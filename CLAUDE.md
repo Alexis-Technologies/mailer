@@ -60,8 +60,17 @@ is no build step.
   runtime exports with the declared value exports and imports every name from ESM.
   `tests/types/index.test-d.ts` (tsd) pins signatures. `check:dts` needs `--target es2022` because
   there is no tsconfig.
-- `package.json` has a closed `exports` map (`types` first, then `default`) and a `files`
-  allowlist: `index.js`, `index.d.ts`, `src`, README, CHANGELOG, LICENSE and SECURITY.
+- `package.json` has a closed `exports` map (`types` first, then `default`), `sideEffects: false`
+  and a `files` allowlist: `index.js`, `index.d.ts`, `src`, README, CHANGELOG, LICENSE and
+  SECURITY.
+- **Subpaths, not a monorepo.** A subpath is a directory `src/<subpath>/` with an `index.js` that
+  lists its exports by name, an `index.d.ts`, and an entry
+  `"./<subpath>": { "types": "./src/<subpath>/index.d.ts", "default": "./src/<subpath>/index.js" }`
+  in the exports map. The export-parity, bundle and graph tests, `scripts/size.js` and
+  `check:dts` (`scripts/check-dts.js`) read the exports map, so a subpath is checked as soon as
+  it is declared. A subpath's d.ts imports the shared types from `'../../index.js'`.
+  `tests/unit/graph.test.js` keeps `src/` free of require cycles and lets a subpath require
+  another one only along the edges it lists.
 
 ## Zero dependencies: drivers are passed in
 
@@ -78,6 +87,29 @@ There is no `dependencies` or `peerDependencies` key in `package.json`, and ther
 - If a small helper is needed, copy it into `src/` with an attribution header rather than adding a
   dependency.
 
+## Code ported from upyo
+
+Most of the transport layer is a port of [upyo](https://github.com/dahlia/upyo) 0.7.0 (MIT,
+Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo package, with
+`@upyo/core` at the root, `@upyo/opentelemetry` as `./otel`, and `@upyo/logtape` replaced by
+`./logger`, which takes any pino-like logger.
+
+- Every ported file, source or test, starts with the attribution header:
+  ```js
+  // Ported from upyo v0.7.0 (packages/smtp/src/smtp-connection.ts)
+  // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+  ```
+- **The port keeps upstream's behavior.** What changes is the platform: CommonJS and the code
+  style below, `node:crypto` instead of `@noble/hashes`, the OpenTelemetry providers and the
+  logger passed in, fallbacks for runtimes older than Node 22 dropped, and the `@since` tags of
+  upyo versions removed. A known upstream bug is fixed afterwards in its own `fix:` commit with a
+  test that fails without it, not during the port.
+- A lint rule that upstream code breaks is suppressed on the line,
+  `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
+  refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
+- Ported test suites keep upstream's `describe`/`it`, so they can be compared with upyo's; new
+  suites use the flat style of "Testing notes".
+
 ## Repository layout
 
 ```
@@ -85,11 +117,16 @@ index.js  index.d.ts   root entry shim + hand-written types
 src/
   index.js          public barrel (explicit named exports)
   mailer.js         createMailer placeholder
+  version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
+  <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
 tests/
-  unit/*.test.js    node:test suites, one per area
-  types/*.test-d.ts tsd assertions
+  unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
+  helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)
+  fixtures/<sub>/   static fixtures (certificates)
+  types/*.test-d.ts tsd assertions, one file per entry
 scripts/
-  size.js           bundle-size report and budget gate (CI smoke)
+  size.js           bundle-size report and budget gates, one per subpath (CI smoke)
+  check-dts.js      tsc --strict over the d.ts of every entry of the exports map
   comparison.js     renders docs/comparison.json into docs/guide/comparison.md
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
 docs/               VitePress site (mailerat.vercel.app), not published
@@ -231,7 +268,8 @@ change. **This file wins** if they ever disagree.
 ## Testing notes
 
 - Runner: Node's built-in `node:test` + `node:assert`. Suites use flat
-  `test('Area: description', …)`; keep that style.
+  `test('Area: description', …)`; keep that style. The suites ported from upyo are the exception:
+  they keep upstream's `describe`/`it` (see "Code ported from upyo").
 - `pnpm test` passes the glob unquoted (`tests/unit/*.test.js`): the shell expands it on Linux and
   macOS, and Node ≥ 22 expands it itself where cmd.exe does not, so Windows runs every version.
 - `tests/unit/bundle.test.js` builds `index.js` with esbuild in memory (minified and not) and calls
@@ -269,7 +307,8 @@ published to npm, and lint/format do not cover it.
 
 Manual, as in the sibling repositories. The `npm-publish` skill walks through it step by step:
 
-1. Bump `version` in `package.json`.
+1. Bump `version` in `package.json` and in `src/version.js` (`tests/unit/version.test.js` fails
+   while they differ).
 2. Turn `## [Unreleased]` in CHANGELOG.md into `## [X.Y.Z] - YYYY-MM-DD` and add its link
    reference.
 3. Commit, then tag `vX.Y.Z`.

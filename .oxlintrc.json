@@ -261,7 +261,8 @@
     {
       "files": [
         "scripts/**",
-        "bench/**"
+        "bench/**",
+        "tests/**"
       ],
       "rules": {
         "no-console": "off"

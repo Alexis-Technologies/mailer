@@ -31,7 +31,7 @@ pnpm run lint                    # oxlint
 pnpm run format:check            # oxfmt
 pnpm run test:coverage           # tests under the c8 coverage gate
 pnpm run test:types              # tsd
-pnpm run check:dts               # tsc over index.d.ts
+pnpm run check:dts               # tsc over the d.ts of every entry of the exports map
 ```
 
 These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
@@ -58,7 +58,7 @@ Compute the new version based on user intent and semver rules:
 - **prerelease**: `1.2.3` → `1.2.4-<label>.0`, or `1.2.4-beta.0` → `1.2.4-beta.1`
 - **Removing prerelease tag**: `4.0.3-prerelease` → `4.0.3` (just strip the suffix)
 
-Update `"version"` in `package.json` with the Edit tool, not `pnpm version`: the bump is a plain edit, and the commit, tag and changelog are handled by hand in the steps below.
+Update `"version"` in `package.json` with the Edit tool, not `pnpm version`: the bump is a plain edit, and the commit, tag and changelog are handled by hand in the steps below. Bump `version` in `src/version.js` to the same value (the OpenTelemetry instrumentation scope reads it; `tests/unit/version.test.js` fails while the two differ).
 
 ## Step 3: Update CHANGELOG.md
 

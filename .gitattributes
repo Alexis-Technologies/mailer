@@ -1,0 +1,7 @@
+# LF everywhere, also on Windows checkouts: MIME output, DKIM canonicalization
+# and the SMTP dot-stuffing tests compare bytes.
+* text=auto eol=lf
+
+# Fixtures compared byte for byte are never converted.
+*.pem -text
+*.eml -text
