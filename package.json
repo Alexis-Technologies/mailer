@@ -36,6 +36,10 @@
       "types": "./src/ses/index.d.ts",
       "default": "./src/ses/index.js"
     },
+    "./resend": {
+      "types": "./src/resend/index.d.ts",
+      "default": "./src/resend/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"

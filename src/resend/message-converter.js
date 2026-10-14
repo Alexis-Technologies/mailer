@@ -1,0 +1,289 @@
+// Ported from upyo v0.7.0 (packages/resend/src/message-converter.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { createCalendarAttachment } = require('../core/calendar.js');
+const { combineSignals } = require('../core/abort-signal.js');
+const { readAttachmentContent } = require('../core/attachment.js');
+const { resolveThreadingHeaders } = require('../core/message-id.js');
+
+/**
+ * Converts a Upyo Message to Resend API JSON format.
+ *
+ * This function transforms the standardized Upyo message format into
+ * the specific format expected by the Resend API.
+ *
+ * @param message - The Upyo message to convert
+ * @param config - The resolved Resend configuration
+ * @param options - Optional conversion options
+ * @returns JSON object ready for Resend API submission
+ * @throws {TypeError} If the message carries an invalid message identifier.
+ *
+ * @example
+ * ```typescript
+ * const emailData = await convertMessage(message, config);
+ * const response = await fetch(url, {
+ *   method: 'POST',
+ *   body: JSON.stringify(emailData),
+ *   headers: { 'Content-Type': 'application/json' }
+ * });
+ * ```
+ */
+const convertMessage = async (message, _config, options = {}) => {
+  // A transport that cannot compose a `text/calendar` alternative carries the
+  // scheduling payload as an *invite.ics* part instead, ahead of the caller's
+  // own files so that a client looking for the first calendar part finds it.
+  const attachments =
+    message.calendar == null
+      ? message.attachments
+      : [createCalendarAttachment(message.calendar), ...message.attachments];
+
+  const emailData = {
+    from: formatAddress(message.sender),
+    to:
+      message.recipients.length === 1
+        ? formatAddress(message.recipients[0])
+        : message.recipients.map(formatAddress),
+    subject: message.subject,
+  };
+
+  // CC recipients
+  if (message.ccRecipients.length > 0) {
+    emailData.cc = message.ccRecipients.map(formatAddress);
+  }
+
+  // BCC recipients
+  if (message.bccRecipients.length > 0) {
+    emailData.bcc = message.bccRecipients.map(formatAddress);
+  }
+
+  // Reply-to
+  if (message.replyRecipients.length > 0) {
+    // Resend supports only one reply-to address, so we take the first one
+    emailData.reply_to = formatAddress(message.replyRecipients[0]);
+  }
+
+  // Content
+  if ('html' in message.content) {
+    emailData.html = message.content.html;
+    if (message.content.text) {
+      emailData.text = message.content.text;
+    }
+  } else {
+    emailData.text = message.content.text;
+  }
+
+  // Attachments
+  if (attachments.length > 0) {
+    const cancellation = new AbortController();
+    const combined = combineSignals(cancellation.signal, options.signal);
+    try {
+      emailData.attachments = await Promise.all(
+        attachments.map((attachment) => convertAttachment(attachment, combined.signal)),
+      );
+    } finally {
+      cancellation.abort();
+      combined.cleanup();
+    }
+  }
+
+  // Tags - Resend uses different format than Upyo
+  if (message.tags.length > 0) {
+    emailData.tags = message.tags.map((tag, index) => ({
+      name: `tag${index + 1}`, // Resend requires name-value pairs
+      value: tag,
+    }));
+  }
+
+  // Custom headers
+  const headers = {};
+
+  // Priority
+  if (message.priority !== 'normal') {
+    const priorityMap = {
+      high: '1',
+      normal: '3',
+      low: '5',
+    };
+    headers['X-Priority'] = priorityMap[message.priority];
+  }
+
+  // Custom headers from message
+  // Reply threading comes from the typed fields when the message defines them,
+  // and from a custom header otherwise.  A field the message owns but left
+  // empty writes nothing, which is how a caller drops an inherited header.
+  const threading = resolveThreadingHeaders(message);
+  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+
+  for (const [key, value] of message.headers.entries()) {
+    // Skip standard headers that are handled separately
+    if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {
+      headers[key] = value;
+    }
+  }
+  for (const [name, value] of threading) {
+    if (value != null) headers[name] = value;
+  }
+
+  if (Object.keys(headers).length > 0) {
+    emailData.headers = headers;
+  }
+
+  // Scheduled sending
+  if (options.scheduledAt) {
+    emailData.scheduled_at = options.scheduledAt.toISOString();
+  }
+
+  return emailData;
+};
+
+/**
+ * Converts multiple Upyo Messages to Resend batch API format.
+ *
+ * This function handles the batch conversion with proper validation
+ * for Resend's batch API limitations.
+ *
+ * @param messages - Array of Upyo messages to convert
+ * @param config - The resolved Resend configuration
+ * @returns Array of JSON objects ready for Resend batch API
+ * @throws {TypeError} If a message carries an invalid message identifier.
+ */
+const convertMessagesBatch = async (messages, _config) => {
+  // Resend batch API limitations
+  if (messages.length > 100) {
+    throw new Error('Resend batch API supports maximum 100 emails per request');
+  }
+
+  // Check for unsupported features in batch mode.  A calendar is checked here
+  // too: it becomes an attachment during conversion, so reading
+  // `message.attachments` alone would let one through the batch API that
+  // forbids attachments.
+  for (const message of messages) {
+    if (message.attachments.length > 0 || message.calendar != null) {
+      throw new Error('Attachments are not supported in Resend batch API');
+    }
+    if (message.tags.length > 0) {
+      throw new Error('Tags are not supported in Resend batch API');
+    }
+  }
+
+  const batchData = await Promise.all(messages.map((message) => convertMessage(message, _config)));
+
+  return batchData;
+};
+
+/**
+ * Formats an Address object into a string suitable for Resend API.
+ *
+ * @param address - The address to format
+ * @returns Formatted address string
+ */
+const formatAddress = (address) => {
+  if (address.name) {
+    // If the name contains special characters, quote it
+    const name =
+      address.name.includes('"') ||
+      address.name.includes(',') ||
+      address.name.includes('<') ||
+      address.name.includes('>')
+        ? `"${address.name.replace(/"/g, '\\"')}"`
+        : address.name;
+    return `${name} <${address.address}>`;
+  }
+  return address.address;
+};
+
+/**
+ * Converts a Upyo Attachment to Resend attachment format.
+ *
+ * @param attachment - The Upyo attachment to convert
+ * @returns Resend attachment object
+ */
+const convertAttachment = async (attachment, signal) => {
+  const content = await readAttachmentContent(attachment.content, signal);
+  const resendAttachment = {
+    filename: attachment.filename,
+    content: await uint8ArrayToBase64(content),
+  };
+
+  if (attachment.contentType) {
+    resendAttachment.content_type = attachment.contentType;
+  }
+
+  return resendAttachment;
+};
+
+/**
+ * Converts a Uint8Array to base64 string using pure JavaScript implementation.
+ * This avoids deprecated APIs like btoa() and Node.js-specific Buffer.
+ *
+ * @param bytes - The Uint8Array to convert
+ * @returns Base64 encoded string
+ */
+const uint8ArrayToBase64 = (bytes) => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+
+  while (i < bytes.length) {
+    const a = bytes[i++];
+    const b = i < bytes.length ? bytes[i++] : 0;
+    const c = i < bytes.length ? bytes[i++] : 0;
+
+    const bitmap = (a << 16) | (b << 8) | c;
+
+    result +=
+      chars.charAt((bitmap >> 18) & 63) +
+      chars.charAt((bitmap >> 12) & 63) +
+      chars.charAt((bitmap >> 6) & 63) +
+      chars.charAt(bitmap & 63);
+  }
+
+  // Add padding
+  const remainder = bytes.length % 3;
+  if (remainder !== 0) {
+    const padding = 3 - remainder;
+    result = result.slice(0, -padding) + '='.repeat(padding);
+  }
+
+  return result;
+};
+
+/**
+ * Checks if a header is a standard email header that should not be prefixed.
+ *
+ * @param headerName - The header name to check
+ * @returns True if the header is a standard header
+ */
+const isStandardHeader = (headerName) => {
+  const standardHeaders = new Set([
+    'from',
+    'to',
+    'cc',
+    'bcc',
+    'reply-to',
+    'subject',
+    'content-type',
+    'content-transfer-encoding',
+    'mime-version',
+    'date',
+    'message-id',
+  ]);
+
+  return standardHeaders.has(headerName.toLowerCase());
+};
+
+/**
+ * Generates a random idempotency key for request deduplication.
+ *
+ * @returns A unique string suitable for use as an idempotency key
+ */
+const generateIdempotencyKey = () => {
+  // Generate a UUID-like string
+  const timestamp = Date.now().toString(36);
+  const random1 = Math.random().toString(36).substring(2, 15);
+  const random2 = Math.random().toString(36).substring(2, 15);
+
+  return `${timestamp}-${random1}${random2}`;
+};
+
+module.exports = { convertMessage, convertMessagesBatch, generateIdempotencyKey };
