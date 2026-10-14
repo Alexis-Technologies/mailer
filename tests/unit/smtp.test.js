@@ -1,0 +1,188 @@
+// Paths of the ported SMTP transport (src/smtp/) that upstream's suites leave
+// out or reach only through Mailpit: broken connections, rejected AUTH LOGIN
+// steps, a rejected DATA, and the guards of the DATA writer.
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { EventEmitter } = require('node:events');
+const { createServer } = require('node:net');
+const { createMessage } = require('../../index.js');
+const { SmtpTransport } = require('../../src/smtp/index.js');
+const { prepareOnSocket, writeMessageData } = require('../../src/smtp/data-stream.js');
+const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
+
+const message = () =>
+  createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Hello',
+    content: { text: 'Hi' },
+  });
+
+// A raw TCP server driven line by line, for replies MockSmtpServer cannot give.
+const scripted = async (onLine, onConnection = (socket) => socket.write('220 ready\r\n')) => {
+  const server = createServer((socket) => {
+    socket.on('error', () => {});
+    onConnection(socket);
+    let buffer = '';
+    socket.on('data', (chunk) => {
+      buffer += chunk.toString('latin1');
+      let end;
+      while ((end = buffer.indexOf('\r\n')) >= 0) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        onLine(line, socket);
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { server, port: server.address().port };
+};
+const stop = (server) => new Promise((resolve) => server.close(() => resolve()));
+
+const failureOf = async (transport) => {
+  const receipt = await transport.send(message());
+  await transport.closeAllConnections();
+  assert.strictEqual(receipt.successful, false);
+  return receipt.errorMessages.join(' | ');
+};
+
+test('SMTP: a server that closes before its greeting fails the send', async () => {
+  const { server, port } = await scripted(
+    () => {},
+    (socket) => socket.destroy(),
+  );
+  try {
+    const transport = new SmtpTransport({ host: '127.0.0.1', port, pool: false });
+    assert.match(await failureOf(transport), /closed before greeting|ECONNRESET|socket/i);
+  } finally {
+    await stop(server);
+  }
+});
+
+test('SMTP: a server that closes during STARTTLS fails the send', async () => {
+  const { server, port } = await scripted((line, socket) => {
+    if (line.startsWith('EHLO')) socket.write('250-localhost\r\n250 STARTTLS\r\n');
+    else if (line === 'STARTTLS') socket.end('220 go ahead\r\n');
+  });
+  try {
+    const transport = new SmtpTransport({ host: '127.0.0.1', port, pool: false });
+    assert.match(await failureOf(transport), /STARTTLS|TLS|socket|disconnected/i);
+  } finally {
+    await stop(server);
+  }
+});
+
+test('SMTP: AUTH LOGIN rejected at the method or at the user name', async () => {
+  for (const [step, expected] of [
+    [0, /AUTH LOGIN failed: Not here/],
+    [1, /Username authentication failed: No such user/],
+  ]) {
+    let sent = 0;
+    const { server, port } = await scripted((line, socket) => {
+      if (line.startsWith('EHLO')) socket.write('250-localhost\r\n250 AUTH LOGIN\r\n');
+      else if (line === 'AUTH LOGIN' || sent > 0) {
+        socket.write(
+          sent++ === step
+            ? `535 ${step === 0 ? 'Not here' : 'No such user'}\r\n`
+            : '334 VXNlcm5hbWU6\r\n',
+        );
+      } else if (line === 'QUIT') socket.end('221 bye\r\n');
+    });
+    try {
+      const transport = new SmtpTransport({
+        host: '127.0.0.1',
+        port,
+        pool: false,
+        auth: { user: 'alex', pass: 'secret', method: 'login' },
+      });
+      assert.match(await failureOf(transport), expected);
+    } finally {
+      await stop(server);
+    }
+  }
+});
+
+test('SMTP: an unsupported AUTH method fails the send', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  server.setCapabilities(['AUTH PLAIN LOGIN CRAM-MD5']);
+  try {
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port,
+      pool: false,
+      auth: { user: 'alex', pass: 'secret', method: 'cram-md5' },
+    });
+    assert.match(await failureOf(transport), /Unsupported authentication method: cram-md5/);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('SMTP: a rejection after DATA fails the send', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  server.setResponse('DATA_END', { code: 554, message: 'Content rejected' });
+  try {
+    const transport = new SmtpTransport({ host: 'localhost', port, pool: false });
+    assert.match(await failureOf(transport), /Content rejected/);
+  } finally {
+    await server.stop();
+  }
+});
+
+const fakeSocket = (state = {}) =>
+  Object.assign(new EventEmitter(), { destroyed: false, writable: true, destroy() {} }, state);
+
+test('SMTP: message preparation fails on a socket that is already closed', async () => {
+  const socket = fakeSocket({ destroyed: true, writable: false });
+  await assert.rejects(
+    prepareOnSocket(socket, 1000, () => new Promise(() => {})),
+    { name: 'TypeError', message: 'SMTP connection closed during message preparation.' },
+  );
+});
+
+test('SMTP: the DATA writer refuses a reply over 64 KiB', async () => {
+  const socket = fakeSocket({
+    write(chunk, callback) {
+      if (chunk.toString() === '.\r\n') {
+        queueMicrotask(() => socket.emit('data', Buffer.alloc(70000, 0x61)));
+      }
+      callback?.();
+      return true;
+    },
+  });
+  const source = async function* () {
+    yield Buffer.from('Subject: x\r\n\r\nbody\r\n');
+  };
+  await assert.rejects(
+    writeMessageData(socket, source, 1000, () => {}),
+    {
+      name: 'RangeError',
+      message: 'SMTP DATA reply exceeds 64 KiB.',
+    },
+  );
+});
+
+test('SMTP: a reply during message preparation fails it', async () => {
+  const socket = fakeSocket();
+  const preparing = prepareOnSocket(socket, 1000, () => new Promise(() => {}));
+  socket.emit('data', Buffer.from('421 closing\r\n'));
+  await assert.rejects(preparing, {
+    name: 'TypeError',
+    message: 'Unexpected SMTP reply during message preparation.',
+  });
+});
+
+test('SMTP: a connection reset in the middle of the envelope fails the send', async () => {
+  const { server, port } = await scripted((line, socket) => {
+    if (line.startsWith('EHLO')) socket.write('250-localhost\r\n250 PIPELINING\r\n');
+    else if (line.startsWith('MAIL FROM')) socket.resetAndDestroy();
+  });
+  try {
+    const transport = new SmtpTransport({ host: '127.0.0.1', port, pool: false });
+    assert.match(await failureOf(transport), /ECONNRESET|closed|socket/i);
+  } finally {
+    await stop(server);
+  }
+});

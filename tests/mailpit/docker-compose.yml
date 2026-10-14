@@ -1,0 +1,35 @@
+# Ported from upyo v0.7.0 (packages/smtp/docker-compose.yml)
+# A local Mailpit for `pnpm test:mailpit`:
+#   docker compose -f tests/mailpit/docker-compose.yml up -d
+#   MAILPIT_SMTP_HOST=localhost MAILPIT_API_URL=http://localhost:8025 pnpm test:mailpit
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailer-mailpit
+    ports:
+      - '1025:1025' # SMTP port
+      - '8025:8025' # Web interface port
+    environment:
+      - MP_SMTP_AUTH_ACCEPT_ANY=1
+      - MP_SMTP_AUTH_ALLOW_INSECURE=1
+      - MP_SMTP_TLS_CERT=/certs/server-cert.pem
+      - MP_SMTP_TLS_KEY=/certs/server-key.pem
+    volumes:
+      - mailpit-data:/data
+      - ../fixtures/smtp:/certs:ro,Z
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:8025/api/v1/info
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  mailpit-data:

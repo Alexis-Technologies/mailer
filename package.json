@@ -28,6 +28,10 @@
       "types": "./src/mime/index.d.ts",
       "default": "./src/mime/index.js"
     },
+    "./smtp": {
+      "types": "./src/smtp/index.d.ts",
+      "default": "./src/smtp/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
@@ -50,6 +54,8 @@
   },
   "scripts": {
     "test": "node --test tests/unit/*.test.js",
+    "test:mailpit": "node --test --test-concurrency=1 tests/mailpit/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",

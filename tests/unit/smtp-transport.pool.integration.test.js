@@ -1,0 +1,451 @@
+// Ported from upyo v0.7.0 (packages/smtp/src/smtp-transport.pool.integration.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { SmtpTransport } = require('../../src/smtp/index.js');
+const assert = require('node:assert/strict');
+const { describe, test } = require('node:test');
+const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
+
+describe('SmtpTransport connection limit', () => {
+  const createTestMessage = (overrides = {}) => {
+    return {
+      sender: { name: 'John Doe', address: 'john@example.com' },
+      recipients: [{ name: 'Jane Doe', address: 'jane@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Hello, World!' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+      ...overrides,
+    };
+  };
+
+  const setupTest = async (options) => {
+    const server = new MockSmtpServer();
+    const serverPort = await server.start();
+
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port: serverPort,
+      secure: false,
+      connectionTimeout: 5000,
+      socketTimeout: 5000,
+      pool: options.pool ?? true,
+      poolSize: options.poolSize,
+    });
+
+    return { server, transport };
+  };
+
+  const teardownTest = async (server, transport) => {
+    await transport.closeAllConnections();
+    await server.stop();
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  };
+
+  test('concurrent sends never exceed poolSize connections', async () => {
+    const { server, transport } = await setupTest({ poolSize: 3 });
+
+    try {
+      const receipts = await Promise.all(
+        Array.from({ length: 12 }, () => transport.send(createTestMessage())),
+      );
+
+      for (const receipt of receipts) {
+        assert.ok(
+          receipt.successful,
+          `Expected every send to succeed, got: ${
+            receipt.successful ? '' : receipt.errorMessages.join(', ')
+          }`,
+        );
+      }
+      assert.ok(
+        server.getPeakConcurrentConnections() <= 3,
+        `Expected at most 3 simultaneous connections, saw ${server.getPeakConcurrentConnections()}`,
+      );
+      assert.strictEqual(server.getReceivedMessages().length, 12);
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('concurrent sendMany calls never exceed poolSize connections', async () => {
+    const { server, transport } = await setupTest({ poolSize: 2 });
+
+    try {
+      await Promise.all(
+        Array.from({ length: 6 }, async () => {
+          const messages = [createTestMessage(), createTestMessage()];
+          for await (const receipt of transport.sendMany(messages)) {
+            assert.ok(receipt.successful);
+          }
+        }),
+      );
+
+      assert.ok(
+        server.getPeakConcurrentConnections() <= 2,
+        `Expected at most 2 simultaneous connections, saw ${server.getPeakConcurrentConnections()}`,
+      );
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('overlapping returns never leave more idle connections than poolSize', async () => {
+    const { server, transport } = await setupTest({ poolSize: 3 });
+    // A slow RSET keeps several returns in flight at once, which is the window
+    // where a plain length check lets every return past the limit.
+    server.setResponseDelay('RSET', 40);
+
+    try {
+      await Promise.all(Array.from({ length: 9 }, () => transport.send(createTestMessage())));
+
+      assert.ok(
+        server.getPeakConcurrentConnections() <= 3,
+        `Expected at most 3 simultaneous connections, saw ${server.getPeakConcurrentConnections()}`,
+      );
+      assert.ok(
+        server.getActiveConnectionCount() <= 3,
+        `Expected at most 3 retained connections, saw ${server.getActiveConnectionCount()}`,
+      );
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('the limit applies even when pooling is disabled', async () => {
+    const { server, transport } = await setupTest({
+      pool: false,
+      poolSize: 2,
+    });
+
+    try {
+      await Promise.all(Array.from({ length: 8 }, () => transport.send(createTestMessage())));
+
+      assert.ok(
+        server.getPeakConcurrentConnections() <= 2,
+        `Expected at most 2 simultaneous connections, saw ${server.getPeakConcurrentConnections()}`,
+      );
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('aborting while waiting for capacity rejects without sending', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+    // Hold the only connection inside DATA long enough for the second send to
+    // queue behind it.
+    server.setResponseDelay('DATA_END', 300);
+
+    try {
+      const first = transport.send(createTestMessage({ subject: 'first' }));
+
+      const controller = new AbortController();
+      const waiting = transport.send(createTestMessage({ subject: 'waiting' }), {
+        signal: controller.signal,
+      });
+      const rejection = assert.rejects(
+        () => waiting,
+        (error) => error.name === 'AbortError',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      controller.abort();
+      await rejection;
+
+      const firstReceipt = await first;
+      assert.ok(firstReceipt.successful);
+
+      const subjects = server
+        .getReceivedMessages()
+        .map((message) => /Subject: (.*)/.exec(message.data)?.[1]?.trim());
+      assert.ok(!subjects.includes('waiting'));
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('aborting a waiting send does not leak capacity', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+    server.setResponseDelay('DATA_END', 200);
+
+    try {
+      const first = transport.send(createTestMessage());
+
+      const controller = new AbortController();
+      const waiting = transport.send(createTestMessage(), {
+        signal: controller.signal,
+      });
+      const rejection = assert.rejects(() => waiting);
+      // Queued behind the send that gets aborted, so it can only proceed if the
+      // aborted one leaves the queue and passes its wake-up along.
+      const queued = transport.send(createTestMessage());
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      controller.abort();
+      await rejection;
+
+      assert.ok((await first).successful);
+      assert.ok((await queued).successful);
+
+      // The aborted send must have given its place back, so this one proceeds.
+      server.setResponseDelay('DATA_END', 0);
+      const later = await transport.send(createTestMessage());
+      assert.ok(later.successful);
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('a failed connection setup gives its slot back', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+    server.setResponse('EHLO', { code: 550, message: 'Not today' });
+
+    try {
+      const failed = await transport.send(createTestMessage());
+      assert.ok(!failed.successful);
+
+      // The only slot was reserved before the handshake, so a leak here would
+      // make every later send wait forever.
+      server.setResponse('EHLO', {
+        code: 250,
+        message: 'Hello, pleased to meet you',
+      });
+      const later = await transport.send(createTestMessage());
+      assert.ok(later.successful);
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('abandoning sendMany early releases the connection', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+
+    try {
+      const messages = [createTestMessage(), createTestMessage(), createTestMessage()];
+      for await (const receipt of transport.sendMany(messages)) {
+        assert.ok(receipt.successful);
+        break;
+      }
+
+      // The abandoned iteration must not keep the only connection slot.
+      const later = await transport.send(createTestMessage());
+      assert.ok(later.successful);
+      assert.ok(server.getPeakConcurrentConnections() <= 1);
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  for (const pool of [false, true]) {
+    for (const asyncInput of [false, true]) {
+      for (const stopEarly of [false, true]) {
+        test(`sendMany cleanup: pool=${pool}, async=${asyncInput}, break=${stopEarly}`, async () => {
+          const { server, transport } = await setupTest({
+            pool,
+            poolSize: 1,
+          });
+          const messages = [createTestMessage(), createTestMessage()];
+          // Exercise both iteration branches without an external SMTP service.
+          const source = async function* () {
+            yield* messages;
+          };
+
+          try {
+            let receipts = 0;
+            for await (const receipt of transport.sendMany(asyncInput ? source() : messages)) {
+              assert.ok(receipt.successful);
+              receipts++;
+              if (stopEarly) break;
+            }
+            assert.strictEqual(receipts, stopEarly ? 1 : 2);
+            assert.strictEqual(server.getReceivedMessages().length, receipts);
+            assert.strictEqual(
+              server.getReceivedCommands().filter((command) => command === 'RSET').length,
+              pool ? 1 : 0,
+            );
+
+            await transport.closeAllConnections();
+            // QUIT is flushed without waiting for the server's reply.
+            for (
+              let attempt = 0;
+              attempt < 50 && !server.getReceivedCommands().includes('QUIT');
+              attempt++
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            assert.strictEqual(
+              server.getReceivedCommands().filter((command) => command === 'QUIT').length,
+              1,
+              'The batch connection must be closed after iteration and cleanup.',
+            );
+          } finally {
+            await teardownTest(server, transport);
+          }
+        });
+      }
+    }
+  }
+
+  test('closing the pool while a send runs stays within poolSize', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+
+    try {
+      // Populate the pool so that closeAllConnections() has a connection to
+      // shut down.
+      assert.ok((await transport.send(createTestMessage())).successful);
+
+      // A shutdown that hands its slot back before the socket is gone would let
+      // this send open a second connection alongside the closing one.
+      const closing = transport.closeAllConnections();
+      const sending = transport.send(createTestMessage());
+      await closing;
+      assert.ok((await sending).successful);
+
+      assert.ok(
+        server.getPeakConcurrentConnections() <= 1,
+        `Expected at most 1 simultaneous connection, saw ${server.getPeakConcurrentConnections()}`,
+      );
+    } finally {
+      await teardownTest(server, transport);
+    }
+  });
+
+  for (const command of ['DATA', 'RSET']) {
+    for (const pool of command === 'RSET' ? [true] : [true, false]) {
+      test(`shutdown drains sends during ${command}, pool=${pool}`, async () => {
+        const { server, transport } = await setupTest({ pool, poolSize: 1 });
+        server.setResponseDelay(command === 'DATA' ? 'DATA_END' : command, 100);
+        const sending = transport.send(createTestMessage());
+        try {
+          while (!server.getReceivedCommands().includes(command)) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+          }
+          const queued = transport.send(createTestMessage());
+          let closed = false;
+          // oxlint-disable-next-line promise/always-return -- upstream
+          const closing = transport.closeAllConnections().then(() => {
+            closed = true;
+          });
+          const disposing = transport[Symbol.asyncDispose]();
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          assert.ok(!closed, 'Shutdown must wait for admitted sends.');
+          assert.ok((await sending).successful);
+          assert.ok((await queued).successful);
+          await Promise.all([closing, disposing]);
+          // QUIT is flushed without waiting for the server to process it.
+          for (let i = 0; i < 50 && server.getActiveConnectionCount() > 0; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          assert.strictEqual(server.getActiveConnectionCount(), 0);
+          assert.ok((await transport.send(createTestMessage())).successful);
+        } finally {
+          await sending;
+          await teardownTest(server, transport);
+        }
+      });
+    }
+  }
+
+  for (const failSetup of [false, true]) {
+    test(`shutdown includes connection setup, failure=${failSetup}`, async () => {
+      const { server, transport } = await setupTest({ poolSize: 1 });
+      if (failSetup) {
+        server.setResponse('EHLO', { code: 550, message: 'Not today' });
+      }
+      try {
+        const sending = transport.send(createTestMessage());
+        await transport.closeAllConnections();
+        assert.strictEqual((await sending).successful, !failSetup);
+        for (let i = 0; i < 50 && server.getActiveConnectionCount() > 0; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        assert.strictEqual(server.getActiveConnectionCount(), 0);
+      } finally {
+        await teardownTest(server, transport);
+      }
+    });
+  }
+
+  test('new sends wait for shutdown and can cancel that wait', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+    const batch = transport.sendMany([createTestMessage()])[Symbol.asyncIterator]();
+    try {
+      assert.ok((await batch.next()).value?.successful);
+      const closing = transport.closeAllConnections();
+      const controller = new AbortController();
+      const cancelled = transport.send(createTestMessage(), {
+        signal: controller.signal,
+      });
+      const rejection = assert.rejects(cancelled, { name: 'AbortError' });
+      let sent = false;
+      const later = transport.send(createTestMessage()).then((receipt) => {
+        sent = true;
+        return receipt;
+      });
+      controller.abort();
+      await rejection;
+      assert.ok(!sent);
+      await batch.return?.();
+      await closing;
+      assert.ok((await later).successful);
+      assert.strictEqual(server.getReceivedMessages().length, 2);
+    } finally {
+      await batch.return?.();
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('shutdown waits for a paused batch to be returned', async () => {
+    const { server, transport } = await setupTest({ poolSize: 1 });
+    const batch = transport.sendMany([createTestMessage(), createTestMessage()])[
+      // oxlint-disable-next-line no-unexpected-multiline -- upstream
+      Symbol.asyncIterator
+    ]();
+    try {
+      assert.ok((await batch.next()).value?.successful);
+      let closed = false;
+      // oxlint-disable-next-line promise/always-return -- upstream
+      const closing = transport.closeAllConnections().then(() => {
+        closed = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.ok(!closed);
+      await batch.return?.();
+      await closing;
+      assert.strictEqual(server.getReceivedMessages().length, 1);
+    } finally {
+      await batch.return?.();
+      await teardownTest(server, transport);
+    }
+  });
+
+  test('rejects a poolSize that no connection could satisfy', () => {
+    for (const poolSize of [0, -1, 2.5, Number.NaN]) {
+      assert.throws(
+        () =>
+          new SmtpTransport({
+            host: 'localhost',
+            port: 1025,
+            secure: false,
+            poolSize,
+          }),
+        RangeError,
+        `Expected poolSize ${poolSize} to be rejected`,
+      );
+    }
+  });
+
+  test('accepts an unbounded poolSize', () => {
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port: 1025,
+      secure: false,
+      poolSize: Number.POSITIVE_INFINITY,
+    });
+    assert.strictEqual(transport.poolSize, Number.POSITIVE_INFINITY);
+  });
+});

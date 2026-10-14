@@ -81,7 +81,15 @@ test('Graph: the modules of src/ require each other without a cycle', () => {
 const SUBPATHS = Object.keys(pkg.exports)
   .filter((subpath) => subpath !== '.')
   .map((subpath) => pkg.exports[subpath].default.split('/')[2]);
-const SUBPATH_EDGES = [];
+// ./smtp renders and signs through the internal modules of ./mime, which
+// upstream exported as @upyo/mime/internal.
+const SUBPATH_EDGES = [
+  'smtp/config.js -> mime/dkim/types.js',
+  'smtp/message-converter.js -> mime/message.js',
+  'smtp/message-converter.js -> mime/stream.js',
+  'smtp/message-stream.js -> mime/stream.js',
+  'smtp/smtp-transport.js -> mime/dkim/types.js',
+];
 
 const subpathOf = (name) => {
   const top = name.split('/')[0];

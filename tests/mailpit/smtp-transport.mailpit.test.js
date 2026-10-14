@@ -1,0 +1,533 @@
+// Ported from upyo v0.7.0 (packages/smtp/src/smtp-transport.mailpit.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { SmtpTransport } = require('../../src/smtp/index.js');
+const assert = require('node:assert/strict');
+const { Buffer } = require('node:buffer');
+const { describe, test } = require('node:test');
+const { MailpitClient } = require('../helpers/smtp/mailpit-client.js');
+const {
+  validateMailpitAttachments,
+  validateMailpitEmailContent,
+  waitForMailpitDelivery,
+} = require('../helpers/smtp/mailpit-delivery-utils.js');
+const {
+  createTestMessage,
+  getTestConfig,
+  isMailpitTestingEnabled,
+} = require('../helpers/smtp/test-config.js');
+
+describe('SMTP Transport Mailpit Tests', { skip: !isMailpitTestingEnabled() }, () => {
+  if (!isMailpitTestingEnabled()) return;
+
+  const setupTest = async (overrides = {}) => {
+    const config = getTestConfig();
+    const transport = new SmtpTransport({
+      ...config.smtp,
+      ...overrides,
+    });
+    const mailpitClient = new MailpitClient(config.mailpit);
+
+    // Clear any existing messages
+    await mailpitClient.deleteAllMessages();
+
+    return { transport, mailpitClient, config };
+  };
+
+  const teardownTest = async (transport) => {
+    await transport.closeAllConnections();
+  };
+
+  test('should deliver original raw MIME through Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    const subject = 'Raw MIME Mailpit delivery';
+    const raw = `From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: ${subject}\r\nMessage-ID: <raw-mailpit@example.com>\r\nX-Preserved: first\r\n second\r\n\r\n.leading dot\r\n`;
+    try {
+      const receipt = await transport.sendRaw({
+        envelope: {
+          from: 'sender@example.com',
+          to: ['recipient@example.com'],
+        },
+        content: Buffer.from(raw),
+        encoding: '7bit',
+      });
+      assert.ok(receipt.successful, JSON.stringify(receipt));
+      const delivered = await waitForMailpitDelivery(mailpitClient, {
+        subject,
+      });
+      const source = await mailpitClient.getMessageSource(delivered.ID);
+      assert.ok(source.endsWith(raw), source);
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should deliver the identity and threading fields', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const subject = 'Test Email Mailpit - Identity';
+      const message = createTestMessage({
+        subject,
+        content: { text: 'Correlating a reply back to a conversation.' },
+        messageId: 'ticket-4821@example.com',
+        date: new Date('2026-09-01T10:00:00Z'),
+        inReplyTo: ['122@example.com'],
+        references: ['120@example.com', '121@example.com'],
+      });
+
+      const receipt = await transport.send(message);
+      assert.ok(receipt.successful);
+
+      const delivered = await waitForMailpitDelivery(mailpitClient, { subject });
+      const source = await mailpitClient.getMessageSource(delivered.ID);
+
+      assert.strictEqual(delivered.MessageID, 'ticket-4821@example.com');
+      assert.ok(
+        source.includes('Message-ID: <ticket-4821@example.com>'),
+        'the supplied identifier should reach the server unchanged',
+      );
+      assert.ok(source.includes('Date: Tue, 01 Sep 2026 10:00:00 +0000'));
+      assert.ok(source.includes('In-Reply-To: <122@example.com>'));
+      assert.ok(source.includes('References: <120@example.com> <121@example.com>'));
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should deliver a calendar invitation Mailpit can parse', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const subject = 'Test Email Mailpit - Calendar';
+      const ics =
+        [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//Upyo//Mailpit//EN',
+          'METHOD:REQUEST',
+          'BEGIN:VEVENT',
+          'UID:mailpit-calendar@example.com',
+          'DTSTAMP:20260901T100000Z',
+          'DTSTART:20260902T120000Z',
+          'SUMMARY:점심 식사',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n') + '\r\n';
+
+      const receipt = await transport.send(
+        createTestMessage({
+          subject,
+          content: { text: 'Lunch on Wednesday.' },
+          calendar: { method: 'REQUEST', content: ics },
+        }),
+      );
+      assert.ok(receipt.successful);
+
+      const delivered = await waitForMailpitDelivery(mailpitClient, { subject });
+      const source = await mailpitClient.getMessageSource(delivered.ID);
+
+      assert.ok(
+        source.includes('Content-Type: text/calendar; charset=utf-8; method=REQUEST'),
+        'the calendar part should keep its method parameter',
+      );
+      assert.ok(source.includes('Content-Type: multipart/alternative'));
+
+      // The Base64 payload has to decode back to the object as written,
+      // including the multi-byte SUMMARY and the CRLF line endings.
+      const marker = source.indexOf('Content-Type: text/calendar');
+      const bodyStart = source.indexOf('\r\n\r\n', marker) + 4;
+      const bodyEnd = source.indexOf('\r\n--', bodyStart);
+      const payload = source.slice(bodyStart, bodyEnd).replace(/\r\n/g, '');
+      assert.equal(Buffer.from(payload, 'base64').toString('utf8'), ics);
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send a basic email to Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const message = createTestMessage({
+        senderEmail: 'john@example.com',
+        recipientEmail: 'jane@example.com',
+        subject: 'Test Email Mailpit - Basic',
+        content: { text: 'This is a test email sent to Mailpit' },
+      });
+
+      const receipt = await transport.send(message);
+
+      assert.strictEqual(receipt.successful, true);
+      if (receipt.successful) {
+        assert.ok(receipt.messageId.length > 0);
+      }
+
+      // Wait for email to be received by Mailpit
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - Basic' },
+        5000,
+      );
+
+      validateMailpitEmailContent(mailpitMessage, {
+        from: 'john@example.com',
+        to: 'jane@example.com',
+        subject: 'Test Email Mailpit - Basic',
+        textBody: 'This is a test email sent to Mailpit',
+      });
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send email with HTML content to Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const message = createTestMessage({
+        senderEmail: 'john@example.com',
+        recipientEmail: 'jane@example.com',
+        subject: 'Test Email Mailpit - HTML',
+        content: {
+          html: '<h1>HTML Email</h1><p>This is an <strong>HTML</strong> email sent to Mailpit</p>',
+        },
+      });
+
+      const receipt = await transport.send(message);
+      assert.strictEqual(receipt.successful, true);
+
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - HTML' },
+        5000,
+      );
+
+      validateMailpitEmailContent(mailpitMessage, {
+        from: 'john@example.com',
+        to: 'jane@example.com',
+        subject: 'Test Email Mailpit - HTML',
+        htmlBody:
+          '<h1>HTML Email</h1><p>This is an <strong>HTML</strong> email sent to Mailpit</p>',
+      });
+
+      assert.ok(mailpitMessage.HTML?.includes('<h1>HTML Email</h1>'));
+      assert.ok(mailpitMessage.HTML?.includes('<strong>HTML</strong>'));
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send email with attachments to Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const textContent = 'Hello from attachment test!';
+      const textBytes = new TextEncoder().encode(textContent);
+
+      const message = createTestMessage({
+        subject: 'Test Email Mailpit - Attachments',
+        content: { text: 'This email has attachments' },
+        attachments: [
+          {
+            filename: 'test.txt',
+            contentType: 'text/plain',
+            content: textBytes,
+            contentId: 'test-attachment',
+            inline: false,
+          },
+        ],
+      });
+
+      const receipt = await transport.send(message);
+      assert.strictEqual(receipt.successful, true);
+
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - Attachments' },
+        5000,
+      );
+
+      validateMailpitEmailContent(mailpitMessage, {
+        from: 'john@example.com',
+        to: 'jane@example.com',
+        subject: 'Test Email Mailpit - Attachments',
+        textBody: 'This email has attachments',
+      });
+
+      validateMailpitAttachments(mailpitMessage, [
+        {
+          filename: 'test.txt',
+          contentType: 'text/plain',
+        },
+      ]);
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send email with multiple recipients to Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const message = createTestMessage({
+        subject: 'Test Email Mailpit - Multiple Recipients',
+        recipients: [{ address: 'recipient1@example.com' }, { address: 'recipient2@example.com' }],
+        ccRecipients: [{ address: 'cc@example.com' }],
+        content: { text: 'This email has multiple recipients' },
+      });
+
+      const receipt = await transport.send(message);
+      assert.strictEqual(receipt.successful, true);
+
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - Multiple Recipients' },
+        5000,
+      );
+
+      // Verify that all recipients are present
+      const allRecipients = [...(mailpitMessage.To || []), ...(mailpitMessage.Cc || [])].map(
+        (addr) => addr.Address,
+      );
+
+      assert.ok(allRecipients.includes('recipient1@example.com'));
+      assert.ok(allRecipients.includes('recipient2@example.com'));
+      assert.ok(allRecipients.includes('cc@example.com'));
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should handle non-ASCII characters in Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const message = createTestMessage({
+        subject: 'Test Email Mailpit - 한글 테스트 🌍',
+        content: {
+          text: '안녕하세요! This email contains Korean characters and emojis 🚀',
+        },
+      });
+
+      const receipt = await transport.send(message);
+      assert.strictEqual(receipt.successful, true);
+
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - 한글 테스트 🌍' },
+        5000,
+      );
+
+      validateMailpitEmailContent(mailpitMessage, {
+        from: 'john@example.com',
+        to: 'jane@example.com',
+        subject: 'Test Email Mailpit - 한글 테스트 🌍',
+        textBody: '안녕하세요! This email contains Korean characters and emojis 🚀',
+      });
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send multiple emails with sendMany to Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      const messages = [
+        createTestMessage({
+          subject: 'Test Email Mailpit - Batch 1',
+          content: { text: 'First email' },
+        }),
+        createTestMessage({
+          subject: 'Test Email Mailpit - Batch 2',
+          content: { text: 'Second email' },
+        }),
+      ];
+
+      const receipts = [];
+      for await (const receipt of transport.sendMany(messages)) {
+        receipts.push(receipt);
+      }
+
+      assert.strictEqual(receipts.length, 2);
+      assert.ok(receipts.every((r) => r.successful));
+
+      // Wait for both emails to be received
+      const message1 = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - Batch 1' },
+        30000,
+      );
+
+      const message2 = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - Batch 2' },
+        30000,
+      );
+
+      assert.ok(message1.Text && message1.Text.includes('First email'));
+      assert.ok(message2.Text && message2.Text.includes('Second email'));
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should send email with required STARTTLS', async () => {
+    const { transport, mailpitClient, config } = await setupTest({
+      requireTls: true,
+    });
+    try {
+      // The test Mailpit instance is configured with a self-signed
+      // certificate and advertises STARTTLS.
+      const message = createTestMessage({
+        subject: 'Test Email Mailpit - STARTTLS',
+        content: {
+          text: 'This email was sent using STARTTLS for secure connection upgrade',
+        },
+      });
+
+      const receipt = await transport.send(message);
+
+      assert.ok(
+        receipt.successful,
+        receipt.successful ? undefined : receipt.errorMessages.join(' '),
+      );
+      if (receipt.successful) {
+        assert.ok(receipt.messageId.length > 0);
+      }
+
+      // Wait for email to be received by Mailpit
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        { subject: 'Test Email Mailpit - STARTTLS' },
+        5000,
+      );
+
+      validateMailpitEmailContent(mailpitMessage, {
+        from: 'sender@example.com',
+        to: 'recipient@example.com',
+        subject: 'Test Email Mailpit - STARTTLS',
+        textBody: 'This email was sent using STARTTLS for secure connection upgrade',
+      });
+
+      // Verify that the connection config doesn't have secure=true
+      // (meaning it started as plaintext and upgraded via STARTTLS)
+      assert.strictEqual(
+        config.smtp.secure,
+        false,
+        'Connection should start as plaintext before STARTTLS upgrade',
+      );
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+
+  test('should handle long CJK text with quoted-printable encoding in Mailpit', async () => {
+    const { transport, mailpitClient } = await setupTest();
+    try {
+      // Create long Korean text that will trigger quoted-printable line breaks
+      const longKoreanText = [
+        '안녕하세요! 이것은 매우 긴 한국어 텍스트입니다.',
+        'quoted-printable 인코딩이 제대로 작동하는지 확인하기 위해 작성된 테스트입니다.',
+        '이 텍스트는 76자 제한을 초과하여 소프트 라인 브레이크가 적용되어야 합니다.',
+        '한국어, 일본어(こんにちは), 중국어(你好) 등 다양한 CJK 문자들이 포함되어 있습니다.',
+        '이모지도 포함됩니다: 👋 🌍 💬 🚀 ✨',
+        '이 모든 문자들이 이메일 클라이언트에서 올바르게 표시되어야 합니다.',
+      ].join(' ');
+
+      const longJapaneseText = [
+        'こんにちは！これは非常に長い日本語のテキストです。',
+        'quoted-printableエンコーディングが正しく動作するかを確認するために作成されたテストです。',
+        'このテキストは76文字制限を超えてソフトラインブレークが適用されるはずです。',
+        '日本語、韓国語(안녕하세요), 中国語(你好)など様々なCJK文字が含まれています。',
+      ].join(' ');
+
+      const message = createTestMessage({
+        senderName: '김테스트',
+        senderEmail: 'test@example.com',
+        recipients: [{ name: '田中太郎', address: 'tanaka@example.com' }],
+        subject: '긴 CJK 텍스트 테스트 - Long CJK Text Test - 長いCJKテキストテスト',
+        content: {
+          text: longKoreanText,
+          html: `
+              <h1>긴 CJK 텍스트 테스트</h1>
+              <h2>한국어 텍스트</h2>
+              <p>${longKoreanText}</p>
+              <h2>일본어 텍스트</h2>
+              <p>${longJapaneseText}</p>
+              <h2>중국어 텍스트</h2>
+              <p>你好！这是一个很长的中文文本测试。我们需要确保quoted-printable编码能够正确处理这些字符。</p>
+              <h2>이모지 테스트</h2>
+              <p>🌟 ✨ 🎉 🚀 💻 📧 🔧 ⚡ 🌍 🇰🇷 🇯🇵 🇨🇳</p>
+            `,
+        },
+      });
+
+      const receipt = await transport.send(message);
+      assert.strictEqual(receipt.successful, true);
+
+      const mailpitMessage = await waitForMailpitDelivery(
+        mailpitClient,
+        {
+          subject: '긴 CJK 텍스트 테스트 - Long CJK Text Test - 長いCJKテキストテスト',
+        },
+        10000,
+      );
+
+      // Verify that the subject and content are correctly decoded
+      assert.ok(
+        mailpitMessage.Subject.includes('긴 CJK 텍스트 테스트'),
+        'Korean subject should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.Subject.includes('Long CJK Text Test'),
+        'English subject should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.Subject.includes('長いCJKテキストテスト'),
+        'Japanese subject should be correctly decoded',
+      );
+
+      // Verify text content
+      assert.ok(
+        mailpitMessage.Text?.includes('quoted-printable 인코딩이 제대로 작동하는지'),
+        'Korean text should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.Text?.includes('다양한 CJK 문자들이 포함되어 있습니다'),
+        'Korean text should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.Text?.includes('👋 🌍 💬 🚀 ✨'),
+        'Emoji should be correctly decoded',
+      );
+
+      // Verify HTML content
+      assert.ok(
+        mailpitMessage.HTML?.includes('<h1>긴 CJK 텍스트 테스트</h1>'),
+        'Korean HTML should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.HTML?.includes('quoted-printableエンコーディングが正しく動作するか'),
+        'Japanese HTML should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.HTML?.includes('quoted-printable编码能够正确处理这些字符'),
+        'Chinese HTML should be correctly decoded',
+      );
+      assert.ok(
+        mailpitMessage.HTML?.includes('🌟 ✨ 🎉 🚀 💻 📧 🔧 ⚡ 🌍 🇰🇷 🇯🇵 🇨🇳'),
+        'Emoji in HTML should be correctly decoded',
+      );
+
+      // Verify sender and recipient names are correctly decoded
+      // Note: Mailpit may parse encoded headers differently, so we check if the Korean name is present
+      assert.ok(
+        mailpitMessage.From?.Name?.includes('김테스트') ||
+          mailpitMessage.From?.Address?.includes('김테스트'),
+        'Korean sender name should be correctly decoded and present in From field',
+      );
+      assert.ok(
+        mailpitMessage.To?.some(
+          (to) => to.Name?.includes('田中太郎') || to.Address?.includes('田中太郎'),
+        ) || mailpitMessage.To?.length === 0, // Mailpit might not populate To array correctly
+        'Japanese recipient name should be correctly decoded or To field handling may vary',
+      );
+    } finally {
+      await teardownTest(transport);
+    }
+  });
+});
