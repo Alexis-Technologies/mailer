@@ -16,8 +16,7 @@ import { SmtpTransport } from '@alexify/mailer/smtp';
 
 ## `@alexify/mailer`
 
-The message model and the transport contract, ported from `@upyo/core`, and the
-mailer.
+The message model and the transport contract, ported from `@upyo/core`.
 
 - **Messages:** `createMessage`, and the `Message`, `MessageConstructor`,
   `MessageContent`, `Address`, `Attachment` and `Priority` types; `parseAddress`,
@@ -37,13 +36,6 @@ mailer.
   `parseRetryAfter`.
 - **Raw messages:** the `RawMessage` type; `createRawMessagePlan`,
   `iterateRawMessage`, `analyzeRawMessage`, `RawMessageValidationError`.
-- **`createMailer(options)`:** the mailer of the reliability layer.
-
-::: warning Work in progress
-`createMailer` is a placeholder: it throws `createMailer is not implemented yet`
-until the mailer is implemented, and its signature will change with the design of
-the queue and the audit log.
-:::
 
 ## Subpaths
 

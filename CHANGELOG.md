@@ -35,8 +35,6 @@ listed in CLAUDE.md, to be fixed one by one.
 - **Package scaffold** set up like the other Alexis libraries: plain CommonJS with no build step,
   a hand-written `index.d.ts`, a closed `exports` map, Node.js 22 or newer, and zero runtime
   dependencies.
-- **`createMailer` placeholder.** It throws until the mailer is implemented; its signature is
-  provisional.
 - **Tooling:** pnpm, oxlint and oxfmt, `node:test` suites with c8 coverage gates, tsd type tests,
   an export-parity check between the runtime and `index.d.ts`, a check that `src/` requires only
   Node builtins, bundle tests through esbuild, a bundle-size budget (`pnpm size`) and a

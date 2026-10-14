@@ -29,9 +29,11 @@ const loadNode = async (entry, minify) => {
 for (const minify of [false, true]) {
   const label = minify ? 'minified' : 'unminified';
   test(`Bundle: node entry, ${label}`, async () => {
-    const { createMailer } = await loadNode('index.js', minify);
-    assert.strictEqual(typeof createMailer, 'function');
-    assert.throws(() => createMailer({}), { message: 'createMailer is not implemented yet' });
+    const { createMessage } = await loadNode('index.js', minify);
+    const fields = { to: 'bob@example.com', subject: 'Hello', content: { text: 'Hi' } };
+    const message = createMessage({ ...fields, from: 'Alex <alex@example.com>' });
+    assert.deepStrictEqual(message.sender, { name: 'Alex', address: 'alex@example.com' });
+    assert.throws(() => createMessage({ ...fields, from: 'not an address' }), TypeError);
   });
 
   // Every entry of the exports map bundles on its own and keeps the names and

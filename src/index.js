@@ -1,5 +1,5 @@
 // The root entry: the message model and the transport contract ported from
-// @upyo/core 0.7.0 (src/core/), in upstream's order, and the mailer.
+// @upyo/core 0.7.0 (src/core/), in upstream's order.
 const { formatAddress, parseAddress, isEmailAddress } = require('./core/address.js');
 const { combineSignals } = require('./core/abort-signal.js');
 const {
@@ -34,7 +34,6 @@ const {
   iterateRawMessage,
   analyzeRawMessage,
 } = require('./core/raw-message.js');
-const { createMailer } = require('./mailer.js');
 
 module.exports = {
   formatAddress,
@@ -64,5 +63,4 @@ module.exports = {
   createRawMessagePlan,
   iterateRawMessage,
   analyzeRawMessage,
-  createMailer,
 };

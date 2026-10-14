@@ -3,8 +3,7 @@
 ::: warning Work in progress
 The transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0, is
 here: messages, SMTP, eight HTTP providers, JMAP and the decorators. The reliability
-layer is still being designed: `createMailer` is a placeholder that throws
-`createMailer is not implemented yet`.
+layer (queue, audit log, delivery events) is still being designed.
 :::
 
 ## Installation

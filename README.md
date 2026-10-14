@@ -15,7 +15,7 @@ idempotency. Zero runtime dependencies.
 > 🚧 **Work in progress.** The transport layer is here, ported from
 > [upyo](https://github.com/dahlia/upyo) 0.7.0: messages, MIME and DKIM, SMTP, Amazon SES and seven
 > more HTTP providers, JMAP, and the pool, retry, OpenTelemetry, logger and mock transports. The
-> reliability layer is being designed: `createMailer` is exported as a placeholder that throws.
+> reliability layer (queue, audit log, delivery events) is being designed.
 
 ### 📖 [Read the documentation →](https://mailerat.vercel.app/)
 

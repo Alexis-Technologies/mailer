@@ -17,10 +17,10 @@ Nodemailer, emailjs or Upyo, made of two parts:
 
 It has zero runtime dependencies and runs on Node.js ≥ 22 only (no browser entry).
 
-**Status: the transport is being ported, the mailer designed.** The root entry exports the message
-model and the transport contract of upyo; the subpaths land one by one. `createMailer`, the entry of
-the reliability layer, is a placeholder that throws (`src/mailer.js`); its signature in
-`index.d.ts` is provisional. The direction is in "Roadmap" below.
+**Status: the transport is ported, the reliability layer is being designed.** The root entry
+exports the message model and the transport contract of upyo, each transport and decorator is a
+subpath. The reliability layer (queue, audit log, delivery events) has no API yet; its direction
+is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -57,9 +57,9 @@ is no build step.
 - `src/` is plain CommonJS (`require`/`module.exports`) and ships as is. No TypeScript syntax, no
   `import`/`export`, no `'use strict'`.
 - The root `index.js` is a one-line shim over `src/index.js`.
-- `src/index.js` lists every export **by name** (`module.exports = { createMailer }`), never by
-  spreading module objects. cjs-module-lexer only sees named keys, and ESM
-  `import { createMailer } from '@alexify/mailer'` depends on it.
+- `src/index.js` lists every export **by name** (`module.exports = { createMessage, … }`), never
+  by spreading module objects. cjs-module-lexer only sees named keys, and ESM
+  `import { createMessage } from '@alexify/mailer'` depends on it.
 - `index.d.ts` is the only source of the public types, written by hand. A public API change touches
   `src/index.js`, `index.d.ts` and a test together. `tests/unit/export-parity.test.js` compares
   runtime exports with the declared value exports and imports every name from ESM.
@@ -156,7 +156,6 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 index.js  index.d.ts   root entry shim + hand-written types
 src/
   index.js          public barrel (explicit named exports)
-  mailer.js         createMailer placeholder
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
 tests/

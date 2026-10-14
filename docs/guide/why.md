@@ -1,8 +1,8 @@
 # Why @alexify/mailer?
 
 ::: warning Work in progress
-@alexify/mailer is being designed. The direction below is settled; the API is not. `createMailer`
-is exported today as a placeholder that throws.
+The transport layer is here, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0. The
+reliability layer is being designed: the direction below is settled, its API is not.
 :::
 
 ## Two parts

@@ -1,5 +1,5 @@
-// The types of @alexify/mailer, written by hand: the message model and the
-// transport contract (src/core/) are ported from @upyo/core 0.7.0
+// The types of the root entry of @alexify/mailer, written by hand: the message
+// model and the transport contract (src/core/), ported from @upyo/core 0.7.0
 // (https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee).
 
 /**
@@ -1208,21 +1208,3 @@ export declare function analyzeRawMessage(
   signal?: AbortSignal,
   onProgress?: (analysis: RawMessageAnalysis) => void,
 ): Promise<RawMessageAnalysis>;
-
-/**
- * A mailer: sends messages through a transport, with the reliability layer
- * (queue, audit log, delivery events) on top.
- *
- * Provisional: the shape is defined with the Phase 0 contracts.
- */
-export interface Mailer {
-  send(message: object): Promise<unknown>;
-}
-
-/**
- * Creates a mailer.
- *
- * Placeholder: throws until the mailer is implemented. The signature is
- * provisional.
- */
-export declare function createMailer(options: object): Mailer;
