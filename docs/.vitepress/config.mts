@@ -50,6 +50,54 @@ const jsonLd = {
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
 };
 
+// One sidebar for the guide, the messages and the transports, so that reading
+// flows from one to the next.
+const guide = [
+  {
+    text: 'Introduction',
+    items: [
+      { text: 'Why @alexify/mailer?', link: '/guide/why' },
+      { text: 'Getting Started', link: '/guide/getting-started' },
+      { text: 'Compared with alternatives', link: '/guide/comparison' },
+    ],
+  },
+  {
+    text: 'Messages',
+    items: [
+      { text: 'Composing messages', link: '/messages/compose' },
+      { text: 'Attachments', link: '/messages/attachments' },
+      { text: 'Calendar invitations', link: '/messages/calendar' },
+      { text: 'MIME composition', link: '/messages/mime' },
+    ],
+  },
+  {
+    text: 'Transports',
+    items: [
+      { text: 'SMTP', link: '/transports/smtp' },
+      { text: 'Amazon SES', link: '/transports/ses' },
+      { text: 'Resend', link: '/transports/resend' },
+      { text: 'SendGrid', link: '/transports/sendgrid' },
+      { text: 'Mailgun', link: '/transports/mailgun' },
+      { text: 'Mailtrap', link: '/transports/mailtrap' },
+      { text: 'Maileroo', link: '/transports/maileroo' },
+      { text: 'Lettermint', link: '/transports/lettermint' },
+      { text: 'Plunk', link: '/transports/plunk' },
+      { text: 'JMAP', link: '/transports/jmap' },
+      { text: 'Mock', link: '/transports/mock' },
+      { text: 'Custom transports', link: '/transports/custom' },
+    ],
+  },
+  {
+    text: 'Decorators',
+    items: [
+      { text: 'Pool', link: '/transports/pool' },
+      { text: 'Retry', link: '/transports/retry' },
+      { text: 'OpenTelemetry', link: '/transports/otel' },
+      { text: 'Logger', link: '/transports/logger' },
+    ],
+  },
+];
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: '@alexify/mailer',
@@ -96,6 +144,8 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
+      { text: 'Messages', link: '/messages/compose', activeMatch: '/messages/' },
+      { text: 'Transports', link: '/transports/smtp', activeMatch: '/transports/' },
       { text: 'API', link: '/api/exports', activeMatch: '/api/' },
       {
         text: `v${version}`,
@@ -108,16 +158,9 @@ export default defineConfig({
     ],
 
     sidebar: {
-      '/guide/': [
-        {
-          text: 'Introduction',
-          items: [
-            { text: 'Why @alexify/mailer?', link: '/guide/why' },
-            { text: 'Getting Started', link: '/guide/getting-started' },
-            { text: 'Compared with alternatives', link: '/guide/comparison' },
-          ],
-        },
-      ],
+      '/guide/': guide,
+      '/messages/': guide,
+      '/transports/': guide,
       '/api/': [
         {
           text: 'API',

@@ -1,24 +1,71 @@
 # Exports
 
-::: warning Work in progress
-`createMailer` is a placeholder: it throws until the mailer is implemented, and its signature will
-change with the design of the messages, the transports and the queue.
-:::
+The package has one root entry and a subpath per transport and decorator, each
+with its own hand-written types. Every name is exported by name, so `require()`
+and ESM `import` give the same values:
 
 ```js
-const { createMailer } = require('@alexify/mailer');
+const { createMessage } = require('@alexify/mailer');
+const { SmtpTransport } = require('@alexify/mailer/smtp');
 ```
 
-## `createMailer(options)`
-
-Creates a mailer that sends messages through a transport, with the reliability layer on top.
-
-```ts
-interface Mailer {
-  send(message: object): Promise<unknown>;
-}
-
-function createMailer(options: object): Mailer;
+```js
+import { createMessage } from '@alexify/mailer';
+import { SmtpTransport } from '@alexify/mailer/smtp';
 ```
 
-Throws `Error('createMailer is not implemented yet')`.
+## `@alexify/mailer`
+
+The message model and the transport contract, ported from `@upyo/core`, and the
+mailer.
+
+- **Messages:** `createMessage`, and the `Message`, `MessageConstructor`,
+  `MessageContent`, `Address`, `Attachment` and `Priority` types; `parseAddress`,
+  `formatAddress`, `isEmailAddress`, `isAttachment`, `comparePriority`. See
+  [composing messages](/messages/compose).
+- **Attachments:** `readAttachmentContent`, `iterateAttachmentContent`. See
+  [attachments](/messages/attachments).
+- **Calendar:** `createCalendarAttachment`, `resolveCalendarContent`,
+  `parseCalendarMethod`. See [calendar invitations](/messages/calendar).
+- **Message-ID and threading:** `generateMessageId`, `parseMessageId`,
+  `formatMessageId`, `resolveThreadingHeaders`.
+- **Transports:** the `Transport`, `RawTransport`, `VerifiableTransport` and
+  `TransportOptions` types; `isRawTransport`, `isVerifiableTransport`,
+  `combineSignals`. See [custom transports](/transports/custom).
+- **Receipts:** the `Receipt` and `ReceiptError` types; `createFailedReceipt`,
+  `createReceiptError`, `classifyHttpStatus`, `classifyReceiptError`,
+  `parseRetryAfter`.
+- **Raw messages:** the `RawMessage` type; `createRawMessagePlan`,
+  `iterateRawMessage`, `analyzeRawMessage`, `RawMessageValidationError`.
+- **`createMailer(options)`:** the mailer of the reliability layer.
+
+::: warning Work in progress
+`createMailer` is a placeholder: it throws `createMailer is not implemented yet`
+until the mailer is implemented, and its signature will change with the design of
+the queue and the audit log.
+:::
+
+## Subpaths
+
+| Subpath | Exports | Page |
+| --- | --- | --- |
+| `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
+| `@alexify/mailer/smtp` | `SmtpTransport` and its error classes (`SmtpResponseError`, `SmtpAuthError`, …), `isSmtpResponseProviderDetails` | [SMTP](/transports/smtp) |
+| `@alexify/mailer/ses` | `SesTransport` | [Amazon SES](/transports/ses) |
+| `@alexify/mailer/resend` | `ResendTransport` | [Resend](/transports/resend) |
+| `@alexify/mailer/sendgrid` | `SendGridTransport`, `SendGridApiError` | [SendGrid](/transports/sendgrid) |
+| `@alexify/mailer/mailgun` | `MailgunTransport`, `MailgunApiError` | [Mailgun](/transports/mailgun) |
+| `@alexify/mailer/mailtrap` | `MailtrapTransport`, `createMailtrapConfig` and its error classes | [Mailtrap](/transports/mailtrap) |
+| `@alexify/mailer/maileroo` | `MailerooTransport`, `createMailerooConfig` and its error classes | [Maileroo](/transports/maileroo) |
+| `@alexify/mailer/lettermint` | `LettermintTransport`, `createLettermintConfig` and its error classes | [Lettermint](/transports/lettermint) |
+| `@alexify/mailer/plunk` | `PlunkTransport` | [Plunk](/transports/plunk) |
+| `@alexify/mailer/jmap` | `JmapTransport`, `createJmapConfig`, `JmapApiError`, `JMAP_ERROR_TYPES`, `isCapabilityError`, `uploadBlob` | [JMAP](/transports/jmap) |
+| `@alexify/mailer/mock` | `MockTransport` | [Mock](/transports/mock) |
+| `@alexify/mailer/pool` | `PoolTransport`, `RoundRobinStrategy`, `WeightedStrategy`, `PriorityStrategy`, `SelectorStrategy` | [Pool](/transports/pool) |
+| `@alexify/mailer/retry` | `RetryTransport`, `createRetryTransport` | [Retry](/transports/retry) |
+| `@alexify/mailer/otel` | `OpenTelemetryTransport`, `createOpenTelemetryTransport`, `createEmailAttributeExtractor`, `createErrorClassifier`, `defaultErrorClassifier` | [OpenTelemetry](/transports/otel) |
+| `@alexify/mailer/logger` | `LoggerTransport` | [Logger](/transports/logger) |
+
+The types of each subpath (configurations, receipts with provider details, the
+structural `TracerProvider`, `MeterProvider` and `Logger` of the decorators) are in
+its `index.d.ts`, next to the code in `src/<subpath>/`.

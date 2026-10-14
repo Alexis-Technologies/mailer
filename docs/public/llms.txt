@@ -6,12 +6,17 @@
 > audit log, one model of delivery events, suppression and idempotency.
 
 Key facts:
-- Status: work in progress. The API is being designed; `createMailer` is exported as a
-  placeholder that throws
+- Status: work in progress. The transport layer is ported from upyo 0.7.0 (MIT); the
+  reliability layer is being designed, and `createMailer` is exported as a placeholder that throws
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
-- Node.js >= 22 only; CommonJS with ESM named-import interop; hand-written `index.d.ts`
-- Zero runtime dependencies: the transports are built on `node:*` modules and `fetch`, and the
-  drivers of a queue or a database (BullMQ, MongoDB) are passed in by the application
-- Exports: `createMailer(options)`
+- Node.js >= 22 only; CommonJS with ESM named-import interop; hand-written d.ts per entry
+- Zero runtime dependencies: the transports are built on `node:*` modules and `fetch`; the
+  OpenTelemetry providers, the logger and the drivers of a queue or a database are passed in
+- Root entry `@alexify/mailer`: `createMessage`, the `Transport` contract, receipts,
+  attachments, calendar parts, Message-ID helpers, `createMailer(options)`
+- Subpaths: `/mime` (MIME, DKIM), `/smtp`, `/jmap`, `/ses`, `/resend`, `/sendgrid`, `/mailgun`,
+  `/mailtrap`, `/maileroo`, `/lettermint`, `/plunk`, `/pool`, `/retry`, `/otel`, `/logger`, `/mock`
+- Guide: https://mailerat.vercel.app/guide/getting-started
+- API: https://mailerat.vercel.app/api/exports
 - Comparison with 14 alternatives (Nodemailer, emailjs, Upyo, unemail, sently, provider SDKs):
   https://mailerat.vercel.app/guide/comparison

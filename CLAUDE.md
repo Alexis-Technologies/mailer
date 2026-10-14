@@ -33,11 +33,13 @@ Package manager is **pnpm** (pinned in `packageManager`).
 
 ```bash
 pnpm test                          # node --test tests/unit/*.test.js
+pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailpit (compose file there)
+pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
 node --test tests/unit/mailer.test.js   # a single file
 node --test --test-name-pattern="Bundle" tests/unit/*.test.js   # filter by name
 pnpm run test:coverage             # c8 over src/, gated at 98 lines/statements, 90 branches, 100 functions
-pnpm run test:types                # tsd: tests/types/*.test-d.ts against index.d.ts
-pnpm run check:dts                 # tsc --noEmit --strict over index.d.ts on its own
+pnpm run test:types                # tsd: tests/types/*.test-d.ts, one file per entry
+pnpm run check:dts                 # tsc --noEmit --strict over the d.ts of every entry
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
 pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 7 KB min+gzip and each subpath
@@ -110,6 +112,12 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 - A lint rule that upstream code breaks is suppressed on the line,
   `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
   refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
+  Style-only rules (`curly`, `object-shorthand`) are fixed instead, and a property access split
+  over lines in a test goes through a variable (`no-unexpected-multiline`).
+- **Coverage keeps the gates of the package.** Paths that upstream reached only end to end get flat
+  suites against fakes (`tests/unit/<subpath>.test.js`); `/* c8 ignore */` marks only code that is
+  dead upstream (`convertMessagesToBulk`, `recordRetry`) or unreachable on Node, each with its
+  reason. Upstream tests of a runtime without `AbortSignal.any` are left out with a comment.
 - Ported test suites keep upstream's `describe`/`it`, so they can be compared with upyo's; new
   suites use the flat style of "Testing notes". Tests for paths that upstream's suites leave out go
   into a new flat suite (`tests/unit/core.test.js` for `src/core/`).
@@ -206,9 +214,10 @@ model of states and events. `tenantId` is in the context from the start.
 
 **Phase 1, reliable sending (P0).**
 
-- **The transport of its own:** the MIME builder; the SMTP client (pool, STARTTLS and REQUIRETLS,
+- **The transport of its own** (done, ported from upyo 0.7.0; its known bugs are on the list of
+  "Code ported from upyo"): the MIME builder; the SMTP client (pool, STARTTLS and REQUIRETLS,
   AUTH PLAIN/LOGIN/XOAUTH2, DSN, PIPELINING); DKIM (RSA-SHA256, Ed25519); SES v2 over `fetch` with
-  SigV4; one more HTTP provider (Resend or Postmark).
+  SigV4; seven more HTTP providers and JMAP.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
@@ -230,8 +239,10 @@ signature mandatory and replay protection, starting with SES (SNS) and one HTTP 
 suppression list per tenant and stream, checked before a message is queued, with a bypass policy
 for transactional mail (password reset, MFA); failover over a pool of providers with health, a
 circuit breaker with a single probe in half-open, and no switch after an ambiguous "submitted"
-without an idempotency key; OpenTelemetry spans and metrics (time in queue, attempts, failure rate
-per provider, outbox size); token-bucket rate limits per provider and per tenant (SES quotas).
+without an idempotency key (`./pool` of the port has strategies and failover, not yet health or a
+breaker); OpenTelemetry spans and metrics (time in queue, attempts, failure rate per provider,
+outbox size; `./otel` of the port covers sends); token-bucket rate limits per provider and per
+tenant (SES quotas).
 
 **Phase 3, multi-tenant (P1–P2).** Provider credentials per tenant (bring your own SES), domains
 and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058) and the split between
@@ -319,15 +330,24 @@ change. **This file wins** if they ever disagree.
   they keep upstream's `describe`/`it` (see "Code ported from upyo").
 - `pnpm test` passes the glob unquoted (`tests/unit/*.test.js`): the shell expands it on Linux and
   macOS, and Node ≥ 22 expands it itself where cmd.exe does not, so Windows runs every version.
-- `tests/unit/bundle.test.js` builds `index.js` with esbuild in memory (minified and not) and calls
-  the API through the result, so the shipped files keep working after a consumer's bundler (a
-  serverless function, a single-file deploy).
+- `tests/unit/bundle.test.js` builds every entry of the exports map with esbuild in memory
+  (minified and not) and checks its exports through the result, so the shipped files keep working
+  after a consumer's bundler (a serverless function, a single-file deploy).
 - `tests/unit/dependencies.test.js` guards "Zero dependencies" above.
 - `tests/unit/scripts.test.js` runs `scripts/size.js` with a budget it always meets and one it
   never can.
-- New behavior needs a test that fails without the change. Network transports will be tested
-  against local fake servers (an SMTP server on `node:net`, an HTTP server on `node:http`), never
-  against a real provider in `pnpm test`.
+- New behavior needs a test that fails without the change. Network transports are tested
+  against local fake servers (`tests/helpers/smtp/mock-smtp-server.js` on `node:net`, servers on
+  `node:http`) or a stubbed `fetch` (`t.mock.method(globalThis, 'fetch', …)`), never against a
+  real provider in `pnpm test`.
+- **Opt-in suites**, outside the gates: `tests/mailpit/` (`pnpm test:mailpit`, serial, as the
+  inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
+  `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
+  until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
+- **Platform-dependent tests:** the mock SMTP server tolerates a client's connection reset (macOS
+  and Windows send an RST where Linux sends a FIN); the seven JMAP tests of a 401 to a streamed
+  body are `todo` on Node 24 (known upstream bug 14). `tests/unit/export-parity.test.js` also
+  checks that every d.ts using `AsyncDisposable` references `esnext.disposable` itself.
 
 ## Documentation site
 
@@ -347,6 +367,11 @@ published to npm, and lint/format do not cover it.
 - The brand is a teal "envelope" mark (`#0D6B63`, `#4CC2B5` on dark; a placeholder until a final
   logo): `docs/public/logo-mark*.svg`, `favicon.svg` (follows `prefers-color-scheme`),
   `favicon.png` and `logo.png` (the 1200×630 og:image, rendered from SVG with `rsvg-convert`).
+- **The guides of upyo are adapted, not generated:** `docs/messages/` (compose, attachments,
+  calendar, MIME) and `docs/transports/` (one page per subpath, plus custom transports), with
+  examples in CommonJS on `@alexify/mailer/<subpath>`. `/transports/logger` is new (pino-like
+  logger) and `/transports/otel` passes the providers in. One sidebar (`guide` in
+  `config.mts`) covers the guide, the messages and the transports.
 - When behavior changes, update README and the matching docs page together. Keep example outputs in
   the docs true to the code.
 

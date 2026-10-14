@@ -1,0 +1,499 @@
+# Custom transport
+
+A custom transport allows you to integrate any email service with @alexify/mailer by
+implementing the simple `Transport` interface. Whether you're connecting to
+a proprietary email API, adding specialized logging, or building testing
+utilities, custom transports provide the flexibility you need.
+
+@alexify/mailer's transport abstraction ensures that custom implementations work
+seamlessly alongside built-in transports like [SMTP](/transports/smtp),
+[Mailgun](/transports/mailgun), and [SendGrid](/transports/sendgrid).
+Your application code remains unchanged when switching between different
+email providers.
+
+This guide walks you through the implementation patterns and best practices
+for creating robust, production-ready custom transports.
+
+## When to create a custom transport
+
+Consider creating a custom transport when:
+
+ -  You need to integrate with an email service not supported by @alexify/mailer
+ -  Your organization has internal email systems with custom APIs
+ -  You require specialized behavior (logging, metrics, preprocessing)
+ -  You want to create transport for testing specific scenarios
+
+## Understanding the `Transport` interface
+
+The `Transport` interface is the foundation of @alexify/mailer's email abstraction.
+It defines a simple contract that all email services must implement,
+ensuring consistent behavior across different providers.
+
+```js
+
+```
+
+This interface is intentionally minimal, with just two methods that handle
+the core email sending operations, plus a stable provider `id` used in
+structured receipt metadata.  The design philosophy prioritizes simplicity and
+reliability over feature complexity.
+
+### Core principles
+
+When implementing a custom transport, these principles ensure compatibility with
+the @alexify/mailer ecosystem:
+
+*Return receipts for delivery failures.* The sending methods report delivery
+failures through `Receipt` objects. Caller cancellation rejects instead.
+The optional `verify()` method also rejects on failure because it does not
+perform a delivery or produce a receipt.
+
+**Support cancellation through [`AbortSignal`].** Modern applications need the
+ability to cancel long-running operations.  Check
+`options?.signal?.throwIfAborted()` at strategic points in your implementation,
+especially before expensive network operations.
+
+**Return descriptive receipts.** Success receipts should include a meaningful
+`messageId` that can be used for tracking and debugging.  Failure receipts
+should provide specific `errorMessages` that help developers understand what
+went wrong.  Use a string literal provider id, such as `Transport<"myservice">`,
+when you want `Receipt.provider` and `ReceiptError.provider` to be type-safe.
+
+[`AbortSignal`]: https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal
+
+## Basic HTTP transport example
+
+Most modern email services provide HTTP APIs for sending emails.  This makes
+HTTP-based transports the most common type of custom implementation.
+
+Let's build a complete transport for a fictional service called “MyService”
+to demonstrate the key patterns. The example below shows all the essential
+components: configuration management, HTTP communication, proper error
+handling, and cancellation support.
+
+```js
+const { createFailedReceipt } = require('@alexify/mailer');
+
+class MyServiceTransport {
+  id = 'myservice';
+
+  config;
+
+  constructor(config) {
+    this.config = {
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl ?? 'https://api.myservice.com/v1',
+    };
+  }
+
+  async send(message, options) {
+    // Check for cancellation
+    options?.signal?.throwIfAborted();
+
+    try {
+      // Convert message to API format
+      const payload = {
+        from: message.sender.address,
+        to: message.recipients.map((r) => r.address),
+        subject: message.subject,
+        text: message.content.text,
+        html: 'html' in message.content ? message.content.html : undefined,
+      };
+
+      options?.signal?.throwIfAborted();
+
+      // Send via API
+      const response = await fetch(`${this.config.baseUrl}/send`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: options?.signal,
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        return createFailedReceipt(`HTTP ${response.status}: ${error}`, {
+          provider: this.id,
+          statusCode: response.status,
+        });
+      }
+
+      const result = await response.json();
+      return {
+        successful: true,
+        messageId: result.messageId,
+        provider: this.id,
+      };
+    } catch (error) {
+      return createFailedReceipt(error instanceof Error ? error.message : String(error), {
+        provider: this.id,
+      });
+    }
+  }
+
+  async *sendMany(messages, options) {
+    for await (const message of messages) {
+      options?.signal?.throwIfAborted();
+      yield await this.send(message, options);
+    }
+  }
+}
+```
+
+Let's break down the key implementation details:
+
+**Configuration with defaults:** The constructor uses a simple pattern to
+provide sensible defaults while requiring only essential configuration.
+This makes the transport easy to use while remaining flexible.
+
+**Cancellation checking:** Notice how we check
+`options?.signal?.throwIfAborted()` at two critical points: before starting the
+operation and before making the network request. This ensures operations can be
+cancelled promptly.
+
+**Error conversion:** All errors are caught and converted to failed `Receipt`
+objects. This prevents exceptions from propagating and provides a consistent
+error handling experience.
+
+**HTTP error handling:** The code distinguishes between HTTP errors (4xx/5xx
+status codes) and network errors, providing specific error messages for each
+case.
+
+The `Transport.sendMany()` implementation uses a simple pattern that delegates
+to the `Transport.send()` method for each message.  This approach is
+straightforward and works well for most HTTP APIs that don't support batch
+operations.
+
+## Advanced patterns
+
+### Resource cleanup
+
+Some transports need to manage persistent resources like connection pools, file
+handles, or background timers. Implementing the `AsyncDisposable` interface
+ensures proper cleanup and integrates with modern JavaScript resource
+management patterns.
+
+```js
+const { createFailedReceipt } = require('@alexify/mailer');
+
+class MyTransport {
+  id = 'myservice';
+
+  connections = [];
+
+  async send(message, options) {
+    options?.signal?.throwIfAborted();
+    return createFailedReceipt('No connection is available.', {
+      provider: this.id,
+      category: 'configuration',
+      retryable: false,
+    });
+  }
+
+  async *sendMany(messages, options) {
+    for await (const message of messages) {
+      yield await this.send(message, options);
+    }
+  }
+
+  async closeConnections() {
+    await Promise.all(this.connections.map((conn) => conn.close()));
+    this.connections = [];
+  }
+
+  async [Symbol.asyncDispose]() {
+    await this.closeConnections();
+  }
+}
+
+// Usage with automatic cleanup
+await using transport = new MyTransport();
+// Transport automatically cleaned up when scope ends
+```
+
+This pattern is particularly important for production deployments where resource
+leaks can cause memory issues or exhaust connection limits. The [`await using`]
+syntax automatically calls the disposal method when the transport goes out of
+scope, even if an exception occurs.
+
+[`await using`]: https://github.com/tc39/proposal-async-explicit-resource-management#await-using-declarations
+
+### Retry logic
+
+Network operations can fail due to temporary issues like network congestion,
+server overload, or brief service outages. Implementing retry logic with
+exponential backoff makes your transport more resilient in production
+environments.
+
+```js
+async function sendWithRetry(sendFn, maxRetries = 3) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await sendFn();
+
+      // Don't retry client errors (4xx)
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Client error: ${response.status}`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s...
+      const delay = Math.pow(2, attempt) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+```
+
+The retry function implements several important patterns: it avoids retrying
+client errors (4xx status codes) since these indicate problems with the
+request itself, uses exponential backoff to avoid overwhelming struggling
+servers, and provides a configurable maximum retry count to prevent infinite
+loops.
+
+> [!CAUTION]
+> Never retry 4xx client errors as these indicate problems with your request
+> that won't be resolved by retrying. Only retry 5xx server errors and
+> network failures.
+
+### Configuration validation
+
+Robust configuration validation prevents runtime errors and provides clear
+feedback when transports are misconfigured.  This is especially important in
+production environments where configuration errors might not be discovered
+until the first email is sent.
+
+```js
+function createApiConfig(config) {
+  if (!config.apiKey) {
+    throw new Error('API key is required');
+  }
+
+  if (config.timeout && config.timeout < 1000) {
+    throw new Error('Timeout must be at least 1000ms');
+  }
+
+  return {
+    apiKey: config.apiKey,
+    timeout: config.timeout ?? 30000,
+  };
+}
+```
+
+This validation approach uses a factory function that both validates input
+and applies defaults. Throwing errors during construction means configuration
+problems are discovered immediately, rather than when the first email is sent.
+
+## Best practices
+
+Following these practices ensures your custom transport integrates well with
+the @alexify/mailer ecosystem and provides a reliable experience for users.
+
+### Handle cancellation properly
+
+Cancellation support is essential for responsive applications. Users should be
+able to cancel email operations that are taking too long or are no longer
+needed.
+
+```js
+// Check before expensive operations
+options?.signal?.throwIfAborted();
+
+// Pass to network calls
+await fetch(url, { signal: options?.signal });
+```
+
+Check for cancellation before starting expensive operations and pass the signal
+to any network calls.  This ensures operations can be cancelled promptly and
+resources aren't wasted.
+
+### Always return receipts, never throw
+
+Consistent error handling is a core principle of the `Transport` interface.
+Users should never have to catch exceptions from transport methods.
+
+```js [✅ Good]
+try {
+  const result = await sendEmail();
+  return { successful: true, messageId: result.id };
+} catch (error) {
+  return { successful: false, errorMessages: [error.message] };
+}
+```
+
+```js [❌ Bad: don't throw from send()]
+async send(message) {
+  throw new Error('Something went wrong');
+}
+```
+
+This approach provides predictable error handling and allows users to handle
+errors consistently across all transports.
+
+### Use the platform, add no dependency
+
+@alexify/mailer runs on Node.js 22 or newer and has no runtime dependencies.  A
+transport may use `node:*` modules and the global `fetch`; prefer `fetch`,
+`AbortSignal` and the other web standards where they fit, and take a client
+library, if one is needed at all, as an option rather than a dependency.
+
+### Provide sensible configuration defaults
+
+Good defaults make your transport easy to use while still allowing customization
+when needed.
+
+```js
+function createConfig(config) {
+  return {
+    ...config,
+    timeout: config.timeout ?? 30000,
+    retries: config.retries ?? 3,
+    baseUrl: config.baseUrl ?? 'https://api.example.com',
+  };
+}
+```
+
+Use factory functions to apply defaults and validate configuration.
+This pattern makes misconfiguration errors visible early and provides
+a better developer experience.
+
+With these patterns, your custom transport will integrate seamlessly with @alexify/mailer's
+ecosystem and provide a consistent, reliable experience for users.
+
+## Sharing your transport
+
+If you've built a transport that others might find useful, consider sharing
+it with the community! There are several ways to make your custom transport
+available to other developers.
+
+### Publishing as a package
+
+You can package and publish your transport as a standalone npm package.  Name
+it after the service, such as *@yourorg/mailer-servicename*, to make it easy
+for users to discover.
+
+Look at the subpaths of the @alexify/mailer repository (`src/ses`,
+`src/resend`) for reference on structure, documentation, and testing
+patterns.  Each one has hand-written type definitions, comprehensive tests,
+and clear usage examples.
+
+Make sure to add *@alexify/mailer* as a peer dependency in your *package.json*
+rather than a regular dependency. This ensures users can control the core
+version and avoids potential version conflicts:
+
+```json
+{
+  "peerDependencies": {
+    "@alexify/mailer": "^0.1.0"
+  }
+}
+```
+
+### Contributing to @alexify/mailer
+
+We welcome contributions of new transports to the @alexify/mailer repository!
+If you've implemented a transport for a popular email service, don't hesitate
+to submit a pull request—we'd love to see what you've built.
+
+While we have established patterns like comprehensive test coverage, proper
+hand-written types, clear documentation, and zero dependencies, you don't
+need to have everything perfect before contributing. Our maintainers are happy
+to help you polish your implementation and bring it up to project standards.
+
+Feel free to open a draft PR early in your development process if you'd like
+feedback or guidance. Check the existing transport implementations for examples,
+but remember that we're here to help you succeed!
+
+## Raw MIME delivery
+
+`RawTransport` extends `Transport` with an optional `sendRaw()` capability.
+Use `isRawTransport()` before sending through a transport supplied by another
+component; decorators must explicitly expose this capability themselves.
+
+```js
+const { isRawTransport } = require('@alexify/mailer');
+
+if (isRawTransport(transport)) {
+  await transport.sendRaw({
+    envelope: { from: 'sender@example.com', to: ['recipient@example.net'] },
+    content: new TextEncoder().encode('Subject: Hello\r\n\r\nHello!\r\n'),
+    encoding: '7bit',
+  });
+}
+```
+
+The envelope is required and independent of all MIME headers, including Bcc.
+Use `null` for a null reverse-path. Content accepts `Uint8Array`, a Promise of
+bytes, `Blob`, or an attachment-style factory that opens an independent reader
+on every call. Do not pass a one-shot stream directly.
+
+An explicit `encoding` reads the source once per successful send. Omitting it
+reads twice: analysis followed by transmission. Factories must reproduce
+identical bytes on both passes, and on concurrent sends. @alexify/mailer checks structure
+and known size again but does not compare a digest of the two passes.
+
+`7bit` requires ASCII bytes. `8bit` allows non-ASCII body bytes and asserts that
+all MIME headers, including nested part headers, are ASCII. This is a caller
+guarantee: @alexify/mailer checks only the top-level headers and does not parse nested
+MIME. Use `utf8` or omit `encoding` if you cannot guarantee ASCII headers
+throughout. `utf8` permits
+internationalized headers. Automatic analysis conservatively selects `utf8`
+for any non-ASCII byte, even in the body; specify `8bit` to avoid that
+additional transport requirement when the headers are ASCII. These values do
+not request transcoding and do not permit binary MIME with NUL bytes.
+
+Raw content must use CRLF throughout, end in CRLF, have a nonempty header
+section, and contain no NUL or line longer than 998 bytes excluding CRLF.
+Headers without a body are valid. @alexify/mailer validates these wire constraints, not
+full MIME syntax or signatures, and never repairs the content. Server-side
+processing can still modify the message.
+
+Transport implementers can use the raw-message source helpers to validate and
+read incrementally. Extra memory is limited to bounded work buffers, the
+largest chunk supplied by the source, and runtime buffers. Sources should
+honor cancellation promptly and release resources when iteration ends.
+
+## Verifying transport configuration
+
+`VerifiableTransport` is an optional capability for checking a transport's
+connection, configured authentication, and prerequisites without sending mail.
+The base `Transport` interface does not require it. Use
+`isVerifiableTransport()` to discover support while retaining the provider ID
+type:
+
+```js
+const { isVerifiableTransport } = require('@alexify/mailer');
+
+if (isVerifiableTransport(transport)) {
+  await transport.verify({ signal: AbortSignal.timeout(10_000) });
+}
+```
+
+`verify()` resolves without a value on success and rejects with a
+transport-specific error on failure. It preserves the caller's abort reason
+when cancelled. A successful check describes setup at that time; it does not
+promise acceptance of any particular message or successful delivery.
+
+[SMTP](/transports/smtp#verifying-the-configuration) and
+[JMAP](/transports/jmap#verifying-the-configuration) implement this capability.
+Retry, pool, and observability wrappers do not automatically forward it.
+Verify the underlying transport before wrapping it, or implement the
+capability explicitly in a custom wrapper.
