@@ -52,6 +52,10 @@
       "types": "./src/mailtrap/index.d.ts",
       "default": "./src/mailtrap/index.js"
     },
+    "./maileroo": {
+      "types": "./src/maileroo/index.d.ts",
+      "default": "./src/maileroo/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
