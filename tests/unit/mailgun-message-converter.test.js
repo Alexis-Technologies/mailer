@@ -1,0 +1,456 @@
+// Ported from upyo v0.7.0 (packages/mailgun/src/message-converter.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { createMessage } = require('../../src/core/message.js');
+const { MailgunTransport } = require('../../src/mailgun/index.js');
+const assert = require('node:assert/strict');
+const { describe, it } = require('node:test');
+const { convertMessage } = require('../../src/mailgun/message-converter.js');
+
+describe('convertMessage', () => {
+  const transport = new MailgunTransport({
+    apiKey: 'test-key',
+    domain: 'test-domain.com',
+  });
+  const config = transport.config;
+
+  it('should convert a simple message', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('from'), 'sender@example.com');
+    assert.equal(formData.get('to'), 'recipient@example.com');
+    assert.equal(formData.get('subject'), 'Test Subject');
+    assert.equal(formData.get('text'), 'Test content');
+  });
+
+  it('should format addresses with names', async () => {
+    const message = {
+      sender: { address: 'sender@example.com', name: 'John Doe' },
+      recipients: [{ address: 'recipient@example.com', name: 'Jane Smith' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('from'), '"John Doe" <sender@example.com>');
+    assert.equal(formData.get('to'), '"Jane Smith" <recipient@example.com>');
+  });
+
+  it('should handle HTML content', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { html: '<p>Test HTML</p>', text: 'Test text' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('html'), '<p>Test HTML</p>');
+    assert.equal(formData.get('text'), 'Test text');
+  });
+
+  it('should handle CC and BCC recipients', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [{ address: 'cc@example.com' }],
+      bccRecipients: [{ address: 'bcc@example.com' }],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('cc'), 'cc@example.com');
+    assert.equal(formData.get('bcc'), 'bcc@example.com');
+  });
+
+  it('should handle reply-to addresses', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [{ address: 'replyto@example.com' }],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('h:Reply-To'), 'replyto@example.com');
+  });
+
+  it('should handle priority', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'high',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    assert.equal(formData.get('h:X-Priority'), '1');
+  });
+
+  it('should handle tags', async () => {
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: ['tag1', 'tag2'],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    const tags = formData.getAll('o:tag');
+    assert.deepEqual(tags, ['tag1', 'tag2']);
+  });
+
+  it('should handle custom headers', async () => {
+    const headers = new Headers();
+    headers.set('X-Custom-Header', 'custom-value');
+
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers,
+    };
+
+    const formData = await convertMessage(message, config);
+
+    // Headers are normalized to lowercase by the Headers API
+    assert.equal(formData.get('h:x-custom-header'), 'custom-value');
+  });
+
+  it('should handle tracking options', async () => {
+    const transportWithTracking = new MailgunTransport({
+      apiKey: 'test-key',
+      domain: 'test-domain.com',
+      tracking: false,
+      clickTracking: false,
+      openTracking: false,
+    });
+    const configWithTracking = transportWithTracking.config;
+
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject',
+      content: { text: 'Test content' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, configWithTracking);
+
+    assert.equal(formData.get('o:tracking'), 'no');
+    assert.equal(formData.get('o:tracking-clicks'), 'no');
+    assert.equal(formData.get('o:tracking-opens'), 'no');
+  });
+
+  it('should handle attachments', async () => {
+    const textContent = 'Hello, this is test content!';
+    const textBytes = new TextEncoder().encode(textContent);
+
+    const message = {
+      sender: { address: 'sender@example.com' },
+      recipients: [{ address: 'recipient@example.com' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Test Subject with Attachment',
+      content: { text: 'This message has an attachment' },
+      attachments: [
+        {
+          filename: 'test.txt',
+          contentType: 'text/plain',
+          content: textBytes,
+          contentId: '',
+          inline: false,
+        },
+        {
+          filename: 'data.json',
+          contentType: 'application/json',
+          content: new TextEncoder().encode(JSON.stringify({ key: 'value' })),
+          contentId: 'json-attachment',
+          inline: true,
+        },
+      ],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+    };
+
+    const formData = await convertMessage(message, config);
+
+    // Check basic message fields
+    assert.equal(formData.get('subject'), 'Test Subject with Attachment');
+    assert.equal(formData.get('text'), 'This message has an attachment');
+
+    // Check attachments were properly added to FormData
+    // The actual Blob content testing is limited in unit tests,
+    // but we can verify the FormData structure
+    const attachmentEntries = Array.from(formData.entries()).filter(
+      ([key]) => key === 'attachment' || key === 'inline',
+    );
+
+    // We should have 2 attachments (1 regular, 1 inline)
+    assert.equal(attachmentEntries.length, 2);
+
+    // Check that we have both attachment types
+    const hasAttachment = attachmentEntries.some(([key]) => key === 'attachment');
+    const hasInline = attachmentEntries.some(([key]) => key === 'inline');
+    assert.ok(hasAttachment, 'Should have regular attachment');
+    assert.ok(hasInline, 'Should have inline attachment');
+  });
+});
+
+const threadingConfig = new MailgunTransport({ apiKey: 'test-key', domain: 'test-domain.com' })
+  .config;
+
+const headerOf = (form, name) =>
+  [...form.entries()]
+    .filter(([key]) => key.toLowerCase() === `h:${name.toLowerCase()}`)
+    .map(([, value]) => String(value));
+
+describe('convertMessage() reply threading', () => {
+  const base = {
+    from: 'sender@example.com',
+    to: 'recipient@example.com',
+    subject: 'Re: Your request',
+    content: { text: 'Thanks for getting in touch.' },
+  };
+
+  it('writes the typed threading fields', async () => {
+    const message = createMessage({
+      ...base,
+      inReplyTo: '122@example.com',
+      references: ['120@example.com', '121@example.com'],
+    });
+    const result = await convertMessage(message, threadingConfig);
+
+    assert.deepEqual(headerOf(result, 'In-Reply-To'), ['<122@example.com>']);
+    assert.deepEqual(headerOf(result, 'References'), ['<120@example.com> <121@example.com>']);
+  });
+
+  it('prefers a typed field over a custom header', async () => {
+    const message = createMessage({
+      ...base,
+      inReplyTo: ['typed@example.com'],
+      headers: { 'In-Reply-To': '<custom@example.com>' },
+    });
+    const result = await convertMessage(message, threadingConfig);
+
+    assert.deepEqual(headerOf(result, 'In-Reply-To'), ['<typed@example.com>']);
+  });
+
+  it('lets an empty list suppress a custom header', async () => {
+    const message = createMessage({
+      ...base,
+      inReplyTo: [],
+      references: [],
+      headers: {
+        'In-Reply-To': '<custom@example.com>',
+        References: '<custom@example.com>',
+      },
+    });
+    const result = await convertMessage(message, threadingConfig);
+
+    assert.deepEqual(headerOf(result, 'In-Reply-To'), []);
+    assert.deepEqual(headerOf(result, 'References'), []);
+  });
+
+  it('lets a custom header through when the field is unset', async () => {
+    const message = createMessage({
+      ...base,
+      headers: { 'In-Reply-To': '<custom@example.com>' },
+    });
+    const result = await convertMessage(message, threadingConfig);
+
+    assert.deepEqual(headerOf(result, 'In-Reply-To'), ['<custom@example.com>']);
+  });
+});
+
+const CALENDAR_ICS =
+  [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    'UID:1@example.com',
+    'SUMMARY:Lunch',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n') + '\r\n';
+
+describe('convertMessage() calendar', () => {
+  const transport = new MailgunTransport({
+    apiKey: 'test-key',
+    domain: 'test-domain.com',
+  });
+  const config = transport.config;
+
+  it('should carry the calendar as an invite.ics attachment', async () => {
+    const form = await convertMessage(
+      createMessage({
+        from: 'organizer@example.com',
+        to: 'attendee@example.net',
+        subject: 'Lunch',
+        content: { text: 'Lunch on Wednesday.' },
+        calendar: { method: 'REQUEST', content: CALENDAR_ICS },
+      }),
+      config,
+    );
+
+    const attachments = form.getAll('attachment');
+    assert.equal(attachments.length, 1);
+    assert.equal(attachments[0].name, 'invite.ics');
+    // `Blob` lower-cases the media type it is given, which is harmless: RFC
+    // 6047 §2.4 compares the method ignoring case.
+    assert.equal(attachments[0].type.toUpperCase(), 'TEXT/CALENDAR; CHARSET=UTF-8; METHOD=REQUEST');
+    assert.equal(await attachments[0].text(), CALENDAR_ICS);
+    // An empty content ID keeps it out of the inline field.
+    assert.equal(form.getAll('inline').length, 0);
+  });
+
+  it('should place the invitation ahead of the other attachments', async () => {
+    const form = await convertMessage(
+      createMessage({
+        from: 'organizer@example.com',
+        to: 'attendee@example.net',
+        subject: 'Lunch',
+        content: { text: 'Lunch on Wednesday.' },
+        calendar: { method: 'REQUEST', content: CALENDAR_ICS },
+        attachments: [
+          {
+            inline: false,
+            filename: 'agenda.txt',
+            content: new TextEncoder().encode('agenda'),
+            contentType: 'text/plain',
+            contentId: '',
+          },
+        ],
+      }),
+      config,
+    );
+
+    const attachments = form.getAll('attachment');
+    assert.deepEqual(
+      attachments.map((file) => file.name),
+      ['invite.ics', 'agenda.txt'],
+    );
+  });
+
+  it('should reject malformed calendar property syntax', async () => {
+    const message = {
+      sender: { address: 'organizer@example.com' },
+      recipients: [{ address: 'attendee@example.net' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Lunch',
+      content: { text: 'Lunch.' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+      calendar: {
+        method: 'REQUEST',
+        content: 'BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nSUMMARY;BROKEN:Lunch\r\nEND:VCALENDAR\r\n',
+      },
+    };
+
+    await assert.rejects(() => convertMessage(message, config), {
+      name: 'TypeError',
+    });
+  });
+
+  it('should reject calendar content that never passed createMessage()', async () => {
+    const message = {
+      sender: { address: 'organizer@example.com' },
+      recipients: [{ address: 'attendee@example.net' }],
+      ccRecipients: [],
+      bccRecipients: [],
+      replyRecipients: [],
+      subject: 'Lunch',
+      content: { text: 'Lunch.' },
+      attachments: [],
+      priority: 'normal',
+      tags: [],
+      headers: new Headers(),
+      calendar: { method: 'REQUEST', content: 'not a calendar' },
+    };
+
+    await assert.rejects(() => convertMessage(message, config), {
+      name: 'TypeError',
+    });
+  });
+});

@@ -44,6 +44,10 @@
       "types": "./src/sendgrid/index.d.ts",
       "default": "./src/sendgrid/index.js"
     },
+    "./mailgun": {
+      "types": "./src/mailgun/index.d.ts",
+      "default": "./src/mailgun/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
