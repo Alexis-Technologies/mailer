@@ -1,6 +1,8 @@
 // Types ported from upyo v0.7.0 (packages/pool/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+/// <reference lib="esnext.disposable" />
+
 import { Message, Receipt, Transport, TransportOptions } from '../../index.js';
 
 /**

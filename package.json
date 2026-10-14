@@ -79,6 +79,10 @@
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
+    },
+    "./otel": {
+      "types": "./src/otel/index.d.ts",
+      "default": "./src/otel/index.js"
     }
   },
   "directories": {
@@ -141,6 +145,12 @@
     "zero-dependency"
   ],
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/context-async-hooks": "^1.30.1",
+    "@opentelemetry/resources": "^1.30.1",
+    "@opentelemetry/sdk-metrics": "^1.30.1",
+    "@opentelemetry/sdk-trace-base": "^1.30.1",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "c8": "^12.0.0",

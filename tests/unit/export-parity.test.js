@@ -59,3 +59,15 @@ for (const { specifier, runtimeFile, dtsFile } of entryPoints) {
     assert.deepStrictEqual(JSON.parse(output), []);
   });
 }
+
+// tsc compiles the d.ts files of check:dts together, so a lib referenced by
+// one of them hides a missing reference in another; a consumer may import a
+// single subpath.
+test('Exports: a d.ts that uses AsyncDisposable references esnext.disposable itself', () => {
+  for (const { dtsFile } of entryPoints) {
+    const source = fs.readFileSync(path.join(ROOT, dtsFile), 'utf8');
+    if (/AsyncDisposable|Symbol\.asyncDispose/.test(source)) {
+      assert.match(source, /^\/\/\/ <reference lib="esnext\.disposable" \/>$/m, dtsFile);
+    }
+  }
+});
