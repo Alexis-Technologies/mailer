@@ -32,6 +32,10 @@
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"
     },
+    "./ses": {
+      "types": "./src/ses/index.d.ts",
+      "default": "./src/ses/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
