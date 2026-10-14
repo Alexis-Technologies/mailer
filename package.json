@@ -1,0 +1,95 @@
+{
+  "name": "@alexify/mailer",
+  "version": "0.0.1",
+  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM and HTTP providers, with a reliability layer on top — a persistent queue, an audit log, delivery events, suppression and idempotency",
+  "license": "MIT",
+  "author": "Alex Dolid <dolid.sasha@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alexis-Technologies/mailer.git"
+  },
+  "homepage": "https://mailer.vercel.app/",
+  "bugs": {
+    "url": "https://github.com/Alexis-Technologies/mailer/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
+    "test:types": "tsd",
+    "check:dts": "tsc --noEmit --strict --target es2022 --skipLibCheck false index.d.ts",
+    "lint": "oxlint src tests scripts bench",
+    "format": "oxfmt src tests scripts bench",
+    "format:check": "oxfmt --check src tests scripts bench",
+    "size": "node scripts/size.js",
+    "bench": "node bench/bench.js",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "docs:comparison": "node scripts/comparison.js",
+    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts",
+    "release": "pnpm publish"
+  },
+  "tsd": {
+    "directory": "tests/types"
+  },
+  "keywords": [
+    "mailer",
+    "email",
+    "mail",
+    "smtp",
+    "smtp-client",
+    "mime",
+    "dkim",
+    "ses",
+    "aws-ses",
+    "nodemailer-alternative",
+    "transactional-email",
+    "email-queue",
+    "outbox",
+    "audit-log",
+    "idempotency",
+    "webhooks",
+    "suppression",
+    "bounce",
+    "deliverability",
+    "zero-dependency"
+  ],
+  "devDependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
+    "c8": "^12.0.0",
+    "esbuild": "^0.28.2",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.75.0",
+    "tsd": "^0.33.0",
+    "typescript": "^7.0.2",
+    "vitepress": "^1.6.4"
+  }
+}
