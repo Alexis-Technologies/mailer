@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://mailer.vercel.app/sitemap.xml
+Sitemap: https://mailerat.vercel.app/sitemap.xml

@@ -12,7 +12,7 @@ const ogDescription =
   'events, suppression and idempotency.';
 const repo = 'https://github.com/Alexis-Technologies/mailer';
 const base = '/';
-const hostname = 'https://mailer.vercel.app/';
+const hostname = 'https://mailerat.vercel.app/';
 const ogImage = `${hostname}logo.png`;
 
 const keywords = [

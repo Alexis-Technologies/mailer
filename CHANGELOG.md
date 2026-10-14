@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Node builtins, bundle tests through esbuild, a bundle-size budget (`pnpm size`) and a
   zero-dependency benchmark harness (`pnpm bench`).
 - **CI** on GitHub Actions and a VitePress documentation site at
-  [mailer.vercel.app](https://mailer.vercel.app/), with a comparison of 14 Node.js email libraries
-  generated from `docs/comparison.json`.
+  [mailerat.vercel.app](https://mailerat.vercel.app/), with a comparison of 14 Node.js email
+  libraries generated from `docs/comparison.json`.
 
 [unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main

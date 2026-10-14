@@ -14,4 +14,4 @@ Key facts:
   drivers of a queue or a database (BullMQ, MongoDB) are passed in by the application
 - Exports: `createMailer(options)`
 - Comparison with 14 alternatives (Nodemailer, emailjs, Upyo, unemail, sently, provider SDKs):
-  https://mailer.vercel.app/guide/comparison
+  https://mailerat.vercel.app/guide/comparison

@@ -92,7 +92,7 @@ scripts/
   size.js           bundle-size report and budget gate (CI smoke)
   comparison.js     renders docs/comparison.json into docs/guide/comparison.md
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
-docs/               VitePress site (mailer.vercel.app), not published
+docs/               VitePress site (mailerat.vercel.app), not published
   comparison.json   the feature matrix of 14 alternatives (the data of the comparison page)
 .claude/skills/     metaskills v1.0.5 skills (js-conventions, npm-publish adapted)
 ```
@@ -246,7 +246,7 @@ change. **This file wins** if they ever disagree.
 
 ## Documentation site
 
-VitePress in `docs/`, deployed to Vercel (`vercel.json`) at `mailer.vercel.app`. It is not
+VitePress in `docs/`, deployed to Vercel (`vercel.json`) at `mailerat.vercel.app`. It is not
 published to npm, and lint/format do not cover it.
 
 - Only `docs/index.md` has frontmatter; links between pages are absolute and extensionless.
