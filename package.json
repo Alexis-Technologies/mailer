@@ -56,6 +56,10 @@
       "types": "./src/maileroo/index.d.ts",
       "default": "./src/maileroo/index.js"
     },
+    "./lettermint": {
+      "types": "./src/lettermint/index.d.ts",
+      "default": "./src/lettermint/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
