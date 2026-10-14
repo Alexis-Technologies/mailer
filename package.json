@@ -24,6 +24,10 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
+    "./mime": {
+      "types": "./src/mime/index.d.ts",
+      "default": "./src/mime/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
@@ -93,6 +97,7 @@
     "esbuild": "^0.28.2",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.75.0",
+    "postal-mime": "^3.0.1",
     "tsd": "^0.33.0",
     "typescript": "^7.0.2",
     "vitepress": "^1.6.4"

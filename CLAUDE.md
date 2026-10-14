@@ -134,6 +134,9 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 11. resend: the `Idempotency-Key` comes from `Math.random`.
 12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
     an injected logger.
+13. mime: the first encoded word of a header shares its line with the field name
+    (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line with
+    encoded words.
 
 ## Repository layout
 

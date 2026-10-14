@@ -26,6 +26,9 @@ importers:
       oxlint:
         specifier: ^1.75.0
         version: 1.88.0
+      postal-mime:
+        specifier: ^3.0.1
+        version: 3.0.1
       tsd:
         specifier: ^0.33.0
         version: 0.33.0
@@ -1754,6 +1757,9 @@ packages:
     resolution: {integrity: sha512-4UGewrYgqDFw9vV6zNV+ADmPAUAfJPKtGvb/VdpQAx25X5f3xXdGdyOEVFwkl8Hl/tl7+xbeHqSEM+D5/TirUg==}
     engines: {node: '>=10'}
 
+  postal-mime@3.0.1:
+    resolution: {integrity: sha512-N86EnYOxZjW1uHQIgSXnnRdnJz+wxmtDsnk3C4R/9rQ1utj8A2znauXZ3Q3+stCHxG5ckY4/NrO09WiPU6rcdQ==}
+
   postcss@8.5.30:
     resolution: {integrity: sha512-zkd+e9S1AQHhmaBKye9zlFHWjOwVgqXl1q3ECYy8561K7qxR2cREf/STLskulBFd78k6AOFeA+ff1TtEzk9bAA==}
     engines: {node: ^10 || ^12 || >=14}
@@ -3462,6 +3468,8 @@ snapshots:
   plur@4.0.0:
     dependencies:
       irregular-plurals: 3.5.0
+
+  postal-mime@3.0.1: {}
 
   postcss@8.5.30:
     dependencies:
