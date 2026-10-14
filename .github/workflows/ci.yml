@@ -32,7 +32,7 @@ jobs:
       - run: pnpm format:check
       # Smoke: keeps the bundle-size script working and fails over the
       # min+gzip budget, which also catches a third-party module bundled in.
-      - run: pnpm size --max-gzip 7
+      - run: pnpm size --max-gzip 7 --max-gzip-mock 2
 
   types:
     runs-on: ubuntu-latest
