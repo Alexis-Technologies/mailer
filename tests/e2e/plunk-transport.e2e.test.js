@@ -1,0 +1,262 @@
+// Ported from upyo v0.7.0 (packages/plunk/src/plunk-transport.e2e.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { createFailedReceipt } = require('../../src/core/receipt.js');
+const { PlunkTransport } = require('../../src/plunk/index.js');
+const assert = require('node:assert/strict');
+const { describe, it } = require('node:test');
+const {
+  createTestMessage,
+  getTestConfig,
+  isE2eTestingEnabled,
+} = require('../helpers/plunk/test-config.js');
+
+// Only run E2E tests if environment is configured
+const describeE2E = isE2eTestingEnabled() ? describe : describe.skip;
+
+describeE2E('PlunkTransport E2E', () => {
+  let transport;
+
+  it('should initialize transport with test config', () => {
+    const config = getTestConfig();
+    transport = new PlunkTransport(config.plunk);
+    assert.ok(transport);
+  });
+
+  it('should send a simple text email', async () => {
+    const message = createTestMessage({
+      subject: '[E2E] Simple text email',
+      content: { text: 'This is a test email sent via Plunk API' },
+    });
+
+    const receipt = await transport.send(message);
+
+    if (acceptQuotaLimit(receipt, 'Simple text email')) return;
+
+    assertSuccessful(receipt);
+
+    if (receipt.successful) {
+      console.log(`Sent email with ID: ${receipt.messageId}`);
+    }
+  });
+
+  it('should send an HTML email', async () => {
+    const message = createTestMessage({
+      subject: '[E2E] HTML email',
+      content: {
+        text: 'This is the plain text version.',
+        html: '<h1>HTML Email</h1><p>This is a <strong>test email</strong> sent via Plunk API.</p>',
+      },
+    });
+
+    const receipt = await transport.send(message);
+
+    if (acceptQuotaLimit(receipt, 'HTML email')) return;
+
+    assertSuccessful(receipt);
+
+    if (receipt.successful) {
+      console.log(`Sent HTML email with ID: ${receipt.messageId}`);
+    }
+  });
+
+  it('should send an email with attachments', async () => {
+    const textContent = new TextEncoder().encode('Hello from attachment!');
+
+    const message = createTestMessage({
+      subject: '[E2E] Email with attachment',
+      content: { text: 'This email has an attachment.' },
+      attachments: [
+        {
+          filename: 'test.txt',
+          contentType: 'text/plain',
+          content: Promise.resolve(textContent),
+          inline: false,
+          contentId: '',
+        },
+      ],
+    });
+
+    const receipt = await transport.send(message);
+
+    // Attachment failures are acceptable - some APIs may have restrictions
+    if (receipt.successful) {
+      assert.ok(receipt.messageId, 'Should have a message ID');
+      console.log(`Sent email with attachment, ID: ${receipt.messageId}`);
+    } else {
+      console.log(`Attachment test failed (acceptable): ${receipt.errorMessages.join(', ')}`);
+      // Still pass the test as attachment restrictions are common
+    }
+  });
+
+  it('should send an email with custom headers', async () => {
+    const headers = new Headers();
+    headers.set('X-Custom-Source', 'Upyo E2E Test');
+    headers.set('X-Test-ID', `e2e-${Date.now()}`);
+
+    const message = createTestMessage({
+      subject: '[E2E] Email with custom headers',
+      content: { text: 'This email includes custom headers.' },
+      headers,
+    });
+
+    const receipt = await transport.send(message);
+
+    if (acceptQuotaLimit(receipt, 'Custom headers email')) return;
+
+    assertSuccessful(receipt);
+
+    if (receipt.successful) {
+      console.log(`Sent email with custom headers, ID: ${receipt.messageId}`);
+    }
+  });
+
+  it('should send an email with reply-to address', async () => {
+    const config = getTestConfig();
+    const message = createTestMessage({
+      subject: '[E2E] Email with reply-to',
+      content: { text: 'This email has a custom reply-to address.' },
+      replyRecipients: [
+        {
+          name: 'No Reply',
+          address: config.testEmails.from, // Use from address as reply-to for testing
+        },
+      ],
+    });
+
+    const receipt = await transport.send(message);
+
+    if (acceptQuotaLimit(receipt, 'Reply-to email')) return;
+
+    assertSuccessful(receipt);
+
+    if (receipt.successful) {
+      console.log(`Sent email with reply-to, ID: ${receipt.messageId}`);
+    }
+  });
+
+  it('should send multiple emails sequentially', async () => {
+    const messages = [
+      createTestMessage({
+        subject: '[E2E] Batch email 1',
+        content: { text: 'This is the first email in a batch.' },
+      }),
+      createTestMessage({
+        subject: '[E2E] Batch email 2',
+        content: { text: 'This is the second email in a batch.' },
+      }),
+      createTestMessage({
+        subject: '[E2E] Batch email 3',
+        content: {
+          html: '<p>This is the <strong>third</strong> email in a batch.</p>',
+        },
+      }),
+    ];
+
+    const receipts = [];
+    for await (const receipt of transport.sendMany(messages)) {
+      receipts.push(receipt);
+    }
+
+    assert.equal(receipts.length, 3, 'Should send all three emails');
+    if (isQuotaLimitedBatch(receipts)) {
+      console.log('Batch email test skipped due to Plunk transactional limit.');
+      return;
+    }
+    assert.ok(
+      receipts.every((r) => r.successful),
+      'All sends should be successful',
+    );
+
+    for (let i = 0; i < receipts.length; i++) {
+      const receipt = receipts[i];
+      if (receipt.successful) {
+        console.log(`Batch email ${i + 1} sent with ID: ${receipt.messageId}`);
+      }
+    }
+  });
+
+  it('should handle cancellation with AbortSignal', async () => {
+    const controller = new AbortController();
+
+    // Abort immediately
+    controller.abort();
+
+    const message = createTestMessage({
+      subject: '[E2E] Cancelled email',
+      content: { text: 'This email should be cancelled.' },
+    });
+
+    await assert.rejects(
+      () =>
+        transport.send(message, {
+          signal: controller.signal,
+        }),
+      { name: 'AbortError' },
+    );
+  });
+
+  it('should handle timeout gracefully', async () => {
+    // Create transport with very short timeout for testing
+    const timeoutTransport = new PlunkTransport({
+      ...getTestConfig().plunk,
+      timeout: 1, // 1ms timeout - should fail quickly
+      retries: 0,
+    });
+
+    const message = createTestMessage({
+      subject: '[E2E] Timeout test',
+      content: { text: 'This should timeout quickly.' },
+    });
+
+    const receipt = await timeoutTransport.send(message);
+
+    // Should fail due to timeout, but gracefully return a failed receipt
+    assert.equal(receipt.successful, false);
+    assert.ok(receipt.errorMessages.length > 0);
+
+    console.log(`Timeout test failed as expected: ${receipt.errorMessages[0]}`);
+  });
+});
+
+describe('PlunkTransport E2E quota helpers', () => {
+  it('only skips batches when all failures are quota limits', () => {
+    const success = { successful: true, messageId: 'sent' };
+    const quotaLimit = createFailedReceipt('Plunk transactional limit.', {
+      provider: 'plunk',
+      statusCode: 402,
+    });
+    const authFailure = createFailedReceipt('Unauthorized.', {
+      provider: 'plunk',
+      statusCode: 401,
+    });
+
+    assert.ok(!isQuotaLimitedBatch([success]));
+    assert.ok(isQuotaLimitedBatch([success, quotaLimit]));
+    assert.ok(!isQuotaLimitedBatch([success, quotaLimit, authFailure]));
+  });
+});
+
+function assertSuccessful(receipt) {
+  assert.ok(receipt.successful, 'Send should be successful');
+  assert.ok(receipt.messageId, 'Should have a message ID');
+}
+
+function acceptQuotaLimit(receipt, label) {
+  if (!isQuotaLimitReceipt(receipt)) return false;
+  console.log(`${label} test skipped due to Plunk transactional limit.`);
+  return true;
+}
+
+function isQuotaLimitedBatch(receipts) {
+  const failures = receipts.filter((receipt) => !receipt.successful);
+  return failures.length > 0 && failures.every(isQuotaLimitReceipt);
+}
+
+function isQuotaLimitReceipt(receipt) {
+  return (
+    !receipt.successful &&
+    receipt.errors?.some((error) => error.statusCode === 402) === true &&
+    receipt.errorMessages.some((message) => message.includes('transactional limit'))
+  );
+}

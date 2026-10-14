@@ -60,6 +60,10 @@
       "types": "./src/lettermint/index.d.ts",
       "default": "./src/lettermint/index.js"
     },
+    "./plunk": {
+      "types": "./src/plunk/index.d.ts",
+      "default": "./src/plunk/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"
