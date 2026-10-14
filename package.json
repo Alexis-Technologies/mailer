@@ -68,6 +68,10 @@
       "types": "./src/plunk/index.d.ts",
       "default": "./src/plunk/index.js"
     },
+    "./pool": {
+      "types": "./src/pool/index.d.ts",
+      "default": "./src/pool/index.js"
+    },
     "./retry": {
       "types": "./src/retry/index.d.ts",
       "default": "./src/retry/index.js"
