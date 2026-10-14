@@ -32,6 +32,10 @@
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"
     },
+    "./jmap": {
+      "types": "./src/jmap/index.d.ts",
+      "default": "./src/jmap/index.js"
+    },
     "./ses": {
       "types": "./src/ses/index.d.ts",
       "default": "./src/ses/index.js"

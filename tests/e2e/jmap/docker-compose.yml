@@ -1,0 +1,28 @@
+# Ported from upyo v0.7.0 (packages/jmap/docker-compose.yml)
+# A local Stalwart for the JMAP e2e suite; tests/e2e/jmap/setup-stalwart.sh
+# configures it.
+services:
+  stalwart:
+    # Stalwart 0.16 removed the REST management API used by setup-stalwart.sh.
+    image: docker.io/stalwartlabs/stalwart:v0.15.5
+    container_name: mailer-stalwart
+    ports:
+      - "8080:8080"   # HTTP/JMAP port
+    volumes:
+      - stalwart-data:/opt/stalwart
+    environment:
+      - STALWART_ADMIN_PASSWORD=admin123
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:8080/
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  stalwart-data:

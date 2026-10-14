@@ -137,6 +137,10 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 13. mime: the first encoded word of a header shares its line with the field name
     (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line with
     encoded words.
+14. jmap: on Node 24, `fetch` answers a 401 to a streamed request body (raw upload, import,
+    submission) with `TypeError: fetch failed` ("expected non-null body source") instead of the
+    response, so an authentication rejection becomes a retryable network error. Node 22 returns
+    the 401. The tests of it are `todo` on Node 24 until the fix.
 
 ## Repository layout
 
