@@ -1,0 +1,41 @@
+import DefaultTheme from 'vitepress/theme';
+import type { EnhanceAppContext, Theme } from 'vitepress';
+import { inBrowser } from 'vitepress';
+import { inject as injectAnalytics } from '@vercel/analytics';
+import { injectSpeedInsights } from '@vercel/speed-insights';
+import './custom.css';
+
+// Extends the default VitePress theme with brand styling (see custom.css): the
+// layout and components stay the default theme, the look comes from CSS variables.
+export default {
+  extends: DefaultTheme,
+
+  enhanceApp({ router }: EnhanceAppContext) {
+    // Vercel Web Analytics + Speed Insights. Docs-only: these are devDependencies,
+    // bundled into the VitePress site, never into the published npm package.
+    // enhanceApp also runs during the static SSR render, and both scripts are
+    // browser-only (they append a <script> to document.head).
+    if (!inBrowser) return;
+
+    // `mode` is explicit rather than 'auto': auto reads process.env.NODE_ENV,
+    // which is not reliably defined in the browser, and falls back to
+    // 'production', which would send real events from `pnpm run docs:dev`.
+    injectAnalytics({
+      framework: 'vitepress',
+      mode: import.meta.env.PROD ? 'production' : 'development',
+    });
+
+    const speedInsights = injectSpeedInsights({
+      framework: 'vitepress',
+      route: router.route.path,
+    });
+
+    // Speed Insights does not follow pushState navigations on its own. Chain
+    // instead of overwrite: the default theme may already have a handler here.
+    const onAfterRouteChange = router.onAfterRouteChange;
+    router.onAfterRouteChange = (to) => {
+      speedInsights?.setRoute(router.route.path);
+      return onAfterRouteChange?.(to);
+    };
+  },
+} satisfies Theme;
