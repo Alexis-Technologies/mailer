@@ -10,11 +10,13 @@ reliability layer is being designed: the direction below is settled, its API is 
 @alexify/mailer is an email library of its own, in the place of Nodemailer, emailjs or Upyo, made
 of two parts:
 
-1. **The transport.** An SMTP client, a MIME builder and DKIM signing written for this library,
-   and HTTP providers on `fetch`, starting with Amazon SES v2 (signed with SigV4 on
-   `node:crypto`, without the AWS SDK).
-2. **A reliability layer on top of it.** A persistent queue and outbox, an append-only audit log,
-   one model of delivery events, suppression, idempotency and failover between providers.
+1. **The transport,** here today, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0: an
+   SMTP client, a MIME builder and DKIM signing, Amazon SES v2 (signed with SigV4, without the AWS
+   SDK) and seven more HTTP providers on `fetch`, JMAP, and decorators for failover, retries,
+   telemetry and logs.
+2. **A reliability layer on top of it,** being designed. A persistent queue and outbox, an
+   append-only audit log, one model of delivery events, suppression, idempotency and failover
+   between providers.
 
 ## The gap it fills
 
@@ -26,8 +28,8 @@ That work is left to every application: a job that dies between "submitted" and 
 retry after a timeout that sends the same password reset twice, a bounce that nobody records.
 
 The breadth of providers is not where the gap is. Each provider added is one more webhook format
-and one more API that drifts, so the library starts with few providers and puts its effort into
-what happens to a message after `send()`.
+and one more API that drifts, so beyond the eight that came with the port, a new provider waits
+for a user who needs it, and the effort goes into what happens to a message after `send()`.
 
 ## Design
 
