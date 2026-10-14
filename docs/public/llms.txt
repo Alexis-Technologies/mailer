@@ -1,0 +1,17 @@
+# @alexify/mailer
+
+> Zero-dependency email for Node.js, maintained by Alexis Technologies. Its own SMTP client, MIME
+> builder, DKIM signing and HTTP providers (starting with Amazon SES v2), with a reliability layer
+> on top that none of the common Node.js email libraries has: a persistent queue and outbox, an
+> audit log, one model of delivery events, suppression and idempotency.
+
+Key facts:
+- Status: work in progress. The API is being designed; `createMailer` is exported as a
+  placeholder that throws
+- Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
+- Node.js >= 22 only; CommonJS with ESM named-import interop; hand-written `index.d.ts`
+- Zero runtime dependencies: the transports are built on `node:*` modules and `fetch`, and the
+  drivers of a queue or a database (BullMQ, MongoDB) are passed in by the application
+- Exports: `createMailer(options)`
+- Comparison with 14 alternatives (Nodemailer, emailjs, Upyo, unemail, sently, provider SDKs):
+  https://mailer.vercel.app/guide/comparison

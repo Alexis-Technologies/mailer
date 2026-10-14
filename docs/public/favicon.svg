@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .mark { stroke: #0D6B63; }
+    @media (prefers-color-scheme: dark) {
+      .mark { stroke: #4CC2B5; }
+    }
+  </style>
+  <g class="mark" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="7.5" width="24" height="17" rx="2.5"/>
+    <path d="M5.5 9.5 16 17.5l10.5-8"/>
+  </g>
+</svg>

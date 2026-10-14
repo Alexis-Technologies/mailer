@@ -1,0 +1,3123 @@
+{
+  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README.",
+  "groups": [
+    {
+      "title": "Runtimes (from imports and CI, not run)",
+      "rows": [
+        {
+          "id": "nodeMin",
+          "title": "Node.js, minimum version"
+        },
+        {
+          "id": "deno",
+          "title": "Deno"
+        },
+        {
+          "id": "bun",
+          "title": "Bun"
+        },
+        {
+          "id": "edge",
+          "title": "Cloudflare Workers / edge"
+        },
+        {
+          "id": "browser",
+          "title": "Browser"
+        }
+      ]
+    },
+    {
+      "title": "Transports and delivery reliability",
+      "rows": [
+        {
+          "id": "smtp",
+          "title": "SMTP client"
+        },
+        {
+          "id": "sendmail",
+          "title": "Sendmail / local binary"
+        },
+        {
+          "id": "jmap",
+          "title": "JMAP"
+        },
+        {
+          "id": "httpProviders",
+          "title": "HTTP providers, count"
+        },
+        {
+          "id": "failover",
+          "title": "Failover between providers"
+        },
+        {
+          "id": "smtpPool",
+          "title": "SMTP connection pool"
+        },
+        {
+          "id": "retry",
+          "title": "Retry / backoff"
+        },
+        {
+          "id": "rateLimit",
+          "title": "Rate limiting"
+        },
+        {
+          "id": "circuitBreaker",
+          "title": "Circuit breaker"
+        },
+        {
+          "id": "timeout",
+          "title": "Timeout / AbortSignal"
+        },
+        {
+          "id": "queue",
+          "title": "Persistent queue (survives a restart)"
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "rows": [
+        {
+          "id": "attachments",
+          "title": "Attachments"
+        },
+        {
+          "id": "streaming",
+          "title": "Streaming large attachments"
+        },
+        {
+          "id": "inline",
+          "title": "Inline images (CID)"
+        },
+        {
+          "id": "rawMime",
+          "title": "Sending raw MIME"
+        },
+        {
+          "id": "ical",
+          "title": "iCalendar"
+        },
+        {
+          "id": "unicode",
+          "title": "Unicode / IDN"
+        },
+        {
+          "id": "listUnsubscribe",
+          "title": "List-Unsubscribe"
+        },
+        {
+          "id": "templates",
+          "title": "Built-in templates"
+        },
+        {
+          "id": "reactEmail",
+          "title": "React Email"
+        },
+        {
+          "id": "batch",
+          "title": "Batch / bulk"
+        },
+        {
+          "id": "scheduled",
+          "title": "Scheduled sending"
+        },
+        {
+          "id": "tags",
+          "title": "Tags / metadata"
+        },
+        {
+          "id": "tracking",
+          "title": "Open/click tracking"
+        },
+        {
+          "id": "idempotency",
+          "title": "Idempotency key"
+        }
+      ]
+    },
+    {
+      "title": "Security and authentication",
+      "rows": [
+        {
+          "id": "dkim",
+          "title": "DKIM signing in the library"
+        },
+        {
+          "id": "oauth2",
+          "title": "OAuth2 for SMTP"
+        },
+        {
+          "id": "arc",
+          "title": "ARC"
+        },
+        {
+          "id": "dsn",
+          "title": "DSN"
+        },
+        {
+          "id": "proxy",
+          "title": "Proxy"
+        },
+        {
+          "id": "verify",
+          "title": "`verify()` / connection check"
+        },
+        {
+          "id": "smtpAuth",
+          "title": "SMTP AUTH mechanisms"
+        },
+        {
+          "id": "tlsPolicy",
+          "title": "SMTP TLS policies"
+        }
+      ]
+    },
+    {
+      "title": "Platform features (events, domains, provider API)",
+      "rows": [
+        {
+          "id": "webhooks",
+          "title": "Webhooks: parsing and signature verification"
+        },
+        {
+          "id": "inbound",
+          "title": "Inbound mail"
+        },
+        {
+          "id": "suppression",
+          "title": "Suppression / bounce API"
+        },
+        {
+          "id": "domains",
+          "title": "Domain management (API)"
+        },
+        {
+          "id": "addressValidation",
+          "title": "Address validation"
+        },
+        {
+          "id": "providerLogs",
+          "title": "Sending log on the provider side"
+        },
+        {
+          "id": "apiCoverage",
+          "title": "Provider API coverage"
+        },
+        {
+          "id": "multiChannel",
+          "title": "Multi-channel: SMS, WhatsApp, push"
+        }
+      ]
+    },
+    {
+      "title": "Observability and extensibility",
+      "rows": [
+        {
+          "id": "otel",
+          "title": "OpenTelemetry"
+        },
+        {
+          "id": "hooks",
+          "title": "Hooks / middleware"
+        },
+        {
+          "id": "mock",
+          "title": "Mock / test mode"
+        },
+        {
+          "id": "auditLog",
+          "title": "Local audit log / event journal"
+        }
+      ]
+    },
+    {
+      "title": "Quality, license, maturity",
+      "rows": [
+        {
+          "id": "types",
+          "title": "TypeScript types"
+        },
+        {
+          "id": "deps",
+          "title": "Runtime dependencies"
+        },
+        {
+          "id": "moduleFormat",
+          "title": "Module format"
+        },
+        {
+          "id": "license",
+          "title": "License"
+        },
+        {
+          "id": "version",
+          "title": "Version (2026-10-07)"
+        },
+        {
+          "id": "lastCommit",
+          "title": "Last commit"
+        },
+        {
+          "id": "tests",
+          "title": "Tests: files / cases"
+        },
+        {
+          "id": "maintainer",
+          "title": "Owner / maintenance risk"
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "id": "nodemailer",
+      "name": "Nodemailer 10",
+      "direction": "SMTP/MIME",
+      "url": "https://github.com/nodemailer/nodemailer",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "CI: test:bun"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "only with `nodejs_compat`"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "SMTP + LMTP"
+        },
+        "sendmail": {
+          "mark": "✅"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1 (SES, needs the SDK)"
+        },
+        "failover": {
+          "mark": "⚠️",
+          "text": "host DNS fallback only"
+        },
+        "smtpPool": {
+          "mark": "✅",
+          "text": "max 5, 100 msg"
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "requeue in the pool only"
+        },
+        "rateLimit": {
+          "mark": "✅",
+          "text": "`rateLimit` in the pool"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "timeouts, no `AbortSignal`"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "✅",
+          "text": "path, URL, Buffer, stream, data-URI"
+        },
+        "streaming": {
+          "mark": "⚠️",
+          "text": "SMTP yes; DKIM and SES buffer"
+        },
+        "inline": {
+          "mark": "✅",
+          "text": "multipart/related"
+        },
+        "rawMime": {
+          "mark": "✅"
+        },
+        "ical": {
+          "mark": "✅",
+          "text": "`icalEvent` + METHOD"
+        },
+        "unicode": {
+          "mark": "✅",
+          "text": "punycode + SMTPUTF8"
+        },
+        "listUnsubscribe": {
+          "mark": "✅",
+          "text": "`list.unsubscribe`"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "❌"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers; tags on SES only"
+        },
+        "tracking": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "✅",
+          "text": "RSA-SHA256"
+        },
+        "oauth2": {
+          "mark": "✅",
+          "text": "refresh + service account"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "✅"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "HTTP CONNECT, SOCKS through a module"
+        },
+        "verify": {
+          "mark": "✅"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, CRAM-MD5, XOAUTH2"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "REQUIRETLS, SNI, no DANE"
+        },
+        "webhooks": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "parser only"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "`use(compile|stream)`"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`jsonTransport`, `streamTransport`, Ethereal"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT-0"
+        },
+        "version": {
+          "text": "10.0.16"
+        },
+        "lastCommit": {
+          "text": "2026-10-07"
+        },
+        "tests": {
+          "text": "61 / ~1330"
+        },
+        "maintainer": {
+          "text": "1 maintainer"
+        }
+      }
+    },
+    {
+      "id": "emailjs",
+      "name": "emailjs 5",
+      "direction": "SMTP",
+      "url": "https://github.com/eleith/emailjs",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "≥18, CI 20+"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "no LMTP"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "0"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "❌",
+          "text": "one connection"
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "1 retry on 450/451"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "timeout, no signal"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "path, stream, no URL"
+        },
+        "streaming": {
+          "mark": "✅"
+        },
+        "inline": {
+          "mark": "⚠️",
+          "text": "manual Content-ID"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "manual"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "Q-encoding, no punycode"
+        },
+        "listUnsubscribe": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "❌"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "tracking": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "❌"
+        },
+        "oauth2": {
+          "mark": "⚠️",
+          "text": "bearer token only"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "❌"
+        },
+        "proxy": {
+          "mark": "❌"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "VRFY, not a check"
+        },
+        "smtpAuth": {
+          "text": "CRAM-MD5, LOGIN, PLAIN, XOAUTH2"
+        },
+        "tlsPolicy": {
+          "mark": "⚠️",
+          "text": "STARTTLS accepts any certificate"
+        },
+        "webhooks": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "parser only"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "logger function"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "`Message#read()`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "5.0.3"
+        },
+        "lastCommit": {
+          "text": "2026-08-26"
+        },
+        "tests": {
+          "text": "15 / ~153"
+        },
+        "maintainer": {
+          "text": "no SECURITY.md"
+        }
+      }
+    },
+    {
+      "id": "upyo",
+      "name": "Upyo",
+      "direction": "unified",
+      "url": "https://github.com/dahlia/upyo",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "CI: deno test"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "CI: bun test"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "HTTP packages yes, SMTP no"
+        },
+        "browser": {
+          "mark": "⚠️",
+          "text": "no target, no tests"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "PIPELINING, SIZE, DSN"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "✅",
+          "text": "RFC 8620/8621"
+        },
+        "httpProviders": {
+          "text": "8"
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "RR, weighted, priority"
+        },
+        "smtpPool": {
+          "mark": "✅",
+          "text": "on by default"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "jitter, Retry-After"
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "`sendMany` only"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`signal` + timeout"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "bytes, Blob, File, factory"
+        },
+        "streaming": {
+          "mark": "⚠️",
+          "text": "SMTP only"
+        },
+        "inline": {
+          "mark": "⚠️",
+          "text": "mixed, not related; Mailgun bug"
+        },
+        "rawMime": {
+          "mark": "⚠️",
+          "text": "SMTP/JMAP only"
+        },
+        "ical": {
+          "mark": "✅",
+          "text": "every METHOD"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "SMTPUTF8, no automatic punycode"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "manual header"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "native: Resend, Mailtrap, JMAP"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "tags in 7 providers"
+        },
+        "tracking": {
+          "mark": "⚠️",
+          "text": "config only"
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "Resend, Lettermint, Maileroo"
+        },
+        "dkim": {
+          "mark": "✅",
+          "text": "RSA + Ed25519, streaming"
+        },
+        "oauth2": {
+          "mark": "✅",
+          "text": "refresh, OAUTHBEARER"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "✅"
+        },
+        "proxy": {
+          "mark": "❌"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "SMTP/JMAP only"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, XOAUTH2, OAUTHBEARER"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "`requireTls`, CA, cert, `minVersion`"
+        },
+        "webhooks": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "RFC 5322/6531 syntax"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "✅",
+          "text": "decorator: spans + metrics"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "decorators, LogTape"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`@upyo/mock`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0–1 (@noble/hashes)"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS + JSR"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "0.7.0 (unreleased; release 0.6.0)"
+        },
+        "lastCommit": {
+          "text": "2026-09-09"
+        },
+        "tests": {
+          "text": "109 / ~1300"
+        },
+        "maintainer": {
+          "text": "1 main author"
+        }
+      }
+    },
+    {
+      "id": "unemail",
+      "name": "unemail",
+      "direction": "unified",
+      "url": "https://github.com/productdevbook/unemail",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20.11"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "HTTP drivers, not SMTP"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "CI: bun"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "HTTP + 3 Cloudflare drivers, no SMTP"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "HTTP drivers only"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "own implementation"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "18 + http + 2 CF"
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "fallback, RR, weighted, tee"
+        },
+        "smtpPool": {
+          "mark": "✅",
+          "text": "off by default"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "5 modes, jitter"
+        },
+        "rateLimit": {
+          "mark": "✅",
+          "text": "token bucket"
+        },
+        "circuitBreaker": {
+          "mark": "✅",
+          "text": "half-open without a single probe"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "signal for HTTP, not SMTP"
+        },
+        "queue": {
+          "mark": "🔜",
+          "text": "planned"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "bytes, string, URL"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "⚠️",
+          "text": "mixed, not related"
+        },
+        "rawMime": {
+          "mark": "⚠️",
+          "text": "smtp driver only"
+        },
+        "ical": {
+          "mark": "🔜",
+          "text": "planned"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "RFC 2047/2231"
+        },
+        "listUnsubscribe": {
+          "mark": "✅",
+          "text": "RFC 8058 oneClick"
+        },
+        "templates": {
+          "mark": "⚠️",
+          "text": "`Renderer` interface"
+        },
+        "reactEmail": {
+          "mark": "✅"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "`sendBatch`"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "8 drivers"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "✅",
+          "text": "10 drivers"
+        },
+        "idempotency": {
+          "mark": "✅",
+          "text": "middleware + providers"
+        },
+        "dkim": {
+          "mark": "✅",
+          "text": "RSA + Ed25519, SMTP only"
+        },
+        "oauth2": {
+          "mark": "⚠️",
+          "text": "callback, no refresh"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "❌"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "custom `fetch`"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "`isAvailable()`, nominal"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, CRAM-MD5, XOAUTH2"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "`requireTLS`, off by default"
+        },
+        "webhooks": {
+          "mark": "🔜",
+          "text": "planned"
+        },
+        "inbound": {
+          "mark": "🔜",
+          "text": "planned"
+        },
+        "suppression": {
+          "mark": "🔜",
+          "text": "planned"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "regex"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "⚠️",
+          "text": "`withLogger`"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "Middleware pipeline"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "mock + Mailpit"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "0.7.0"
+        },
+        "lastCommit": {
+          "text": "2026-09-02"
+        },
+        "tests": {
+          "text": "40 / ~773"
+        },
+        "maintainer": {
+          "text": "1 author"
+        }
+      }
+    },
+    {
+      "id": "sently",
+      "name": "sently",
+      "direction": "unified + multi-channel",
+      "url": "https://github.com/omqkhafi/sently",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥18"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "`Deno.connect`"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "CI: bun test"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "HTTP + SMTP (cloudflare:sockets)"
+        },
+        "browser": {
+          "mark": "⚠️",
+          "text": "throws"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "own implementation"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "14 + CF binding"
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "fallback + weighted"
+        },
+        "smtpPool": {
+          "mark": "✅",
+          "text": "off by default"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "no jitter, retries SMTP 5xx"
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "pool + `sendBulk`"
+        },
+        "circuitBreaker": {
+          "mark": "⚠️",
+          "text": "`cooldownMs`"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "SMTP connect only"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "bytes + path"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "⚠️",
+          "text": "HTTP: 3 providers only"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "❌"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "one RFC 2047 word"
+        },
+        "listUnsubscribe": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "`{{var}}` + plugins"
+        },
+        "reactEmail": {
+          "mark": "✅"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "`sendBulk`, SendGrid bug"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers only"
+        },
+        "tracking": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "decorator; batch bypasses it"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "body canonicalization bug"
+        },
+        "oauth2": {
+          "mark": "✅",
+          "text": "refresh client"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "❌"
+        },
+        "proxy": {
+          "mark": "❌"
+        },
+        "verify": {
+          "mark": "✅"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, CRAM-MD5, XOAUTH2"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "`requireTLS` by default with auth"
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "10 parsers, HMAC in 5"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "regex"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "✅",
+          "text": "SMS, WhatsApp, webpush, FCM"
+        },
+        "otel": {
+          "mark": "⚠️",
+          "text": "hooks + `consoleObserver`"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "hooks + plugins"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "preview, Mailpit"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.2.2"
+        },
+        "lastCommit": {
+          "text": "2026-08-19"
+        },
+        "tests": {
+          "text": "66 / ~532"
+        },
+        "maintainer": {
+          "text": "1 author, 0.1 → 1.2 in ~80 days"
+        }
+      }
+    },
+    {
+      "id": "workerMailer",
+      "name": "worker-mailer",
+      "direction": "edge SMTP",
+      "url": "https://github.com/zou-yu/worker-mailer",
+      "cells": {
+        "nodeMin": {
+          "mark": "❌",
+          "text": "Workers only"
+        },
+        "deno": {
+          "mark": "❌"
+        },
+        "bun": {
+          "mark": "❌"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "the only target"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "✅"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "0"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "❌"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "socket timeouts"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "base64 only"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "❌"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "❌"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "RFC 2047"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "queue per session"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "tracking": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "❌"
+        },
+        "oauth2": {
+          "mark": "❌"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "✅"
+        },
+        "proxy": {
+          "mark": "❌"
+        },
+        "verify": {
+          "mark": "❌"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, CRAM-MD5"
+        },
+        "tlsPolicy": {
+          "mark": "⚠️",
+          "text": "falls back to plaintext + AUTH"
+        },
+        "webhooks": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "logger"
+        },
+        "mock": {
+          "mark": "❌"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.2.1"
+        },
+        "lastCommit": {
+          "text": "2025-11-15"
+        },
+        "tests": {
+          "text": "4 / ~189"
+        },
+        "maintainer": {
+          "text": "1 author"
+        }
+      }
+    },
+    {
+      "id": "edgeMailer",
+      "name": "edge-mailer",
+      "direction": "edge SMTP",
+      "url": "https://github.com/sparticle9/edge-mailer",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "needs a connector of your own"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "edge-mailer/deno"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "no connector"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "no `node:*`"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "✅"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "0"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "✅"
+        },
+        "retry": {
+          "mark": "❌",
+          "text": "`retryHint` only"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "signal on connect and send"
+        },
+        "queue": {
+          "mark": "⚠️",
+          "text": "sample outbox only"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "string, bytes, Blob"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "✅"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "SMTPUTF8, no punycode"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "tracking": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "✅",
+          "text": "RSA"
+        },
+        "oauth2": {
+          "mark": "⚠️",
+          "text": "no refresh"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "✅"
+        },
+        "proxy": {
+          "mark": "❌"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "`probe()` without auth"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, CRAM-MD5, XOAUTH2"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "`tlsPolicy` ×4, REQUIRETLS"
+        },
+        "webhooks": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "suppression": {
+          "mark": "❌"
+        },
+        "domains": {
+          "mark": "❌"
+        },
+        "addressValidation": {
+          "mark": "❌",
+          "text": "syntax assert"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "`onEvent`"
+        },
+        "mock": {
+          "mark": "❌"
+        },
+        "auditLog": {
+          "mark": "⚠️",
+          "text": "events, not stored"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS + JSR"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "0.8.5"
+        },
+        "lastCommit": {
+          "text": "2026-09-08"
+        },
+        "tests": {
+          "text": "14 / ~258"
+        },
+        "maintainer": {
+          "text": "1 author, 0.x"
+        }
+      }
+    },
+    {
+      "id": "mimetext",
+      "name": "MIMEText",
+      "direction": "MIME builder",
+      "url": "https://github.com/muratgozel/MIMEText",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "no `engines` field"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "browser-entry"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "browser-entry"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "browser-entry"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "browser-bundle"
+        },
+        "smtp": {
+          "mark": "—"
+        },
+        "sendmail": {
+          "mark": "—"
+        },
+        "jmap": {
+          "mark": "—"
+        },
+        "httpProviders": {
+          "mark": "—"
+        },
+        "failover": {
+          "mark": "—"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "—"
+        },
+        "rateLimit": {
+          "mark": "—"
+        },
+        "circuitBreaker": {
+          "mark": "—"
+        },
+        "timeout": {
+          "mark": "—"
+        },
+        "queue": {
+          "mark": "—"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "base64 only"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "—",
+          "text": "builds MIME only"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "as an attachment"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "Subject as one B-word"
+        },
+        "listUnsubscribe": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "—"
+        },
+        "scheduled": {
+          "mark": "—"
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "tracking": {
+          "mark": "—"
+        },
+        "idempotency": {
+          "mark": "—"
+        },
+        "dkim": {
+          "mark": "❌"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "—"
+        },
+        "verify": {
+          "mark": "—"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "—"
+        },
+        "inbound": {
+          "mark": "—"
+        },
+        "suppression": {
+          "mark": "—"
+        },
+        "domains": {
+          "mark": "—"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "—"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "`dump()`"
+        },
+        "mock": {
+          "mark": "—"
+        },
+        "auditLog": {
+          "mark": "—"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "4"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "3.0.24 (tag 3.0.28)"
+        },
+        "lastCommit": {
+          "text": "2026-01-28"
+        },
+        "tests": {
+          "text": "6 / ~30"
+        },
+        "maintainer": {
+          "text": "no SECURITY.md"
+        }
+      }
+    },
+    {
+      "id": "resend",
+      "name": "Resend SDK",
+      "direction": "SDK",
+      "url": "https://github.com/resend/resend-node",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "`fetch`, not tested"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "fetch"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "`fetch`, not tested"
+        },
+        "browser": {
+          "mark": "⚠️",
+          "text": "secret key in the client"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "signal, no timeout"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "base64 or URL"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "❌"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "UTF-8 JSON"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers, topics"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Templates API"
+        },
+        "reactEmail": {
+          "mark": "✅"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "up to 100, no attachments"
+        },
+        "scheduled": {
+          "mark": "✅"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "⚠️",
+          "text": "per domain"
+        },
+        "idempotency": {
+          "mark": "✅"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "keys through the API"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "`baseUrl` only"
+        },
+        "verify": {
+          "mark": "—"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "standardwebhooks"
+        },
+        "inbound": {
+          "mark": "✅"
+        },
+        "suppression": {
+          "mark": "✅"
+        },
+        "domains": {
+          "mark": "✅"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "✅",
+          "text": "logs API"
+        },
+        "apiCoverage": {
+          "text": "18 namespaces, ~117 calls"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "`console.error`"
+        },
+        "mock": {
+          "mark": "❌"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "2"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "6.32.1"
+        },
+        "lastCommit": {
+          "text": "2026-10-06"
+        },
+        "tests": {
+          "text": "39 / ~441"
+        },
+        "maintainer": {
+          "text": "vendor"
+        }
+      }
+    },
+    {
+      "id": "sendgrid",
+      "name": "SendGrid SDK",
+      "direction": "SDK",
+      "url": "https://github.com/sendgrid/sendgrid-nodejs",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥12"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "through Node compatibility"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "through Node compatibility"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "`fs`, axios; not declared"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "contact importer only"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "global signal only"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "base64, helper for `Buffer`"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "❌"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "UTF-8 JSON"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers, asm"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "dynamic templates"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "personalizations"
+        },
+        "scheduled": {
+          "mark": "✅"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "✅"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "whitelabel, generic"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "axios proxy"
+        },
+        "verify": {
+          "mark": "—"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "ECDSA"
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "parser with a bug"
+        },
+        "suppression": {
+          "mark": "⚠️",
+          "text": "generic client"
+        },
+        "domains": {
+          "mark": "⚠️",
+          "text": "generic client"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "⚠️",
+          "text": "generic /v3/messages"
+        },
+        "apiCoverage": {
+          "text": "only mail/send typed; ~251 endpoints in USAGE.md"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "`setClient`"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`sandboxMode`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "hand-written `.d.ts`"
+        },
+        "deps": {
+          "text": "2+ (axios)"
+        },
+        "moduleFormat": {
+          "text": "CJS only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "8.1.6"
+        },
+        "lastCommit": {
+          "text": "2025-09-19"
+        },
+        "tests": {
+          "text": "43 / ~450"
+        },
+        "maintainer": {
+          "text": "vendor, old toolchain"
+        }
+      }
+    },
+    {
+      "id": "mailgun",
+      "name": "Mailgun.js",
+      "direction": "SDK",
+      "url": "https://github.com/mailgun/mailgun.js",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥18"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "`fetch` mode"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "needs a CORS proxy"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "timeout, no signal"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "✅",
+          "text": "Buffer, Blob, stream, 50 MB"
+        },
+        "streaming": {
+          "mark": "⚠️",
+          "text": "accepts a stream"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "✅",
+          "text": "`/messages.mime`"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "as an attachment"
+        },
+        "unicode": {
+          "mark": "❌"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Templates API"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "`recipient-variables`"
+        },
+        "scheduled": {
+          "mark": "✅",
+          "text": "up to 3 days"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "✅"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "keys through the API"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "✅"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "domain DNS only"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "CRUD, no verification"
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "routes"
+        },
+        "suppression": {
+          "mark": "✅"
+        },
+        "domains": {
+          "mark": "✅"
+        },
+        "addressValidation": {
+          "mark": "✅",
+          "text": "`/v4/address/validate`"
+        },
+        "providerLogs": {
+          "mark": "✅",
+          "text": "logs API"
+        },
+        "apiCoverage": {
+          "text": "21 clients, ~155 calls"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "❌"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`testmode`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "3 (axios)"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "14.0.2"
+        },
+        "lastCommit": {
+          "text": "2026-10-07"
+        },
+        "tests": {
+          "text": "49 files"
+        },
+        "maintainer": {
+          "text": "vendor"
+        }
+      }
+    },
+    {
+      "id": "postmark",
+      "name": "Postmark.js",
+      "direction": "SDK",
+      "url": "https://github.com/ActiveCampaign/postmark.js",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥18"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "`fetch`, not declared"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "declared in 5.0.0"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "429 → error"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "180 s timeout"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "✅",
+          "text": "base64"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "as an attachment"
+        },
+        "unicode": {
+          "mark": "❌"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Templates API"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "batch + bulk API"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "✅"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "keys through the API"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "custom fetch + undici"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "`getServer()`"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "CRUD + types, no verification"
+        },
+        "inbound": {
+          "mark": "✅"
+        },
+        "suppression": {
+          "mark": "✅"
+        },
+        "domains": {
+          "mark": "✅"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "⚠️",
+          "text": "events, opens, clicks"
+        },
+        "apiCoverage": {
+          "text": "85 methods"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "❌"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "Sandbox server"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "CJS only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "5.1.0"
+        },
+        "lastCommit": {
+          "text": "2026-07-10"
+        },
+        "tests": {
+          "text": "23 (16 integration)"
+        },
+        "maintainer": {
+          "text": "vendor"
+        }
+      }
+    },
+    {
+      "id": "mailtrap",
+      "name": "Mailtrap SDK",
+      "direction": "SDK",
+      "url": "https://github.com/mailtrap/mailtrap-nodejs",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥16.20"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "`http`/`https` agents"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "❌"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "hard 10 s"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "✅",
+          "text": "string / Buffer"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "❌"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "as an attachment"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "UTF-8 JSON"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "headers"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Templates API"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "batchSend, 500"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "campaigns only"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "⚠️",
+          "text": "per domain"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "domain DNS records"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "environment only"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "`getAllAccounts()`"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "HMAC verify"
+        },
+        "inbound": {
+          "mark": "✅"
+        },
+        "suppression": {
+          "mark": "✅"
+        },
+        "domains": {
+          "mark": "✅"
+        },
+        "addressValidation": {
+          "mark": "❌"
+        },
+        "providerLogs": {
+          "mark": "⚠️",
+          "text": "`emailLogs`"
+        },
+        "apiCoverage": {
+          "text": "~126 calls"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "❌"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`Sandbox API`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅"
+        },
+        "deps": {
+          "text": "2 (axios, qs)"
+        },
+        "moduleFormat": {
+          "text": "CJS only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "4.10.0 (HEAD ahead)"
+        },
+        "lastCommit": {
+          "text": "2026-10-07"
+        },
+        "tests": {
+          "text": "55 files"
+        },
+        "maintainer": {
+          "text": "vendor"
+        }
+      }
+    },
+    {
+      "id": "ses",
+      "name": "AWS SES v3",
+      "direction": "SDK, client-sesv2",
+      "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/clients/client-sesv2",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "through `npm:`"
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "through Node compatibility"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "explicit credentials needed"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "explicit credentials"
+        },
+        "smtp": {
+          "mark": "❌"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "❌"
+        },
+        "httpProviders": {
+          "text": "1"
+        },
+        "failover": {
+          "mark": "⚠️",
+          "text": "multi-region endpoint on the AWS side"
+        },
+        "smtpPool": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "standard / adaptive"
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "adaptive retry"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`abortSignal` + `requestTimeout`"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "attachments": {
+          "mark": "✅",
+          "text": "`Uint8Array` or Raw MIME"
+        },
+        "streaming": {
+          "mark": "❌"
+        },
+        "inline": {
+          "mark": "✅"
+        },
+        "rawMime": {
+          "mark": "✅",
+          "text": "`Content.Raw`"
+        },
+        "ical": {
+          "mark": "⚠️",
+          "text": "through Raw MIME"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "Charset, no IDN"
+        },
+        "listUnsubscribe": {
+          "mark": "✅",
+          "text": "`ListManagementOptions`"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Templates API"
+        },
+        "reactEmail": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "`SendBulkEmail`"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "tags": {
+          "mark": "✅"
+        },
+        "tracking": {
+          "mark": "✅",
+          "text": "per-message override"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "dkim": {
+          "mark": "⚠️",
+          "text": "Easy / BYO DKIM"
+        },
+        "oauth2": {
+          "mark": "—"
+        },
+        "arc": {
+          "mark": "—"
+        },
+        "dsn": {
+          "mark": "—"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "through `requestHandler`"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "`GetAccount`"
+        },
+        "smtpAuth": {
+          "mark": "—"
+        },
+        "tlsPolicy": {
+          "mark": "—"
+        },
+        "webhooks": {
+          "mark": "❌",
+          "text": "SNS signature not in the SDK"
+        },
+        "inbound": {
+          "mark": "❌",
+          "text": "legacy `client-ses` only"
+        },
+        "suppression": {
+          "mark": "✅"
+        },
+        "domains": {
+          "mark": "✅",
+          "text": "identities"
+        },
+        "addressValidation": {
+          "mark": "✅",
+          "text": "`GetEmailAddressInsights`"
+        },
+        "providerLogs": {
+          "mark": "⚠️",
+          "text": "event destinations + archiving"
+        },
+        "apiCoverage": {
+          "text": "116 commands"
+        },
+        "multiChannel": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "⚠️",
+          "text": "`middlewareStack`"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "logger + `middlewareStack`"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "`TestRenderEmailTemplate`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "generated"
+        },
+        "deps": {
+          "text": "9"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "Apache-2.0"
+        },
+        "version": {
+          "text": "3.1147.0"
+        },
+        "lastCommit": {
+          "text": "2026-10-06"
+        },
+        "tests": {
+          "text": "2 smoke (the rest in the monorepo)"
+        },
+        "maintainer": {
+          "text": "vendor"
+        }
+      }
+    }
+  ]
+}
