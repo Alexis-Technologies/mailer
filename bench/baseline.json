@@ -1,0 +1,38 @@
+{
+  "node": "v24.14.1",
+  "date": "2026-10-14T15:35:28.049Z",
+  "results": [
+    {
+      "name": "base64, 76-column lines — 100 KB attachment",
+      "opsPerSec": 9490
+    },
+    {
+      "name": "base64, 76-column lines — 1 MB attachment",
+      "opsPerSec": 1158
+    },
+    {
+      "name": "Message-ID — crypto.randomUUID()",
+      "opsPerSec": 7218410
+    },
+    {
+      "name": "DKIM — RSA-SHA256 signature, 2048-bit key",
+      "opsPerSec": 1835
+    },
+    {
+      "name": "Audit log — SHA-256 of an outbox record",
+      "opsPerSec": 1174212
+    },
+    {
+      "name": "Audit log — HMAC-SHA256 of an address",
+      "opsPerSec": 767227
+    },
+    {
+      "name": "Outbox — JSON.stringify of a record",
+      "opsPerSec": 1314416
+    },
+    {
+      "name": "Outbox — JSON.parse of a record",
+      "opsPerSec": 892982
+    }
+  ]
+}
