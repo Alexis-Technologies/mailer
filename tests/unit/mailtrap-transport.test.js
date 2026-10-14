@@ -1,0 +1,701 @@
+// Ported from upyo v0.7.0 (packages/mailtrap/src/mailtrap-transport.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const assert = require('node:assert/strict');
+const { describe, it } = require('node:test');
+const { MailtrapTransport } = require('../../src/mailtrap/mailtrap-transport.js');
+const { createMailtrapConfig, MailtrapResponseError } = require('../../src/mailtrap/index.js');
+const { MailtrapHttpClient } = require('../../src/mailtrap/http-client.js');
+
+const createMessage = (overrides = {}) => {
+  return {
+    sender: { address: 'sender@example.com' },
+    recipients: [{ address: 'recipient@example.com' }],
+    ccRecipients: [],
+    bccRecipients: [],
+    replyRecipients: [],
+    subject: 'Test Subject',
+    content: { text: 'Test content' },
+    attachments: [],
+    priority: 'normal',
+    tags: [],
+    headers: new Headers(),
+    ...overrides,
+  };
+};
+
+// Deno runs node:test subtests concurrently, so serialize tests that replace
+// globalThis.fetch to keep their mocks isolated.
+let testChain = Promise.resolve();
+
+const serialIt = (name, callback) => {
+  it(name, async () => {
+    const previous = testChain;
+    let release = () => {};
+    testChain = new Promise((resolve) => {
+      release = resolve;
+    });
+    await previous;
+
+    try {
+      await callback();
+    } finally {
+      release();
+    }
+  });
+};
+
+const createDelayedJsonResponse = (signal, onBodyRead, delay) => {
+  const body = new TextEncoder().encode(
+    JSON.stringify({
+      success: true,
+      message_ids: ['test-message-id'],
+    }),
+  );
+  let started = false;
+
+  return new Response(
+    new ReadableStream({
+      pull(controller) {
+        if (started) return;
+        started = true;
+        onBodyRead();
+
+        if (signal?.aborted) {
+          controller.error(signal.reason);
+          return;
+        }
+
+        const onAbort = () => {
+          clearTimeout(timeoutId);
+          controller.error(signal?.reason);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+
+        const timeoutId = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          controller.enqueue(body);
+          controller.close();
+        }, delay);
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+};
+
+describe('MailtrapTransport - Send Message', () => {
+  serialIt('should send a message successfully', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (input, init) => {
+        assert.equal(input, 'https://send.api.mailtrap.io/api/send');
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get('Api-Token'), 'test-token');
+        assert.equal(headers.get('User-Agent'), '@alexify/mailer/mailtrap');
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message_ids: ['test-message-id'],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(receipt.successful);
+      if (receipt.successful) {
+        assert.equal(receipt.messageId, 'test-message-id');
+        assert.equal(receipt.provider, 'mailtrap');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('exposes the mailtrap provider id', () => {
+    const transport = new MailtrapTransport({ apiToken: 'test-token' });
+    assert.equal(transport.id, 'mailtrap');
+  });
+});
+
+describe('MailtrapTransport - Sandbox URL', () => {
+  serialIt('should use sandbox endpoint when configured', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (input) => {
+        assert.equal(input, 'https://sandbox.api.mailtrap.io/api/send/12345');
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message_ids: ['sandbox-message-id'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        sandbox: true,
+        inboxId: 12345,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(receipt.successful);
+      if (receipt.successful) {
+        assert.equal(receipt.messageId, 'sandbox-message-id');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('MailtrapTransport - API Errors', () => {
+  serialIt('should handle API errors', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            errors: ['Invalid API token'],
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'invalid-token',
+        retries: 0,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.match(receipt.errorMessages[0], /Invalid API token/);
+        assert.equal(receipt.provider, 'mailtrap');
+        assert.equal(receipt.errors?.[0]?.statusCode, 401);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('uses the sandbox rate-limit window when Retry-After is missing', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            errors: ['Too many emails per second. Please upgrade your plan.'],
+          }),
+          {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        sandbox: true,
+        inboxId: 12345,
+        retries: 0,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errors?.[0]?.statusCode, 429);
+        assert.equal(receipt.errors?.[0]?.retryAfterMilliseconds, 10_000);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('prefers Retry-After over the sandbox rate-limit window', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            errors: ['Too many emails per second.'],
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '12',
+            },
+          },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        sandbox: true,
+        inboxId: 12345,
+        retries: 0,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errors?.[0]?.retryAfterMilliseconds, 12_000);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('does not infer a delay for unrelated sandbox rate limits', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            errors: ['Monthly testing limit exhausted.'],
+          }),
+          {
+            status: 429,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        sandbox: true,
+        inboxId: 12345,
+        retries: 0,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errors?.[0]?.retryAfterMilliseconds, undefined);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('truncates non-JSON API response bodies in failure receipts', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response('x'.repeat(600), {
+          status: 503,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        retries: 0,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errorMessages[0], `${'x'.repeat(500)}...`);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('should handle provider-reported send failures', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            errors: ['Invalid from address'],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errorMessages[0], 'Invalid from address');
+        assert.equal(receipt.provider, 'mailtrap');
+        assert.equal(receipt.errors?.[0]?.code, 'mailtrap.unsuccessful');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('does not retry invalid JSON from successful responses', async () => {
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    try {
+      globalThis.fetch = async () => {
+        requests++;
+        return new Response('not json', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        retries: 1,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      assert.equal(requests, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  for (const failure of ['network', 'timeout', 'status', 'error body']) {
+    serialIt(`retries a ${failure} failure before acceptance`, async () => {
+      const originalFetch = globalThis.fetch;
+      let requests = 0;
+      try {
+        globalThis.fetch = async (_input, init) => {
+          requests++;
+          if (requests === 1) {
+            if (failure === 'network') throw new TypeError('Failed to fetch.');
+            if (failure === 'timeout') {
+              return new Promise((_resolve, reject) => {
+                init?.signal?.addEventListener(
+                  'abort',
+                  () => {
+                    reject(init.signal?.reason);
+                  },
+                  { once: true },
+                );
+              });
+            }
+            if (failure === 'error body') {
+              return new Response(
+                new ReadableStream({
+                  start(controller) {
+                    controller.error(new TypeError('Failed to fetch response body.'));
+                  },
+                }),
+                { status: 503 },
+              );
+            }
+            return new Response('Unavailable', { status: 503 });
+          }
+          return Response.json({ success: true, message_ids: ['id'] });
+        };
+        const transport = new MailtrapTransport({
+          apiToken: 'test-token',
+          retries: 1,
+          timeout: 10,
+        });
+        const receipt = await transport.send(createMessage());
+        assert.ok(receipt.successful);
+        assert.equal(requests, 2);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  }
+
+  serialIt('preserves the cause of an unreadable successful response', async () => {
+    const originalFetch = globalThis.fetch;
+    const cause = new TypeError('Failed to fetch response body.');
+    try {
+      globalThis.fetch = async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(cause);
+            },
+          }),
+        );
+      const client = new MailtrapHttpClient(
+        createMailtrapConfig({
+          apiToken: 'test-token',
+          retries: 1,
+        }),
+      );
+      await assert.rejects(client.sendBatch([]), (error) => {
+        assert.ok(error instanceof MailtrapResponseError);
+        assert.equal(error.cause, cause);
+        assert.equal(error.attempts, 1);
+        return true;
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  for (const batch of [false, true]) {
+    serialIt(
+      `does not retry an unreadable successful ${batch ? 'batch' : 'single'} response`,
+      async () => {
+        const originalFetch = globalThis.fetch;
+        let requests = 0;
+        try {
+          globalThis.fetch = async () => {
+            requests++;
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.error(new TypeError('Failed to fetch response body.'));
+                },
+              }),
+              { status: 200 },
+            );
+          };
+          const transport = new MailtrapTransport({
+            apiToken: 'test-token',
+            retries: 1,
+          });
+          const receipts = [];
+          if (batch) {
+            for await (const receipt of transport.sendMany([createMessage(), createMessage()])) {
+              receipts.push(receipt);
+            }
+          } else {
+            receipts.push(await transport.send(createMessage()));
+          }
+          assert.equal(requests, 1);
+          assert.equal(receipts.length, batch ? 2 : 1);
+          for (const receipt of receipts) {
+            assert.ok(!receipt.successful);
+            if (!receipt.successful) {
+              assert.equal(receipt.errorMessages[0], 'Failed to fetch response body.');
+              assert.ok(!receipt.errors?.[0]?.retryable);
+              assert.equal(receipt.attempts, 1);
+            }
+          }
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      },
+    );
+  }
+
+  serialIt('times out while reading the response body without retrying', async () => {
+    const originalFetch = globalThis.fetch;
+    let requests = 0;
+    try {
+      globalThis.fetch = async (_input, init) => {
+        requests++;
+        return createDelayedJsonResponse(init?.signal, () => {}, 100);
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        timeout: 10,
+        retries: 1,
+      });
+
+      const receipt = await transport.send(createMessage());
+
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.equal(receipt.errorMessages[0], 'Mailtrap API request timed out after 10 ms.');
+        assert.equal(receipt.errors?.[0]?.category, 'timeout');
+        assert.ok(!receipt.errors?.[0]?.retryable);
+        assert.equal(receipt.attempts, 1);
+        assert.equal(requests, 1);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('propagates caller cancellation while reading the response body', async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    let bodyRead = () => {};
+    const bodyReading = new Promise((resolve) => {
+      bodyRead = resolve;
+    });
+
+    try {
+      globalThis.fetch = async (_input, init) => {
+        return createDelayedJsonResponse(init?.signal, bodyRead, 100);
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+        timeout: 0,
+        retries: 1,
+      });
+      const sending = transport.send(createMessage(), {
+        signal: controller.signal,
+      });
+
+      await bodyReading;
+      controller.abort();
+
+      await assert.rejects(sending, { name: 'AbortError' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('MailtrapTransport - Batch Send', () => {
+  serialIt('should send a batch successfully', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (input, init) => {
+        assert.equal(input, 'https://send.api.mailtrap.io/api/batch');
+
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.requests.length, 2);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            responses: [
+              { success: true, message_ids: ['id-1'] },
+              { success: true, message_ids: ['id-2'] },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+      });
+
+      const receipts = [];
+      for await (const receipt of transport.sendMany([
+        createMessage({ subject: 'One' }),
+        createMessage({ subject: 'Two' }),
+      ])) {
+        receipts.push(receipt);
+      }
+
+      assert.equal(receipts.length, 2);
+      assert.ok(receipts[0]?.successful);
+      assert.ok(receipts[1]?.successful);
+      if (receipts[0]?.successful) {
+        assert.equal(receipts[0].messageId, 'id-1');
+      }
+      if (receipts[1]?.successful) {
+        assert.equal(receipts[1].messageId, 'id-2');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('should handle per-item batch failures', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            responses: [
+              { success: true, message_ids: ['id-1'] },
+              { success: false, errors: ['Invalid recipient'] },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const transport = new MailtrapTransport({
+        apiToken: 'test-token',
+      });
+
+      const receipts = [];
+      for await (const receipt of transport.sendMany([createMessage(), createMessage()])) {
+        receipts.push(receipt);
+      }
+
+      assert.ok(receipts[0]?.successful);
+      assert.ok(!receipts[1]?.successful);
+      if (receipts[1] && !receipts[1].successful) {
+        assert.equal(receipts[1].errorMessages[0], 'Invalid recipient');
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  serialIt('chunks batches at the Mailtrap limit', async () => {
+    const originalFetch = globalThis.fetch;
+    const requestSizes = [];
+    try {
+      globalThis.fetch = async (_input, init) => {
+        const body = JSON.parse(String(init?.body));
+        assert.ok(
+          typeof body === 'object' &&
+            body !== null &&
+            'requests' in body &&
+            Array.isArray(body.requests),
+        );
+        const requests = body.requests;
+        requestSizes.push(requests.length);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            responses: requests.map((_, index) => ({
+              success: true,
+              message_ids: [`id-${requestSizes.length}-${index}`],
+            })),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const transport = new MailtrapTransport({ apiToken: 'test-token' });
+      const messages = Array.from({ length: 501 }, (_, index) =>
+        createMessage({ subject: `Message ${index}` }),
+      );
+      let receipts = 0;
+
+      // oxlint-disable-next-line no-underscore-dangle, no-unused-vars -- upstream
+      for await (const _receipt of transport.sendMany(messages)) {
+        receipts++;
+      }
+
+      assert.equal(receipts, 501);
+      assert.deepEqual(requestSizes, [500, 1]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
