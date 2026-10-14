@@ -7,7 +7,7 @@ services:
     image: docker.io/stalwartlabs/stalwart:v0.15.5
     container_name: mailer-stalwart
     ports:
-      - "8080:8080"   # HTTP/JMAP port
+      - '8080:8080' # HTTP/JMAP port
     volumes:
       - stalwart-data:/opt/stalwart
     environment:

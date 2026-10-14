@@ -68,6 +68,10 @@
       "types": "./src/plunk/index.d.ts",
       "default": "./src/plunk/index.js"
     },
+    "./retry": {
+      "types": "./src/retry/index.d.ts",
+      "default": "./src/retry/index.js"
+    },
     "./mock": {
       "types": "./src/mock/index.d.ts",
       "default": "./src/mock/index.js"

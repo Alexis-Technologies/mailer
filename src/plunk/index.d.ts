@@ -1,7 +1,7 @@
 // Types ported from upyo v0.7.0 (packages/plunk/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
 
 /**
  * Configuration interface for Plunk transport connection settings.
