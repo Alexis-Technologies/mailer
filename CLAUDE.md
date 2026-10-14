@@ -7,17 +7,20 @@ Guidance for Claude Code when working in this repository.
 **mailer** (npm package `@alexify/mailer`) is an email library for Node.js, in the place of
 Nodemailer, emailjs or Upyo, made of two parts:
 
-1. **The transport:** its own SMTP client, MIME builder and DKIM signing, and HTTP providers on
-   `fetch`, starting with Amazon SES v2.
+1. **The transport,** ported from upyo 0.7.0 (see "Code ported from upyo"): the message model,
+   its own SMTP client, MIME builder and DKIM signing, Amazon SES v2 and seven more HTTP providers
+   on `fetch`, JMAP, and the pool, retry, mock, OpenTelemetry and logger decorators, one subpath
+   each.
 2. **A reliability layer on top of it,** which none of the fourteen libraries in
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
    of delivery events, suppression, idempotency and failover between providers.
 
 It has zero runtime dependencies and runs on Node.js ≥ 22 only (no browser entry).
 
-**Status: the API is being designed.** `createMailer` is exported as a placeholder that throws
-(`src/mailer.js`); its signature in `index.d.ts` is provisional. The package, its tooling, tests and
-docs are already wired around that name. The direction is in "Roadmap" below.
+**Status: the transport is being ported, the mailer designed.** The root entry exports the message
+model and the transport contract of upyo; the subpaths land one by one. `createMailer`, the entry of
+the reliability layer, is a placeholder that throws (`src/mailer.js`); its signature in
+`index.d.ts` is provisional. The direction is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -37,7 +40,7 @@ pnpm run test:types                # tsd: tests/types/*.test-d.ts against index.
 pnpm run check:dts                 # tsc --noEmit --strict over index.d.ts on its own
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
-pnpm size [--max-gzip <KB>]        # esbuild bundle size of index.js; CI gates at 4 KB min+gzip
+pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 7 KB min+gzip and each subpath
 pnpm bench [filter] [--json] [--save] [--compare]   # ops/sec harness, manual only; --save writes bench/baseline.json
 pnpm docs:comparison               # renders docs/comparison.json into docs/guide/comparison.md
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
@@ -108,7 +111,29 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
   refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
 - Ported test suites keep upstream's `describe`/`it`, so they can be compared with upyo's; new
-  suites use the flat style of "Testing notes".
+  suites use the flat style of "Testing notes". Tests for paths that upstream's suites leave out go
+  into a new flat suite (`tests/unit/core.test.js` for `src/core/`).
+
+**Known upstream bugs, each to fix in its own `fix:` commit after the port:**
+
+1. mime: inline images (`contentId`) go into `multipart/mixed`, not `multipart/related`.
+2. mailgun: an inline attachment is sent under its `filename`, not its `contentId`
+   (`message-converter.js`), so a `cid:` in the HTML does not match it.
+3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
+4. SMTP AUTH PLAIN and LOGIN encode with `btoa`, which fails on non-Latin-1 credentials; so does
+   Basic auth in jmap and mailgun.
+5. `cram-md5` is in the `SmtpAuth` type but not implemented.
+6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
+7. pool: `continueOnSuccess` is never read.
+8. otel: `_active_sends` is not decremented after `sendMany` and drifts under sampling;
+   `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
+   its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
+9. resend, plunk: the sleep between retries ignores the `AbortSignal`; ses, resend, sendgrid,
+   mailgun and plunk parse `Retry-After` but do not wait for it.
+10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
+11. resend: the `Idempotency-Key` comes from `Math.random`.
+12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
+    an injected logger.
 
 ## Repository layout
 
@@ -136,13 +161,25 @@ docs/               VitePress site (mailerat.vercel.app), not published
 
 ## Architecture
 
-To be written with Phase 0. The contracts it starts from:
+The root entry is the contract every subpath shares, ported from `@upyo/core` (`src/core/`):
 
-- **`Message`** with a typed builder that rejects CRLF in every header field, and the MIME
-  rendering of it (`multipart/alternative`, `multipart/mixed`, `multipart/related` for inline
-  images, RFC 2047/2231 encoding, SMTPUTF8).
-- **`Transport`**: `send(rendered) → { messageId, accepted, rejected }` or a classified error
-  (permanent, temporary, ambiguous). SMTP and the HTTP providers implement it.
+- **`Message`**, built by `createMessage()`, which parses and validates the addresses (CR and LF
+  are rejected), the attachments, the Message-ID and the threading headers, the date and an
+  iCalendar part. `Address`, `Attachment` (bytes, a `Promise`, a `Blob` or a factory of chunks)
+  and `Priority` go with it.
+- **`Transport<TProviderId>`**: `send(message, { signal }) → Receipt` and
+  `sendMany(messages) → AsyncIterable<Receipt>`. `RawTransport` adds `sendRaw()` for a ready MIME
+  message (`RawMessage`, checked by `createRawMessagePlan`), `VerifiableTransport` adds
+  `verify()`.
+- **`Receipt`**: `{ successful: true, messageId }` or
+  `{ successful: false, errorMessages, errors, retryable }`. A `ReceiptError` carries a `category`
+  (auth, rate-limit, network, timeout, validation, rejected, server-error, service-unavailable,
+  configuration, unknown), `retryable`, `statusCode` and `retryAfterMilliseconds`;
+  `classifyHttpStatus` and `classifyReceiptError` classify. A transport reports a failure in a
+  receipt rather than by throwing.
+
+The contracts of the reliability layer, still to be designed (Phase 0):
+
 - **`QueueDriver`**: enqueue, reserve, ack, retry with a delay; drivers for an outbox in MongoDB,
   BullMQ and an in-memory one for tests.
 - **`AuditSink`**: append-only records of state changes; sinks for MongoDB, stdout/OTel logs and a
@@ -196,12 +233,15 @@ optional React Email adapter (no template engine of its own); more providers.
 
 **Decisions:**
 
-- **The transport is our own, not a wrapper over Nodemailer.** The comparison advises against
-  rewriting SMTP (Nodemailer has 15 years of edge cases); the product needs the transport and the
-  layers designed together, so the risk is paid for by the correctness suite in Phase 1.
+- **The transport is ported from upyo, not a wrapper over Nodemailer.** The comparison advises
+  against rewriting SMTP (Nodemailer has 15 years of edge cases). Upyo already has the transport
+  this roadmap planned, on the same platform (zero dependencies, `node:net`, `fetch`), so it is
+  ported file by file instead of written anew; its known bugs are fixed afterwards (see "Code
+  ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
-- **Few providers, done well.** Each provider adds its webhooks and API drift to maintain.
+- **Few new providers.** The eight HTTP providers of upyo come with the port. Each provider adds
+  its webhooks and API drift to maintain, so another one waits for a user who needs it.
 
 **What the competitors appear to get wrong, to not repeat** (findings from reading their code in
 October 2026, not reproduced except for emailjs, which was run against fake SMTP servers): no
@@ -211,7 +251,7 @@ Bcc in the headers of the message (worker-mailer); relaxed body canonicalization
 every empty line instead of the trailing ones (sently); retrying permanent SMTP 5xx (sently);
 inline images in `multipart/mixed` instead of `multipart/related` (Upyo, unemail); options
 accepted but never read (Upyo `validateSsl`); no CRLF sanitization and `os.EOL` instead of CRLF
-(MIMEText).
+(MIMEText). The Upyo ones came with the port and are on the list of "Code ported from upyo".
 
 **Out of scope:** SMS, WhatsApp and push (a `Channel` interface may stay, implementations no);
 inbound mail; the management APIs of the providers (domains, templates, statistics), which the
