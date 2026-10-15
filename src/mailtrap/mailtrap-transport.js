@@ -10,6 +10,7 @@ const {
   MailtrapTimeoutError,
 } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -53,6 +54,23 @@ class MailtrapTransport {
   constructor(config) {
     this.config = createMailtrapConfig(config);
     this.httpClient = new MailtrapHttpClient(this.config);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `JSON.stringify()`.
+   *
+   * @returns A plain copy of the transport with its credentials redacted.
+   */
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `util.inspect()`, and
+   * so out of `console.log()` and of loggers that inspect what they log.
+   */
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
   }
 
   /**

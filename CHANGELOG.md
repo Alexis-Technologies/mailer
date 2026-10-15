@@ -69,6 +69,11 @@ listed in CLAUDE.md, to be fixed one by one.
 - **`./smtp` bounds what a server's replies can take** (an upstream bug): a reply line is at most
   8192 characters and a reply at most 1000 lines, where a server that never ended a line made the
   client rescan everything received on every chunk until the socket timeout.
+- **A transport no longer prints its credentials** (an upstream bug): `util.inspect`,
+  `console.log` and `JSON.stringify` of `./smtp`, `./ses`, `./jmap` or an HTTP provider showed its
+  API key, password, tokens or DKIM key, also through `./retry` and `./pool`. They now show
+  `[REDACTED]`, as do credential headers such as `Authorization`; `transport.config` keeps the
+  values.
 
 ### Fixed
 

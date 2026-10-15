@@ -22,6 +22,7 @@ const { prepareMessage } = require('./message-converter.js');
 const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { validateDkimBodyMode } = require('../mime/dkim/types.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 /**
  * SMTP transport implementation for sending emails via SMTP protocol.
@@ -131,6 +132,23 @@ class SmtpTransport {
       auth != null && ('accessToken' in auth || 'refreshToken' in auth)
         ? new OAuth2TokenManager(auth)
         : undefined;
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `JSON.stringify()`.
+   *
+   * @returns A plain copy of the transport with its credentials redacted.
+   */
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `util.inspect()`, and
+   * so out of `console.log()` and of loggers that inspect what they log.
+   */
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
   }
 
   /**

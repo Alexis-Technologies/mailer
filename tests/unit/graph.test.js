@@ -77,7 +77,8 @@ test('Graph: the modules of src/ require each other without a cycle', () => {
 
 // The directories of the subpaths, from the exports map: `./smtp` lives in
 // src/smtp/. Everything else (src/*.js, src/core/) is the root entry, which
-// requires no subpath.
+// requires no subpath, and src/internal/ holds private modules any subpath may
+// require, which require no subpath either.
 const SUBPATHS = Object.keys(pkg.exports)
   .filter((subpath) => subpath !== '.')
   .map((subpath) => pkg.exports[subpath].default.split('/')[2]);

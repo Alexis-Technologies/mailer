@@ -13,6 +13,7 @@ const { JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -40,6 +41,23 @@ class JmapTransport {
   constructor(config) {
     this.config = createJmapConfig(config);
     this.httpClient = new JmapHttpClient(this.config);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `JSON.stringify()`.
+   *
+   * @returns A plain copy of the transport with its credentials redacted.
+   */
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `util.inspect()`, and
+   * so out of `console.log()` and of loggers that inspect what they log.
+   */
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
   }
 
   /**

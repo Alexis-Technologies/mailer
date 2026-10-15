@@ -168,6 +168,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     greeting resolved on an incomplete line; and `toString()` per chunk broke a split UTF-8
     character. `createReplyReader` in `smtp-connection.js` decodes with a `StringDecoder` and
     bounds both (8192 characters, 1000 lines).
+19. every transport: credentials sit on plain properties (TS `private` is not private at run
+    time), so `util.inspect`, `console.log` and `JSON.stringify` of a transport printed API keys,
+    passwords, tokens and DKIM keys. `src/internal/redact.js` backs `toJSON()` and
+    `[util.inspect.custom]` on the ten transports that hold them; `config` keeps its values.
 
 ## Repository layout
 
@@ -177,6 +181,7 @@ src/
   index.js          public barrel (explicit named exports)
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
+  internal/         private modules shared by subpaths, not in the exports map (redact.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

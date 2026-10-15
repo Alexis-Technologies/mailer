@@ -9,6 +9,7 @@ const {
   convertMessagesBatch,
   generateIdempotencyKey,
 } = require('./message-converter.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 /**
  * Resend transport implementation for sending emails via Resend API.
@@ -53,6 +54,23 @@ class ResendTransport {
   constructor(config) {
     this.config = createResendConfig(config);
     this.httpClient = new ResendHttpClient(this.config);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `JSON.stringify()`.
+   *
+   * @returns A plain copy of the transport with its credentials redacted.
+   */
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `util.inspect()`, and
+   * so out of `console.log()` and of loggers that inspect what they log.
+   */
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
   }
 
   /**

@@ -5,6 +5,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -57,6 +58,23 @@ class SesTransport {
   constructor(config) {
     this.config = createSesConfig(config);
     this.httpClient = new SesHttpClient(this.config);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `JSON.stringify()`.
+   *
+   * @returns A plain copy of the transport with its credentials redacted.
+   */
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  /**
+   * Leaves the credentials of the configuration out of `util.inspect()`, and
+   * so out of `console.log()` and of loggers that inspect what they log.
+   */
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
   }
 
   /**
