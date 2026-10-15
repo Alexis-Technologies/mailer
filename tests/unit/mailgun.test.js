@@ -4,6 +4,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
 const { MailgunTransport } = require('../../src/mailgun/index.js');
+const PostalMime = require('postal-mime');
+const { convertMessage } = require('../../src/mailgun/message-converter.js');
 
 const message = () =>
   createMessage({
@@ -51,4 +53,25 @@ test('Mailgun: sendMany reads an async iterable', async (t) => {
   }
   assert.strictEqual(ids.length, 2);
   assert.ok(ids.every((id) => /^<?m\d@mg\.example\.com>?$/.test(id)));
+});
+
+test('Mailgun: a display name with "<", "," or "@" stays a single mailbox', async () => {
+  const name = 'x\\", eve@evil.example, "';
+  const converted = await convertMessage(
+    createMessage({
+      from: { name: 'Support <attacker@evil.com>, Real', address: 'alex@example.com' },
+      to: { name, address: 'bob@example.com' },
+      subject: 'Hello',
+      content: { text: 'Hi' },
+    }),
+    config,
+  );
+  const parsed = await PostalMime.parse(
+    `From: ${converted.get('from')}\r\nTo: ${converted.get('to')}\r\n\r\n`,
+  );
+  assert.deepStrictEqual(parsed.from, {
+    address: 'alex@example.com',
+    name: 'Support <attacker@evil.com>, Real',
+  });
+  assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
 });

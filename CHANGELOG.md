@@ -56,5 +56,12 @@ listed in CLAUDE.md, to be fixed one by one.
   underscore or an empty label is refused too; a domain literal is an IPv4 address or an IPv6
   one, with or without the `IPv6:` tag. `./smtp` checks every path again right before it writes
   `MAIL FROM` and `RCPT TO`.
+- **A display name can no longer add a mailbox** (an upstream bug). The MIME builder and
+  `formatAddress` wrote a printable name as it was, and `./ses`, `./mailgun` and `./resend`
+  escaped `"` but not `\` (SES escaped nothing), so the name `Support <attacker@evil.com>, Real`
+  put a second address into `Reply-To`. A name that is more than atoms is now written as a quoted
+  string with `\` and `"` escaped, as is one that reads as an encoded word; `createMessage`
+  refuses a name with a line break and the formatters one with a control character; and
+  `parseAddress` reads a quoted name holding `<` or `,` back, so it inverts `formatAddress`.
 
 [unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main

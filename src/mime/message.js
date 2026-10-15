@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mime/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { formatPhrase } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const {
   formatMessageId,
@@ -516,9 +517,13 @@ const encodeAddress = (address) => {
     return address.address;
   }
 
-  // Encode only the display name part, leave email address as-is
+  // Encode only the display name part, leave email address as-is.  An
+  // encoded word holds no specials, but plain text that is more than atoms is
+  // quoted, or "<", "," and "@" in it would make another mailbox.
   const encodedDisplayName = encodeHeaderValue(address.name, true);
-  return `${encodedDisplayName} <${address.address}>`;
+  const displayName =
+    encodedDisplayName === address.name ? formatPhrase(address.name) : encodedDisplayName;
+  return `${displayName} <${address.address}>`;
 };
 
 const encodeHeaderValue = (value, encodeLongAsciiWords = false) => {

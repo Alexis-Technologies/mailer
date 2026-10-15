@@ -5,6 +5,9 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
 const { SesTransport } = require('../../src/ses/index.js');
+const PostalMime = require('postal-mime');
+const { createSesConfig } = require('../../src/ses/config.js');
+const { convertMessage } = require('../../src/ses/message-converter.js');
 
 const message = (extra = {}) =>
   createMessage({
@@ -141,4 +144,25 @@ test('SES: sendMany reads an async iterable', async (t) => {
     receipts.push(receipt.messageId);
   }
   assert.deepStrictEqual(receipts.sort(), ['m1', 'm2']);
+});
+
+test('SES: a display name with "<", "," or "@" stays a single mailbox', async () => {
+  const name = 'x\\", eve@evil.example, "';
+  const converted = await convertMessage(
+    createMessage({
+      from: { name: 'Support <attacker@evil.com>, Real', address: 'alex@example.com' },
+      to: { name, address: 'bob@example.com' },
+      subject: 'Hello',
+      content: { text: 'Hi' },
+    }),
+    createSesConfig({}),
+  );
+  const parsed = await PostalMime.parse(
+    `From: ${converted.FromEmailAddress}\r\nTo: ${converted.Destination.ToAddresses[0]}\r\n\r\n`,
+  );
+  assert.deepStrictEqual(parsed.from, {
+    address: 'alex@example.com',
+    name: 'Support <attacker@evil.com>, Real',
+  });
+  assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
 });

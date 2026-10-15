@@ -42,7 +42,7 @@ pnpm run test:types                # tsd: tests/types/*.test-d.ts, one file per 
 pnpm run check:dts                 # tsc --noEmit --strict over the d.ts of every entry
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
-pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 7 KB min+gzip and each subpath
+pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 8 KB min+gzip and each subpath
 pnpm bench [filter] [--json] [--save] [--compare]   # ops/sec harness, manual only; --save writes bench/baseline.json
 pnpm docs:comparison               # renders docs/comparison.json into docs/guide/comparison.md
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
@@ -157,6 +157,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `URL.canParse` alone, so a domain could carry `>`, spaces, a port or userinfo and inject
     ESMTP parameters into `RCPT TO`. The domain is held to host-name characters, a domain
     literal to an IP address, and `./smtp` re-checks each path (`checkSmtpPath`).
+16. mime, core, ses, mailgun, resend: a printable display name was written as it was (SES), or
+    with `"` but not `\` escaped (mailgun, resend), so `<`, `,` and `@` in it added a mailbox.
+    `formatMailbox`, `formatQuotedMailbox` and `formatPhrase` in `src/core/address.js` quote it;
+    `createMessage` refuses a line break in a name.
 
 ## Repository layout
 

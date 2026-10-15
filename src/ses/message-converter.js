@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { combineSignals } = require('../core/abort-signal.js');
+const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 
@@ -130,13 +131,6 @@ const createSimpleContent = async (message, signal) => {
   }
 
   return content;
-};
-
-const formatAddress = (address) => {
-  if (address.name) {
-    return `"${address.name}" <${address.address}>`;
-  }
-  return address.address;
 };
 
 // Dead upstream: nothing calls it (CLAUDE.md, known upstream bugs).

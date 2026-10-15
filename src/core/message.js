@@ -107,6 +107,9 @@ const checkAddress = (label, address) => {
   if (/[\r\n]/.test(parsed.address)) {
     throwTypeError(`Invalid ${label} address: ${JSON.stringify(parsed.address)}`);
   }
+  if (parsed.name != null && /[\r\n]/.test(parsed.name)) {
+    throwTypeError(`Invalid ${label} display name: it contains a carriage return or line feed.`);
+  }
   return parsed;
 };
 

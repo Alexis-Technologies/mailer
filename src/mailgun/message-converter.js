@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailgun/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
@@ -120,21 +121,6 @@ const convertMessage = async (message, config, signal) => {
   }
 
   return formData;
-};
-
-/**
- * Formats an address for Mailgun API.
- *
- * @param address - The address to format
- * @returns Formatted address string
- */
-const formatAddress = (address) => {
-  if (address.name) {
-    // Escape quotes in the name
-    const escapedName = address.name.replace(/"/g, '\\"');
-    return `"${escapedName}" <${address.address}>`;
-  }
-  return address.address;
 };
 
 /**

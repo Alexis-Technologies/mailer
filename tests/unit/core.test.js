@@ -10,9 +10,11 @@ const {
   createMessage,
   createRawMessagePlan,
   createReceiptError,
+  formatAddress,
   isEmailAddress,
   iterateAttachmentContent,
   iterateRawMessage,
+  parseAddress,
   RawMessageValidationError,
   readAttachmentContent,
   resolveCalendarContent,
@@ -64,6 +66,27 @@ test('Address: host names, internationalized names and quoted local parts still 
     '"john doe"@example.com',
   ];
   for (const address of valid) assert.strictEqual(isEmailAddress(address), true, address);
+});
+
+test('Address: formatAddress() quotes a name that is more than atoms; parseAddress() reads it back', () => {
+  const cases = [
+    ['John Doe', 'John Doe <j@example.com>'],
+    ['Support <attacker@evil.com>, Real', '"Support <attacker@evil.com>, Real" <j@example.com>'],
+    ['x\\", eve@evil.example, "', '"x\\\\\\", eve@evil.example, \\"" <j@example.com>'],
+    ['Joe Q. Public', '"Joe Q. Public" <j@example.com>'],
+    ['=?utf-8?q?Admin?=', '"=?utf-8?q?Admin?=" <j@example.com>'],
+  ];
+  for (const [name, formatted] of cases) {
+    const address = { name, address: 'j@example.com' };
+    assert.strictEqual(formatAddress(address), formatted);
+    assert.deepStrictEqual(parseAddress(formatted), address);
+  }
+});
+
+test('Address: a display name with a line break is refused', () => {
+  const to = { name: 'Bob\r\nBcc: eve@evil.example', address: 'bob@example.com' };
+  assert.throws(() => createMessage({ ...base, to }), TypeError);
+  assert.throws(() => formatAddress({ name: 'Bob\nX', address: 'bob@example.com' }), TypeError);
 });
 
 test('Address: a domain literal is an IPv4 address or an IPv6 one, tagged or not', () => {

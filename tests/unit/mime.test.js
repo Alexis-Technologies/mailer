@@ -54,6 +54,26 @@ test('MIME: non-ASCII names, subjects and filenames round-trip through encoded w
   );
 });
 
+test('MIME: a display name with "<", "," or "@" stays a single mailbox', async () => {
+  const name = 'Support <attacker@evil.com>, Real';
+  const tricky = 'x\\", eve@evil.example, "';
+  const text = await wire(
+    createMessage({
+      ...base,
+      subject: 'a',
+      to: { name: tricky, address: 'bob@example.com' },
+      replyTo: { name, address: 'help@example.com' },
+    }),
+  );
+  assert.match(
+    headerBlock(text),
+    /^Reply-To: "Support <attacker@evil.com>, Real" <help@example.com>$/m,
+  );
+  const parsed = await PostalMime.parse(text);
+  assert.deepStrictEqual(parsed.replyTo, [{ address: 'help@example.com', name }]);
+  assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name: tricky }]);
+});
+
 test('MIME: a message without content gets an empty text part', async () => {
   const parsed = await PostalMime.parse(
     await wire(createMessage({ ...base, subject: 'Empty', content: {} })),

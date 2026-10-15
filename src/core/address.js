@@ -25,7 +25,81 @@ const net = require('node:net');
  * @return A string representation of the address.
  */
 const formatAddress = (address) => {
-  return address.name == null ? address.address : `${address.name} <${address.address}>`;
+  return address.name == null ? address.address : formatMailbox(address);
+};
+
+// RFC 5322 §3.2.3: the characters of an atom.
+const ATEXT = new Uint8Array(128);
+for (let code = 0x30; code <= 0x39; code++) ATEXT[code] = 1;
+for (let code = 0x41; code <= 0x5a; code++) {
+  ATEXT[code] = 1;
+  ATEXT[code + 0x20] = 1;
+}
+for (const symbol of "!#$%&'*+-/=?^_`{|}~") ATEXT[symbol.charCodeAt(0)] = 1;
+
+// A phrase of atoms separated by spaces goes as it is; anything else, such as
+// "<", ",", "@" or "." that would make a second mailbox or end this one, goes
+// as a quoted string (RFC 5322 §3.4).  So does text that reads as an encoded
+// word, which a reader would otherwise decode (RFC 2047 §5).
+const isAtomPhrase = (name) => {
+  const last = name.length - 1;
+  if (last < 0 || name.charCodeAt(0) === 0x20 || name.charCodeAt(last) === 0x20) return false;
+  for (let i = 0; i <= last; i++) {
+    const code = name.charCodeAt(i);
+    if (code !== 0x20 && (code > 0x7f || ATEXT[code] !== 1)) return false;
+  }
+  return !name.includes('=?');
+};
+
+const quoteString = (text) => `"${text.replace(/[\\"]/g, '\\$&')}"`;
+
+/**
+ * Formats a display name of printable text: as it is when it is atoms, as a
+ * quoted string otherwise.
+ *
+ * @param name A display name with no control character.
+ * @returns The phrase for the header.
+ * @internal
+ */
+const formatPhrase = (name) => (isAtomPhrase(name) ? name : quoteString(name));
+
+const checkDisplayName = (name) => {
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    if ((code < 0x20 && code !== 0x09) || code === 0x7f) {
+      throw new TypeError('A display name must not contain a control character.');
+    }
+  }
+};
+
+/**
+ * Formats a mailbox for a header or an API that takes one as a string: the
+ * display name as atoms when it has nothing else, otherwise as a quoted string.
+ *
+ * @param address The address, with or without a display name.
+ * @returns `name <address>`, `"name" <address>`, or the bare address.
+ * @throws {TypeError} If the display name holds a control character.
+ * @internal
+ */
+const formatMailbox = (address) => {
+  if (!address.name) return address.address;
+  checkDisplayName(address.name);
+  return `${formatPhrase(address.name)} <${address.address}>`;
+};
+
+/**
+ * Formats a mailbox with the display name always quoted, for APIs whose
+ * output has always been `"name" <address>`.
+ *
+ * @param address The address, with or without a display name.
+ * @returns `"name" <address>`, or the bare address.
+ * @throws {TypeError} If the display name holds a control character.
+ * @internal
+ */
+const formatQuotedMailbox = (address) => {
+  if (!address.name) return address.address;
+  checkDisplayName(address.name);
+  return `${quoteString(address.name)} <${address.address}>`;
 };
 
 /**
@@ -67,6 +141,20 @@ const parseAddress = (address) => {
     return undefined;
   }
 
+  // A quoted display name may hold "<", ">" and ",", so its end is found by
+  // scanning the quoted string rather than by the first "<".
+  if (trimmed.charCodeAt(0) === 0x22) {
+    const nameEnd = findClosingQuote(trimmed);
+    const rest = nameEnd === -1 ? '' : trimmed.slice(nameEnd + 1).trim();
+    if (rest.startsWith('<') && rest.endsWith('>')) {
+      const email = rest.slice(1, -1).trim();
+      if (!isValidEmail(email)) {
+        return undefined;
+      }
+      return { name: trimmed.slice(1, nameEnd).replace(/\\(.)/g, '$1'), address: email };
+    }
+  }
+
   // Check for name and angle bracket format: "Name <email@domain.com>"
   const nameAngleBracketMatch = trimmed.match(/^(.+?)\s*<(.+?)>$/);
   if (nameAngleBracketMatch) {
@@ -77,8 +165,10 @@ const parseAddress = (address) => {
       return undefined;
     }
 
-    // Remove quotes from name if present
-    const cleanName = name.replace(/^"(.+)"$/, '$1');
+    // Remove quotes from name if present, and the backslashes of the pairs
+    // they quote, so a name formatted by formatAddress() comes back as it was.
+    const quoted = /^"(.+)"$/.exec(name);
+    const cleanName = quoted == null ? name : quoted[1].replace(/\\(.)/g, '$1');
     return { name: cleanName, address: email };
   }
 
@@ -128,12 +218,19 @@ const isValidEmail = (email) => {
 
 const findLocalPartEnd = (email) => {
   if (email.charCodeAt(0) !== 0x22) return email.indexOf('@');
-  for (let i = 1; i < email.length; i++) {
-    const code = email.charCodeAt(i);
+  const quoteEnd = findClosingQuote(email);
+  return quoteEnd !== -1 && email.charCodeAt(quoteEnd + 1) === 0x40 ? quoteEnd + 1 : -1;
+};
+
+// The index of the quote that closes the quoted string opening `text`, past
+// its backslash pairs, or -1.
+const findClosingQuote = (text) => {
+  for (let i = 1; i < text.length; i++) {
+    const code = text.charCodeAt(i);
     if (code === 0x5c) {
       i++;
     } else if (code === 0x22) {
-      return email.charCodeAt(i + 1) === 0x40 ? i + 1 : -1;
+      return i;
     }
   }
   return -1;
@@ -269,4 +366,11 @@ const isEmailAddress = (email) => {
   return typeof email === 'string' && isValidEmail(email);
 };
 
-module.exports = { formatAddress, parseAddress, isEmailAddress };
+module.exports = {
+  formatAddress,
+  formatMailbox,
+  formatPhrase,
+  formatQuotedMailbox,
+  parseAddress,
+  isEmailAddress,
+};

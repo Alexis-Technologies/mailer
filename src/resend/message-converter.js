@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/resend/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { formatMailbox: formatAddress } = require('../core/address.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
@@ -169,27 +170,6 @@ const convertMessagesBatch = async (messages, _config) => {
   const batchData = await Promise.all(messages.map((message) => convertMessage(message, _config)));
 
   return batchData;
-};
-
-/**
- * Formats an Address object into a string suitable for Resend API.
- *
- * @param address - The address to format
- * @returns Formatted address string
- */
-const formatAddress = (address) => {
-  if (address.name) {
-    // If the name contains special characters, quote it
-    const name =
-      address.name.includes('"') ||
-      address.name.includes(',') ||
-      address.name.includes('<') ||
-      address.name.includes('>')
-        ? `"${address.name.replace(/"/g, '\\"')}"`
-        : address.name;
-    return `${name} <${address.address}>`;
-  }
-  return address.address;
 };
 
 /**

@@ -4,6 +4,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
 const { ResendTransport } = require('../../src/resend/index.js');
+const PostalMime = require('postal-mime');
+const { convertMessage } = require('../../src/resend/message-converter.js');
 
 const message = (index = 0) =>
   createMessage({
@@ -79,4 +81,23 @@ test('Resend: a failed batch fails each of its messages', async (t) => {
     receipts.map((receipt) => receipt.errorMessages),
     [['Bad batch'], ['Bad batch']],
   );
+});
+
+test('Resend: a display name with "<", "," or "@" stays a single mailbox', async () => {
+  const name = 'x\\", eve@evil.example, "';
+  const converted = await convertMessage(
+    createMessage({
+      from: { name: 'Support <attacker@evil.com>, Real', address: 'alex@example.com' },
+      to: { name, address: 'bob@example.com' },
+      subject: 'Hello',
+      content: { text: 'Hi' },
+    }),
+    {},
+  );
+  const parsed = await PostalMime.parse(`From: ${converted.from}\r\nTo: ${converted.to}\r\n\r\n`);
+  assert.deepStrictEqual(parsed.from, {
+    address: 'alex@example.com',
+    name: 'Support <attacker@evil.com>, Real',
+  });
+  assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
 });
