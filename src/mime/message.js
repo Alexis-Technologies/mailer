@@ -3,6 +3,7 @@
 
 const { formatPhrase } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
+const { checkAttachment } = require('../core/message.js');
 const {
   formatMessageId,
   generateMessageId,
@@ -198,8 +199,11 @@ const buildMimeParts = (message) => {
       lines.push(alternatives[0].body);
     }
 
-    // Attachments
+    // Attachments.  A message is structural input, not only one built by
+    // createMessage(), so the fields written into part headers as given are
+    // checked again here, as the addresses and the custom headers are.
     for (const attachment of message.attachments) {
+      checkAttachment(attachment);
       lines.push('');
       lines.push(`--${boundary}`);
       lines.push(

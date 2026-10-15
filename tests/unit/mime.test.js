@@ -74,6 +74,27 @@ test('MIME: a display name with "<", "," or "@" stays a single mailbox', async (
   assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name: tricky }]);
 });
 
+test('MIME: a hand-built message cannot inject part headers through an attachment', async () => {
+  const attachment = {
+    inline: true,
+    filename: 'a.txt',
+    content: new Uint8Array([0x61]),
+    contentType: 'text/plain',
+    contentId: 'a@example.com',
+  };
+  const built = createMessage({ ...base, subject: 'a', attachments: [attachment] });
+  const injected = [
+    { ...attachment, contentType: 'text/plain\r\nX-Injected: 1' },
+    { ...attachment, contentId: 'a@example.com>\r\nX-Injected: 1\r\nX: <b' },
+  ];
+  for (const bad of injected) {
+    await assert.rejects(composeMessage({ ...built, attachments: [bad] }), TypeError);
+  }
+  const withParameter = { ...attachment, contentType: 'text/plain; charset=utf-8' };
+  const text = await wire({ ...built, attachments: [withParameter] });
+  assert.match(text, /^Content-Type: text\/plain; charset=utf-8; name="a.txt"$/m);
+});
+
 test('MIME: a message without content gets an empty text part', async () => {
   const parsed = await PostalMime.parse(
     await wire(createMessage({ ...base, subject: 'Empty', content: {} })),

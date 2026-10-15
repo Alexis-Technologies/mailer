@@ -126,6 +126,7 @@ const checkAddress = (label, address) => {
  * @returns The attachment, unchanged.
  * @throws {TypeError} If the content type or content ID contains a carriage
  * return or line feed.
+ * @internal
  */
 const checkAttachment = (attachment) => {
   if (/[\r\n]/.test(attachment.contentType)) {
@@ -192,4 +193,4 @@ const ensureArray = (value) => {
   return Array.isArray(value) ? value : value == null ? [] : [value];
 };
 
-module.exports = { createMessage };
+module.exports = { checkAttachment, createMessage };

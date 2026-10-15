@@ -161,6 +161,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     with `"` but not `\` escaped (mailgun, resend), so `<`, `,` and `@` in it added a mailbox.
     `formatMailbox`, `formatQuotedMailbox` and `formatPhrase` in `src/core/address.js` quote it;
     `createMessage` refuses a line break in a name.
+17. mime: the content type and content ID of an attachment went into part headers unchecked when
+    the message was not built by `createMessage`; `composeMessage` runs `checkAttachment` again.
 
 ## Repository layout
 

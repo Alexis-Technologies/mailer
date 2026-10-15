@@ -63,5 +63,8 @@ listed in CLAUDE.md, to be fixed one by one.
   string with `\` and `"` escaped, as is one that reads as an encoded word; `createMessage`
   refuses a name with a line break and the formatters one with a control character; and
   `parseAddress` reads a quoted name holding `<` or `,` back, so it inverts `formatAddress`.
+- **`composeMessage` checks an attachment's content type and content ID again** (an upstream
+  bug): only `createMessage` refused a line break in them, so a message built by hand, such as one
+  read back from a queue, could inject part headers.
 
 [unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main
