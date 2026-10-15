@@ -11,8 +11,16 @@ class JmapApiError extends Error {
   retryAfterMilliseconds;
   attempts;
 
-  constructor(message, statusCode, responseBody, jmapErrorType, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(
+    message,
+    statusCode,
+    responseBody,
+    jmapErrorType,
+    retryAfterMilliseconds,
+    attempts,
+    options,
+  ) {
+    super(message, options);
     this.name = 'JmapApiError';
     this.statusCode = statusCode;
     this.responseBody = responseBody;

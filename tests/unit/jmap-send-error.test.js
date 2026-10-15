@@ -53,7 +53,10 @@ describe('JmapTransport send error', () => {
     }
   });
 
-  it('should return retryable timeout receipts for request timeouts', async () => {
+  // Changed after the port: the submission request timed out after it went
+  // out, so the server may have submitted the message; upstream returned a
+  // retryable receipt.
+  it('should return unknown-delivery timeout receipts for request timeouts', async () => {
     const originalFetch = globalThis.fetch;
 
     try {
@@ -156,9 +159,10 @@ describe('JmapTransport send error', () => {
       assert.ok(!receipt.successful);
       if (!receipt.successful) {
         assert.equal(receipt.provider, 'jmap');
-        assert.equal(receipt.retryable, true);
+        assert.equal(receipt.retryable, false);
+        assert.equal(receipt.deliveryUnknown, true);
         assert.equal(receipt.errors?.[0]?.category, 'timeout');
-        assert.equal(receipt.errors?.[0]?.retryable, true);
+        assert.equal(receipt.errors?.[0]?.retryable, false);
         assert.equal(receipt.errors?.[0]?.code, 'timeout');
         assert.equal(receipt.errors?.[0]?.provider, 'jmap');
       }

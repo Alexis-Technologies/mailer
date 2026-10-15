@@ -11,6 +11,7 @@ const { uploadBlob } = require('./blob-uploader.js');
 const { createJmapConfig } = require('./config.js');
 const { JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
+const { isUnsentRequestError } = require('../internal/unsent.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
@@ -41,6 +42,9 @@ class JmapTransport {
   constructor(config) {
     this.config = createJmapConfig(config);
     this.httpClient = new JmapHttpClient(this.config);
+    // The request that creates and submits the email is never replayed: a
+    // retry after a lost answer could submit the message twice.
+    this.submissionClient = new JmapHttpClient({ ...this.config, retries: 0 });
   }
 
   /**
@@ -207,7 +211,8 @@ class JmapTransport {
       const emailCreate = convertMessage(message, draftsMailboxId, uploadedBlobs);
 
       // Execute Email/set + EmailSubmission/set batch request
-      const response = await this.httpClient.executeRequest(
+      const response = await executeSubmission(
+        this.submissionClient,
         session.apiUrl,
         {
           using: [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail, JMAP_CAPABILITIES.submission],
@@ -434,7 +439,8 @@ class JmapTransport {
 
       // Execute batch request
       processingStage = 'batch request execution';
-      const response = await this.httpClient.executeRequest(
+      const response = await executeSubmission(
+        this.submissionClient,
         session.apiUrl,
         {
           using: [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail, JMAP_CAPABILITIES.submission],
@@ -869,6 +875,22 @@ class JmapTransport {
   }
 }
 
+// The submission errors after which the message may have been submitted.
+const unansweredSubmissions = new WeakSet();
+
+// Sends the request that creates and submits emails.  A failure without an
+// answer from the server, unless the connection was never made, leaves it
+// unknown whether the server submitted them.
+const executeSubmission = async (client, apiUrl, request, signal) => {
+  try {
+    return await client.executeRequest(apiUrl, request, signal);
+  } catch (error) {
+    const isUnanswered = error instanceof JmapApiError && error.statusCode === undefined;
+    if (isUnanswered && !isUnsentRequestError(error)) unansweredSubmissions.add(error);
+    throw error;
+  }
+};
+
 const createJmapFailure = (message, error, override = {}) => {
   const attempts = getAttemptCount(error);
 
@@ -885,6 +907,7 @@ const createJmapFailure = (message, error, override = {}) => {
       category: override.category,
       code: override.code,
       retryable: override.retryable,
+      deliveryUnknown: unansweredSubmissions.has(error),
     });
   }
 

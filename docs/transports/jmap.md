@@ -258,6 +258,13 @@ The transport uses exponential backoff for retries, with delays of 1s,
 2s, 4s, etc. between attempts. Client errors (4xx responses) are not
 retried, as they typically indicate a problem with the request itself.
 
+The request that creates and submits the email (`Email/set` with
+`EmailSubmission/set`) is the exception: it is sent once, since a retry after a
+lost answer could submit the message twice.  If it fails without an answer
+from the server, the receipt is marked `deliveryUnknown: true` and is not
+retryable, unless the connection was never made (a refused connection, an
+unknown host, a rejected certificate), in which case it stays retryable.
+
 ### URL rewriting
 
 Some JMAP servers may return internal hostnames in session URLs that are

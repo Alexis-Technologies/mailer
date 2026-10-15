@@ -186,6 +186,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 22. smtp: a connection that closed or timed out after the terminating dot of DATA failed with
     the same retryable error as one before it. `writeMessageData` wraps a failure after the dot
     in `SmtpDeliveryUnknownError`, which `createSmtpFailure` turns into `deliveryUnknown`.
+23. jmap: `send` and `sendMany` retried the request that creates and submits emails, as only
+    `sendRaw` avoided. It goes through `submissionClient` (no retries); an unanswered failure is
+    `deliveryUnknown` unless `isUnsentRequestError` (`src/internal/unsent.js`) finds a connection
+    that was never made in its causes, which `JmapApiError` now keeps.
 
 ## Repository layout
 
@@ -195,7 +199,8 @@ src/
   index.js          public barrel (explicit named exports)
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
-  internal/         private modules shared by subpaths, not in the exports map (redact.js)
+  internal/         private modules shared by subpaths, not in the exports map (redact.js,
+                    redact-addresses.js, unsent.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

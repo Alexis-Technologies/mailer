@@ -20,7 +20,10 @@ const baseMessage = {
 };
 
 describe('JmapTransport retry attempts', () => {
-  it('should preserve attempt counts from retried network failures', async () => {
+  // Changed after the port: the request that creates and submits the email is
+  // no longer retried, as a retry after a lost answer could submit it twice;
+  // upstream retried it (two attempts here).
+  it('should not retry a failed submission, whose delivery is unknown', async () => {
     const originalFetch = globalThis.fetch;
 
     try {
@@ -118,7 +121,8 @@ describe('JmapTransport retry attempts', () => {
       const receipt = await transport.send(baseMessage);
 
       assert.ok(!receipt.successful);
-      assert.equal(receipt.attempts, 2);
+      assert.equal(receipt.attempts, 1);
+      assert.equal(receipt.deliveryUnknown, true);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -121,6 +121,8 @@ class JmapHttpClient {
           if (error instanceof JmapApiError) {
             throw error;
           }
+          // The cause tells a request that never left (a refused connection)
+          // from one that may have reached the server.
           if (isAbortError(error)) {
             throw new JmapApiError(
               'JMAP request timed out.',
@@ -129,6 +131,7 @@ class JmapHttpClient {
               undefined,
               undefined,
               attempt + 1,
+              { cause: error },
             );
           }
           throw new JmapApiError(
@@ -138,6 +141,7 @@ class JmapHttpClient {
             undefined,
             undefined,
             attempt + 1,
+            { cause: error },
           );
         }
 

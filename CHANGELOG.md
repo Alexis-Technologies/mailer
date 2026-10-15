@@ -95,6 +95,10 @@ listed in CLAUDE.md, to be fixed one by one.
   connection that closed or timed out after the terminating dot was a retryable network or
   timeout failure, like one before it, so a retry could deliver the message twice. It is now
   `deliveryUnknown` with the code `smtp.delivery-unknown`.
+- **`./jmap` no longer replays the request that submits an email** (an upstream bug): `send` and
+  `sendMany` retried `Email/set` with `EmailSubmission/set` after a network failure, which could
+  submit the message twice. That request is now sent once; a failure without an answer is
+  `deliveryUnknown`, unless the connection was never made. `JmapApiError` takes a `cause`.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

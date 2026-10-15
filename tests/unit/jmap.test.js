@@ -165,3 +165,23 @@ test('JMAP: verification refuses a session without the submission capability', a
   serve(t, { session: session({ capabilities: { [CORE]: {}, [MAIL]: {} } }) });
   await assert.rejects(transport().verify(), /lacks core, mail, or submission capability/);
 });
+
+test('JMAP: a submission is sent once; it stays retryable only if it never left', async (t) => {
+  for (const [code, isUnknown] of [
+    ['ECONNREFUSED', false],
+    ['ECONNRESET', true],
+  ]) {
+    const calls = serve(t, {
+      'Email/set': () => {
+        const cause = Object.assign(new Error(code), { code });
+        throw new TypeError('fetch failed', { cause });
+      },
+    });
+    const receipt = await transport({ retries: 3 }).send(message());
+    assert.strictEqual(receipt.successful, false);
+    assert.strictEqual(calls.filter((call) => call === 'Email/set').length, 1);
+    assert.strictEqual(receipt.deliveryUnknown, isUnknown ? true : undefined, code);
+    assert.strictEqual(receipt.retryable, !isUnknown, code);
+    t.mock.restoreAll();
+  }
+});

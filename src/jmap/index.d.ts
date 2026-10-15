@@ -173,6 +173,7 @@ export declare class JmapApiError extends Error {
     jmapErrorType?: string,
     retryAfterMilliseconds?: number,
     attempts?: number,
+    options?: { readonly cause?: unknown },
   );
 }
 /**
