@@ -9,14 +9,14 @@ const net = require('node:net');
  *
  * @example Formatting an address with a name
  * ```ts
- * import { type Address, formatAddress } from "@alexify/mailer/address";
+ * import { type Address, formatAddress } from "@alexify/mailer";
  * const address: Address = { name: "John Doe", address: "john@example.com" };
  * console.log(formatAddress(address)); // "John Doe <john@example.com>"
  * ```
  *
  * @example Formatting an address without a name
  * ```ts
- * import { type Address, formatAddress } from "@alexify/mailer/address";
+ * import { type Address, formatAddress } from "@alexify/mailer";
  * const address: Address = { address: "jane@examle.com" };
  * console.log(formatAddress(address)); // "jane@example.com"
  * ```
@@ -108,21 +108,21 @@ const formatQuotedMailbox = (address) => {
  *
  * @example Parsing an address with a name
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("John Doe <john@example.com>");
  * console.log(address); // { name: "John Doe", address: "john@example.com" }
  * ```
  *
  * @example Parsing an address without a name
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("jane@example.com");
  * console.log(address); // { address: "jane@example.com" }
  * ```
  *
  * @example Trying to parse an invalid address
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("invalid-email");
  * console.log(address); // undefined
  * ```
@@ -350,7 +350,7 @@ const isValidAddressLiteral = (literal) => {
  *
  * @example
  * ```ts
- * import { isEmailAddress } from "@alexify/mailer/address";
+ * import { isEmailAddress } from "@alexify/mailer";
  *
  * const userInput = "user@example.com";
  * if (isEmailAddress(userInput)) {

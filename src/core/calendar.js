@@ -35,7 +35,7 @@ const calendarMethods = new Set([
  *
  * @example
  * ```ts
- * import { parseCalendarMethod } from "@alexify/mailer/calendar";
+ * import { parseCalendarMethod } from "@alexify/mailer";
  * parseCalendarMethod("BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n");
  * // "REQUEST"
  * ```
@@ -71,7 +71,7 @@ const parseCalendarMethod = (content) => {
  *
  * @example
  * ```ts
- * import { resolveCalendarContent } from "@alexify/mailer/calendar";
+ * import { resolveCalendarContent } from "@alexify/mailer";
  * const calendar = resolveCalendarContent({ content: ics });
  * calendar.method;  // "REQUEST"
  * ```

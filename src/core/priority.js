@@ -7,7 +7,7 @@
  *
  * @example Sorting priorities
  * ```ts
- * import { comparePriority, type Priority } from "@alexify/mailer/priority";
+ * import { comparePriority, type Priority } from "@alexify/mailer";
  * const priorities: Priority[] = ["normal", "low", "high"];
  * priorities.sort(comparePriority);
  * console.log(priorities); // ["high", "normal", "low"]

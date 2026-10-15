@@ -25,14 +25,16 @@ idempotency. Zero runtime dependencies.
   MIME builder and DKIM (RSA-SHA256, Ed25519), and HTTP providers on `fetch`: Amazon SES v2,
   Resend, SendGrid, Mailgun, Mailtrap, Maileroo, Lettermint, Plunk, and JMAP. Secure by default:
   TLS certificates are verified, AUTH never goes over plain text, CRLF in a header is rejected.
-- **What happens after `send()`.** A persistent queue and outbox, an append-only audit log and one
-  model of delivery events (delivered, bounced, complained, failed). None of the
+- **What happens after `send()`** (being designed). A persistent queue and outbox, an append-only
+  audit log and one model of delivery events (delivered, bounced, complained, failed). None of the
   [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has the three.
-- **Sent once, or known to be unknown.** Idempotency keys with deduplication, errors classified as
-  permanent or temporary, and a `delivery_unknown` state instead of a blind retry when a provider
-  has no idempotency key.
-- **Correct before broad.** Golden `.eml` messages, DKIM checked by an independent verifier, and
-  fuzzing of headers, `multipart/related`, dot-stuffing and internationalized addresses.
+- **Sent once, or known to be unknown.** Errors are classified as permanent or temporary, and a
+  failure after which the provider may have taken the message is marked `deliveryUnknown`:
+  `./retry` and `./pool` never send it again. Idempotency keys with deduplication come with the
+  outbox.
+- **Correct before broad.** The tests read the composed messages back with an independent parser;
+  golden `.eml` messages, DKIM checked by an independent verifier and fuzzing of headers,
+  `multipart/related`, dot-stuffing and internationalized addresses are planned.
 - **Zero dependencies.** Built on `node:*` modules and `fetch`. What a part needs from your
   application is passed in: the OpenTelemetry providers, a pino-like logger, and later the driver of
   a queue or a database (BullMQ, MongoDB). CommonJS with ESM named imports and hand-written

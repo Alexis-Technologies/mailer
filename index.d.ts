@@ -25,14 +25,14 @@ export interface Address {
  *
  * @example Formatting an address with a name
  * ```ts
- * import { type Address, formatAddress } from "@alexify/mailer/address";
+ * import { type Address, formatAddress } from "@alexify/mailer";
  * const address: Address = { name: "John Doe", address: "john@example.com" };
  * console.log(formatAddress(address)); // "John Doe <john@example.com>"
  * ```
  *
  * @example Formatting an address without a name
  * ```ts
- * import { type Address, formatAddress } from "@alexify/mailer/address";
+ * import { type Address, formatAddress } from "@alexify/mailer";
  * const address: Address = { address: "jane@examle.com" };
  * console.log(formatAddress(address)); // "jane@example.com"
  * ```
@@ -47,21 +47,21 @@ export declare function formatAddress(address: Address): string;
  *
  * @example Parsing an address with a name
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("John Doe <john@example.com>");
  * console.log(address); // { name: "John Doe", address: "john@example.com" }
  * ```
  *
  * @example Parsing an address without a name
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("jane@example.com");
  * console.log(address); // { address: "jane@example.com" }
  * ```
  *
  * @example Trying to parse an invalid address
  * ```ts
- * import { parseAddress } from "@alexify/mailer/address";
+ * import { parseAddress } from "@alexify/mailer";
  * const address = parseAddress("invalid-email");
  * console.log(address); // undefined
  * ```
@@ -76,7 +76,7 @@ export declare function parseAddress(address: string): Address | undefined;
  *
  * @example
  * ```ts
- * import { isEmailAddress } from "@alexify/mailer/address";
+ * import { isEmailAddress } from "@alexify/mailer";
  *
  * const userInput = "user@example.com";
  * if (isEmailAddress(userInput)) {
@@ -272,7 +272,7 @@ export interface CalendarConstructor {
  *
  * @example
  * ```ts
- * import { parseCalendarMethod } from "@alexify/mailer/calendar";
+ * import { parseCalendarMethod } from "@alexify/mailer";
  * parseCalendarMethod("BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n");
  * // "REQUEST"
  * ```
@@ -300,7 +300,7 @@ export declare function parseCalendarMethod(content: string): CalendarMethod | u
  *
  * @example
  * ```ts
- * import { resolveCalendarContent } from "@alexify/mailer/calendar";
+ * import { resolveCalendarContent } from "@alexify/mailer";
  * const calendar = resolveCalendarContent({ content: ics });
  * calendar.method;  // "REQUEST"
  * ```
@@ -692,7 +692,7 @@ export declare function createMessage(constructor: MessageConstructor): Message;
  *
  * @example
  * ```ts
- * import { generateMessageId } from "@alexify/mailer/message-id";
+ * import { generateMessageId } from "@alexify/mailer";
  * const messageId = generateMessageId("example.com");
  * // "1e2ee2e1-…-…@example.com"
  * ```
@@ -716,7 +716,7 @@ export declare function generateMessageId(domain: string): string;
  *
  * @example
  * ```ts
- * import { parseMessageId } from "@alexify/mailer/message-id";
+ * import { parseMessageId } from "@alexify/mailer";
  * parseMessageId("<abc@example.com>");  // "abc@example.com"
  * parseMessageId("not an identifier");  // undefined
  * ```
@@ -736,7 +736,7 @@ export declare function parseMessageId(value: string): string | undefined;
  *
  * @example
  * ```ts
- * import { formatMessageId } from "@alexify/mailer/message-id";
+ * import { formatMessageId } from "@alexify/mailer";
  * formatMessageId("abc@example.com");  // "<abc@example.com>"
  * ```
  *
@@ -765,7 +765,7 @@ export declare function formatMessageId(id: string): string;
  *
  * @example
  * ```ts
- * import { resolveThreadingHeaders } from "@alexify/mailer/message-id";
+ * import { resolveThreadingHeaders } from "@alexify/mailer";
  * // for a message replying to <122@example.com>:
  * // Map { "In-Reply-To" => "<122@example.com>" }
  * ```
@@ -788,7 +788,7 @@ export type Priority = 'high' | 'normal' | 'low';
  *
  * @example Sorting priorities
  * ```ts
- * import { comparePriority, type Priority } from "@alexify/mailer/priority";
+ * import { comparePriority, type Priority } from "@alexify/mailer";
  * const priorities: Priority[] = ["normal", "low", "high"];
  * priorities.sort(comparePriority);
  * console.log(priorities); // ["high", "normal", "low"]

@@ -33,6 +33,10 @@ for a user who needs it, and the effort goes into what happens to a message afte
 
 ## Design
 
+The transport is built; the rest of this list is the design of the reliability layer, which is
+being built. A failure after which a provider may have taken the message is already marked
+`deliveryUnknown`, and `./retry` and `./pool` do not send it again.
+
 - **At least once, with deduplication.** Exactly-once delivery is not possible over SMTP or HTTP.
   A message carries an idempotency key, the outbox deduplicates by it, and a provider that has no
   idempotency key (SES) leads to a `delivery_unknown` state that is reconciled from delivery
@@ -47,9 +51,10 @@ for a user who needs it, and the effort goes into what happens to a message afte
 - **Secure by default.** TLS certificates are verified, AUTH never goes over plain text, CRLF in
   any header is rejected, the body is dot-stuffed, and reading files or URLs for attachments is
   off unless asked for.
-- **Correct before broad.** The transport is checked against a public set of golden `.eml`
-  messages, DKIM signatures verified by an independent verifier, and fuzzing of headers,
-  `multipart/related`, dot-stuffing and internationalized addresses.
+- **Correct before broad.** The tests read the composed messages back with an independent
+  parser; the transport is to be checked against a public set of golden `.eml` messages, DKIM
+  signatures verified by an independent verifier, and fuzzing of headers, `multipart/related`,
+  dot-stuffing and internationalized addresses.
 - **No dependencies.** The transports use `node:*` modules and `fetch`. The driver of a queue or a
   database (BullMQ on Valkey or Redis, MongoDB) is created by your application and passed in.
 

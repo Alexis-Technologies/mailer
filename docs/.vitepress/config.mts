@@ -59,6 +59,7 @@ const guide = [
       { text: 'Why @alexify/mailer?', link: '/guide/why' },
       { text: 'Getting Started', link: '/guide/getting-started' },
       { text: 'Compared with alternatives', link: '/guide/comparison' },
+      { text: 'Known issues', link: '/guide/known-issues' },
     ],
   },
   {

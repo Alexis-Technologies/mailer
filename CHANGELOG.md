@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0 (MIT, © 2025
 Hong Minhee): the code is upstream's, converted to CommonJS with hand-written types and no
-runtime dependency, one subpath per upstream package. Upstream's known bugs are kept for now and
-listed in CLAUDE.md, to be fixed one by one.
+runtime dependency, one subpath per upstream package. Upstream's known bugs are fixed one by one:
+the open ones are on the [Known issues](https://mailerat.vercel.app/guide/known-issues) page, the
+fixed ones below.
 
 ### Added
 

@@ -18,7 +18,7 @@
  *
  * @example
  * ```ts
- * import { generateMessageId } from "@alexify/mailer/message-id";
+ * import { generateMessageId } from "@alexify/mailer";
  * const messageId = generateMessageId("example.com");
  * // "1e2ee2e1-…-…@example.com"
  * ```
@@ -45,7 +45,7 @@ const generateMessageId = (domain) => {
  *
  * @example
  * ```ts
- * import { parseMessageId } from "@alexify/mailer/message-id";
+ * import { parseMessageId } from "@alexify/mailer";
  * parseMessageId("<abc@example.com>");  // "abc@example.com"
  * parseMessageId("not an identifier");  // undefined
  * ```
@@ -71,7 +71,7 @@ const parseMessageId = (value) => {
  *
  * @example
  * ```ts
- * import { formatMessageId } from "@alexify/mailer/message-id";
+ * import { formatMessageId } from "@alexify/mailer";
  * formatMessageId("abc@example.com");  // "<abc@example.com>"
  * ```
  *
@@ -275,7 +275,7 @@ const hasNonAscii = (value) => {
  *
  * @example
  * ```ts
- * import { resolveThreadingHeaders } from "@alexify/mailer/message-id";
+ * import { resolveThreadingHeaders } from "@alexify/mailer";
  * // for a message replying to <122@example.com>:
  * // Map { "In-Reply-To" => "<122@example.com>" }
  * ```

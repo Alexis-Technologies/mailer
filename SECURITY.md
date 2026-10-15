@@ -39,20 +39,20 @@ is designed around:
   over a plain connection: when TLS is required and the server does not offer STARTTLS, or the
   upgrade fails, the send fails instead of falling back to plain text. Bcc recipients never appear
   in the headers of the message.
-- **Attachments do not read the machine by default.** Reading a file path or fetching a URL for an
-  attachment is off unless the application turns it on; fetching a URL is limited in size and
-  refuses private and link-local addresses.
+- **Attachments do not read the machine by default** (planned). Reading a file path or fetching a
+  URL for an attachment is off unless the application turns it on; fetching a URL is limited in size
+  and refuses private and link-local addresses.
 - **Credentials and personal data stay out of logs.** A transport shows `[REDACTED]` in place of
   its SMTP password, OAuth2 tokens, provider key and DKIM private key when it is inspected,
   logged or serialized. `./otel` and `./logger` record addresses only when told to
   (`recordSensitiveData`, `recordMessage`); otherwise the addresses that error text names, such
   as the recipient of an SMTP rejection, are redacted. A receipt returned to the application
   keeps its full error text: logging it is the application's to scrub.
-- **Webhooks are verified.** A delivery event from a provider is accepted only with a valid
-  signature and within a replay window.
-- **The audit log can forget a person.** Recipients are stored as a keyed hash and an encrypted
-  block whose key can be destroyed, so a request to erase someone's data does not require editing
-  an append-only log.
+- **Webhooks are verified** (planned). A delivery event from a provider is accepted only with a
+  valid signature and within a replay window.
+- **The audit log can forget a person** (planned). Recipients are stored as a keyed hash and an
+  encrypted block whose key can be destroyed, so a request to erase someone's data does not require
+  editing an append-only log.
 - **Drivers are the application's.** A queue or database driver passed in (BullMQ, MongoDB) is
   trusted the same as any other module the application `require`s; its connection security is the
   application's to configure.
