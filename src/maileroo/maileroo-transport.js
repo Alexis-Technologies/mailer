@@ -6,6 +6,7 @@ const { createMailerooConfig } = require('./config.js');
 const { MailerooApiError, MailerooHttpClient, MailerooTimeoutError } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Maileroo transport implementation for sending emails via Maileroo API.
@@ -138,6 +139,7 @@ const responseToReceipt = (response) => {
 const createMailerooFailure = (message, error) => {
   if (error instanceof MailerooApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'maileroo',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -147,6 +149,7 @@ const createMailerooFailure = (message, error) => {
 
   if (error instanceof MailerooTimeoutError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'maileroo',
       category: 'timeout',
       code: 'timeout',
@@ -156,6 +159,7 @@ const createMailerooFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'maileroo',
     attempts: getErrorAttempts(error),
   });

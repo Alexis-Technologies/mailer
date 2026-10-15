@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
+const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Error thrown when a Plunk API request fails.
@@ -77,8 +78,10 @@ class PlunkHttpClient {
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
       signal?.throwIfAborted();
 
+      let isAccepted = false;
       try {
         const response = await this.makeRequest(url, emailData, signal);
+        isAccepted = response.ok;
         return await this.parseResponse(response);
       } catch (error) {
         if (isCallerAbort(error, signal)) {
@@ -86,6 +89,13 @@ class PlunkHttpClient {
         }
 
         lastError = error instanceof Error ? error : new Error(String(error));
+
+        // A 2xx means Plunk took the request: sending it again could deliver
+        // the message twice.  Its explicit refusal (success: false) is a
+        // failure of its own; anything else that fails after it is unknown.
+        if (isAccepted) {
+          throw lastError instanceof PlunkApiError ? lastError : markDeliveryUnknown(lastError);
+        }
 
         // Don't retry on client errors (4xx) or AbortError
         if (error instanceof Error && error.name === 'AbortError') {
@@ -211,7 +221,10 @@ class PlunkHttpClient {
       }
 
       if (!data.success) {
-        throw new Error(data.message ?? 'Send operation failed without error details');
+        throw new PlunkApiError(
+          data.message ?? 'Send operation failed without error details',
+          response.status,
+        );
       }
 
       const responseData = 'data' in data ? data.data : data;

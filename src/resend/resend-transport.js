@@ -10,6 +10,7 @@ const {
   generateIdempotencyKey,
 } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Resend transport implementation for sending emails via Resend API.
@@ -339,6 +340,7 @@ class ResendTransport {
 const createResendFailure = (message, error) => {
   if (error instanceof ResendApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'resend',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -347,6 +349,7 @@ const createResendFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'resend',
   });
 };

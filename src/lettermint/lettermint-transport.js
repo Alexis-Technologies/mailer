@@ -10,6 +10,7 @@ const {
 } = require('./http-client.js');
 const { convertMessage, generateIdempotencyKey } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -226,6 +227,7 @@ const responseToReceipt = (response) => {
 const createLettermintFailure = (message, error) => {
   if (error instanceof LettermintApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'lettermint',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -235,6 +237,7 @@ const createLettermintFailure = (message, error) => {
 
   if (error instanceof LettermintTimeoutError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'lettermint',
       category: 'timeout',
       code: 'timeout',
@@ -244,6 +247,7 @@ const createLettermintFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'lettermint',
     attempts: getErrorAttempts(error),
   });

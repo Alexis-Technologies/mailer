@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
+const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Lettermint API error class for API-specific failures.
@@ -104,8 +105,10 @@ class LettermintHttpClient {
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
       signal?.throwIfAborted();
 
+      let isAccepted = false;
       try {
         const response = await this.fetchWithAuth(url, body, signal, idempotencyKey);
+        isAccepted = response.ok;
         const text = await response.text();
 
         if (!response.ok) {
@@ -128,6 +131,10 @@ class LettermintHttpClient {
         }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+
+        // A 2xx means the provider took the request: sending it again could
+        // deliver the message twice, so what fails after it is not retried.
+        if (isAccepted && !signal?.aborted) throw markDeliveryUnknown(lastError);
 
         if (error instanceof LettermintApiError && !isRetryable(error)) {
           throw error;

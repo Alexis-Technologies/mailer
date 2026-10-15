@@ -99,6 +99,12 @@ listed in CLAUDE.md, to be fixed one by one.
   `sendMany` retried `Email/set` with `EmailSubmission/set` after a network failure, which could
   submit the message twice. That request is now sent once; a failure without an answer is
   `deliveryUnknown`, unless the connection was never made. `JmapApiError` takes a `cause`.
+- **The HTTP providers no longer send a message again after a 2xx** (an upstream bug): `./ses`,
+  `./resend`, `./sendgrid`, `./mailgun`, `./maileroo`, `./lettermint` and `./plunk` retried when
+  the body of a successful response could not be read or parsed, or when SES or SendGrid answered
+  a 2xx other than the one they expect, though the provider had taken the request. Such a failure
+  is now `deliveryUnknown` (so is `./mailtrap`'s unreadable success); Plunk's `success: false` in a
+  200 is a non-retryable failure.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

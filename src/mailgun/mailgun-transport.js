@@ -6,6 +6,7 @@ const { createMailgunConfig } = require('./config.js');
 const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Mailgun transport implementation for sending emails via Mailgun API.
@@ -201,6 +202,7 @@ class MailgunTransport {
 const createMailgunFailure = (message, error) => {
   if (error instanceof MailgunApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'mailgun',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -209,6 +211,7 @@ const createMailgunFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'mailgun',
   });
 };

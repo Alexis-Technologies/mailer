@@ -6,6 +6,7 @@ const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -228,6 +229,7 @@ class SesTransport {
 const createSesFailure = (message, error) => {
   if (error instanceof SesApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'ses',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -237,6 +239,7 @@ const createSesFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'ses',
   });
 };

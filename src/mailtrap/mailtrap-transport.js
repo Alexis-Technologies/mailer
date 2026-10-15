@@ -243,6 +243,7 @@ const toReceipt = (response, options) => {
 const createMailtrapFailure = (message, error) => {
   if (error instanceof MailtrapResponseError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: true,
       provider: 'mailtrap',
       ...(error.cause instanceof MailtrapTimeoutError
         ? { category: 'timeout', code: 'timeout' }

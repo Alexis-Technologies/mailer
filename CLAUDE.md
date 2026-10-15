@@ -190,6 +190,12 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `sendRaw` avoided. It goes through `submissionClient` (no retries); an unanswered failure is
     `deliveryUnknown` unless `isUnsentRequestError` (`src/internal/unsent.js`) finds a connection
     that was never made in its causes, which `JmapApiError` now keeps.
+24. ses, resend, sendgrid, mailgun, maileroo, lettermint, plunk: a failure after a 2xx (an
+    unreadable or unparsable body, a 2xx other than the expected one, Plunk's `success: false`)
+    was retried, re-sending a message the provider had taken. Each client notes the 2xx
+    (`isAccepted`) and throws `markDeliveryUnknown` (`src/internal/delivery-unknown.js`) instead
+    of retrying; the transports report `deliveryUnknown`. Telling an unsent request from a sent
+    one on a timeout or a reset waits for the shared HTTP client (Phase B).
 
 ## Repository layout
 
@@ -200,7 +206,7 @@ src/
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map (redact.js,
-                    redact-addresses.js, unsent.js)
+                    redact-addresses.js, unsent.js, delivery-unknown.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

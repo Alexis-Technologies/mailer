@@ -6,6 +6,7 @@ const { createSendGridConfig } = require('./config.js');
 const { SendGridApiError, SendGridHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * SendGrid transport implementation for sending emails via SendGrid API.
@@ -231,6 +232,7 @@ class SendGridTransport {
 const createSendGridFailure = (message, error) => {
   if (error instanceof SendGridApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'sendgrid',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -240,6 +242,7 @@ const createSendGridFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'sendgrid',
   });
 };

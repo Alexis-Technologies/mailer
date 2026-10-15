@@ -11,6 +11,7 @@ const { uploadBlob } = require('./blob-uploader.js');
 const { createJmapConfig } = require('./config.js');
 const { JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
+const { isDeliveryUnknown, markDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { isUnsentRequestError } = require('../internal/unsent.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
@@ -875,9 +876,6 @@ class JmapTransport {
   }
 }
 
-// The submission errors after which the message may have been submitted.
-const unansweredSubmissions = new WeakSet();
-
 // Sends the request that creates and submits emails.  A failure without an
 // answer from the server, unless the connection was never made, leaves it
 // unknown whether the server submitted them.
@@ -886,8 +884,7 @@ const executeSubmission = async (client, apiUrl, request, signal) => {
     return await client.executeRequest(apiUrl, request, signal);
   } catch (error) {
     const isUnanswered = error instanceof JmapApiError && error.statusCode === undefined;
-    if (isUnanswered && !isUnsentRequestError(error)) unansweredSubmissions.add(error);
-    throw error;
+    throw isUnanswered && !isUnsentRequestError(error) ? markDeliveryUnknown(error) : error;
   }
 };
 
@@ -907,7 +904,7 @@ const createJmapFailure = (message, error, override = {}) => {
       category: override.category,
       code: override.code,
       retryable: override.retryable,
-      deliveryUnknown: unansweredSubmissions.has(error),
+      deliveryUnknown: isDeliveryUnknown(error),
     });
   }
 

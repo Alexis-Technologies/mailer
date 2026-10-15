@@ -417,7 +417,11 @@ describe('MailerooTransport - send', { concurrency: false }, () => {
         assert.ok(!receipt.successful);
         if (!receipt.successful) {
           assert.equal(receipt.errors?.[0]?.category, 'timeout');
-          assert.ok(receipt.retryable);
+          // Changed after the port: the timeout came after a 200, so Maileroo
+          // took the request and a retry could deliver it twice; upstream
+          // returned a retryable receipt.
+          assert.equal(receipt.retryable, false);
+          assert.equal(receipt.deliveryUnknown, true);
         }
       },
     );

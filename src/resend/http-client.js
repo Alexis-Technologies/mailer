@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
+const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Error thrown when a Resend API request fails.
@@ -116,8 +117,10 @@ class ResendHttpClient {
     let lastError = null;
 
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
+      let isAccepted = false;
       try {
         const response = await this.fetchWithAuth(url, options);
+        isAccepted = response.ok;
         const text = await response.text();
 
         if (!response.ok) {
@@ -157,6 +160,10 @@ class ResendHttpClient {
         }
 
         lastError = error instanceof Error ? error : new Error(String(error));
+
+        // A 2xx means the provider took the request: sending it again could
+        // deliver the message twice, so what fails after it is not retried.
+        if (isAccepted) throw markDeliveryUnknown(lastError);
 
         // Don't retry on client errors (4xx) or AbortError
         if (

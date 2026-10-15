@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
+const { isDeliveryUnknown, markDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 const maxErrorMessageLength = 500;
 
@@ -111,7 +112,7 @@ class MailerooHttpClient {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        if (signal?.aborted) {
+        if (signal?.aborted || isDeliveryUnknown(error)) {
           throw error;
         }
 
@@ -127,7 +128,11 @@ class MailerooHttpClient {
         continue;
       }
 
-      return parseResponse(responseText);
+      try {
+        return parseResponse(responseText);
+      } catch (error) {
+        throw markDeliveryUnknown(error);
+      }
     }
 
     throw lastError ?? new Error('Request failed after all retry attempts.');
@@ -150,6 +155,7 @@ class MailerooHttpClient {
         : undefined;
     const requestSignal = combineSignals(timeoutController.signal, signal);
 
+    let isAccepted = false;
     try {
       const response = await globalThis.fetch(url, {
         method: 'POST',
@@ -157,18 +163,19 @@ class MailerooHttpClient {
         body: JSON.stringify(body),
         signal: requestSignal.signal,
       });
+      isAccepted = response.ok;
       const text = await response.text();
       return { response, text };
     } catch (error) {
-      if (
+      const isTimeout =
         error instanceof Error &&
         error.name === 'AbortError' &&
         timeoutController.signal.aborted &&
-        !signal?.aborted
-      ) {
-        throw new MailerooTimeoutError(this.config.timeout);
-      }
-      throw error;
+        !signal?.aborted;
+      const failure = isTimeout ? new MailerooTimeoutError(this.config.timeout) : error;
+      // A 2xx means Maileroo took the request: sending it again could
+      // deliver the message twice.
+      throw isAccepted && !signal?.aborted ? markDeliveryUnknown(failure) : failure;
     } finally {
       requestSignal.cleanup();
       if (timeoutId !== undefined) {

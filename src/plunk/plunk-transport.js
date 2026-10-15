@@ -6,6 +6,7 @@ const { createPlunkConfig } = require('./config.js');
 const { PlunkApiError, PlunkHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 /**
  * Plunk transport implementation for sending emails via Plunk API.
@@ -231,6 +232,7 @@ class PlunkTransport {
 const createPlunkFailure = (message, error) => {
   if (error instanceof PlunkApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'plunk',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -239,6 +241,7 @@ const createPlunkFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'plunk',
   });
 };
