@@ -231,6 +231,12 @@ network/routing statuses use `network`.  Other subjects retain the category
 derived from the traditional reply class.  A `4.x.x` code remains retryable and
 a `5.x.x` code remains non-retryable.
 
+A connection that closes, times out or fails after the end of the message data
+went out (the terminating dot) leaves it unknown whether the server accepted
+the message.  Such a failure has the code `smtp.delivery-unknown`, is marked
+`deliveryUnknown: true` and is not retryable, since sending it again could
+deliver it twice.  The same failure before the dot stays retryable.
+
 The enhanced code must appear at the start of the reply text, use fields of one
 to three digits without leading zeroes, and have the same class as the
 three-digit SMTP reply.  If any condition is not met, @alexify/mailer preserves the reply

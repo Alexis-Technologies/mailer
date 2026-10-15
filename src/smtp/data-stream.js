@@ -5,6 +5,25 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { Buffer } = require('node:buffer');
 
 /** Races preparation against source inactivity and remote socket termination. */
+/**
+ * Error produced when the connection fails after the end of the message data
+ * went out: the server may have accepted the message, so whether it was
+ * delivered is unknown, and sending it again may deliver it twice.
+ */
+class SmtpDeliveryUnknownError extends Error {
+  /**
+   * @param cause The failure of the connection: a close, a timeout or a
+   * socket error.
+   */
+  constructor(cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(`${reason} The message data had been sent; the server may have accepted it.`, {
+      cause,
+    });
+    this.name = 'SmtpDeliveryUnknownError';
+  }
+}
+
 const prepareOnSocket = async (socket, timeoutMs, prepare, signal) => {
   const controller = new AbortController();
   const combined = combineSignals(controller.signal, signal);
@@ -60,8 +79,12 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
   const lines = [];
   let resolveReply;
   const reply = new Promise((resolve) => (resolveReply = resolve));
+  // Once the terminating dot is on its way, a failure of the connection can
+  // no longer tell whether the server accepted the message.
   const fail = (error) => {
-    if (!owned.aborted) controller.abort(error);
+    if (!owned.aborted) {
+      controller.abort(terminated ? new SmtpDeliveryUnknownError(error) : error);
+    }
     socket.destroy();
   };
   const close = () => fail(new TypeError('SMTP connection closed during DATA.'));
@@ -202,4 +225,4 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
   }
 };
 
-module.exports = { prepareOnSocket, writeMessageData };
+module.exports = { SmtpDeliveryUnknownError, prepareOnSocket, writeMessageData };

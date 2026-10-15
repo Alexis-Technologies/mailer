@@ -183,6 +183,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     Message-ID. A failed receipt may carry `deliveryUnknown: true` (never retryable); the pool
     stops failover at it and at a message rejection, retry does not retry it, and both pin one
     Message-ID per message (`pinMessageId`, `src/core/message-id.js`).
+22. smtp: a connection that closed or timed out after the terminating dot of DATA failed with
+    the same retryable error as one before it. `writeMessageData` wraps a failure after the dot
+    in `SmtpDeliveryUnknownError`, which `createSmtpFailure` turns into `deliveryUnknown`.
 
 ## Repository layout
 

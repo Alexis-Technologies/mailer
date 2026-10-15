@@ -284,7 +284,7 @@ test('SMTP: message preparation fails on a socket that is already closed', async
   );
 });
 
-test('SMTP: the DATA writer refuses a reply over 64 KiB', async () => {
+test('SMTP: the DATA writer refuses a reply over 64 KiB, of unknown delivery', async () => {
   const socket = fakeSocket({
     write(chunk, callback) {
       if (chunk.toString() === '.\r\n') {
@@ -297,11 +297,66 @@ test('SMTP: the DATA writer refuses a reply over 64 KiB', async () => {
   const source = async function* () {
     yield Buffer.from('Subject: x\r\n\r\nbody\r\n');
   };
+  // The reply comes after the terminating dot, so the message may have been
+  // accepted before the server went wrong.
+  await assert.rejects(
+    writeMessageData(socket, source, 1000, () => {}),
+    (error) => {
+      assert.strictEqual(error.name, 'SmtpDeliveryUnknownError');
+      assert.strictEqual(error.cause.name, 'RangeError');
+      assert.strictEqual(error.cause.message, 'SMTP DATA reply exceeds 64 KiB.');
+      return true;
+    },
+  );
+});
+
+test('SMTP: a connection lost after the end of DATA is a receipt of unknown delivery', async () => {
+  for (const [onEnd, category] of [
+    [(socket) => socket.destroy(), 'network'],
+    [() => {}, 'timeout'],
+  ]) {
+    const reply = transaction(okReply);
+    const { server, port } = await scripted((line, socket) => {
+      if (line === '.') onEnd(socket);
+      else reply(line, socket);
+    });
+    try {
+      const transport = new SmtpTransport({
+        host: '127.0.0.1',
+        port,
+        pool: false,
+        socketTimeout: 300,
+      });
+      const receipt = await transport.send(message());
+      await transport.closeAllConnections();
+      assert.strictEqual(receipt.successful, false);
+      assert.strictEqual(receipt.deliveryUnknown, true, receipt.errorMessages.join(' | '));
+      assert.strictEqual(receipt.retryable, false);
+      assert.strictEqual(receipt.errors[0].category, category);
+      assert.strictEqual(receipt.errors[0].code, 'smtp.delivery-unknown');
+    } finally {
+      await stop(server);
+    }
+  }
+});
+
+test('SMTP: a connection lost before the end of DATA is a plain failure', async () => {
+  const socket = fakeSocket({
+    write(chunk, callback) {
+      callback?.();
+      return true;
+    },
+  });
+  const source = async function* () {
+    yield Buffer.from('Subject: x\r\n\r\n');
+    socket.emit('close');
+    await new Promise(() => {});
+  };
   await assert.rejects(
     writeMessageData(socket, source, 1000, () => {}),
     {
-      name: 'RangeError',
-      message: 'SMTP DATA reply exceeds 64 KiB.',
+      name: 'TypeError',
+      message: 'SMTP connection closed during DATA.',
     },
   );
 });

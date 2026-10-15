@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { prepareRawSmtpMessage, Smtp8BitMimeUnsupportedError } = require('./raw-message.js');
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { createRawMessagePlan, RawMessageValidationError } = require('../core/raw-message.js');
 const {
   resolveSmtpDsn,
@@ -20,6 +20,7 @@ const { resolveSmtpEnvelope, SmtpEnvelopeValidationError } = require('./envelope
 const { OAuth2TokenManager } = require('./oauth2.js');
 const { prepareMessage } = require('./message-converter.js');
 const { SmtpAttachmentReplayError } = require('./message-stream.js');
+const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { validateDkimBodyMode } = require('../mime/dkim/types.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
@@ -768,6 +769,15 @@ class SmtpTransport {
 }
 
 const createSmtpFailure = (message, error) => {
+  if (error instanceof SmtpDeliveryUnknownError) {
+    return createFailedReceipt(message, {
+      provider: 'smtp',
+      code: 'smtp.delivery-unknown',
+      category: classifyReceiptError(error.cause).category,
+      deliveryUnknown: true,
+      attempts: 1,
+    });
+  }
   if (error instanceof RawMessageValidationError) {
     return createFailedReceipt(message, {
       provider: 'smtp',
