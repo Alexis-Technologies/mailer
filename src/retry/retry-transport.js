@@ -7,6 +7,7 @@ const {
   createReceiptError,
 } = require('../core/receipt.js');
 const { combineSignals } = require('../core/abort-signal.js');
+const { pinMessageId } = require('../core/message-id.js');
 const { createRetryConfig } = require('./config.js');
 
 /**
@@ -46,13 +47,14 @@ class RetryTransport {
   async send(message, options) {
     options?.signal?.throwIfAborted();
 
+    const pinned = pinMessageId(message);
     let lastThrownError;
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       options?.signal?.throwIfAborted();
 
       let receipt;
       try {
-        receipt = await this.wrappedTransport.send(message, options);
+        receipt = await this.wrappedTransport.send(pinned, options);
       } catch (error) {
         options?.signal?.throwIfAborted();
 
@@ -288,7 +290,10 @@ class RetryTransport {
     return {
       ...receipt,
       provider: receipt.provider ?? this.id,
-      retryable: receipt.retryable ?? this.hasRetryableError(receipt.errors),
+      retryable:
+        receipt.deliveryUnknown === true
+          ? false
+          : (receipt.retryable ?? this.hasRetryableError(receipt.errors)),
       attempts,
     };
   }
@@ -298,6 +303,8 @@ class RetryTransport {
     if (shouldRetry != null) {
       return shouldRetry({ kind: 'receipt', receipt });
     }
+    // The message may have been accepted: sending it again may deliver it twice.
+    if (receipt.deliveryUnknown === true) return false;
     if (receipt.retryable != null) return receipt.retryable;
     return this.hasRetryableError(receipt.errors);
   }

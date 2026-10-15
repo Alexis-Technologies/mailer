@@ -910,6 +910,16 @@ export type Receipt<TProviderId extends string = string> =
        */
       readonly retryable?: boolean;
       /**
+       * `true` when the transport cannot tell whether the message was
+       * accepted: the request or the message data went out, but no answer
+       * came back (a timeout or a closed connection after the end of `DATA`).
+       * Sending it again may deliver it twice, so such a receipt is never
+       * retryable, `./retry` does not retry it and `./pool` does not pass it
+       * to another transport; reconcile it from the provider's delivery
+       * events instead.
+       */
+      readonly deliveryUnknown?: boolean;
+      /**
        * Provider or transport that produced this receipt.
        */
       readonly provider?: TProviderId;
@@ -951,6 +961,11 @@ export interface CreateFailedReceiptOptions<
   readonly errors?: readonly ReceiptError<TProviderId>[];
   readonly attempts?: number;
   readonly timestamp?: string;
+  /**
+   * Marks the delivery as unknown; the receipt and the errors made for it are
+   * then not retryable.  See {@link Receipt}.
+   */
+  readonly deliveryUnknown?: boolean;
 }
 /**
  * Classifies an HTTP status code for delivery error handling.

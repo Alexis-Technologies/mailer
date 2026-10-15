@@ -269,3 +269,14 @@ test('Raw message: a long message yields to the event loop while it is read', as
   for await (const chunk of iterateRawMessage(plan)) size += chunk.length;
   assert.strictEqual(size, text.length);
 });
+
+test('Receipt: an unknown delivery is never retryable, nor are the errors made for it', () => {
+  const receipt = createFailedReceipt('SMTP connection closed during DATA.', {
+    deliveryUnknown: true,
+    retryable: true,
+  });
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.errors[0].retryable, false);
+  assert.strictEqual('deliveryUnknown' in createFailedReceipt('Busy', { statusCode: 503 }), false);
+});

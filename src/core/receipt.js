@@ -179,12 +179,19 @@ const createReceiptError = (message, options = {}) => {
  * @returns A failed receipt.
  */
 const createFailedReceipt = (error, options = {}) => {
+  // When delivery is unknown, the message may have been accepted, so sending
+  // it again may deliver it twice: neither the receipt nor the errors made for
+  // it are retryable, whatever their classification says.
+  const deliveryUnknown = options.deliveryUnknown === true ? true : undefined;
+  const errorOptions = deliveryUnknown === true ? { ...options, retryable: false } : options;
   const errors =
     options.errors ??
     (typeof error === 'string'
-      ? [createReceiptError(error, options)]
+      ? [createReceiptError(error, errorOptions)]
       : Array.isArray(error)
-        ? error.map((item) => (typeof item === 'string' ? createReceiptError(item, options) : item))
+        ? error.map((item) =>
+            typeof item === 'string' ? createReceiptError(item, errorOptions) : item,
+          )
         : [error]);
   const errorMessages =
     typeof error === 'string'
@@ -192,7 +199,10 @@ const createFailedReceipt = (error, options = {}) => {
       : Array.isArray(error)
         ? error.map((item) => (typeof item === 'string' ? item : item.message))
         : errors.map((receiptError) => receiptError.message);
-  const retryable = options.retryable ?? errors.some((receiptError) => receiptError.retryable);
+  const retryable =
+    deliveryUnknown === true
+      ? false
+      : (options.retryable ?? errors.some((receiptError) => receiptError.retryable));
   const provider = options.provider ?? errors[0]?.provider;
 
   return omitUndefined({
@@ -200,6 +210,7 @@ const createFailedReceipt = (error, options = {}) => {
     errorMessages,
     errors,
     retryable,
+    deliveryUnknown,
     provider,
     attempts: options.attempts,
     timestamp: options.timestamp ?? new Date().toISOString(),

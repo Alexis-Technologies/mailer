@@ -67,3 +67,59 @@ test('Pool: a transport whose dispose throws does not fail the disposal', async 
   });
   await pool[Symbol.asyncDispose]();
 });
+
+const failing = (receipt, sent = []) => ({
+  id: 'failing',
+  send: async (sentMessage) => {
+    sent.push(sentMessage);
+    return receipt;
+  },
+  async *sendMany() {},
+});
+const rejected = (category, extra = {}) => ({
+  successful: false,
+  errorMessages: [category],
+  errors: [{ message: category, category, code: category, retryable: category !== 'rejected' }],
+  ...extra,
+});
+
+test('Pool: failover stops at a rejected message or an unknown delivery, not at an auth failure', async () => {
+  for (const [first, isFailedOver] of [
+    [rejected('rejected'), false],
+    [rejected('validation'), false],
+    [rejected('timeout', { deliveryUnknown: true }), false],
+    [rejected('auth'), true],
+    [rejected('service-unavailable'), true],
+  ]) {
+    const second = [];
+    const pool = new PoolTransport({
+      strategy: 'priority',
+      transports: [
+        { transport: failing(first), priority: 2 },
+        { transport: failing({ successful: true, messageId: 'm2' }, second), priority: 1 },
+      ],
+    });
+    const receipt = await pool.send(message());
+    assert.strictEqual(second.length === 1, isFailedOver, first.errors[0].category);
+    assert.strictEqual(receipt.successful, isFailedOver);
+    if (!isFailedOver) {
+      assert.strictEqual(receipt.retryable, false);
+      assert.strictEqual(receipt.deliveryUnknown, first.deliveryUnknown);
+    }
+  }
+});
+
+test('Pool: every transport of a failover sends the same Message-ID', async () => {
+  const sent = [];
+  const pool = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: failing(rejected('auth'), sent), priority: 2 },
+      { transport: failing({ successful: true, messageId: 'm2' }, sent), priority: 1 },
+    ],
+  });
+  await pool.send(message());
+  assert.strictEqual(sent.length, 2);
+  assert.ok(sent[0].messageId);
+  assert.strictEqual(sent[0].messageId, sent[1].messageId);
+});

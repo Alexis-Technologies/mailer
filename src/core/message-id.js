@@ -297,4 +297,81 @@ const resolveThreadingHeaders = (message) => {
   return resolved;
 };
 
-module.exports = { generateMessageId, parseMessageId, formatMessageId, resolveThreadingHeaders };
+/**
+ * Generates an identifier rooted in the sender's domain.
+ *
+ * `parseAddress()` accepts spellings the identifier grammar does not, such as
+ * the trailing dot of a fully qualified name, which is dropped here.  A domain
+ * the grammar still refuses falls back to `localhost` rather than failing the
+ * send.  Uniqueness holds either way: the left half is a UUID.
+ *
+ * @param address The sender's address.
+ * @returns A bare message identifier.
+ * @internal
+ */
+const generateSenderMessageId = (address) => {
+  const domain = domainOf(address).replace(/\.$/, '');
+  try {
+    return generateMessageId(domain);
+  } catch {
+    return generateMessageId('localhost');
+  }
+};
+
+/**
+ * Extracts the domain of an address.
+ *
+ * The separator is the first at sign outside a quoted local part, since a
+ * quoted one may contain at signs of its own, as in `"a@b"@example.com`.
+ *
+ * @param address The address to read.
+ * @returns The domain, or the whole address when it carries no separator.
+ */
+const domainOf = (address) => {
+  let quoted = false;
+  for (let index = 0; index < address.length; index++) {
+    const character = address[index];
+    if (quoted && character === '\\') index++;
+    else if (character === '"') quoted = !quoted;
+    else if (!quoted && character === '@') return address.slice(index + 1);
+  }
+  return address;
+};
+
+// The copies of messages pinned to one Message-ID, keyed weakly: a copy lives
+// as long as the caller's message does.
+const pinnedMessages = new WeakMap();
+
+/**
+ * Gives a message one Message-ID for all of its attempts.  `./retry` and
+ * `./pool` send the same message more than once; without a fixed identifier
+ * each attempt would compose a new one, and a message delivered twice after
+ * an ambiguous failure would not read as one to its recipients' servers.
+ *
+ * @param message The message to send.
+ * @returns The message itself when it has a Message-ID, either as
+ * `messageId` or as a custom header; otherwise a copy carrying a generated
+ * one, the same copy on every call for the same message.
+ * @internal
+ */
+const pinMessageId = (message) => {
+  if (typeof message !== 'object' || message === null || message.sender == null) return message;
+  if (message.messageId !== undefined || message.headers?.get('Message-ID') != null) {
+    return message;
+  }
+  let pinned = pinnedMessages.get(message);
+  if (pinned === undefined) {
+    pinned = { ...message, messageId: generateSenderMessageId(message.sender.address) };
+    pinnedMessages.set(message, pinned);
+  }
+  return pinned;
+};
+
+module.exports = {
+  generateMessageId,
+  generateSenderMessageId,
+  parseMessageId,
+  pinMessageId,
+  formatMessageId,
+  resolveThreadingHeaders,
+};

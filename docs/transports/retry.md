@@ -80,6 +80,12 @@ its structured errors is marked retryable.  This includes common transient
 HTTP statuses such as `429`, `408`, and `5xx` when transports expose them as
 structured receipt errors.
 
+A receipt whose delivery is unknown (`receipt.deliveryUnknown`) is not
+retried: the message may have been accepted before the timeout or the lost
+connection, and another attempt could deliver it twice.  Every attempt carries
+the same `Message-ID`, generated before the first one when the message has
+none, so that a duplicate can be told apart.
+
 If a wrapped transport throws a transient error instead of returning a failed
 receipt, retry transport retries it using the same classifier used by
 *@alexify/mailer*.  After all attempts are exhausted, thrown delivery failures are

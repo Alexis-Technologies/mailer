@@ -240,6 +240,23 @@ attempts, giving you complete visibility into what went wrong across all
 providers.  Structured errors use each child transport's provider `id`, so
 fallback failures remain tied to the transport that produced them.
 
+Failover moves on after a failure of the transport, such as an authentication
+error, a rate limit or an outage, and stops in two cases where another
+transport could not help:
+
+- **The message itself was refused**, an error of category `validation` or
+  `rejected`: another provider would refuse it too.  The receipt is not
+  retryable.
+- **The delivery is unknown** (`receipt.deliveryUnknown`): the transport timed
+  out, or lost its connection, after the message went out, so it may have
+  been accepted.  The pool's own `timeout` counts as such.  Another provider
+  could deliver the message a second time; reconcile it from the provider's
+  delivery events instead.
+
+Every attempt of one `send()` carries the same `Message-ID`: a message without
+one gets a generated one before the first attempt, so a recipient's server can
+tell a duplicate apart.
+
 ## Custom strategies
 
 For advanced use cases, you can implement custom routing strategies by

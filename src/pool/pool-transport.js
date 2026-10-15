@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { combineSignals } = require('../core/abort-signal.js');
+const { pinMessageId } = require('../core/message-id.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
 const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
@@ -94,10 +95,16 @@ class PoolTransport {
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   async send(message, options) {
+    const pinned = pinMessageId(message);
     const attemptedIndices = new Set();
     const errorMessages = [];
     const errors = [];
     let checkCallerAbortBeforeFailure = false;
+    // Failover stops when another transport could only deliver the message a
+    // second time (delivery unknown) or would refuse it too (the message
+    // itself was rejected).
+    let deliveryUnknown = false;
+    let isRejected = false;
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       // Check for cancellation
@@ -106,7 +113,7 @@ class PoolTransport {
       }
 
       // Select a transport
-      const selection = this.strategy.select(message, this.config.transports, attemptedIndices);
+      const selection = this.strategy.select(pinned, this.config.transports, attemptedIndices);
 
       if (!selection) {
         // No more transports available
@@ -122,7 +129,7 @@ class PoolTransport {
 
         let receipt;
         try {
-          receipt = await selection.entry.transport.send(message, sendOptions.options);
+          receipt = await selection.entry.transport.send(pinned, sendOptions.options);
         } catch (error) {
           if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) {
             abortedByCaller = true;
@@ -140,6 +147,9 @@ class PoolTransport {
         errorMessages.push(...receipt.errorMessages);
         errors.push(...getReceiptErrors(receipt, selection.entry.transport.id));
         checkCallerAbortBeforeFailure = true;
+        deliveryUnknown = receipt.deliveryUnknown === true;
+        isRejected = hasMessageRejection(receipt.errors);
+        if (deliveryUnknown || isRejected) break;
       } catch (error) {
         // Handle transport errors
         if (abortedByCaller && isCallerAbort(error, options?.signal)) {
@@ -151,6 +161,8 @@ class PoolTransport {
           errorMessages.push(...thrownErrors.map((item) => item.message));
           errors.push(...thrownErrors);
           checkCallerAbortBeforeFailure = true;
+          isRejected = hasMessageRejection(thrownErrors);
+          if (isRejected) break;
           continue;
         }
 
@@ -166,10 +178,16 @@ class PoolTransport {
           createReceiptError(errorMessage, {
             provider: selection.entry.transport.id,
             category: abortError ? 'timeout' : undefined,
-            retryable: abortError ? true : undefined,
+            retryable: abortError ? false : undefined,
           }),
         );
         checkCallerAbortBeforeFailure ||= !abortError;
+        // A send cut short by the pool's timeout may already have been
+        // accepted: switching transports could deliver the message twice.
+        if (abortError) {
+          deliveryUnknown = true;
+          break;
+        }
       }
     }
 
@@ -184,6 +202,8 @@ class PoolTransport {
         provider: 'pool',
         errors: errors.length > 0 ? errors : undefined,
         attempts: attemptedIndices.size,
+        deliveryUnknown,
+        retryable: isRejected ? false : undefined,
       },
     );
   }
@@ -396,6 +416,16 @@ const isFailedReceipt = (value) => {
 
 const isAbortError = (error) => {
   return error instanceof Error && error.name === 'AbortError';
+};
+
+// A rejection of the message itself, as opposed to one of the transport
+// (authentication, rate limit, outage), which another transport may not share.
+const hasMessageRejection = (errors) => {
+  if (errors == null) return false;
+  for (const error of errors) {
+    if (error.category === 'validation' || error.category === 'rejected') return true;
+  }
+  return false;
 };
 
 module.exports = { PoolTransport };

@@ -652,7 +652,11 @@ describe('PoolTransport', () => {
       assert.ok(!receipt.successful);
       if (!receipt.successful) {
         assert.equal(receipt.errors?.[0]?.category, 'timeout');
-        assert.ok(receipt.retryable);
+        // Changed after the port: a send cut short by the pool's timeout may
+        // have been accepted, so its delivery is unknown and it is not
+        // retryable (upstream returned retryable: true).
+        assert.equal(receipt.deliveryUnknown, true);
+        assert.equal(receipt.retryable, false);
       }
     });
 

@@ -97,3 +97,54 @@ test('Retry: the default wait rejects with an AbortError for a signal without a 
   };
   await assert.rejects(wait({ delayMilliseconds: 10 }, signal), { name: 'AbortError' });
 });
+
+const unknownDelivery = {
+  successful: false,
+  errorMessages: ['Timed out after the request was sent'],
+  errors: [{ message: 'Timed out', category: 'timeout', code: 'timeout', retryable: true }],
+  deliveryUnknown: true,
+};
+
+test('Retry: a receipt of unknown delivery is not retried, unless shouldRetry says so', async () => {
+  const base = sequence(unknownDelivery, { successful: true, messageId: 'm1' });
+  const receipt = await new RetryTransport(base, { maxAttempts: 3 }).send(message());
+  assert.strictEqual(base.calls, 1);
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+
+  const opted = sequence(unknownDelivery, { successful: true, messageId: 'm1' });
+  const transport = new RetryTransport(opted, {
+    maxAttempts: 3,
+    shouldRetry: () => true,
+    wait: async () => {},
+  });
+  assert.strictEqual((await transport.send(message())).successful, true);
+  assert.strictEqual(opted.calls, 2);
+});
+
+test('Retry: every attempt sends the same Message-ID, without changing the message', async () => {
+  const ids = [];
+  const base = {
+    id: 'base',
+    send: async (sent) => {
+      ids.push(sent.messageId);
+      return ids.length < 3 ? failure(true) : { successful: true, messageId: 'm1' };
+    },
+    async *sendMany() {},
+  };
+  const original = message();
+  await new RetryTransport(base, { maxAttempts: 3, wait: async () => {} }).send(original);
+  assert.strictEqual(ids.length, 3);
+  assert.match(ids[0], /^[0-9a-f-]+@example\.com$/);
+  assert.deepStrictEqual(new Set(ids).size, 1);
+  assert.strictEqual(original.messageId, undefined);
+  const own = createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    content: {},
+    messageId: 'own@example.com',
+  });
+  ids.length = 2;
+  await new RetryTransport(base, { maxAttempts: 1 }).send(own);
+  assert.strictEqual(ids[2], 'own@example.com');
+});

@@ -50,6 +50,12 @@ const typedReceipt: Receipt<'sendgrid'> = createFailedReceipt('Too many requests
   statusCode: 429,
 });
 expectType<'sendgrid' | undefined>(typedReceipt.provider);
+const unknownDelivery = createFailedReceipt('Connection closed after DATA', {
+  deliveryUnknown: true,
+});
+if (!unknownDelivery.successful) {
+  expectType<boolean | undefined>(unknownDelivery.deliveryUnknown);
+}
 
 const transport: Transport<'smtp'> = {
   id: 'smtp',

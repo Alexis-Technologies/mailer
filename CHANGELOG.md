@@ -83,6 +83,15 @@ listed in CLAUDE.md, to be fixed one by one.
 
 ### Fixed
 
+- **`./pool` and `./retry` no longer send a message twice where they can avoid it** (upstream
+  bugs). A failed receipt can now say `deliveryUnknown: true`, which makes it not retryable:
+  `./retry` does not retry it unless `shouldRetry` says so, and `./pool` does not pass it to
+  another transport. The pool's own timeout produces it (upstream failed over, so a slow
+  provider and the next one could both deliver). The pool also stops failing over at an error of
+  category `validation` or `rejected`, which every provider would share (upstream sent a
+  refused message to each transport in turn). Both decorators give a message without a
+  Message-ID one before the first attempt, so all attempts carry the same one.
+
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
   any step or after DATA; the greeting waits for a complete line; and a UTF-8 character split

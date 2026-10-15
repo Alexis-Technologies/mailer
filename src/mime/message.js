@@ -6,7 +6,7 @@ const { readAttachmentContent } = require('../core/attachment.js');
 const { checkAttachment } = require('../core/message.js');
 const {
   formatMessageId,
-  generateMessageId,
+  generateSenderMessageId,
   resolveThreadingHeaders,
 } = require('../core/message-id.js');
 const { resolveCalendarContent } = require('../core/calendar.js');
@@ -427,46 +427,6 @@ const resolveMessageId = (message) => {
   const custom = overridden(message, 'Message-ID');
   if (custom != null) return custom;
   return formatMessageId(generateSenderMessageId(message.sender.address));
-};
-
-/**
- * Generates an identifier rooted in the sender's domain.
- *
- * `parseAddress()` accepts spellings the identifier grammar does not, such as
- * the trailing dot of a fully qualified name, which is dropped here.  A domain
- * the grammar still refuses falls back to `localhost` rather than failing the
- * send.  Uniqueness holds either way: the left half is a UUID.
- *
- * @param address The sender's address.
- * @returns A bare message identifier.
- */
-const generateSenderMessageId = (address) => {
-  const domain = domainOf(address).replace(/\.$/, '');
-  try {
-    return generateMessageId(domain);
-  } catch {
-    return generateMessageId('localhost');
-  }
-};
-
-/**
- * Extracts the domain of an address.
- *
- * The separator is the first at sign outside a quoted local part, since a
- * quoted one may contain at signs of its own, as in `"a@b"@example.com`.
- *
- * @param address The address to read.
- * @returns The domain, or the whole address when it carries no separator.
- */
-const domainOf = (address) => {
-  let quoted = false;
-  for (let index = 0; index < address.length; index++) {
-    const character = address[index];
-    if (quoted && character === '\\') index++;
-    else if (character === '"') quoted = !quoted;
-    else if (!quoted && character === '@') return address.slice(index + 1);
-  }
-  return address;
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

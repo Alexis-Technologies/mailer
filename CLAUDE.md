@@ -177,6 +177,12 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     synthetic message ID held the recipient's local part. `src/internal/redact-addresses.js`
     (`redactAddresses`, linear time) scrubs the text unless `recordSensitiveData` (otel) or
     `recordMessage` (logger) is set.
+21. pool, retry: the pool failed over on any failed receipt, sending a refused message
+    (`validation`, `rejected`) to every transport, and on its own timeout, after which the slow
+    transport and the next could both deliver; each attempt of either decorator composed a new
+    Message-ID. A failed receipt may carry `deliveryUnknown: true` (never retryable); the pool
+    stops failover at it and at a message rejection, retry does not retry it, and both pin one
+    Message-ID per message (`pinMessageId`, `src/core/message-id.js`).
 
 ## Repository layout
 
