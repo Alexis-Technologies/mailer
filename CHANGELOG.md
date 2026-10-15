@@ -46,4 +46,15 @@ listed in CLAUDE.md, to be fixed one by one.
   [mailerat.vercel.app](https://mailerat.vercel.app/), with a comparison of 14 Node.js email
   libraries generated from `docs/comparison.json`.
 
+### Security
+
+- **An address can no longer end the path of an SMTP command** (an upstream bug). A quote in the
+  domain hid a second `@` from the scan of `isEmailAddress`, and `URL.canParse` accepted the rest
+  as userinfo, so `user@example.com> NOTIFY=NEVER ORCPT=rfc822;a"@x.com` passed and became
+  `RCPT TO:<user@example.com> NOTIFY=NEVER …>`. A domain is now held to host-name characters
+  (letters, digits, `-`, `.` and non-ASCII), so a port, path, query, fragment, comma, space,
+  underscore or an empty label is refused too; a domain literal is an IPv4 address or an IPv6
+  one, with or without the `IPv6:` tag. `./smtp` checks every path again right before it writes
+  `MAIL FROM` and `RCPT TO`.
+
 [unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main

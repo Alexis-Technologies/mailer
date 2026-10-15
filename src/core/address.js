@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/core/src/address.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const net = require('node:net');
+
 /**
  * Formats an address object into a string representation.  This function is
  * an inverse of the {@link parseAddress} function.
@@ -110,29 +112,11 @@ const isValidEmail = (email) => {
     return false;
   }
 
-  // Find the @ symbol that separates local and domain parts
-  // If the local part is quoted, we need to find the @ after the closing quote
-  let atIndex = -1;
-  let inQuotes = false;
-  let escaped = false;
-
-  for (let i = 0; i < email.length; i++) {
-    const char = email[i];
-
-    if (char === '"' && !escaped) {
-      inQuotes = !inQuotes;
-    } else if (char === '@' && !inQuotes) {
-      if (atIndex === -1) {
-        atIndex = i;
-      } else {
-        // Multiple @ symbols outside quotes
-        return false;
-      }
-    }
-    escaped = char === '\\' && !escaped;
-  }
-
-  if (atIndex === -1) {
+  // Only a quoted local part may hold an @, and only at its start may a quote
+  // open; the domain holds none.  Toggling on every quote let a quote in the
+  // domain hide a second @ from the scan.
+  const atIndex = findLocalPartEnd(email);
+  if (atIndex < 1 || email.indexOf('@', atIndex + 1) !== -1) {
     return false;
   }
 
@@ -140,6 +124,19 @@ const isValidEmail = (email) => {
   const domainPart = email.substring(atIndex + 1);
 
   return isValidLocalPart(localPart) && isValidDomainPart(domainPart);
+};
+
+const findLocalPartEnd = (email) => {
+  if (email.charCodeAt(0) !== 0x22) return email.indexOf('@');
+  for (let i = 1; i < email.length; i++) {
+    const code = email.charCodeAt(i);
+    if (code === 0x5c) {
+      i++;
+    } else if (code === 0x22) {
+      return email.charCodeAt(i + 1) === 0x40 ? i + 1 : -1;
+    }
+  }
+  return -1;
 };
 
 const isValidLocalPart = (localPart) => {
@@ -205,13 +202,17 @@ const isValidDomainPart = (domainPart) => {
 
   // Check for domain literal format [IP]
   if (domainPart.startsWith('[') && domainPart.endsWith(']')) {
-    const literal = domainPart.slice(1, -1);
-    // Use URL.canParse() for IP validation
-    try {
-      return URL.canParse(`http://${literal}/`);
-    } catch {
-      return false;
-    }
+    return isValidAddressLiteral(domainPart.slice(1, -1));
+  }
+
+  // URL.canParse() reads "@", ":", "/", "?" and "#" as delimiters of other
+  // parts of a URL, so on its own it accepts a domain that carries a port, a
+  // path or userinfo, such as "example.com> NOTIFY=NEVER …@x.com", which
+  // would end the path of an SMTP command early.  A host name has letters,
+  // digits, hyphens and dots, plus the non-ASCII characters of an
+  // internationalized name.
+  if (!hasHostNameCharacters(domainPart)) {
+    return false;
   }
 
   // For regular domain format, use URL.canParse() for validation
@@ -221,6 +222,30 @@ const isValidDomainPart = (domainPart) => {
   } catch {
     return false;
   }
+};
+
+const hasHostNameCharacters = (domainPart) => {
+  let previous = 0x2e;
+  for (let i = 0; i < domainPart.length; i++) {
+    const code = domainPart.charCodeAt(i);
+    if (code === 0x2e && previous === 0x2e) return false;
+    const isLetterOrDigit =
+      (code >= 0x61 && code <= 0x7a) ||
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x30 && code <= 0x39);
+    if (!isLetterOrDigit && code !== 0x2d && code !== 0x2e && code < 0x80) return false;
+    previous = code;
+  }
+  return true;
+};
+
+// RFC 5321 §4.1.3: an IPv4 address, or an IPv6 one after the "IPv6:" tag
+// (taken without the tag too, as written in practice).  A zone index has no
+// place in an address.
+const isValidAddressLiteral = (literal) => {
+  if (literal.includes('%')) return false;
+  if (literal.slice(0, 5).toLowerCase() === 'ipv6:') return net.isIPv6(literal.slice(5));
+  return net.isIPv4(literal) || net.isIPv6(literal);
 };
 
 /**

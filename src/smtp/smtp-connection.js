@@ -7,6 +7,7 @@ const { Socket } = require('node:net');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
 const { createSmtpConfig } = require('./config.js');
 const { SmtpDsnUnsupportedError } = require('./delivery-status.js');
+const { checkSmtpPath } = require('./envelope.js');
 const {
   formatOauthbearer,
   formatXoauth2,
@@ -892,6 +893,8 @@ class SmtpConnection {
 
   async sendPreparedMessage(message, signal) {
     signal?.throwIfAborted();
+    checkSmtpPath(message.envelope.from ?? '');
+    for (const recipient of message.envelope.to) checkSmtpPath(recipient);
 
     let smtpUtf8Parameters = '';
     const negotiate = (encoding) => {

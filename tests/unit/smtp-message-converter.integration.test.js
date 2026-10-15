@@ -1076,21 +1076,24 @@ describe('Message Converter Integration Tests', () => {
     });
 
     test('should still generate an identifier for an unusual sender domain', async () => {
-      // `parseAddress()` validates domains with `URL`, which accepts spellings
-      // the identifier grammar does not.  Neither may fail the send.
+      // `parseAddress()` accepts the trailing dot of a fully qualified name,
+      // which the identifier grammar does not; it must not fail the send.
       const trailingDot = await convertMessage(
         createTestMessage({
           sender: { address: 'john@example.com.' },
         }),
       );
-      const withPort = await convertMessage(
-        createTestMessage({
-          sender: { address: 'john@example.com:8080' },
-        }),
-      );
 
       assert.match(occurrences(trailingDot.raw, 'Message-ID')[0], /^<[0-9a-f-]+@example\.com>$/);
-      assert.match(occurrences(withPort.raw, 'Message-ID')[0], /^<[0-9a-f-]+@localhost>$/);
+
+      // Changed after the port: upstream also delivered a sender whose domain
+      // carries a port, as `URL` accepts it.  A domain is now held to host-name
+      // characters (CLAUDE.md, upstream bugs fixed after the port), so such a
+      // sender is no address and never reaches `MAIL FROM`.
+      await assert.rejects(
+        convertMessage(createTestMessage({ sender: { address: 'john@example.com:8080' } })),
+        { name: 'SmtpEnvelopeValidationError' },
+      );
     });
 
     test('should write a year beyond four digits', async () => {

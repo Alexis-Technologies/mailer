@@ -8,6 +8,7 @@ const { createServer } = require('node:net');
 const { createMessage } = require('../../index.js');
 const { SmtpTransport } = require('../../src/smtp/index.js');
 const { prepareOnSocket, writeMessageData } = require('../../src/smtp/data-stream.js');
+const { checkSmtpPath } = require('../../src/smtp/envelope.js');
 const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
 
 const message = () =>
@@ -129,6 +130,44 @@ test('SMTP: a rejection after DATA fails the send', async () => {
   } finally {
     await server.stop();
   }
+});
+
+test('SMTP: an address that would end the RCPT TO path never reaches the server', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  try {
+    const transport = new SmtpTransport({ host: 'localhost', port, pool: false });
+    const receipt = await transport.send(message(), {
+      envelope: { to: ['user@example.com> NOTIFY=NEVER ORCPT=rfc822;a"@x.com'] },
+    });
+    assert.strictEqual(receipt.successful, false);
+    const rcpt = server.getReceivedCommands().filter((command) => command.startsWith('RCPT'));
+    assert.deepStrictEqual(rcpt, []);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('SMTP: a path that could end MAIL FROM or RCPT TO early is refused before it is written', () => {
+  const unsafe = [
+    'a@b.com> NOTIFY=NEVER',
+    'a b@c.com',
+    'a<b@c.com',
+    'a@b.com\u0000',
+    'a@b\u007f.com',
+    '"x\\\u0001"@b.com',
+  ];
+  for (const path of unsafe) {
+    assert.throws(() => checkSmtpPath(path), { name: 'SmtpEnvelopeValidationError' }, path);
+  }
+  const safe = [
+    '',
+    'a@b.com',
+    '"john doe"@example.com',
+    '"a>b"@example.com',
+    '"a\\"b"@example.com',
+  ];
+  for (const path of safe) assert.doesNotThrow(() => checkSmtpPath(path), path);
 });
 
 const fakeSocket = (state = {}) =>

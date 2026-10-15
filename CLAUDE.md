@@ -150,6 +150,14 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
     response, so an authentication rejection becomes a retryable network error. Node 22 returns
     the 401. The tests of it are `todo` on Node 24 until the fix.
 
+**Upstream bugs found and fixed after the port** (each in its own `fix:` commit, with a test that
+fails without it; ported tests that pinned the old behavior say "Changed after the port"):
+
+15. core: `isEmailAddress` toggled quotes over the whole address and checked the domain with
+    `URL.canParse` alone, so a domain could carry `>`, spaces, a port or userinfo and inject
+    ESMTP parameters into `RCPT TO`. The domain is held to host-name characters, a domain
+    literal to an IP address, and `./smtp` re-checks each path (`checkSmtpPath`).
+
 ## Repository layout
 
 ```

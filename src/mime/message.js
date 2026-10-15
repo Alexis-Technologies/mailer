@@ -427,11 +427,10 @@ const resolveMessageId = (message) => {
 /**
  * Generates an identifier rooted in the sender's domain.
  *
- * `parseAddress()` validates a domain with `URL`, which accepts spellings the
- * identifier grammar does not, such as the trailing dot of a fully qualified
- * name or a host carrying a port.  A sender written that way used to be
- * delivered, so an unusable domain falls back to `localhost` rather than
- * failing the send.  Uniqueness holds either way: the left half is a UUID.
+ * `parseAddress()` accepts spellings the identifier grammar does not, such as
+ * the trailing dot of a fully qualified name, which is dropped here.  A domain
+ * the grammar still refuses falls back to `localhost` rather than failing the
+ * send.  Uniqueness holds either way: the left half is a UUID.
  *
  * @param address The sender's address.
  * @returns A bare message identifier.

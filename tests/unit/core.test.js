@@ -33,6 +33,53 @@ test('Address: a value that is not a string, or a bad quoted local part, is no a
   assert.strictEqual(isEmailAddress('alex@[127.0.0.1]'), true);
 });
 
+test('Address: a domain is held to host-name characters, so it cannot end an SMTP path', () => {
+  const injected = 'user@example.com> NOTIFY=NEVER ORCPT=rfc822;a"@x.com';
+  const invalid = [
+    injected,
+    'user@example.com:25',
+    'user@example.com/path',
+    'user@example.com?query',
+    'user@example.com#fragment',
+    'user@x.com,evil.com',
+    'user@exa\tmple.com',
+    'user@exa mple.com',
+    'user@example..com',
+    'user@.example.com',
+    'user@ex_ample.com',
+    'user@"x"@example.com',
+  ];
+  for (const address of invalid) assert.strictEqual(isEmailAddress(address), false, address);
+  assert.throws(() => createMessage({ ...base, to: injected }), TypeError);
+  assert.throws(() => createMessage({ ...base, to: `Bob <${injected}>` }), TypeError);
+});
+
+test('Address: host names, internationalized names and quoted local parts still pass', () => {
+  const valid = [
+    'user@example.com',
+    'user@sub-domain.example.co.uk',
+    'user@\u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444',
+    'user@example.com.',
+    '"a@b"@example.com',
+    '"john doe"@example.com',
+  ];
+  for (const address of valid) assert.strictEqual(isEmailAddress(address), true, address);
+});
+
+test('Address: a domain literal is an IPv4 address or an IPv6 one, tagged or not', () => {
+  const valid = ['u@[192.0.2.1]', 'u@[IPv6:2001:db8::1]', 'u@[ipv6:::1]', 'u@[2001:db8::1]'];
+  for (const address of valid) assert.strictEqual(isEmailAddress(address), true, address);
+  const invalid = [
+    'u@[999.1.1.1]',
+    'u@[example.com]',
+    'u@[fe80::1%en0]',
+    'u@[a@evil.com]',
+    'u@[127.0.0.1:25]',
+    'u@[IPv6:192.0.2.1]',
+  ];
+  for (const address of invalid) assert.strictEqual(isEmailAddress(address), false, address);
+});
+
 test('Message: an attachment that is neither a File nor an Attachment is rejected', () => {
   assert.throws(() => createMessage({ ...base, attachments: [{}] }), {
     name: 'TypeError',
