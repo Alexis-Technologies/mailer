@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/attributes.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { estimateMessageSize } = require('./message-size.js');
 
 /**
@@ -165,6 +166,15 @@ class EmailAttributeExtractor {
     }
 
     return attributes;
+  }
+
+  /**
+   * Prepares error text for a span status or event: as it is when sensitive
+   * data is recorded, otherwise without the addresses it names, such as the
+   * recipient of an SMTP rejection.
+   */
+  describeError(text) {
+    return this.recordSensitiveData ? text : redactAddresses(text);
   }
 
   detectContentType(message) {

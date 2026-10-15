@@ -212,18 +212,19 @@ class PlunkTransport {
    * @param message The original message for fallback ID generation.
    * @returns A message ID string.
    */
-  extractMessageId(response, message) {
+  extractMessageId(response, _message) {
     const emailId = response.emails?.[0]?.email;
     if (emailId) {
       return emailId;
     }
 
-    // Fallback: generate synthetic message ID
+    // Fallback: generate synthetic message ID.  Upstream put the first eight
+    // characters of the recipient's local part into it, personal data that
+    // receipts carry into logs.
     const timestamp = Date.now();
-    const recipientHash = message.recipients[0]?.address.split('@')[0].substring(0, 8) ?? 'unknown';
     const random = Math.random().toString(36).substring(2, 8);
 
-    return `plunk-${timestamp}-${recipientHash}-${random}`;
+    return `plunk-${timestamp}-${random}`;
   }
 }
 

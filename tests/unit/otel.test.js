@@ -110,3 +110,29 @@ test('OTel: a batch gets the custom attributes and records its failures', async 
   assert.strictEqual(span.attributes['app.count'], 2);
   assert.strictEqual(span.status.code, 2);
 });
+
+test('OTel: without sensitive data, error text in spans names no address', async () => {
+  const rejection = 'RCPT TO failed for bob@example.com: 550 No such user';
+  const failure = { successful: false, errorMessages: [rejection], errors: [] };
+  const thrown = plain({});
+  thrown.send = async () => {
+    throw new Error(rejection);
+  };
+  for (const [transport, recordSensitiveData] of [
+    [plain({}, failure), false],
+    [thrown, false],
+    [plain({}, failure), true],
+  ]) {
+    const { tracerProvider, meterProvider } = providers();
+    const otel = new OpenTelemetryTransport(transport, {
+      tracerProvider,
+      meterProvider,
+      tracing: { recordSensitiveData },
+    });
+    await otel.send(createTestMessage()).catch(() => {});
+    const [span] = tracerProvider.getAllSpans();
+    const recorded = JSON.stringify({ status: span.status, events: span.events });
+    assert.strictEqual(recorded.includes('bob@example.com'), recordSensitiveData, recorded);
+    if (!recordSensitiveData) assert.match(recorded, /RCPT TO failed for \[REDACTED\]: 550/);
+  }
+});

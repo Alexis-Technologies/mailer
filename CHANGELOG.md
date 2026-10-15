@@ -74,6 +74,12 @@ listed in CLAUDE.md, to be fixed one by one.
   API key, password, tokens or DKIM key, also through `./retry` and `./pool`. They now show
   `[REDACTED]`, as do credential headers such as `Authorization`; `transport.config` keeps the
   values.
+- **`./otel` and `./logger` keep addresses out of error text by default** (an upstream bug): the
+  status and events of a span carried the raw error text whatever `recordSensitiveData` said, and
+  the logger wrote it with the provider's raw response, so the recipient of an SMTP rejection
+  reached telemetry and logs. Without `recordSensitiveData` (otel) or `recordMessage` (logger),
+  every address in that text is now `[REDACTED]`, and the logger leaves `providerDetails` out.
+  `./plunk` no longer puts the start of the recipient's address into a synthetic message ID.
 
 ### Fixed
 

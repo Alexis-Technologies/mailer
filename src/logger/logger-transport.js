@@ -3,6 +3,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { inspect } = require('node:util');
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
 
@@ -195,6 +196,7 @@ class LoggerTransport {
       return;
     }
 
+    const failure = this.config.recordMessage === false ? redactFailure(receipt) : receipt;
     this.log(
       this.config.levels.failed,
       this.getMessageText('Failed to send email.', pendingMessage?.message),
@@ -204,12 +206,12 @@ class LoggerTransport {
         operation,
         transportId: this.id,
         durationMilliseconds,
-        errorMessages: receipt.errorMessages,
-        errors: receipt.errors,
-        retryable: receipt.retryable,
-        provider: receipt.provider ?? this.id,
-        attempts: receipt.attempts,
-        receipt,
+        errorMessages: failure.errorMessages,
+        errors: failure.errors,
+        retryable: failure.retryable,
+        provider: failure.provider ?? this.id,
+        attempts: failure.attempts,
+        receipt: failure,
       },
     );
   }
@@ -285,6 +287,26 @@ class LoggerTransport {
     this.logger[level](properties, message);
   }
 }
+
+// Unless the message itself is logged, a failure is logged without the
+// addresses its error text names, such as the recipient of an SMTP rejection,
+// and without the provider's raw response.
+const redactFailure = (receipt) => {
+  const errorMessages = [];
+  for (const text of receipt.errorMessages) errorMessages.push(redactAddresses(text));
+  let errors = receipt.errors;
+  if (errors != null) {
+    errors = [];
+    for (const error of receipt.errors) {
+      errors.push({
+        ...error,
+        message: redactAddresses(error.message),
+        providerDetails: undefined,
+      });
+    }
+  }
+  return { ...receipt, errorMessages, errors };
+};
 
 const isAsyncDisposable = (value) => {
   return Symbol.asyncDispose in value && typeof value[Symbol.asyncDispose] === 'function';

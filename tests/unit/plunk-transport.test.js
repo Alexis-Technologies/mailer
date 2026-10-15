@@ -282,8 +282,9 @@ describe('PlunkTransport - fallback message ID', () => {
 
         assert.equal(receipt.successful, true);
         if (receipt.successful) {
-          assert.match(receipt.messageId, /^plunk-/);
-          assert.ok(receipt.messageId.includes('to'));
+          // Changed after the port: upstream put the start of the recipient's
+          // local part ("to") into the ID; it carries no personal data now.
+          assert.match(receipt.messageId, /^plunk-\d+-[a-z0-9]+$/);
         }
       },
     );

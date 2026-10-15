@@ -104,9 +104,10 @@ class LiveEmailSpan {
 
   recordError(error, errorCategory) {
     // Set span status to error
+    const extractor = this.attributeExtractor;
     this.span.setStatus({
       code: SPAN_STATUS_ERROR,
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: error instanceof Error ? extractor.describeError(error.message) : 'Unknown error',
     });
 
     // Record error attributes
@@ -116,7 +117,9 @@ class LiveEmailSpan {
     // Add error event
     this.span.addEvent('exception', {
       'exception.type': error instanceof Error ? error.constructor.name : 'unknown',
-      'exception.message': error instanceof Error ? error.message : String(error),
+      'exception.message': extractor.describeError(
+        error instanceof Error ? error.message : String(error),
+      ),
     });
   }
 
@@ -149,9 +152,12 @@ class LiveEmailSpan {
   }
 
   recordFailure(errorMessages) {
+    const extractor = this.attributeExtractor;
+    const described = [];
+    for (const errorMessage of errorMessages) described.push(extractor.describeError(errorMessage));
     this.span.setStatus({
       code: SPAN_STATUS_ERROR,
-      message: errorMessages[0] || 'Send failed',
+      message: described[0] || 'Send failed',
     });
 
     this.span.setAttributes({
@@ -160,7 +166,7 @@ class LiveEmailSpan {
 
     this.span.addEvent('email.send_failed', {
       'error.count': errorMessages.length,
-      'error.messages': JSON.stringify(errorMessages),
+      'error.messages': JSON.stringify(described),
     });
   }
 

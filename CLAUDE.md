@@ -172,6 +172,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     time), so `util.inspect`, `console.log` and `JSON.stringify` of a transport printed API keys,
     passwords, tokens and DKIM keys. `src/internal/redact.js` backs `toJSON()` and
     `[util.inspect.custom]` on the ten transports that hold them; `config` keeps its values.
+20. otel, logger, plunk: span status and events carried raw error text whatever
+    `recordSensitiveData` said, the logger wrote failures with `providerDetails`, and plunk's
+    synthetic message ID held the recipient's local part. `src/internal/redact-addresses.js`
+    (`redactAddresses`, linear time) scrubs the text unless `recordSensitiveData` (otel) or
+    `recordMessage` (logger) is set.
 
 ## Repository layout
 

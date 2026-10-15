@@ -370,6 +370,16 @@ These metrics are exported to your configured observability backend
 (Prometheus, DataDog, etc.) where you can create dashboards and alerts
 to monitor your email system's health.
 
+## Sensitive data
+
+With `tracing.recordSensitiveData` off, the default, a span records the sender's
+domain rather than its address, and the error text it records, in its status
+and in its `exception` and `email.send_failed` events, has every address
+replaced by `[REDACTED]`. An SMTP rejection such as
+`RCPT TO failed for bob@example.com: 550 No such user` is recorded as
+`RCPT TO failed for [REDACTED]: 550 No such user`. Turn the option on only for
+a backend where personal data is allowed.
+
 ## Error classification and analysis
 
 The OpenTelemetry transport includes intelligent error classification that

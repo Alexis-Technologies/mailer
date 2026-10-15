@@ -126,8 +126,12 @@ bindings you want (`logger.child({ component: 'mail' })`).
 
 ## Recording message content
 
-Messages are excluded from logs by default. The `recordMessage` option has two
-modes:
+Messages are excluded from logs by default, and so are the addresses that the
+error text of a failure names: with `recordMessage` off, `errorMessages`,
+`errors` and `receipt` are logged with every address replaced by `[REDACTED]`
+(`RCPT TO failed for [REDACTED]: 550 No such user`), and without the
+provider's raw response (`providerDetails`). The `recordMessage` option has two
+modes, both of which log the failure as it is:
 
 - `"properties"`: Adds the complete `Message` object to the structured properties
   of every lifecycle event. The log message itself remains on one line.

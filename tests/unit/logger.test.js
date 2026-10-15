@@ -64,3 +64,38 @@ test('Logger: a pino logger records the lifecycle, with the error serialized', a
   assert.match(lines[1].err.stack, /TypeError: Connection refused\./);
   assert.strictEqual(lines[1].transportId, 'base');
 });
+
+test('Logger: unless the message is recorded, a failure is logged without addresses', async () => {
+  const failure = {
+    successful: false,
+    errorMessages: ['RCPT TO failed for bob@example.com: 550 No such user'],
+    errors: [
+      {
+        message: 'RCPT TO failed for bob@example.com: 550 No such user',
+        category: 'rejected',
+        retryable: false,
+        providerDetails: { response: '550 <bob@example.com> No such user' },
+      },
+    ],
+    retryable: false,
+  };
+  const transport = { id: 'smtp', send: async () => failure, async *sendMany() {} };
+  for (const recordMessage of [undefined, 'properties']) {
+    const calls = [];
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      error: (properties) => calls.push(properties),
+    };
+    await new LoggerTransport({ logger, transport, recordMessage }).send(message());
+    const logged = JSON.stringify(calls[0]);
+    assert.strictEqual(logged.includes('bob@example.com'), recordMessage !== undefined, logged);
+    if (recordMessage === undefined) {
+      assert.deepStrictEqual(calls[0].errorMessages, [
+        'RCPT TO failed for [REDACTED]: 550 No such user',
+      ]);
+      assert.strictEqual(calls[0].errors[0].providerDetails, undefined);
+      assert.strictEqual(calls[0].errors[0].category, 'rejected');
+    }
+  }
+});
