@@ -83,7 +83,8 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
       const line = buffer.slice(0, end);
       buffer = buffer.slice(end + 2);
       lines.push(line);
-      if (/^\d{3} /.test(line)) {
+      // RFC 5321 §4.2: a final line is the code alone or with a space.
+      if (/^\d{3}(?: |$)/.test(line)) {
         if (!terminated) {
           fail(new TypeError(`Premature SMTP DATA reply: ${line}`));
         } else {

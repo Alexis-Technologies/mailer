@@ -163,6 +163,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `createMessage` refuses a line break in a name.
 17. mime: the content type and content ID of an attachment went into part headers unchecked when
     the message was not built by `createMessage`; `composeMessage` runs `checkAttachment` again.
+18. smtp: replies were re-split whole on every chunk with no bound on a line or on the lines of a
+    reply; a bare final line (`250`) was taken for a continuation and hung until the timeout; the
+    greeting resolved on an incomplete line; and `toString()` per chunk broke a split UTF-8
+    character. `createReplyReader` in `smtp-connection.js` decodes with a `StringDecoder` and
+    bounds both (8192 characters, 1000 lines).
 
 ## Repository layout
 

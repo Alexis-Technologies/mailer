@@ -66,5 +66,15 @@ listed in CLAUDE.md, to be fixed one by one.
 - **`composeMessage` checks an attachment's content type and content ID again** (an upstream
   bug): only `createMessage` refused a line break in them, so a message built by hand, such as one
   read back from a queue, could inject part headers.
+- **`./smtp` bounds what a server's replies can take** (an upstream bug): a reply line is at most
+  8192 characters and a reply at most 1000 lines, where a server that never ended a line made the
+  client rescan everything received on every chunk until the socket timeout.
+
+### Fixed
+
+- **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
+  (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
+  any step or after DATA; the greeting waits for a complete line; and a UTF-8 character split
+  across two chunks of a reply stays whole.
 
 [unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main

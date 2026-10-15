@@ -4,6 +4,7 @@
 const { prepareRawSmtpStream, Smtp8BitMimeUnsupportedError } = require('./raw-message.js');
 const { Buffer } = require('node:buffer');
 const { Socket } = require('node:net');
+const { StringDecoder } = require('node:string_decoder');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
 const { createSmtpConfig } = require('./config.js');
 const { SmtpDsnUnsupportedError } = require('./delivery-status.js');
@@ -18,6 +19,54 @@ const {
 const { prepareMessageStream } = require('./message-stream.js');
 const { prepareOnSocket, writeMessageData } = require('./data-stream.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
+
+// RFC 5321 §4.5.3.1.5 limits a reply line to 512 octets, but servers send
+// longer text; these bound the memory a broken or hostile server can take
+// rather than enforce the RFC.  The reply to DATA is bounded in data-stream.js.
+const MAX_REPLY_LINE_LENGTH = 8192;
+const MAX_REPLY_LINES = 1000;
+
+const createReplyLimitError = () =>
+  new RangeError(
+    `SMTP reply exceeds ${MAX_REPLY_LINE_LENGTH} characters in a line ` +
+      `or ${MAX_REPLY_LINES} lines.`,
+  );
+
+// RFC 5321 §4.2: the last line of a reply is its code, alone or followed by a
+// space and text; every other line puts a hyphen after the code.
+const isFinalReplyLine = (line) => line.length === 3 || (line.length > 3 && line[3] === ' ');
+
+/**
+ * Splits replies into lines as their bytes arrive.  The decoder keeps a
+ * character split across chunks whole, and only the incomplete last line is
+ * kept between chunks, so a server that never ends a line costs neither
+ * memory nor a rescan of everything received.
+ *
+ * @returns A reader whose `read()` returns the complete lines of a chunk, or
+ * `undefined` once a line is longer than {@link MAX_REPLY_LINE_LENGTH}.
+ */
+const createReplyReader = () => {
+  const decoder = new StringDecoder('utf8');
+  let pending = '';
+  return {
+    get pending() {
+      return pending;
+    },
+    read(data) {
+      pending += decoder.write(data);
+      const lines = [];
+      let start = 0;
+      let end;
+      while ((end = pending.indexOf('\r\n', start)) !== -1) {
+        if (end - start > MAX_REPLY_LINE_LENGTH) return undefined;
+        lines.push(pending.slice(start, end));
+        start = end + 2;
+      }
+      if (start > 0) pending = pending.slice(start);
+      return pending.length > MAX_REPLY_LINE_LENGTH ? undefined : lines;
+    },
+  };
+};
 
 /**
  * Error thrown when a message exceeds the fixed limit advertised through the
@@ -404,7 +453,7 @@ class SmtpConnection {
     signal?.throwIfAborted();
 
     return new Promise((resolve, reject) => {
-      let buffer = '';
+      const reader = createReplyReader();
       let responseLines = [];
       const responses = [];
       const startTimeout = () =>
@@ -419,15 +468,21 @@ class SmtpConnection {
       };
 
       const onData = (data) => {
-        buffer += data.toString();
-        const lines = buffer.split('\r\n');
+        const lines = reader.read(data);
+        if (lines === undefined) {
+          failOnLimit();
+          return;
+        }
 
-        // Keep incomplete line in buffer
-        const incompleteLine = lines.pop() || '';
-
-        for (const [lineIndex, line] of lines.entries()) {
+        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+          const line = lines[lineIndex];
           responseLines.push(line);
-          if (line.length >= 4 && line[3] === ' ') {
+          if (!isFinalReplyLine(line)) {
+            if (responseLines.length > MAX_REPLY_LINES) {
+              failOnLimit();
+              return;
+            }
+          } else {
             const code = parseInt(line.substring(0, 3), 10);
             const message = line.substring(4);
             const response = {
@@ -443,7 +498,7 @@ class SmtpConnection {
               cleanup();
               if (
                 commands[0] === 'DATA' &&
-                (lineIndex + 1 < lines.length || incompleteLine.length > 0)
+                (lineIndex + 1 < lines.length || reader.pending.length > 0)
               ) {
                 this.socket?.destroy();
                 reject(new TypeError('Premature SMTP reply after DATA readiness.'));
@@ -462,14 +517,17 @@ class SmtpConnection {
             resetTimeout();
           }
         }
-
-        // Update buffer with incomplete line
-        buffer = incompleteLine;
       };
 
       const onError = (error) => {
         cleanup();
         reject(error);
+      };
+
+      const failOnLimit = () => {
+        cleanup();
+        this.socket?.destroy();
+        reject(createReplyLimitError());
       };
 
       const onClose = () => {
@@ -524,22 +582,36 @@ class SmtpConnection {
     signal?.throwIfAborted();
 
     return new Promise((resolve, reject) => {
-      let buffer = '';
+      const reader = createReplyReader();
+      const replyLines = [];
       const timeout = setTimeout(() => {
         onError(new Error('Greeting timeout.'));
       }, this.config.socketTimeout);
 
+      // Only complete lines count: a final line still waiting for its CRLF
+      // could be cut short.
       const onData = (data) => {
-        buffer += data.toString();
-        const lines = buffer.split('\r\n');
+        const lines = reader.read(data);
+        if (lines === undefined) {
+          this.socket?.destroy();
+          onError(createReplyLimitError());
+          return;
+        }
 
-        for (const line of lines) {
-          if (line.length >= 4 && line[3] === ' ') {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          replyLines.push(line);
+          if (isFinalReplyLine(line)) {
             const code = parseInt(line.substring(0, 3), 10);
             const message = line.substring(4);
 
             cleanup();
-            resolve({ code, message, raw: buffer });
+            resolve({ code, message, raw: replyLines.join('\r\n') });
+            return;
+          }
+          if (replyLines.length > MAX_REPLY_LINES) {
+            this.socket?.destroy();
+            onError(createReplyLimitError());
             return;
           }
         }

@@ -47,6 +47,109 @@ const failureOf = async (transport) => {
   return receipt.errorMessages.join(' | ');
 };
 
+// Answers a whole transaction through `reply(verb)`, with DATA_END for the
+// reply to the end of the message data.
+const transaction = (reply) => {
+  let inData = false;
+  return (line, socket) => {
+    if (inData) {
+      if (line === '.') {
+        inData = false;
+        socket.write(reply('DATA_END'));
+      }
+      return;
+    }
+    const verb = /^[A-Za-z]+/.exec(line)[0].toUpperCase();
+    if (verb === 'QUIT') socket.end(reply(verb));
+    else socket.write(reply(verb));
+    if (verb === 'DATA') inData = true;
+  };
+};
+const ok = { EHLO: '250 localhost\r\n', DATA: '354 go\r\n', QUIT: '221 bye\r\n' };
+const okReply = (verb) => ok[verb] ?? '250 ok\r\n';
+
+test('SMTP: a reply line that is the code alone ends the reply', async () => {
+  const bare = { DATA: '354\r\n', QUIT: '221\r\n' };
+  const { server, port } = await scripted(
+    transaction((verb) => bare[verb] ?? '250\r\n'),
+    (socket) => socket.write('220\r\n'),
+  );
+  try {
+    const transport = new SmtpTransport({
+      host: '127.0.0.1',
+      port,
+      pool: false,
+      socketTimeout: 1000,
+    });
+    const receipt = await transport.send(message());
+    assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join(' | '));
+  } finally {
+    await stop(server);
+  }
+});
+
+test('SMTP: a reply line or a reply too long to be one fails the send at once', async () => {
+  const servers = [
+    // A greeting that never ends its line.
+    () =>
+      scripted(
+        () => {},
+        (socket) => socket.write(`220 ${'x'.repeat(9000)}`),
+      ),
+    // A greeting of more lines than a reply holds.
+    () =>
+      scripted(
+        () => {},
+        (socket) => socket.write('220-x\r\n'.repeat(1001)),
+      ),
+    // An EHLO reply of more lines than any server has capabilities.
+    () =>
+      scripted(
+        transaction((verb) =>
+          verb === 'EHLO' ? `${'250-x\r\n'.repeat(1001)}250 ok\r\n` : okReply(verb),
+        ),
+      ),
+  ];
+  for (const start of servers) {
+    const { server, port } = await start();
+    try {
+      const transport = new SmtpTransport({
+        host: '127.0.0.1',
+        port,
+        pool: false,
+        socketTimeout: 2000,
+      });
+      assert.match(await failureOf(transport), /SMTP reply exceeds/);
+    } finally {
+      await stop(server);
+    }
+  }
+});
+
+test('SMTP: a character split across two chunks of a reply stays whole', async () => {
+  const rejection = Buffer.from('550 Скриньки немає\r\n');
+  const { server, port } = await scripted(
+    transaction((verb) => {
+      if (verb !== 'RCPT') return okReply(verb);
+      return '';
+    }),
+  );
+  server.on('connection', (socket) => {
+    socket.on('data', (chunk) => {
+      if (!chunk.toString('latin1').includes('RCPT TO')) return;
+      // "С" is two bytes; the reply is cut between them.
+      socket.write(rejection.subarray(0, 5));
+      setTimeout(() => socket.write(rejection.subarray(5)), 20);
+    });
+  });
+  try {
+    const transport = new SmtpTransport({ host: '127.0.0.1', port, pool: false });
+    assert.match(await failureOf(transport), /Скриньки немає/);
+  } finally {
+    await stop(server);
+  }
+});
+
 test('SMTP: a server that closes before its greeting fails the send', async () => {
   const { server, port } = await scripted(
     () => {},
