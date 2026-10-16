@@ -216,3 +216,52 @@ test('MIME: generateId makes the left half of a generated Message-ID', async () 
   });
   assert.match(headerBlock(text), /\r\nMessage-ID: <01JMIME\.message-id@example\.com>/);
 });
+
+test('MIME: an inline image goes in multipart/related with its HTML, a file beside them', async () => {
+  const image = {
+    inline: true,
+    filename: 'logo.png',
+    content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    contentType: 'image/png',
+    contentId: 'logo@example.com',
+  };
+  const file = {
+    inline: false,
+    filename: 'report.pdf',
+    content: new Uint8Array([0x25, 0x50]),
+    contentType: 'application/pdf',
+    contentId: '',
+  };
+  const html = { text: 'Hi', html: '<p>Hi <img src="cid:logo@example.com"></p>' };
+
+  const onlyInline = await wire(
+    createMessage({ ...base, subject: 'a', content: html, attachments: [image] }),
+  );
+  assert.match(
+    headerBlock(onlyInline),
+    /^Content-Type: multipart\/related; boundary="[^"]+"; type="multipart\/alternative"$/m,
+  );
+  const parsedInline = await PostalMime.parse(onlyInline);
+  assert.strictEqual(parsedInline.html.trim(), html.html);
+  assert.deepStrictEqual(
+    parsedInline.attachments.map((part) => [part.contentId, part.related]),
+    [['<logo@example.com>', true]],
+  );
+
+  const both = await wire(
+    createMessage({ ...base, subject: 'a', content: html, attachments: [image, file] }),
+  );
+  assert.match(headerBlock(both), /^Content-Type: multipart\/mixed; boundary=/m);
+  // The related part, with the image in it, comes first; the file after it.
+  const related = both.indexOf('Content-Type: multipart/related;');
+  assert.ok(related > 0 && related < both.indexOf('name="logo.png"'));
+  assert.ok(both.indexOf('name="logo.png"') < both.indexOf('name="report.pdf"'));
+  const parsedBoth = await PostalMime.parse(both);
+  assert.deepStrictEqual(
+    parsedBoth.attachments.map((part) => [part.filename, part.related === true]),
+    [
+      ['logo.png', true],
+      ['report.pdf', false],
+    ],
+  );
+});

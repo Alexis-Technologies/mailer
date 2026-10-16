@@ -324,6 +324,10 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **Inline images go in `multipart/related`** (an upstream bug): `./mime`, and so `./smtp`,
+  put inline parts in the `multipart/mixed` of the files, so some clients showed an image the
+  HTML refers to by `cid:` as an attachment. They now go with the body in a `multipart/related`
+  (RFC 2387), first in a `multipart/mixed` when there are files too.
 - **`./ses`, `./resend` and `./jmap` stream `sendMany`** (an upstream bug): each read its whole
   input into an array before the first message went out, so a long or endless iterable was held
   in memory, or never sent. SES now reads `batchSize` messages at a time, Resend 100 (the batch

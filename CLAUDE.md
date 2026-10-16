@@ -129,7 +129,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 
 **Known upstream bugs, each to fix in its own `fix:` commit after the port:**
 
-1. mime: inline images (`contentId`) go into `multipart/mixed`, not `multipart/related`.
+1. (fixed, see 77) mime: inline images (`contentId`) went into `multipart/mixed`, not
+   `multipart/related`.
 2. mailgun: an inline attachment is sent under its `filename`, not its `contentId`
    (`message-converter.js`), so a `cid:` in the HTML does not match it.
 3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
@@ -390,6 +391,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 76. pool: `sendMany` reset the strategy, so round-robin sent every batch of one message
     through the first transport, and concurrent batches reset each other's rotation. The
     strategy goes on from where the sends before left it.
+77. mime (known bug 1): inline parts went into the `multipart/mixed` of the files, so a client
+    could show an image the HTML refers to by `cid:` as an attachment. They go with the body in
+    a `multipart/related` whose `type` names the root part (RFC 2387), which sits first in a
+    `multipart/mixed` when there are files too, as `./jmap` already built it.
 
 ## Repository layout
 

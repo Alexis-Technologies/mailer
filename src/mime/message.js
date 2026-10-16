@@ -134,22 +134,74 @@ const buildMimeParts = (message, generateId) => {
   const alternatives = buildAlternatives(message);
   pushHeaderFields(lines, message, generateId);
   lines.push('MIME-Version: 1.0');
-  if (message.attachments.length > 0 || alternatives.length > 1) {
-    const boundary = generateBoundary();
-    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
-    lines.push('');
-    lines.push('This is a multi-part message in MIME format.');
-    lines.push('');
+  // RFC 2387: an inline part goes with the body it is shown in, in a
+  // multipart/related; the files go beside them in a multipart/mixed.
+  const inline = [];
+  const attached = [];
+  for (const attachment of message.attachments) {
+    if (attachment.inline) inline.push(attachment);
+    else attached.push(attachment);
+  }
+  if (attached.length > 0) {
+    const boundary = pushMultipartHeader(lines, 'multipart/mixed');
     lines.push(`--${boundary}`);
-    if (alternatives.length > 1) pushAlternatives(lines, alternatives);
-    else pushSinglePart(lines, alternatives[0]);
-    for (const attachment of message.attachments) pushAttachment(lines, attachment, boundary);
+    if (inline.length > 0) pushRelated(lines, alternatives, inline);
+    else pushBody(lines, alternatives);
+    for (const attachment of attached) pushAttachment(lines, attachment, boundary);
+    lines.push('');
+    lines.push(`--${boundary}--`);
+  } else if (inline.length > 0) {
+    pushRelated(lines, alternatives, inline, true);
+  } else if (alternatives.length > 1) {
+    const boundary = pushMultipartHeader(lines, 'multipart/mixed');
+    lines.push(`--${boundary}`);
+    pushAlternatives(lines, alternatives);
     lines.push('');
     lines.push(`--${boundary}--`);
   } else {
     pushSinglePart(lines, alternatives[0]);
   }
   return joinLines(lines);
+};
+
+// The Content-Type of a top-level multipart and its preamble.
+const pushMultipartHeader = (lines, type, parameters = '') => {
+  const boundary = generateBoundary();
+  lines.push(`Content-Type: ${type}; boundary="${boundary}"${parameters}`);
+  lines.push('');
+  lines.push('This is a multi-part message in MIME format.');
+  lines.push('');
+  return boundary;
+};
+
+const pushBody = (lines, alternatives) => {
+  if (alternatives.length > 1) pushAlternatives(lines, alternatives);
+  else pushSinglePart(lines, alternatives[0]);
+};
+
+// A multipart/related of the body and its inline parts; `type` names the root
+// part, the body (RFC 2387 §3.1).
+const pushRelated = (lines, alternatives, inline, top = false) => {
+  const root = alternatives.length > 1 ? 'multipart/alternative' : mediaType(alternatives[0]);
+  const parameters = `; type="${root}"`;
+  let boundary;
+  if (top) {
+    boundary = pushMultipartHeader(lines, 'multipart/related', parameters);
+  } else {
+    boundary = generateBoundary();
+    lines.push(`Content-Type: multipart/related; boundary="${boundary}"${parameters}`);
+    lines.push('');
+  }
+  lines.push(`--${boundary}`);
+  pushBody(lines, alternatives);
+  for (const attachment of inline) pushAttachment(lines, attachment, boundary);
+  lines.push('');
+  lines.push(`--${boundary}--`);
+};
+
+const mediaType = (alternative) => {
+  const end = alternative.contentType.indexOf(';');
+  return end === -1 ? alternative.contentType : alternative.contentType.slice(0, end);
 };
 
 const pushHeaderFields = (lines, message, generateId) => {
