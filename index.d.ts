@@ -1,6 +1,7 @@
+// Types ported from upyo v0.7.0 (packages/core/src)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 // The types of the root entry of @alexify/mailer, written by hand: the message
-// model and the transport contract (src/core/), ported from @upyo/core 0.7.0
-// (https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee).
+// model and the transport contract (src/core/).
 
 /**
  * A type alias for email address strings that must contain an @ symbol.

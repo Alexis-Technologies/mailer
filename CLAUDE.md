@@ -105,6 +105,11 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   // Ported from upyo v0.7.0 (packages/smtp/src/smtp-connection.ts)
   // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
   ```
+  A d.ts names the directory of its package (`// Types ported from upyo v0.7.0
+  (packages/smtp/src)`), as its types come from several files, and lines that say how a file
+  was adapted may come between the two. A file that is not a port starts with
+  `// Not ported from upyo:` and what it is. `tests/unit/attribution.test.js` checks one or the
+  other in every file the package ships.
 - **The port keeps upstream's behavior.** What changes is the platform: CommonJS and the code
   style below, `node:crypto` instead of `@noble/hashes`, the OpenTelemetry providers and the
   logger passed in, fallbacks for runtimes older than Node 22 dropped, and the `@since` tags of

@@ -1,5 +1,7 @@
-// The root entry: the message model and the transport contract ported from
-// @upyo/core 0.7.0 (src/core/), in upstream's order.
+// Ported from upyo v0.7.0 (packages/core/src/index.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// The root entry: the message model and the transport contract (src/core/), in
+// upstream's order.
 const { formatAddress, parseAddress, isEmailAddress } = require('./core/address.js');
 const { combineSignals } = require('./core/abort-signal.js');
 const {
