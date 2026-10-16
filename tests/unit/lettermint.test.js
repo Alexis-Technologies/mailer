@@ -92,3 +92,15 @@ test('Lettermint: a batch whose every message fails to convert sends nothing', a
   assert.strictEqual(calls, 0);
   assert.deepStrictEqual(receipts[0].errorMessages, ['Cannot read attachment']);
 });
+
+test('Lettermint: an abort during the wait between attempts keeps the caller reason', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('busy', { status: 503 }));
+  const controller = new AbortController();
+  const reason = new Error('Stopped by the caller.');
+  setTimeout(() => controller.abort(reason), 20);
+  const transport = new LettermintTransport({ apiToken: 'token', retries: 3 });
+  await assert.rejects(
+    transport.send(message(), { signal: controller.signal }),
+    (error) => error === reason,
+  );
+});

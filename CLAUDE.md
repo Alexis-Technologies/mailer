@@ -198,6 +198,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     one on a timeout or a reset waits for the shared HTTP client (Phase B).
 25. resend, plunk (known bug 9): the wait between retries ignored the `AbortSignal`, so an abort
     took effect only after the backoff. They use the abortable `sleep` of `src/internal/http.js`.
+26. lettermint: an abort during the wait between retries rejected with a new `AbortError`
+    instead of the caller's reason. It uses the shared `sleep`, which keeps the reason.
 
 ## Repository layout
 

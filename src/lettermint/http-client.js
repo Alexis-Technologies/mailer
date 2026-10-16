@@ -128,9 +128,6 @@ class LettermintHttpClient {
       isRetryable: (error) => !(error instanceof LettermintApiError) || isRetryable(error),
       retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
-      // Upstream's wait rejects with an AbortError of its own rather than the
-      // caller's reason.
-      sleep,
     });
   }
 
@@ -188,33 +185,6 @@ const parseErrorMessage = (text, statusCode) => {
   }
 
   return text || `HTTP ${statusCode}`;
-};
-
-const sleep = (ms, signal) => {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException('The operation was aborted.', 'AbortError'));
-      return;
-    }
-
-    const onAbort = () => {
-      clearTimeout(timeoutId);
-      signal?.removeEventListener('abort', onAbort);
-      reject(new DOMException('The operation was aborted.', 'AbortError'));
-    };
-
-    const timeoutId = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
 };
 
 module.exports = { LettermintApiError, LettermintTimeoutError, LettermintHttpClient };

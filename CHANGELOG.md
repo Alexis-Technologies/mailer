@@ -108,6 +108,8 @@ fixed ones below.
   200 is a non-retryable failure.
 - **`./resend` and `./plunk` stop at once when the caller aborts during the wait between retries**
   (known upstream bug 9): the abort took effect only after the backoff, up to ten seconds.
+- **`./lettermint` rejects with the caller's abort reason** (an upstream bug): an abort during the
+  wait between retries rejected with an `AbortError` of its own.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
