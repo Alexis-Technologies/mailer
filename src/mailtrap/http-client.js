@@ -146,6 +146,7 @@ class MailtrapHttpClient {
             `Invalid JSON response from Mailtrap API: ${
               error instanceof Error ? error.message : String(error)
             }.`,
+            { cause: error },
           );
         }
       },

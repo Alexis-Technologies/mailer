@@ -174,6 +174,7 @@ const parseResponse = (text) => {
       `Invalid JSON response from Maileroo API: ${
         error instanceof Error ? error.message : String(error)
       }.`,
+      { cause: error },
     );
   }
 };

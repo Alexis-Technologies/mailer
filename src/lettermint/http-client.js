@@ -114,6 +114,7 @@ class LettermintHttpClient {
             `Invalid JSON response from Lettermint API: ${
               error instanceof Error ? error.message : String(error)
             }.`,
+            { cause: error },
           );
         }
       },

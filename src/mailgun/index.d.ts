@@ -266,5 +266,6 @@ export declare class MailgunApiError extends Error {
     statusCode?: number,
     retryAfterMilliseconds?: number,
     attempts?: number,
+    options?: { readonly cause?: unknown },
   );
 }

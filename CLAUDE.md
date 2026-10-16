@@ -227,6 +227,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 34. every HTTP provider, jmap and the OAuth2 token request: a response body was read whole,
     however long, before anything looked at it. `readText`/`readJson` (`src/internal/body.js`)
     read it from its stream and refuse one over 4 MiB, by its `Content-Length` or as it comes.
+35. ses, resend, sendgrid, mailgun, plunk, mailtrap, maileroo, lettermint: errors rewrapped once
+    retries were spent, or for a body that was not JSON, dropped their cause, so `fetch failed`
+    lost the ECONNREFUSED or certificate error behind it. Each keeps it as `cause`; the provider
+    errors take an `options` argument for it.
 
 ## Repository layout
 

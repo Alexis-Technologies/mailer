@@ -32,8 +32,8 @@ class PlunkApiError extends Error {
    * @param retryAfterMilliseconds Retry delay from the response.
    * @param attempts Number of attempts made before this error.
    */
-  constructor(message, statusCode, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(message, statusCode, retryAfterMilliseconds, attempts, options) {
+    super(message, options);
     this.name = 'PlunkApiError';
     this.statusCode = statusCode;
     this.retryAfterMilliseconds = retryAfterMilliseconds;
@@ -105,8 +105,9 @@ class PlunkHttpClient {
               error.statusCode,
               error.retryAfterMilliseconds,
               attempts,
+              { cause: error.cause },
             )
-          : new PlunkApiError(error.message, undefined, undefined, attempts),
+          : new PlunkApiError(error.message, undefined, undefined, attempts, { cause: error }),
     });
   }
 
@@ -174,8 +175,7 @@ class PlunkHttpClient {
       };
     } catch (error) {
       if (error instanceof SyntaxError) {
-        // oxlint-disable-next-line preserve-caught-error -- upstream
-        throw new Error('Invalid JSON response from Plunk API');
+        throw new Error('Invalid JSON response from Plunk API', { cause: error });
       }
       throw error;
     }

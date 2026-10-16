@@ -57,9 +57,9 @@ class MailgunHttpClient {
         } catch (jsonError) {
           // This handles cases where the request was successful (e.g., 2xx status)
           // but the response body is not valid JSON.
-          // oxlint-disable-next-line preserve-caught-error -- upstream
           throw new Error(
             `Successfully received response but failed to parse JSON: ${jsonError.message}`,
+            { cause: jsonError },
           );
         }
       },
@@ -91,7 +91,7 @@ class MailgunHttpClient {
       finalError: (error, attempts) =>
         error instanceof MailgunApiError
           ? error
-          : new MailgunApiError(error.message, undefined, undefined, attempts),
+          : new MailgunApiError(error.message, undefined, undefined, attempts, { cause: error }),
     });
   }
 
@@ -147,9 +147,10 @@ class MailgunApiError extends Error {
    * @param statusCode HTTP status code returned by Mailgun.
    * @param retryAfterMilliseconds Retry delay from the response.
    * @param attempts Number of attempts made before this error.
+   * @param options The cause of the error, such as the failure of `fetch`.
    */
-  constructor(message, statusCode, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(message, statusCode, retryAfterMilliseconds, attempts, options) {
+    super(message, options);
     this.name = 'MailgunApiError';
     this.statusCode = statusCode;
     this.retryAfterMilliseconds = retryAfterMilliseconds;

@@ -60,7 +60,9 @@ class SesHttpClient {
       finalError: (error, attempts) =>
         error instanceof SesApiError
           ? error
-          : new SesApiError(error.message, undefined, undefined, undefined, attempts),
+          : new SesApiError(error.message, undefined, undefined, undefined, attempts, {
+              cause: error,
+            }),
     });
   }
 
@@ -221,8 +223,8 @@ class SesApiError extends Error {
   retryAfterMilliseconds;
   attempts;
 
-  constructor(message, statusCode, errors, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(message, statusCode, errors, retryAfterMilliseconds, attempts, options) {
+    super(message, options);
     this.name = 'SesApiError';
     this.statusCode = statusCode;
     this.errors = errors;

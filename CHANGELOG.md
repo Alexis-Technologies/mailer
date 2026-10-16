@@ -139,6 +139,11 @@ fixed ones below.
   the OAuth2 token request of `./smtp` read a response whole, however long, so a broken or
   hostile endpoint could fill the memory of the sender. A longer body is refused, by its
   `Content-Length` or as it streams; after a 2xx, that is an unknown delivery.
+- **Provider errors keep their cause** (an upstream bug): once retries were spent, `SesApiError`,
+  `ResendApiError`, `SendGridApiError`, `MailgunApiError` and `PlunkApiError` rewrapped the last
+  failure without it, so `fetch failed` lost the refused connection or the certificate error
+  behind it, and so did the errors for a body that was not JSON. They keep it as `cause`, and
+  their constructors take an `options` argument with it.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

@@ -31,9 +31,10 @@ class ResendApiError extends Error {
    * @param statusCode HTTP status code returned by Resend.
    * @param retryAfterMilliseconds Retry delay from the response.
    * @param attempts Number of attempts made before this error.
+   * @param options The cause of the error, such as the failure of `fetch`.
    */
-  constructor(message, statusCode, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(message, statusCode, retryAfterMilliseconds, attempts, options) {
+    super(message, options);
     this.name = 'ResendApiError';
     this.statusCode = statusCode;
     this.retryAfterMilliseconds = retryAfterMilliseconds;
@@ -124,11 +125,11 @@ class ResendHttpClient {
         try {
           return JSON.parse(text);
         } catch (parseError) {
-          // oxlint-disable-next-line preserve-caught-error -- upstream
           throw new Error(
             `Invalid JSON response from Resend API: ${
               parseError instanceof Error ? parseError.message : String(parseError)
             }`,
+            { cause: parseError },
           );
         }
       },
@@ -157,7 +158,7 @@ class ResendHttpClient {
       finalError: (error, attempts) =>
         error instanceof ResendApiError
           ? error
-          : new ResendApiError(error.message, undefined, undefined, attempts),
+          : new ResendApiError(error.message, undefined, undefined, attempts, { cause: error }),
     });
   }
 

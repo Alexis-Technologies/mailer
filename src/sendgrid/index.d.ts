@@ -271,5 +271,6 @@ export declare class SendGridApiError extends Error {
     }>,
     retryAfterMilliseconds?: number,
     attempts?: number,
+    options?: { readonly cause?: unknown },
   );
 }

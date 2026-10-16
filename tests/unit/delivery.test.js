@@ -206,3 +206,22 @@ test('Delivery: a 2xx body longer than 4 MiB is refused, of unknown delivery', a
     assert.match(receipt.errorMessages[0], /exceeds 4194304 bytes/, name);
   }
 });
+
+test('Delivery: the failure of fetch stays the cause of the provider error', async (t) => {
+  const refused = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+  });
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw refused;
+  });
+  for (const [name, , create] of providers) {
+    const body = name === 'Mailgun' ? new FormData() : {};
+    const error = await create({ retries: 0 })
+      .httpClient.sendMessage(body, undefined)
+      .catch((caught) => caught);
+    assert.ok(error instanceof Error, name);
+    let cause = error;
+    while (cause !== refused && cause?.cause != null) cause = cause.cause;
+    assert.strictEqual(cause, refused, `${name}: ${error.name}`);
+  }
+});

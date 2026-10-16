@@ -71,7 +71,9 @@ class SendGridHttpClient {
       finalError: (error, attempts) =>
         error instanceof SendGridApiError
           ? error
-          : new SendGridApiError(error.message, undefined, undefined, undefined, attempts),
+          : new SendGridApiError(error.message, undefined, undefined, undefined, attempts, {
+              cause: error,
+            }),
     });
   }
 
@@ -146,9 +148,10 @@ class SendGridApiError extends Error {
    * @param errors Provider-supplied SendGrid error details.
    * @param retryAfterMilliseconds Retry delay from the response.
    * @param attempts Number of attempts made before this error.
+   * @param options The cause of the error, such as the failure of `fetch`.
    */
-  constructor(message, statusCode, errors, retryAfterMilliseconds, attempts) {
-    super(message);
+  constructor(message, statusCode, errors, retryAfterMilliseconds, attempts, options) {
+    super(message, options);
     this.name = 'SendGridApiError';
     this.statusCode = statusCode;
     this.errors = errors;

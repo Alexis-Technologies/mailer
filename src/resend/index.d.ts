@@ -270,6 +270,7 @@ declare class ResendApiError extends Error {
     statusCode?: number,
     retryAfterMilliseconds?: number,
     attempts?: number,
+    options?: { readonly cause?: unknown },
   );
 }
 /**
