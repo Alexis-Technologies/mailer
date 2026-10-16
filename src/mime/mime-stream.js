@@ -2,27 +2,36 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { iterateAttachmentContent } = require('../core/attachment.js');
-const { base64, utf8 } = require('./bytes.js');
+const { Buffer } = require('node:buffer');
+const { base64 } = require('./bytes.js');
 
 /** Encodes base64 without retaining producer-owned carry bytes. */
 const encodeAttachment = async function* (content, signal, progress) {
   const carry = new Uint8Array(3);
   let carried = 0;
   let column = 0;
+  // The base64 text is ASCII, so it is written straight into one buffer with
+  // a CRLF after every 76 characters of the attachment, without joining
+  // strings and encoding them again.
   const wrap = (encoded) => {
-    const parts = [];
+    const firstBreak = column === 76 ? 0 : 76 - column;
+    const lineBreaks =
+      encoded.length > firstBreak ? Math.ceil((encoded.length - firstBreak) / 76) : 0;
+    const output = Buffer.allocUnsafe(encoded.length + 2 * lineBreaks);
+    let written = 0;
     let offset = 0;
     while (offset < encoded.length) {
       if (column === 76) {
-        parts.push('\r\n');
+        output[written++] = 0x0d;
+        output[written++] = 0x0a;
         column = 0;
       }
       const take = Math.min(76 - column, encoded.length - offset);
-      parts.push(encoded.slice(offset, offset + take));
+      written += output.latin1Write(encoded.slice(offset, offset + take), written);
       offset += take;
       column += take;
     }
-    return utf8(parts.join(''));
+    return output;
   };
   let processed = 0;
   for await (const chunk of iterateAttachmentContent(content, signal)) {
