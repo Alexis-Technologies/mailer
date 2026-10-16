@@ -92,6 +92,13 @@ to disposable wrapped transports. Completion logs are emitted as callers consume
 receipts. If a caller stops reading a batch early, the wrapped iterator is closed
 without being drained so the logging layer does not start additional delivery work.
 
+In `sendMany()`, the decorator keeps each message it has passed on until its
+receipt comes back, to log the two together.  It holds as many as the wrapped
+transport reads ahead of its receipts and no more: one for the providers that
+send one message at a time, `concurrency` for those that take it, a batch for
+SES, Resend, Mailtrap, Lettermint and JMAP, and at most twice `maxConcurrent`
+for a `./retry` inside it.
+
 A logger that throws changes nothing of the delivery: the message is still sent,
 its receipt still comes back, and the failure is emitted as a process warning
 with the code `MAILER_LOGGER_FAILED` (`process.on('warning', …)`), since losing
