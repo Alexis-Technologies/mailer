@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { classifyReceiptError } = require('../core/receipt.js');
+
 /**
  * Default configuration values.
  */
@@ -85,7 +87,11 @@ const createOpenTelemetryConfig = (config = {}) => {
 };
 
 /**
- * Default error classifier that categorizes errors into standard types.
+ * Default error classifier that categorizes errors into standard types: the
+ * categories of a `ReceiptError`, from `classifyReceiptError` of the root
+ * entry, so that a thrown error and a failed receipt are classified alike,
+ * and `"aborted"` for an `AbortError`, which is a cancellation rather than a
+ * failure of the transport.
  *
  * @example
  * ```typescript
@@ -93,85 +99,20 @@ const createOpenTelemetryConfig = (config = {}) => {
  *
  * console.log(defaultErrorClassifier(new Error("401 Unauthorized"))); // "auth"
  * console.log(defaultErrorClassifier(new Error("Rate limit exceeded"))); // "rate-limit"
- * console.log(defaultErrorClassifier(new Error("Connection timeout"))); // "network"
+ * console.log(defaultErrorClassifier(new Error("Connection timeout"))); // "timeout"
  * console.log(defaultErrorClassifier(new Error("Invalid email format"))); // "validation"
  * console.log(defaultErrorClassifier(new Error("500 Internal Server Error"))); // "server-error"
  * console.log(defaultErrorClassifier(new Error("Something else"))); // "unknown"
  * ```
  *
  * @param error The error to classify.
- * @returns A string category such as `"auth"`, `"rate-limit"`, `"network"`,
- *          `"validation"`, `"service-unavailable"`, `"server-error"`, or
- *          `"unknown"`.
+ * @returns A category of `ReceiptError`, such as `"auth"`, `"rate-limit"`,
+ *          `"network"`, `"timeout"`, `"validation"`, `"server-error"` or
+ *          `"unknown"`, or `"aborted"`.
  */
 const defaultErrorClassifier = (error) => {
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    const name = error.name.toLowerCase();
-
-    // Authentication errors
-    if (
-      message.includes('auth') ||
-      message.includes('unauthorized') ||
-      message.includes('invalid api key') ||
-      message.includes('403')
-    ) {
-      return 'auth';
-    }
-
-    // Rate limiting
-    if (
-      message.includes('rate limit') ||
-      message.includes('429') ||
-      message.includes('quota exceeded') ||
-      message.includes('throttle')
-    ) {
-      return 'rate-limit';
-    }
-
-    // Server errors (check before network errors to catch "504 Gateway Timeout")
-    if (
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('504') ||
-      message.includes('internal server error')
-    ) {
-      return 'server-error';
-    }
-
-    // Network errors
-    if (
-      name.includes('network') ||
-      message.includes('connect') ||
-      message.includes('timeout') ||
-      message.includes('dns') ||
-      name === 'aborterror'
-    ) {
-      return 'network';
-    }
-
-    // Validation errors
-    if (
-      message.includes('invalid') ||
-      message.includes('malformed') ||
-      message.includes('validation') ||
-      message.includes('400')
-    ) {
-      return 'validation';
-    }
-
-    // Service unavailable
-    if (
-      message.includes('503') ||
-      message.includes('service unavailable') ||
-      message.includes('temporarily unavailable')
-    ) {
-      return 'service-unavailable';
-    }
-  }
-
-  // Fallback category
-  return 'unknown';
+  if (error instanceof Error && error.name === 'AbortError') return 'aborted';
+  return classifyReceiptError(error).category;
 };
 
 module.exports = { createOpenTelemetryConfig, defaultErrorClassifier };

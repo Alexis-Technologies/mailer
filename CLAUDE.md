@@ -133,8 +133,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
-8. otel (partly fixed, see 44, 45, 48 and 49): `recordRetry` is never called; `sendMany` buffers
-   its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
+8. otel (partly fixed, see 44, 45 and 48 to 50): `recordRetry` is never called; `sendMany`
+   buffers its whole input.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
@@ -277,6 +277,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 49. otel: `auto`, `serviceName` and `serviceVersion` were accepted and never read: exporters and
     resource attributes belong to the SDK that builds the providers passed in. They throw a
     `TypeError`, and `AutoConfig` and `CreateOpenTelemetryTransportConfig` are gone.
+50. otel: `defaultErrorClassifier` looked for words and status codes as substrings, before the
+    network check (`"Author unknown"` was `auth`, `"timeout after 5000ms"` a server error), and
+    disagreed with the categories of the receipts. It is `classifyReceiptError` of the root, plus
+    `aborted` for an `AbortError`, which upstream counted as a network failure.
 
 ## Repository layout
 

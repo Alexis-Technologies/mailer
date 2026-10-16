@@ -188,7 +188,11 @@ interface ResolvedOpenTelemetryConfig {
  */
 
 /**
- * Default error classifier that categorizes errors into standard types.
+ * Default error classifier that categorizes errors into standard types: the
+ * categories of a `ReceiptError`, from `classifyReceiptError` of the root
+ * entry, so that a thrown error and a failed receipt are classified alike,
+ * and `"aborted"` for an `AbortError`, which is a cancellation rather than a
+ * failure of the transport.
  *
  * @example
  * ```typescript
@@ -196,16 +200,16 @@ interface ResolvedOpenTelemetryConfig {
  *
  * console.log(defaultErrorClassifier(new Error("401 Unauthorized"))); // "auth"
  * console.log(defaultErrorClassifier(new Error("Rate limit exceeded"))); // "rate-limit"
- * console.log(defaultErrorClassifier(new Error("Connection timeout"))); // "network"
+ * console.log(defaultErrorClassifier(new Error("Connection timeout"))); // "timeout"
  * console.log(defaultErrorClassifier(new Error("Invalid email format"))); // "validation"
  * console.log(defaultErrorClassifier(new Error("500 Internal Server Error"))); // "server-error"
  * console.log(defaultErrorClassifier(new Error("Something else"))); // "unknown"
  * ```
  *
  * @param error The error to classify.
- * @returns A string category such as `"auth"`, `"rate-limit"`, `"network"`,
- *          `"validation"`, `"service-unavailable"`, `"server-error"`, or
- *          `"unknown"`.
+ * @returns A category of `ReceiptError`, such as `"auth"`, `"rate-limit"`,
+ *          `"network"`, `"timeout"`, `"validation"`, `"server-error"` or
+ *          `"unknown"`, or `"aborted"`.
  */
 export declare function defaultErrorClassifier(error: unknown): string;
 

@@ -424,9 +424,11 @@ Error classifications appear in both metrics and trace data, allowing you to:
  -  Analyze error patterns across different email types
  -  Identify systematic issues vs. temporary problems
 
-The default classifier recognizes common email error patterns including
-authentication failures, rate limiting, network issues, validation errors,
-and server problems.
+The default classifier gives the category that `classifyReceiptError` of the
+root entry gives a failed receipt (`auth`, `rate-limit`, `network`, `timeout`,
+`validation`, `server-error` and so on), so a thrown error and a failed receipt
+land in the same categories, and `aborted` for an `AbortError`, which is a
+cancellation rather than a failure of the transport.
 
 ## Custom attributes and context
 

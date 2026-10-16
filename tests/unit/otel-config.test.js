@@ -134,16 +134,12 @@ describe('config', () => {
 
     it('should classify network errors', () => {
       const errors = [
-        new Error('Connection timeout'),
+        // Changed after the port: a timeout and an abort have categories of
+        // their own (see "should tell timeouts and aborts" below).
         new Error('DNS resolution failed'),
         (() => {
           const e = new Error('Network is unreachable');
           e.name = 'NetworkError';
-          return e;
-        })(),
-        (() => {
-          const e = new Error('Operation was aborted');
-          e.name = 'AbortError';
           return e;
         })(),
       ];
@@ -181,11 +177,19 @@ describe('config', () => {
       }
     });
 
+    // Changed after the port: the classifier is that of the receipts.
+    it('should tell timeouts and aborts', () => {
+      const aborted = new Error('Operation was aborted');
+      aborted.name = 'AbortError';
+      assert.equal(defaultErrorClassifier(new Error('Connection timeout')), 'timeout');
+      assert.equal(defaultErrorClassifier(new Error('HTTP 504 Gateway Timeout')), 'timeout');
+      assert.equal(defaultErrorClassifier(aborted), 'aborted');
+    });
+
     it('should classify server errors', () => {
       const errors = [
         new Error('HTTP 500 Internal Server Error'),
         new Error('HTTP 502 Bad Gateway'),
-        new Error('HTTP 504 Gateway Timeout'),
         new Error('Internal server error occurred'),
       ];
 

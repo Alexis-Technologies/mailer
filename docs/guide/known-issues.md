@@ -32,5 +32,4 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 ## Decorators
 
 - `./pool`: `continueOnSuccess` is never read.
-- `./otel`: `recordRetry` is never called, `sendMany` buffers its whole input, and the default
-  error classifier matches `auth` and status codes as substrings of the message.
+- `./otel`: `recordRetry` is never called, and `sendMany` buffers its whole input.

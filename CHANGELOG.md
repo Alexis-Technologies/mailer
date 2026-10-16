@@ -203,6 +203,11 @@ fixed ones below.
   exporters and resource attributes belong to the SDK that builds them. They now throw a
   `TypeError`; the types `AutoConfig` and `CreateOpenTelemetryTransportConfig` are removed and
   `createOpenTelemetryTransport` takes an `OpenTelemetryConfig`.
+- **`./otel` classifies a thrown error like a failed receipt** (an upstream bug): the default
+  classifier looked for words and status codes as substrings, so `Author unknown` was an `auth`
+  error and `timeout after 5000ms` a `server-error`. It now gives the category of
+  `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
+  `aborted` for an `AbortError`, which upstream counted as `network`.
 
 ### Changed
 

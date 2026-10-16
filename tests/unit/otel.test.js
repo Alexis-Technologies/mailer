@@ -261,3 +261,16 @@ test('OTel: the duration buckets reach the histogram as advice', () => {
     assert.deepStrictEqual(duration.options.advice, { explicitBucketBoundaries: buckets });
   }
 });
+
+test('OTel: the default classifier reads words and status codes whole', () => {
+  const { defaultErrorClassifier } = require('../../src/otel/index.js');
+  const cases = [
+    ['Author unknown', 'unknown'],
+    ['timeout after 5000ms', 'timeout'],
+    ['Message size 4013 octets exceeds the limit', 'unknown'],
+    ['HTTP 403 Forbidden', 'auth'],
+  ];
+  for (const [text, category] of cases) {
+    assert.strictEqual(defaultErrorClassifier(new Error(text)), category, text);
+  }
+});
