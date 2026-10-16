@@ -82,7 +82,7 @@ is no build step.
 There is no `dependencies` or `peerDependencies` key in `package.json`, and there won't be one.
 
 - **The transports are built on `node:*` and `fetch`:** SMTP on `node:net`/`node:tls`, DKIM and
-  the SES SigV4 signature on WebCrypto (`crypto.subtle`, a global of Node), HTTP providers on the global `fetch`. No provider SDK.
+  the SES SigV4 signature on `node:crypto`, HTTP providers on the global `fetch`. No provider SDK.
 - **Infrastructure drivers are injected.** An adapter for a queue or a store takes the client or
   module the application created (a BullMQ `Queue`, a `MongoClient` or `require('mongodb')`), the
   way `./mongodb` of `@alexify/metaschema` takes the driver module. The package never `require`s

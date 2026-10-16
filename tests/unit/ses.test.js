@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
 const { SesTransport } = require('../../src/ses/index.js');
+const { SesHttpClient } = require('../../src/ses/http-client.js');
 const PostalMime = require('postal-mime');
 const { createSesConfig } = require('../../src/ses/config.js');
 const { convertMessage } = require('../../src/ses/message-converter.js');
@@ -165,4 +166,29 @@ test('SES: a display name with "<", "," or "@" stays a single mailbox', async ()
     name: 'Support <attacker@evil.com>, Real',
   });
   assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
+});
+
+test('SES: a request is signed as the SigV4 test suite of AWS expects', (t) => {
+  // "get-vanilla" of the AWS Signature Version 4 test suite.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2015-08-30T12:36:00Z') });
+  const client = new SesHttpClient(createSesConfig({ region: 'us-east-1' }));
+  const credentials = {
+    accessKeyId: 'AKIDEXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+  };
+  for (let call = 0; call < 2; call++) {
+    const headers = client.signRequest(
+      'https://example.amazonaws.com/',
+      { method: 'GET' },
+      credentials,
+      'service',
+    );
+    assert.strictEqual(headers.get('X-Amz-Date'), '20150830T123600Z');
+    assert.strictEqual(
+      headers.get('Authorization'),
+      'AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, ' +
+        'SignedHeaders=host;x-amz-date, ' +
+        'Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31',
+    );
+  }
 });

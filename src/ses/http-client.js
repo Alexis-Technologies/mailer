@@ -1,11 +1,13 @@
 // Ported from upyo v0.7.0 (packages/ses/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
 
 class SesHttpClient {
   config;
+  #signingKey = null;
 
   constructor(config) {
     this.config = config;
@@ -75,7 +77,7 @@ class SesHttpClient {
     const credentials = await this.getCredentials();
     const headers = new Headers(options.headers);
 
-    const signedHeaders = await this.signRequest(
+    const signedHeaders = this.signRequest(
       url,
       {
         ...options,
@@ -117,14 +119,22 @@ class SesHttpClient {
     }
   }
 
-  async signRequest(url, options, credentials) {
+  /**
+   * Signs a request with AWS Signature Version 4.
+   *
+   * @param url The URL of the request.
+   * @param options The method, headers and body of the request.
+   * @param credentials The access key, secret key and session token.
+   * @param service The AWS service the request goes to.
+   * @returns The headers of the request, with the signature.
+   */
+  signRequest(url, options, credentials, service = 'ses') {
     const parsedUrl = new URL(url);
     const method = options.method || 'GET';
     const headers = new Headers(options.headers);
 
     const host = parsedUrl.host;
     const path = parsedUrl.pathname + parsedUrl.search;
-    const service = 'ses';
     const region = this.config.region;
 
     const now = new Date();
@@ -144,22 +154,15 @@ class SesHttpClient {
       `host:${host}\nx-amz-date:${amzDate}\n` +
       (credentials.sessionToken ? `x-amz-security-token:${credentials.sessionToken}\n` : '');
 
-    const payloadHash = await this.sha256(options.body || '');
+    const payloadHash = sha256Hex(options.body || '');
     const canonicalRequest = `${method}\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
 
     const algorithm = 'AWS4-HMAC-SHA256';
     const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = `${algorithm}\n${amzDate}\n${credentialScope}\n${await this.sha256(
-      canonicalRequest,
-    )}`;
+    const stringToSign = `${algorithm}\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
 
-    const signingKey = await this.getSignatureKey(
-      credentials.secretAccessKey,
-      dateStamp,
-      region,
-      service,
-    );
-    const signature = await this.hmacSha256(signingKey, stringToSign);
+    const signingKey = this.getSigningKey(credentials.secretAccessKey, credentialScope);
+    const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
 
     const authorizationHeader = `${algorithm} Credential=${credentials.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
     headers.set('Authorization', authorizationHeader);
@@ -167,54 +170,19 @@ class SesHttpClient {
     return headers;
   }
 
-  async sha256(data) {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-    return Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  async hmacSha256(key, data) {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      key,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer);
-    return Array.from(new Uint8Array(signature))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  async getSignatureKey(key, dateStamp, regionName, serviceName) {
-    const encoder = new TextEncoder();
-
-    let keyBuffer = new Uint8Array(encoder.encode('AWS4' + key)).buffer;
-    keyBuffer = await this.hmacSha256Buffer(keyBuffer, dateStamp);
-    keyBuffer = await this.hmacSha256Buffer(keyBuffer, regionName);
-    keyBuffer = await this.hmacSha256Buffer(keyBuffer, serviceName);
-    keyBuffer = await this.hmacSha256Buffer(keyBuffer, 'aws4_request');
-
-    return keyBuffer;
-  }
-
-  async hmacSha256Buffer(key, data) {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      key,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    return await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer);
+  // The signing key depends only on the secret and the scope (a day, a
+  // region, a service), so it is derived once a day rather than per request.
+  getSigningKey(secretAccessKey, credentialScope) {
+    const cached = this.#signingKey;
+    if (cached?.scope === credentialScope && cached.secretAccessKey === secretAccessKey) {
+      return cached.key;
+    }
+    let key = `AWS4${secretAccessKey}`;
+    for (const part of credentialScope.split('/')) {
+      key = createHmac('sha256', key).update(part).digest();
+    }
+    this.#signingKey = { scope: credentialScope, secretAccessKey, key };
+    return key;
   }
 
   headersToRecord(headers) {
@@ -225,6 +193,8 @@ class SesHttpClient {
     return record;
   }
 }
+
+const sha256Hex = (data) => createHash('sha256').update(data).digest('hex');
 
 const createSesApiError = (response, text, attempt) => {
   let errorData;
