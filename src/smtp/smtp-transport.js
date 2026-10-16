@@ -635,8 +635,7 @@ class SmtpTransport {
     // even without the capability so STARTTLS stripping fails closed.
     if (
       connection.config.secure === false &&
-      (connection.config.requireTls === true ||
-        connection.capabilities.some((cap) => cap.toUpperCase().startsWith('STARTTLS')))
+      (connection.config.requireTls === true || connection.hasCapability('STARTTLS'))
     ) {
       await connection.starttls(signal);
 

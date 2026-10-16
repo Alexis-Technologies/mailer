@@ -10,6 +10,7 @@ const { SmtpTransport } = require('../../src/smtp/index.js');
 const { prepareOnSocket, writeMessageData } = require('../../src/smtp/data-stream.js');
 const { checkSmtpPath } = require('../../src/smtp/envelope.js');
 const { OAuth2TokenManager } = require('../../src/smtp/oauth2.js');
+const { SmtpConnection } = require('../../src/smtp/smtp-connection.js');
 const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
 
 const message = () =>
@@ -444,4 +445,15 @@ test('SMTP: AUTH PLAIN and LOGIN encode credentials outside Latin-1 as UTF-8', a
       await stop(server);
     }
   }
+});
+
+test('SMTP: capabilities are looked up by keyword, rebuilt when replaced', () => {
+  const connection = new SmtpConnection({ host: 'smtp.example.com' });
+  connection.capabilities = ['size 10240000', 'AUTH=LOGIN PLAIN', 'PIPELINING', '8BITMIME'];
+  assert.strictEqual(connection.capabilityLine('SIZE'), 'size 10240000');
+  assert.strictEqual(connection.hasCapability('AUTH'), true);
+  assert.strictEqual(connection.hasCapability('PIPE'), false);
+  connection.capabilities = ['STARTTLS'];
+  assert.strictEqual(connection.hasCapability('PIPELINING'), false);
+  assert.strictEqual(connection.hasCapability('STARTTLS'), true);
 });

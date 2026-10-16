@@ -196,8 +196,24 @@ const CRLF_LENGTH = 2;
  * @param capabilities The extension lines returned by EHLO.
  * @returns The SIZE capability, or `null` when it was not advertised.
  */
-const parseSizeCapability = (capabilities) => {
-  const capability = capabilities.find((value) => /^SIZE(?:[ \t]|$)/i.test(value));
+// The capability lines by keyword (up to a space, a tab or the "=" of the
+// old AUTH=LOGIN form, in upper case), the first line of a keyword winning.
+const indexCapabilities = (lines) => {
+  const index = new Map();
+  for (const line of lines) {
+    let end = 0;
+    while (end < line.length) {
+      const code = line.charCodeAt(end);
+      if (code === 0x20 || code === 0x09 || code === 0x3d) break;
+      end++;
+    }
+    const keyword = line.slice(0, end).toUpperCase();
+    if (!index.has(keyword)) index.set(keyword, line);
+  }
+  return index;
+};
+
+const parseSizeCapability = (capability) => {
   if (capability == null) return null;
 
   const match = /^SIZE(?:[ \t]+([0-9]+))?[ \t]*$/i.exec(capability);
@@ -335,6 +351,8 @@ const isLoopbackConnection = (socket, host) => {
 class SmtpConnection {
   socket = null;
   config;
+  #indexedCapabilities = null;
+  #capabilityIndex = new Map();
   authenticated = false;
   capabilities = [];
   tokenManager;
@@ -668,13 +686,40 @@ class SmtpConnection {
       );
     }
 
-    // Parse capabilities
-    this.capabilities = response.raw
-      .split('\r\n')
-      .filter((line) => line.startsWith('250-') || line.startsWith('250 '))
-      .slice(1)
-      .map((line) => line.substring(4))
-      .filter((line) => line.length > 0);
+    // Parse capabilities: the lines of the reply after the greeting line, in
+    // one pass.
+    const capabilities = [];
+    const lines = response.raw.split('\r\n');
+    let isGreeting = true;
+    for (const line of lines) {
+      if (!line.startsWith('250-') && !line.startsWith('250 ')) continue;
+      if (isGreeting) {
+        isGreeting = false;
+        continue;
+      }
+      if (line.length > 4) capabilities.push(line.substring(4));
+    }
+    this.capabilities = capabilities;
+  }
+
+  /**
+   * The capability line of a keyword, from an index built again whenever
+   * `capabilities` is replaced: a send asks for several, which used to scan
+   * the list each time, with a new RegExp for some.
+   *
+   * @param keyword The keyword, in upper case, such as `SIZE`.
+   * @returns The whole line, or `undefined` when the server lacks it.
+   */
+  capabilityLine(keyword) {
+    if (this.#indexedCapabilities !== this.capabilities) {
+      this.#capabilityIndex = indexCapabilities(this.capabilities);
+      this.#indexedCapabilities = this.capabilities;
+    }
+    return this.#capabilityIndex.get(keyword);
+  }
+
+  hasCapability(keyword) {
+    return this.capabilityLine(keyword) !== undefined;
   }
 
   async starttls(signal) {
@@ -761,7 +806,7 @@ class SmtpConnection {
       return;
     }
 
-    if (!this.capabilities.some((cap) => cap.toUpperCase().startsWith('AUTH'))) {
+    if (!this.hasCapability('AUTH')) {
       throw new SmtpAuthError('Server does not support authentication.');
     }
 
@@ -970,10 +1015,7 @@ class SmtpConnection {
 
     let smtpUtf8Parameters = '';
     const negotiate = (encoding) => {
-      const supports = (name) =>
-        this.capabilities.some((capability) =>
-          new RegExp(`^${name}(?:[ \t]|$)`, 'i').test(capability),
-        );
+      const supports = (name) => this.hasCapability(name);
       if (message.requiresSmtpUtf8 || encoding === 'utf8') {
         if (!supports('SMTPUTF8')) {
           throw new SmtpUtf8UnsupportedError('SMTPUTF8');
@@ -989,11 +1031,11 @@ class SmtpConnection {
     };
     negotiate('rawMessage' in message ? message.rawMessage.encoding : undefined);
 
-    const sizeCapability = parseSizeCapability(this.capabilities);
+    const sizeCapability = parseSizeCapability(this.capabilityLine('SIZE'));
     let sizeParameter = '';
 
     const dsn = message.envelope.dsn;
-    if (dsn != null && !this.capabilities.some((capability) => /^DSN[ \t]*$/i.test(capability))) {
+    if (dsn != null && !/^DSN[ \t]*$/i.test(this.capabilityLine('DSN') ?? '')) {
       throw new SmtpDsnUnsupportedError();
     }
     const mailDsnParameters =
@@ -1050,9 +1092,7 @@ class SmtpConnection {
       const suffix = parameters.length === 0 ? '' : ` ${parameters.join(' ')}`;
       return `RCPT TO:<${recipient}>${suffix}`;
     });
-    const pipelining = this.capabilities.some((capability) =>
-      /^PIPELINING(?:\s|$)/i.test(capability),
-    );
+    const pipelining = this.hasCapability('PIPELINING');
 
     let mailResponse;
     let recipientResponses;
