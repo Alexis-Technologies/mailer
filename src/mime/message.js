@@ -538,6 +538,21 @@ const encodeHeaderValue = (value, encodeLongAsciiWords = false) => {
   return words.join(' ');
 };
 
+// Each byte as an RFC 2231 extended value carries it: an attribute-char as it
+// is, any other byte percent-encoded.
+const EXTENDED_VALUE_BYTES = [];
+for (let byte = 0; byte < 256; byte++) {
+  const character = String.fromCharCode(byte);
+  EXTENDED_VALUE_BYTES.push(
+    /^[A-Za-z0-9!#$&+.^_`|~-]$/.test(character)
+      ? character
+      : `%${byte.toString(16).toUpperCase().padStart(2, '0')}`,
+  );
+}
+
+const formatParameterSegment = (name, index, segment) =>
+  index === 0 ? `${name}*0*=UTF-8''${segment}` : `; ${name}*${index}*=${segment}`;
+
 const encodeMimeParameter = (name, value) => {
   const escapedValue = value.replace(/[\\"]/g, '\\$&');
   const quotedParameter = `${name}="${escapedValue}"`;
@@ -545,27 +560,22 @@ const encodeMimeParameter = (name, value) => {
     return quotedParameter;
   }
 
-  const encodedBytes = Array.from(new TextEncoder().encode(value), (byte) => {
-    const character = String.fromCharCode(byte);
-    return /^[A-Za-z0-9!#$&+.^_`|~-]$/.test(character)
-      ? character
-      : `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;
-  });
-  const segments = [];
+  // Continuations of at most 45 characters each, built in one pass over the
+  // UTF-8 bytes of the value.
+  const bytes = Buffer.from(value, 'utf8');
+  let parameter = '';
   let segment = '';
-
-  for (const encodedByte of encodedBytes) {
+  let index = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const encodedByte = EXTENDED_VALUE_BYTES[bytes[i]];
     if (segment.length + encodedByte.length > 45) {
-      segments.push(segment);
+      parameter += formatParameterSegment(name, index++, segment);
       segment = '';
     }
     segment += encodedByte;
   }
-  if (segment.length > 0 || segments.length === 0) segments.push(segment);
-
-  return segments
-    .map((part, index) => `${name}*${index}*=${index === 0 ? "UTF-8''" : ''}${part}`)
-    .join('; ');
+  if (segment.length > 0 || index === 0) parameter += formatParameterSegment(name, index, segment);
+  return parameter;
 };
 
 const foldHeader = (name, value) => {

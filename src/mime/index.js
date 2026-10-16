@@ -24,6 +24,14 @@ const { MimeAttachmentReplayError } = require('./stream.js');
  * Attachment errors can also occur during later content reads, after partial
  * output. Streaming DKIM changes throw {@link MimeAttachmentReplayError}.
  */
+const envelopeRecipients = (message) => {
+  const addresses = [];
+  for (const list of [message.recipients, message.ccRecipients, message.bccRecipients]) {
+    for (let i = 0; i < list.length; i++) addresses.push(list[i].address);
+  }
+  return addresses;
+};
+
 const composeMessage = async (message, options = {}) => {
   const { signal } = options;
   // The neutral plan observes promised sources even when envelope validation fails.
@@ -31,9 +39,7 @@ const composeMessage = async (message, options = {}) => {
   const { envelope } = createRawMessagePlan({
     envelope: {
       from: message.sender.address,
-      to: [...message.recipients, ...message.ccRecipients, ...message.bccRecipients].map(
-        (recipient) => recipient.address,
-      ),
+      to: envelopeRecipients(message),
     },
     content: new Uint8Array(),
   });
