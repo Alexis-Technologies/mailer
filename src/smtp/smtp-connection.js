@@ -7,6 +7,8 @@ const { isIP, Socket } = require('node:net');
 const { StringDecoder } = require('node:string_decoder');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
 const { generateId } = require('../core/id.js');
+const { createLog } = require('../internal/log.js');
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { createSmtpConfig } = require('./config.js');
 const { SmtpDsnUnsupportedError } = require('./delivery-status.js');
 const { checkSmtpPath } = require('./envelope.js');
@@ -238,6 +240,27 @@ const QUIT_TIMEOUT_MS = 5000;
 // answer with its default one.
 const serverNameOf = (host) => (isIP(host) === 0 ? host.replace(/\.$/, '') : undefined);
 
+// The commands of a trace: a SASL exchange and the argument of AUTH carry
+// credentials, and an envelope carries addresses, none of which is logged.
+const describeCommands = (commands, authenticating) => {
+  const described = [];
+  for (let i = 0; i < commands.length; i++) {
+    const command = commands[i];
+    if (command.startsWith('AUTH ')) {
+      described.push(`AUTH ${command.slice(5).split(' ')[0]} [REDACTED]`);
+    } else {
+      described.push(authenticating ? '[REDACTED]' : redactAddresses(command));
+    }
+  }
+  return described;
+};
+
+const replyCodes = (responses) => {
+  const codes = [];
+  for (let i = 0; i < responses.length; i++) codes.push(responses[i].code);
+  return codes;
+};
+
 /**
  * Whether the SMTP connection is local enough to permit cleartext
  * authentication during development.
@@ -260,6 +283,8 @@ class SmtpConnection {
   capabilities = [];
   tokenManager;
   active = false;
+  /** Whether a SASL exchange is under way, whose lines carry credentials. */
+  authenticating = false;
   /** Whether the connection sits in a pool and must be reset before reuse. */
   needsReset = false;
 
@@ -277,6 +302,15 @@ class SmtpConnection {
   constructor(config, tokenManager) {
     this.config = createSmtpConfig(config);
     this.tokenManager = tokenManager ?? null;
+    this.log = createLog(this.config.logger, { transport: 'smtp', host: this.config.host });
+  }
+
+  /**
+   * Whether the connected peer, or the host when the socket names none, is
+   * this machine, where plain text is allowed for local development.
+   */
+  isLocal() {
+    return isLoopbackConnection(this.socket, this.config.host);
   }
 
   connect(signal) {
@@ -313,6 +347,11 @@ class SmtpConnection {
 
       const onConnect = () => {
         cleanup();
+        this.log.write(
+          'debug',
+          () => ({ port: this.config.port, secure: this.config.secure }),
+          'SMTP connected',
+        );
         resolve();
       };
 
@@ -432,6 +471,7 @@ class SmtpConnection {
                 reject(new TypeError('Premature SMTP reply after DATA readiness.'));
                 return;
               }
+              this.log.write('trace', () => ({ codes: replyCodes(responses) }), 'SMTP replies');
               resolve(responses);
               return;
             }
@@ -499,6 +539,11 @@ class SmtpConnection {
       this.socket.on('close', onClose);
       signal?.addEventListener('abort', onAbort, { once: true });
       this.socket.write(commands.map((command) => `${command}\r\n`).join(''));
+      this.log.write(
+        'trace',
+        () => ({ commands: describeCommands(commands, this.authenticating) }),
+        'SMTP commands',
+      );
     });
   }
 
@@ -697,6 +742,7 @@ class SmtpConnection {
       const onSecureConnect = () => {
         cleanup();
         tlsSocket.setTimeout(this.config.socketTimeout);
+        this.log.write('debug', () => ({ protocol: tlsSocket.getProtocol() }), 'SMTP upgraded');
         resolve();
       };
       tlsSocket.once('secureConnect', onSecureConnect);
@@ -723,43 +769,47 @@ class SmtpConnection {
 
     // Refuse to send credentials over a cleartext connection.  Loopback hosts
     // are excepted for local testing and development.
-    if (
-      !(this.socket instanceof TLSSocket) &&
-      !isLoopbackConnection(this.socket, this.config.host)
-    ) {
+    if (!(this.socket instanceof TLSSocket) && !this.isLocal()) {
       throw new SmtpAuthError(
         'SMTP authentication requires a TLS-secured connection to protect ' +
           'credentials; use `secure: true` or STARTTLS.',
       );
     }
 
-    if ('accessToken' in auth || 'refreshToken' in auth) {
-      const mechanism = auth.method ?? selectOAuth2Mechanism(this.capabilities);
-      switch (mechanism) {
-        case 'xoauth2':
-          await this.authXoauth2(auth, signal);
-          break;
-        case 'oauthbearer':
-          await this.authOauthbearer(auth, signal);
-          break;
-        default:
-          throw new SmtpAuthError(`Unsupported authentication method: ${mechanism}`);
+    let mechanism;
+    this.authenticating = true;
+    try {
+      if ('accessToken' in auth || 'refreshToken' in auth) {
+        mechanism = auth.method ?? selectOAuth2Mechanism(this.capabilities);
+        switch (mechanism) {
+          case 'xoauth2':
+            await this.authXoauth2(auth, signal);
+            break;
+          case 'oauthbearer':
+            await this.authOauthbearer(auth, signal);
+            break;
+          default:
+            throw new SmtpAuthError(`Unsupported authentication method: ${mechanism}`);
+        }
+      } else {
+        mechanism = auth.method ?? 'plain';
+        switch (mechanism) {
+          case 'plain':
+            await this.authPlain(auth, signal);
+            break;
+          case 'login':
+            await this.authLogin(auth, signal);
+            break;
+          default:
+            throw new Error(`Unsupported authentication method: ${mechanism}`);
+        }
       }
-    } else {
-      const method = auth.method ?? 'plain';
-      switch (method) {
-        case 'plain':
-          await this.authPlain(auth, signal);
-          break;
-        case 'login':
-          await this.authLogin(auth, signal);
-          break;
-        default:
-          throw new Error(`Unsupported authentication method: ${method}`);
-      }
+    } finally {
+      this.authenticating = false;
     }
 
     this.authenticated = true;
+    this.log.write('debug', { mechanism }, 'SMTP authenticated');
   }
 
   async authPlain(auth, signal) {

@@ -24,6 +24,8 @@ const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { checkDkimKeys } = require('../mime/dkim/sign.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
+const { TLSSocket } = require('node:tls');
+const { warnDegradation } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
 /**
@@ -528,9 +530,11 @@ class SmtpTransport {
         try {
           await pooled.reset(signal);
           pooled.needsReset = false;
+          pooled.log.write('debug', {}, 'SMTP connection reused');
           return pooled;
-        } catch {
+        } catch (error) {
           // Its state is unknown after a failed or aborted RSET.
+          pooled.log.write('debug', () => ({ error: error?.message }), 'SMTP reset failed');
           await this.discardConnection(pooled);
           signal?.throwIfAborted();
         }
@@ -648,6 +652,17 @@ class SmtpTransport {
       await connection.ehlo(signal);
 
       signal?.throwIfAborted();
+    }
+
+    // Mail that goes out without TLS is told, but for local development.
+    if (!(connection.socket instanceof TLSSocket) && !connection.isLocal()) {
+      warnDegradation(
+        connection.log,
+        'MAILER_SMTP_PLAINTEXT',
+        'The SMTP connection is not encrypted: the server offers no STARTTLS and requireTls is ' +
+          'off, so messages go out in plain text.',
+        { port: connection.config.port },
+      );
     }
 
     // Authenticate if needed

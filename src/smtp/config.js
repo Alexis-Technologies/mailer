@@ -33,6 +33,7 @@ const createSmtpConfig = (config) => {
     dkim: config.dkim,
     fetch: config.fetch,
     generateId: config.generateId,
+    logger: config.logger,
   };
 };
 

@@ -179,6 +179,18 @@ without one, and the message ID of a receipt the server named none for (see
 is used for the token refresh of OAuth 2.0, in place of the global one, such as
 one bound to an undici `Agent` or a proxy.
 
+### Diagnostics
+
+A `logger`, pino-like, hears what the receipts do not tell: `debug` for a
+connection made, upgraded with STARTTLS, authenticated, reused from the pool or
+dropped after a failed reset, and `trace` for the commands and reply codes of
+the protocol, with the argument of AUTH, the SASL exchange and every address
+replaced by `[REDACTED]`. A connection that goes out in plain text to a host
+other than this machine, because the server offers no STARTTLS and `requireTls`
+is off, is a `warn` with the code `MAILER_SMTP_PLAINTEXT`; without a logger,
+that warning, and the one of a DKIM signature skipped under `send-unsigned`,
+go to `console.warn`, and nothing else is written.
+
 ## Command pipelining
 
 When a server advertises the `PIPELINING` extension defined by [RFC 2920], @alexify/mailer

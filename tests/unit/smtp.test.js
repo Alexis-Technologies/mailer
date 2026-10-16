@@ -729,3 +729,73 @@ test('SMTP: generateId makes the Message-ID, and fetch refreshes the OAuth 2.0 t
     await server.stop();
   }
 });
+
+test('SMTP: the logger hears the connection and the protocol, without credentials or addresses', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  const records = [];
+  const logger = {
+    isLevelEnabled: () => true,
+    trace: (properties, text) => records.push(['trace', properties, text]),
+    debug: (properties, text) => records.push(['debug', properties, text]),
+    warn: (properties, text) => records.push(['warn', properties, text]),
+  };
+  try {
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port,
+      logger,
+      auth: { user: 'alex@example.com', pass: 'hunter2-secret' },
+    });
+    assert.strictEqual((await transport.send(message())).successful, true);
+    await transport.closeAllConnections();
+  } finally {
+    await server.stop();
+  }
+  const texts = records.map(([level, , text]) => `${level} ${text}`);
+  assert.ok(texts.includes('debug SMTP connected'));
+  assert.ok(texts.includes('debug SMTP authenticated'));
+  // A loopback server is local development: no plaintext warning.
+  assert.ok(!texts.some((text) => text.startsWith('warn')));
+  const commands = records
+    .filter(([, , text]) => text === 'SMTP commands')
+    .flatMap(([, p]) => p.commands);
+  assert.ok(commands.includes('AUTH PLAIN [REDACTED]'), JSON.stringify(commands));
+  assert.ok(commands.includes('MAIL FROM:<[REDACTED]>'), JSON.stringify(commands));
+  const logged = JSON.stringify(records);
+  for (const secret of [
+    'hunter2-secret',
+    Buffer.from('\0alex@example.com\0hunter2-secret').toString('base64'),
+    'bob@example.com',
+    'alex@example.com',
+  ]) {
+    assert.ok(!logged.includes(secret), secret);
+  }
+  assert.ok(records.every(([, properties]) => properties.transport === 'smtp'));
+});
+
+test('SMTP: mail sent in plain text to another host is warned of, to the logger or console.warn', async (t) => {
+  t.mock.method(SmtpConnection.prototype, 'isLocal', () => false);
+  const consoleWarn = t.mock.method(console, 'warn', () => {});
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  try {
+    const silent = new SmtpTransport({ host: 'localhost', port, pool: false });
+    assert.strictEqual((await silent.send(message())).successful, true);
+    assert.strictEqual(consoleWarn.mock.callCount(), 1);
+    assert.match(consoleWarn.mock.calls[0].arguments[0], /^MAILER_SMTP_PLAINTEXT: /);
+
+    const warnings = [];
+    const logged = new SmtpTransport({
+      host: 'localhost',
+      port,
+      pool: false,
+      logger: { warn: (properties) => warnings.push(properties) },
+    });
+    assert.strictEqual((await logged.send(message())).successful, true);
+    assert.strictEqual(consoleWarn.mock.callCount(), 1);
+    assert.strictEqual(warnings[0].code, 'MAILER_SMTP_PLAINTEXT');
+  } finally {
+    await server.stop();
+  }
+});

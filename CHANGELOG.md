@@ -51,6 +51,11 @@ fixed ones below.
   log-only receipt; `random`, a function like `Math.random`, makes the choices of the pool
   strategies (their constructors take it too), the simulated failures and delays of `./mock`,
   and the span sampling of `./otel`.
+- **A `logger` for what happens inside `./smtp`:** pino-like, given in the configuration like
+  `fetch` and `generateId` (`TransportDependencies`), it hears connections, STARTTLS upgrades,
+  authentication and pool reuse at `debug`, and the protocol at `trace` with credentials and
+  addresses redacted. Mail sent in plain text to another host is a `warn` with the code
+  `MAILER_SMTP_PLAINTEXT`, which goes to `console.warn` when there is no logger.
 - **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
   (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
   With a wrapped transport, the logger needs a method for that level.
