@@ -740,7 +740,9 @@ class JmapTransport {
 
       const result = await uploadBlob(this.config, session.uploadUrl, accountId, blob, signal);
 
-      uploadedBlobs.set(attachment.contentId, result.blobId);
+      // Keyed by the attachment itself: content IDs repeat, and are empty for
+      // every attachment that is not inline.
+      uploadedBlobs.set(attachment, result.blobId);
     }
 
     return uploadedBlobs;

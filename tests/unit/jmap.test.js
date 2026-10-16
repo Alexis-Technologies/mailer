@@ -229,3 +229,45 @@ test('JMAP: Basic authentication encodes credentials outside Latin-1 as UTF-8', 
   const expected = `Basic ${Buffer.from('алекс:пароль-✓').toString('base64')}`;
   assert.deepStrictEqual([...authorizations], [expected]);
 });
+
+test('JMAP: attachments that share a content ID keep their own blobs', async (t) => {
+  let created;
+  serve(t, {
+    'Email/set': (args) => {
+      created = args.create.draft;
+      return defaults['Email/set']();
+    },
+  });
+  const original = globalThis.fetch;
+  let uploads = 0;
+  t.mock.method(globalThis, 'fetch', (input, init) =>
+    String(input).includes('/upload/')
+      ? Promise.resolve(Response.json({ blobId: `blob-${++uploads}` }))
+      : original(input, init),
+  );
+  const attachment = (filename) => ({
+    inline: false,
+    filename,
+    content: new TextEncoder().encode(filename),
+    contentType: 'text/plain',
+    contentId: '',
+  });
+  const receipt = await transport().send(
+    createMessage({
+      from: 'alex@example.com',
+      to: 'bob@example.com',
+      subject: 'Two files',
+      content: { text: 'Hi' },
+      attachments: [attachment('a.txt'), attachment('b.txt')],
+    }),
+  );
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join(' | '));
+  const parts = created.bodyStructure.subParts.filter((part) => part.blobId != null);
+  assert.deepStrictEqual(
+    parts.map((part) => [part.name, part.blobId]),
+    [
+      ['a.txt', 'blob-1'],
+      ['b.txt', 'blob-2'],
+    ],
+  );
+});

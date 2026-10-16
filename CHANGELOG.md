@@ -163,6 +163,9 @@ fixed ones below.
   unknown delivery, not retried, for `./ses`, `./sendgrid`, `./mailgun`, `./mailtrap`,
   `./maileroo` and `./plunk`. `./resend` and `./lettermint`, which send an idempotency key that
   the provider deduplicates, still retry, and report the last failure as of unknown delivery.
+- **`./jmap` keeps each attachment's own file** (an upstream bug): uploaded files were looked up
+  by content ID, which is empty for every attachment that is not inline, so a message with two
+  such attachments sent the second file twice.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

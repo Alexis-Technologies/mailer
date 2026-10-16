@@ -246,6 +246,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     it is thrown as `deliveryUnknown` without a retry; a request with an idempotency key
     (`hasIdempotencyKey`: resend, lettermint) is retried and only its last failure is marked; a
     read (`isIdempotent`: jmap queries) is retried and never marked.
+40. jmap: uploaded blobs were keyed by `contentId`, which repeats and is empty for every
+    attachment that is not inline, so attachments overwrote each other's blob and every part
+    pointed at the last one. They are keyed by the attachment object.
 
 ## Repository layout
 

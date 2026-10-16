@@ -91,7 +91,7 @@ const extractCustomHeaders = (message) => {
 /**
  * Builds body structure for the message content.
  * @param message The message to build body structure for.
- * @param uploadedBlobs Map of contentId to blobId for attachments.
+ * @param uploadedBlobs Map of each attachment to its blobId.
  * @returns Object containing bodyStructure and bodyValues.
  */
 const buildBodyStructure = (message, uploadedBlobs) => {
@@ -190,14 +190,14 @@ const buildBodyStructure = (message, uploadedBlobs) => {
 /**
  * Build inline attachment parts from uploaded blobs.
  * @param attachments Array of attachments from the message.
- * @param uploadedBlobs Map of contentId to blobId.
+ * @param uploadedBlobs Map of each attachment to its blobId.
  * @returns Array of JmapBodyPart for inline attachments.
  */
 const buildInlineAttachmentParts = (attachments, uploadedBlobs) => {
   const parts = [];
 
   for (const attachment of attachments) {
-    const blobId = uploadedBlobs.get(attachment.contentId);
+    const blobId = uploadedBlobs.get(attachment);
     if (!blobId) continue;
 
     if (attachment.inline) {
@@ -217,14 +217,14 @@ const buildInlineAttachmentParts = (attachments, uploadedBlobs) => {
 /**
  * Build regular attachment parts from uploaded blobs.
  * @param attachments Array of attachments from the message.
- * @param uploadedBlobs Map of contentId to blobId.
+ * @param uploadedBlobs Map of each attachment to its blobId.
  * @returns Array of JmapBodyPart for regular attachments.
  */
 const buildAttachmentParts = (attachments, uploadedBlobs) => {
   const parts = [];
 
   for (const attachment of attachments) {
-    const blobId = uploadedBlobs.get(attachment.contentId);
+    const blobId = uploadedBlobs.get(attachment);
     if (!blobId) continue;
 
     if (!attachment.inline) {
@@ -244,7 +244,7 @@ const buildAttachmentParts = (attachments, uploadedBlobs) => {
  * Converts an Upyo Message to JMAP Email/set create format.
  * @param message The Upyo message to convert.
  * @param draftMailboxId The mailbox ID to store the draft in.
- * @param uploadedBlobs Map of contentId to blobId for attachments.
+ * @param uploadedBlobs Map of each attachment to its blobId.
  * @returns The JMAP Email/set create object.
  * @throws {TypeError} If the message carries an invalid message identifier or
  * date, or a header value containing a carriage return or line feed.

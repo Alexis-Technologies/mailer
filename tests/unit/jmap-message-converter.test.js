@@ -5,6 +5,11 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { convertMessage, formatAddress } = require('../../src/jmap/message-converter.js');
 
+// Changed after the port: uploaded blobs are keyed by the attachment, not its
+// content ID, which repeats or is empty (CLAUDE.md, fixed after the port).
+const attachmentWithId = (message, contentId) =>
+  message.attachments.find((attachment) => attachment.contentId === contentId);
+
 describe('formatAddress', () => {
   it('should format address with name', () => {
     const address = {
@@ -309,7 +314,7 @@ describe('convertMessage', () => {
     };
 
     const uploadedBlobs = new Map();
-    uploadedBlobs.set('attachment-1', 'blob-uploaded-123');
+    uploadedBlobs.set(attachmentWithId(message, 'attachment-1'), 'blob-uploaded-123');
 
     const result = convertMessage(message, 'drafts-123', uploadedBlobs);
 
@@ -353,8 +358,8 @@ describe('convertMessage', () => {
     };
 
     const uploadedBlobs = new Map();
-    uploadedBlobs.set('att-1', 'blob-1');
-    uploadedBlobs.set('att-2', 'blob-2');
+    uploadedBlobs.set(attachmentWithId(message, 'att-1'), 'blob-1');
+    uploadedBlobs.set(attachmentWithId(message, 'att-2'), 'blob-2');
 
     const result = convertMessage(message, 'drafts-123', uploadedBlobs);
 
@@ -388,7 +393,7 @@ describe('convertMessage', () => {
     };
 
     const uploadedBlobs = new Map();
-    uploadedBlobs.set('inline-img', 'blob-inline-123');
+    uploadedBlobs.set(attachmentWithId(message, 'inline-img'), 'blob-inline-123');
 
     const result = convertMessage(message, 'drafts-123', uploadedBlobs);
 
@@ -432,8 +437,8 @@ describe('convertMessage', () => {
     };
 
     const uploadedBlobs = new Map();
-    uploadedBlobs.set('logo', 'blob-logo');
-    uploadedBlobs.set('att-doc', 'blob-doc');
+    uploadedBlobs.set(attachmentWithId(message, 'logo'), 'blob-logo');
+    uploadedBlobs.set(attachmentWithId(message, 'att-doc'), 'blob-doc');
 
     const result = convertMessage(message, 'drafts-123', uploadedBlobs);
 
