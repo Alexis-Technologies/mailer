@@ -98,7 +98,10 @@ const startDeadline = (timeoutMs, isZeroTimeoutDisabled, signal) => {
  * - `retries`, `timeoutMs`, `signal`;
  * - `createTimeoutError(error)`: the error of an expired deadline;
  * - `finalError(error, attempts)`: the error thrown once retries are spent;
- * - optional `wrapAccepted(error, attempts)`, `isIdempotent`, `sleep`, and
+ * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
+ *   is the provider's own answer in a 2xx, such as a refusal in its body,
+ *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
+ *   `sleep`, and
  *   until they are unified, `isZeroTimeoutDisabled` (a timeout of 0 or less
  *   means none) and `timeoutCoversBody` (the deadline lasts until `read`
  *   returns, not only until the headers arrive).
@@ -133,6 +136,7 @@ const requestWithRetry = async (request) => {
 
     if (signal?.aborted) throw abortReason(signal);
     if (isAccepted && request.isIdempotent !== true) {
+      if (request.isAnswer?.(failure) === true) throw failure;
       const accepted = request.wrapAccepted?.(failure, attempt + 1) ?? failure;
       throw markDeliveryUnknown(accepted);
     }

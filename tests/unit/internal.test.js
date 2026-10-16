@@ -97,6 +97,17 @@ test('Internal: a failure after a 2xx is not retried and is of unknown delivery'
   assert.strictEqual(wrapping.message, 'wrapped');
   assert.strictEqual(isDeliveryUnknown(wrapping), true);
 
+  const refusal = new RejectedError('Refused in the body.');
+  const answered = scripted([new Response('{}')], {
+    read: async () => {
+      throw refusal;
+    },
+    isAnswer: (failure) => failure instanceof RejectedError,
+  });
+  const answer = await requestWithRetry(answered.request).catch((caught) => caught);
+  assert.strictEqual(answer, refusal);
+  assert.strictEqual(isDeliveryUnknown(answer), false);
+
   const idempotent = scripted([unreadable, new Response('ok')], { isIdempotent: true });
   assert.strictEqual(await requestWithRetry(idempotent.request), 'ok');
   assert.strictEqual(idempotent.sends(), 2);

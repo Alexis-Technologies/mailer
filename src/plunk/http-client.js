@@ -1,9 +1,8 @@
 // Ported from upyo v0.7.0 (packages/plunk/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
 
 /**
  * Error thrown when a Plunk API request fails.
@@ -70,74 +69,49 @@ class PlunkHttpClient {
    * @returns Promise that resolves to Plunk API response
    * @throws PlunkError if the request fails after all retries
    */
-  async sendMessage(emailData, signal) {
+  sendMessage(emailData, signal) {
     const url = `${this.config.baseUrl}/v1/send`;
 
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      signal?.throwIfAborted();
-
-      let isAccepted = false;
-      try {
-        const response = await this.makeRequest(url, emailData, signal);
-        isAccepted = response.ok;
-        return await this.parseResponse(response);
-      } catch (error) {
-        if (isCallerAbort(error, signal)) {
-          throw error;
+    return requestWithRetry({
+      signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      isZeroTimeoutDisabled: true,
+      send: (attemptSignal) => this.makeRequest(url, emailData, attemptSignal),
+      read: (response) => this.parseResponse(response),
+      reject: async (response, attempt) => {
+        let errorBody;
+        try {
+          errorBody = await response.text();
+        } catch {
+          errorBody = 'Failed to read error response';
         }
 
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // A 2xx means Plunk took the request: sending it again could deliver
-        // the message twice.  Its explicit refusal (success: false) is a
-        // failure of its own; anything else that fails after it is unknown.
-        if (isAccepted) {
-          throw lastError instanceof PlunkApiError ? lastError : markDeliveryUnknown(lastError);
-        }
-
-        // Don't retry on client errors (4xx) or AbortError
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw error;
-        }
-
-        if (
-          error instanceof PlunkApiError &&
-          error.statusCode !== undefined &&
-          error.statusCode >= 400 &&
-          error.statusCode < 500
-        ) {
-          throw new PlunkApiError(
-            error.message,
-            error.statusCode,
-            error.retryAfterMilliseconds,
-            attempt + 1,
-          );
-        }
-
-        // If this was the last attempt, throw the error
-        if (attempt === this.config.retries) {
-          break;
-        }
-
-        // Wait before retrying (exponential backoff)
-        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-        await this.sleep(delay);
-      }
-    }
-
-    // All retries failed
-    const errorMessage = lastError?.message ?? 'Unknown error occurred';
-    if (lastError instanceof PlunkApiError) {
-      throw new PlunkApiError(
-        lastError.message,
-        lastError.statusCode,
-        lastError.retryAfterMilliseconds,
-        this.config.retries + 1,
-      );
-    }
-    throw new PlunkApiError(errorMessage, undefined, undefined, this.config.retries + 1);
+        return new PlunkApiError(
+          `HTTP ${response.status}: ${response.statusText}. ${truncateErrorBody(errorBody)}`,
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        );
+      },
+      createTimeoutError: () =>
+        new Error(`Plunk API request timed out after ${this.config.timeout} ms.`),
+      // Plunk refusing in a 200 (success: false) is a failure of its own.
+      isAnswer: (error) => error instanceof PlunkApiError,
+      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
+      retryDelayMs: (attempt) => Math.min(exponentialDelayMs(attempt), 10000),
+      finalError: (error, attempts) =>
+        error instanceof PlunkApiError
+          ? new PlunkApiError(
+              error.message,
+              error.statusCode,
+              error.retryAfterMilliseconds,
+              attempts,
+            )
+          : new PlunkApiError(error.message, undefined, undefined, attempts),
+      // Upstream's wait ignores the signal (CLAUDE.md, known upstream bugs).
+      sleep: (milliseconds) => this.sleep(milliseconds),
+    });
   }
 
   /**
@@ -148,57 +122,19 @@ class PlunkHttpClient {
    * @param signal - Optional AbortSignal for cancellation
    * @returns Promise that resolves to the Response object
    */
-  async makeRequest(url, emailData, signal) {
+  makeRequest(url, emailData, signal) {
     const headers = {
       Authorization: `Bearer ${this.config.apiKey}`,
       'Content-Type': 'application/json',
       ...this.config.headers,
     };
 
-    const timeoutController = new AbortController();
-    const timeoutId =
-      this.config.timeout > 0
-        ? setTimeout(() => timeoutController.abort(), this.config.timeout)
-        : undefined;
-    const combinedSignal = combineSignals(timeoutController.signal, signal);
-
-    let response;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(emailData),
-        signal: combinedSignal.signal,
-      });
-    } catch (error) {
-      if (isAbortError(error) && timeoutController.signal.aborted && !signal?.aborted) {
-        // oxlint-disable-next-line preserve-caught-error -- upstream
-        throw new Error(`Plunk API request timed out after ${this.config.timeout} ms.`);
-      }
-      throw error;
-    } finally {
-      combinedSignal.cleanup();
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-
-    if (!response.ok) {
-      let errorBody;
-      try {
-        errorBody = await response.text();
-      } catch {
-        errorBody = 'Failed to read error response';
-      }
-
-      throw new PlunkApiError(
-        `HTTP ${response.status}: ${response.statusText}. ${truncateErrorBody(errorBody)}`,
-        response.status,
-        parseRetryAfter(response.headers.get('Retry-After')),
-      );
-    }
-
-    return response;
+    return fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(emailData),
+      signal,
+    });
   }
 
   /**
@@ -257,13 +193,8 @@ class PlunkHttpClient {
   }
 }
 
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
+const isClientError = (error) =>
+  error instanceof PlunkApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 const truncateErrorBody = (text) => {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
