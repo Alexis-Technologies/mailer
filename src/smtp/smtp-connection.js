@@ -3,7 +3,7 @@
 
 const { prepareRawSmtpStream, Smtp8BitMimeUnsupportedError } = require('./raw-message.js');
 const { Buffer } = require('node:buffer');
-const { Socket } = require('node:net');
+const { isIP, Socket } = require('node:net');
 const { StringDecoder } = require('node:string_decoder');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
 const { createSmtpConfig } = require('./config.js');
@@ -231,6 +231,12 @@ const parseSizeCapability = (capability) => {
  */
 const QUIT_TIMEOUT_MS = 5000;
 
+// The name a TLS client sends for SNI (RFC 6066 §3): the host without a final
+// dot, and none for an IP address, which SNI does not carry.  Node sends none
+// unless it is given, so a server with a certificate per name could only
+// answer with its default one.
+const serverNameOf = (host) => (isIP(host) === 0 ? host.replace(/\.$/, '') : undefined);
+
 /**
  * Whether the SMTP connection is local enough to permit cleartext
  * authentication during development.
@@ -319,6 +325,7 @@ class SmtpConnection {
         if (this.config.secure) {
           this.socket = tlsConnect({
             host: this.config.host,
+            servername: serverNameOf(this.config.host),
             port: this.config.port,
             rejectUnauthorized: this.config.tls?.rejectUnauthorized ?? true,
             ca: this.config.tls?.ca,
@@ -648,6 +655,7 @@ class SmtpConnection {
     const tlsSocket = tlsConnect({
       socket: plainSocket,
       host: this.config.host,
+      servername: serverNameOf(this.config.host),
       rejectUnauthorized: this.config.tls?.rejectUnauthorized ?? true,
       ca: this.config.tls?.ca,
       key: this.config.tls?.key,

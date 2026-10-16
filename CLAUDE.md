@@ -300,6 +300,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     the one rule (`localhost`, `*.localhost`, 127.0.0.0/8 and `::1`, also IPv4-mapped, on
     `net.BlockList`) for SMTP, OAuth 2.0 and the HTTP providers, in place of SMTP's own IPv4
     and IPv6 parsers.
+55. smtp: implicit TLS and STARTTLS sent no SNI, as Node sends none without `servername`, so
+    a server with a certificate per name answered with its default one, and a user was pushed
+    towards `rejectUnauthorized: false`. Both send the host (without a final dot, and nothing
+    for an IP address).
 
 ## Repository layout
 

@@ -457,3 +457,72 @@ test('SMTP: capabilities are looked up by keyword, rebuilt when replaced', () =>
   assert.strictEqual(connection.hasCapability('PIPELINING'), false);
   assert.strictEqual(connection.hasCapability('STARTTLS'), true);
 });
+
+test('SMTP: implicit TLS and STARTTLS send the host name for SNI, and no IP address', async () => {
+  const { readFileSync } = require('node:fs');
+  const path = require('node:path');
+  const tls = require('node:tls');
+  const credentials = {
+    key: readFileSync(path.join(__dirname, '../fixtures/smtp/server-key.pem')),
+    cert: readFileSync(path.join(__dirname, '../fixtures/smtp/server-cert.pem')),
+  };
+  const names = [];
+  // Answers EHLO and QUIT over a socket that is already secure or upgrades.
+  const serve = (socket, secure) => {
+    socket.on('error', () => {});
+    if (!secure) socket.write('220 ready\r\n');
+    let buffer = '';
+    const onData = (chunk) => {
+      buffer += chunk.toString('latin1');
+      let end;
+      while ((end = buffer.indexOf('\r\n')) >= 0) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        if (line.startsWith('EHLO')) {
+          socket.write(secure ? '250 ready\r\n' : '250-ready\r\n250 STARTTLS\r\n');
+        } else if (line === 'STARTTLS') {
+          socket.off('data', onData);
+          socket.write('220 go ahead\r\n');
+          const upgraded = new tls.TLSSocket(socket, {
+            isServer: true,
+            secureContext: tls.createSecureContext(credentials),
+          });
+          upgraded.on('secure', () => names.push(upgraded.servername));
+          serve(upgraded, true);
+          return;
+        } else if (line === 'QUIT') {
+          socket.end('221 bye\r\n');
+        }
+      }
+    };
+    socket.on('data', onData);
+  };
+  const implicit = tls.createServer(credentials, (socket) => {
+    names.push(socket.servername);
+    socket.write('220 ready\r\n');
+    serve(socket, true);
+  });
+  const starttls = createServer((socket) => serve(socket, false));
+  for (const server of [implicit, starttls]) {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  }
+  try {
+    for (const host of ['localhost', 'localhost.', '127.0.0.1']) {
+      for (const server of [implicit, starttls]) {
+        const transport = new SmtpTransport({
+          host,
+          port: server.address().port,
+          secure: server === implicit,
+          tls: { rejectUnauthorized: false },
+        });
+        await transport.verify();
+        await transport.closeAllConnections();
+      }
+    }
+  } finally {
+    for (const server of [implicit, starttls]) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+  assert.deepStrictEqual(names, ['localhost', 'localhost', 'localhost', 'localhost', false, false]);
+});

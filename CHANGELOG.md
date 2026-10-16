@@ -193,6 +193,10 @@ fixed ones below.
   could use plain `http:` only to `localhost`, `127.0.0.1` and `::1`, while SMTP AUTH without TLS
   allowed any loopback host. Both, and the HTTP providers, now take `localhost`, a name under
   `.localhost`, 127.0.0.0/8 and `::1`, also as an IPv4-mapped address.
+- **`./smtp` sends the host name for SNI** (an upstream bug): neither implicit TLS nor STARTTLS
+  passed `servername`, and Node sends no SNI without it, so a server that picks its certificate
+  by name answered with its default one, which then failed verification. Both send the host,
+  and nothing for an IP address.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

@@ -606,6 +606,9 @@ Setting `secure: true` establishes a TLS connection from the start,
 while `rejectUnauthorized: true` ensures certificate validation.
 You can specify custom certificate authorities, client certificates,
 and acceptable TLS versions based on your security requirements.
+Both implicit TLS and STARTTLS send the host name for SNI, so a server with a
+certificate per name answers with the one for `host`; a host given as an IP
+address sends none, as SNI carries only names.
 
 ### STARTTLS support
 
