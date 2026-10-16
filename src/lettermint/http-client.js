@@ -1,9 +1,8 @@
 // Ported from upyo v0.7.0 (packages/lettermint/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
 
 /**
  * Lettermint API error class for API-specific failures.
@@ -99,27 +98,15 @@ class LettermintHttpClient {
     return this.makeRequest(url, messagesData, signal, idempotencyKey);
   }
 
-  async makeRequest(url, body, signal, idempotencyKey) {
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      signal?.throwIfAborted();
-
-      let isAccepted = false;
-      try {
-        const response = await this.fetchWithAuth(url, body, signal, idempotencyKey);
-        isAccepted = response.ok;
+  makeRequest(url, body, signal, idempotencyKey) {
+    return requestWithRetry({
+      signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      isZeroTimeoutDisabled: true,
+      send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal, idempotencyKey),
+      read: async (response) => {
         const text = await response.text();
-
-        if (!response.ok) {
-          throw new LettermintApiError(
-            parseErrorMessage(text, response.status),
-            response.status,
-            parseRetryAfter(response.headers.get('Retry-After')),
-            attempt + 1,
-          );
-        }
-
         try {
           return JSON.parse(text);
         } catch (error) {
@@ -129,33 +116,25 @@ class LettermintHttpClient {
             }.`,
           );
         }
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // A 2xx means the provider took the request: sending it again could
-        // deliver the message twice, so what fails after it is not retried.
-        if (isAccepted && !signal?.aborted) throw markDeliveryUnknown(lastError);
-
-        if (error instanceof LettermintApiError && !isRetryable(error)) {
-          throw error;
-        }
-
-        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) {
-          throw error;
-        }
-
-        if (attempt === this.config.retries) {
-          throw withAttempts(lastError, attempt + 1);
-        }
-
-        await sleep(calculateRetryDelay(attempt), signal);
-      }
-    }
-
-    throw lastError ?? new Error('Request failed after all retry attempts.');
+      },
+      reject: async (response, attempt) =>
+        new LettermintApiError(
+          parseErrorMessage(await response.text(), response.status),
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        ),
+      createTimeoutError: () => new LettermintTimeoutError(this.config.timeout),
+      isRetryable: (error) => !(error instanceof LettermintApiError) || isRetryable(error),
+      retryDelayMs: jitteredDelayMs,
+      finalError: withAttempts,
+      // Upstream's wait rejects with an AbortError of its own rather than the
+      // caller's reason.
+      sleep,
+    });
   }
 
-  async fetchWithAuth(url, body, signal, idempotencyKey) {
+  fetchWithAuth(url, body, signal, idempotencyKey) {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'x-lettermint-token': this.config.apiToken,
@@ -169,36 +148,12 @@ class LettermintHttpClient {
       headers.set(key, value);
     }
 
-    const timeoutController = new AbortController();
-    const timeoutId =
-      this.config.timeout > 0
-        ? setTimeout(() => timeoutController.abort(), this.config.timeout)
-        : undefined;
-    const requestSignal = combineSignals(timeoutController.signal, signal);
-
-    try {
-      return await globalThis.fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: requestSignal.signal,
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.name === 'AbortError' &&
-        timeoutController.signal.aborted &&
-        !signal?.aborted
-      ) {
-        throw new LettermintTimeoutError(this.config.timeout);
-      }
-      throw error;
-    } finally {
-      requestSignal.cleanup();
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
+    return globalThis.fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
   }
 }
 
@@ -214,11 +169,6 @@ const withAttempts = (error, attempts) => {
 
 const isRetryable = (error) => {
   return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
-};
-
-const calculateRetryDelay = (attempt) => {
-  const baseDelay = Math.min(1000 * Math.pow(2, attempt), 10000);
-  return Math.round(baseDelay / 2 + Math.random() * (baseDelay / 2));
 };
 
 const parseErrorMessage = (text, statusCode) => {
