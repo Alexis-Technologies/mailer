@@ -283,6 +283,10 @@ class SmtpConnection {
 
     signal?.throwIfAborted();
 
+    // Implicit TLS is established once its handshake completes, not when the
+    // TCP connection opens, so the connection timeout covers the handshake.
+    const establishedEvent = this.config.secure ? 'secureConnect' : 'connect';
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         onError(new TypeError('Connection timeout.'));
@@ -291,7 +295,7 @@ class SmtpConnection {
 
       const cleanup = () => {
         clearTimeout(timeout);
-        this.socket?.off('connect', onConnect);
+        this.socket?.off(establishedEvent, onConnect);
         this.socket?.off('error', onError);
         this.socket?.off('close', onClose);
         this.socket?.off('timeout', onTimeout);
@@ -341,7 +345,7 @@ class SmtpConnection {
 
         this.socket.setTimeout(this.config.socketTimeout);
         this.observeSocket(this.socket);
-        this.socket.once('connect', onConnect);
+        this.socket.once(establishedEvent, onConnect);
         this.socket.once('error', onError);
         this.socket.once('close', onClose);
         this.socket.once('timeout', onTimeout);

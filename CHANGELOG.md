@@ -197,6 +197,10 @@ fixed ones below.
   passed `servername`, and Node sends no SNI without it, so a server that picks its certificate
   by name answered with its default one, which then failed verification. Both send the host,
   and nothing for an IP address.
+- **`./smtp` waits for the TLS handshake of `secure: true`** (an upstream bug): the connection
+  counted as made when TCP connected, so `connectionTimeout` did not cover the handshake, and a
+  server that never completed it held the send until the socket timeout. It is made once the
+  handshake completes.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

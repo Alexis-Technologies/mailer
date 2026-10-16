@@ -526,3 +526,47 @@ test('SMTP: implicit TLS and STARTTLS send the host name for SNI, and no IP addr
   }
   assert.deepStrictEqual(names, ['localhost', 'localhost', 'localhost', 'localhost', false, false]);
 });
+
+test('SMTP: implicit TLS is connected once its handshake completes, within the timeout', async () => {
+  // A server that accepts the connection and never answers the handshake.
+  const sockets = new Set();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on('error', () => {});
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const connection = new SmtpConnection({
+    host: '127.0.0.1',
+    port: server.address().port,
+    secure: true,
+    connectionTimeout: 100,
+    socketTimeout: 5000,
+  });
+  try {
+    await assert.rejects(connection.connect(), { message: 'Connection timeout.' });
+  } finally {
+    connection.socket?.destroy();
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('SMTP: an abort while waiting for the greeting rejects with its reason', async () => {
+  const { server, port } = await scripted(
+    () => {},
+    () => {},
+  );
+  const connection = new SmtpConnection({ host: '127.0.0.1', port, socketTimeout: 5000 });
+  const controller = new AbortController();
+  const reason = new Error('Stop.');
+  try {
+    await connection.connect();
+    const greeting = connection.greeting(controller.signal);
+    controller.abort(reason);
+    await assert.rejects(greeting, (error) => error === reason);
+    assert.strictEqual(connection.socket.destroyed, true);
+  } finally {
+    connection.socket?.destroy();
+    await stop(server);
+  }
+});

@@ -304,6 +304,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     a server with a certificate per name answered with its default one, and a user was pushed
     towards `rejectUnauthorized: false`. Both send the host (without a final dot, and nothing
     for an IP address).
+56. smtp: implicit TLS resolved `connect()` on the TCP `connect`, before its handshake, so the
+    connection timeout did not cover the handshake and a failed one surfaced later, while the
+    greeting was read. It resolves on `secureConnect`.
 
 ## Repository layout
 
