@@ -107,8 +107,14 @@ describe('DKIM Signing', () => {
         privateKey: TEST_DKIM_PRIVATE_KEY,
       });
 
-      // Default headers: from, to, subject, date
-      assert.ok(result.signature.includes('h=from:to:subject:date'));
+      // Changed after the port: the default signs more fields, and over-signs
+      // From, Reply-To and Subject (upstream signed from, to, subject, date).
+      assert.ok(
+        result.signature.includes(
+          'h=from:from:reply-to:reply-to:subject:subject:to:cc:date:message-id:in-reply-to:' +
+            'references:mime-version:content-type;',
+        ),
+      );
     });
 
     it('should use specified canonicalization method', async () => {

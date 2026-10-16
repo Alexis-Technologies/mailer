@@ -219,6 +219,11 @@ fixed ones below.
   instance twice, and over-signing such as `['from', 'from']` produced a signature that failed
   verification. Each name now signs the next instance from the bottom up (§5.4.2), and one with
   no instance left signs nothing, which keeps another from being added.
+- **DKIM signs the fields a reader trusts by default** (an upstream bug): the default
+  `headerFields` were From, To, Subject and Date, so a Reply-To could be added, or the Cc,
+  Message-ID or Content-Type changed, without breaking the signature. The default now also
+  covers Reply-To, Cc, Message-ID, In-Reply-To, References, MIME-Version and Content-Type, and
+  over-signs From, Reply-To and Subject.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

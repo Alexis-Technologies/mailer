@@ -17,9 +17,28 @@ const validateDkimBodyMode = (config) => {
 };
 
 /**
- * Default header fields to sign if not specified.
+ * Default header fields to sign if not specified: those a reader trusts or a
+ * client renders, present or not, since a field absent when signed cannot be
+ * added afterwards without breaking the signature.  From, Reply-To and
+ * Subject are listed once more than they can appear, so that a second
+ * instance cannot be added either (over-signing, RFC 6376 §8.15).
  */
-const DEFAULT_SIGNED_HEADERS = ['from', 'to', 'subject', 'date'];
+const DEFAULT_SIGNED_HEADERS = [
+  'from',
+  'from',
+  'reply-to',
+  'reply-to',
+  'subject',
+  'subject',
+  'to',
+  'cc',
+  'date',
+  'message-id',
+  'in-reply-to',
+  'references',
+  'mime-version',
+  'content-type',
+];
 
 /**
  * Default DKIM algorithm.

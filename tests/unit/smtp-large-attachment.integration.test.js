@@ -156,12 +156,20 @@ for (const megabytes of [8, 64]) {
               }),
           );
           assert.equal(tags.get('bh'), bodyHash.digest('base64'));
-          const selected = tags
-            .get('h')
-            .split(':')
-            .map((name) =>
-              headers.find((line) => line.toLowerCase().startsWith(name.toLowerCase() + ':')),
-            );
+          // Changed after the port: each name takes the next instance from the
+          // bottom up, and a name with none left adds nothing (RFC 6376 §5.4.2),
+          // as the default h= now lists absent and over-signed fields.
+          const used = new Set();
+          const selected = [];
+          for (const name of tags.get('h').split(':')) {
+            for (let i = headers.length - 1; i >= 0; i--) {
+              if (!used.has(i) && headers[i].toLowerCase().startsWith(`${name.toLowerCase()}:`)) {
+                used.add(i);
+                selected.push(headers[i]);
+                break;
+              }
+            }
+          }
           selected.push(signature.replace(/b=[^;]*$/, 'b='));
           assert.ok(
             verify(

@@ -108,8 +108,12 @@ export interface DkimSignature {
    */
   readonly canonicalization?: DkimCanonicalization;
   /**
-   * Header fields to include in the signature (h= tag).
-   * @default ["from", "to", "subject", "date"]
+   * Header fields to include in the signature (h= tag).  A name listed more
+   * than once signs the next instance of the field from the bottom up, and
+   * one with no instance left keeps another from being added.
+   * @default ["from", "from", "reply-to", "reply-to", "subject", "subject", "to",
+   *   "cc", "date", "message-id", "in-reply-to", "references", "mime-version",
+   *   "content-type"]
    */
   readonly headerFields?: readonly string[];
 }

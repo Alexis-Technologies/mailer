@@ -324,6 +324,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     signed that instance twice, against RFC 6376 §5.4.2, and over-signing (`h=from:from`) made
     a signature no verifier accepts. Each name in `h=` signs the next instance from the bottom
     up, and one with none left signs nothing.
+61. DKIM: the default `h=` was From, To, Subject and Date, so Reply-To, Cc, Message-ID or the
+    Content-Type could be changed or added without breaking the signature. It adds Reply-To,
+    Cc, Message-ID, In-Reply-To, References, MIME-Version and Content-Type, and over-signs
+    From, Reply-To and Subject.
 
 ## Repository layout
 

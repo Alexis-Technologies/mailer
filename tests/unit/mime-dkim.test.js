@@ -19,11 +19,35 @@ const config = (extra) => ({
   ...extra,
 });
 
-// Whether an RSA signature with relaxed header canonicalization covers exactly
-// `signed`, the relaxed form of the fields in h= order.
-const verifies = (result, signed) => {
+// Whether an RSA signature with relaxed header canonicalization verifies over
+// `wire`, the header lines a receiver sees: a small verifier of its own that
+// reads h= from the signature and takes the instances of each name from the
+// bottom up (RFC 6376 §5.4.2), with relaxed canonicalization (§3.4.2).
+const verifies = (result, wire) => {
   const signature = /(?:^|;\s*)b=([^;]+)$/.exec(result.signature)[1];
   const unsigned = result.signature.slice(0, -signature.length);
+  const names = /(?:^|;\s*)h=([^;]+);/.exec(result.signature)[1].split(':');
+  const fields = wire.map((line) => {
+    const colon = line.indexOf(':');
+    return [
+      line.slice(0, colon).trim().toLowerCase(),
+      line
+        .slice(colon + 1)
+        .replace(/\s+/g, ' ')
+        .trim(),
+    ];
+  });
+  const used = new Set();
+  const signed = [];
+  for (const name of names) {
+    for (let i = fields.length - 1; i >= 0; i--) {
+      if (fields[i][0] === name.toLowerCase() && !used.has(i)) {
+        used.add(i);
+        signed.push(`${fields[i][0]}:${fields[i][1]}`);
+        break;
+      }
+    }
+  }
   const input = [...signed, `dkim-signature:${unsigned.trim()}`].join('\r\n');
   return verify(
     'RSA-SHA256',
@@ -49,9 +73,30 @@ test('DKIM: h= signs the instances of a field from the bottom up, and over-signs
   assert.ok(
     result.signature.includes(`bh=${createHash('sha256').update('Hi\r\n').digest('base64')};`),
   );
-  // The third x-tag and the second subject have no instance left: they add nothing.
-  assert.strictEqual(
-    verifies(result, ['from:alex@example.com', 'x-tag:two', 'x-tag:one', 'subject:Hello']),
-    true,
-  );
+  const wire = ['From: alex@example.com', 'X-Tag: one', 'Subject: Hello', 'X-Tag: two'];
+  assert.strictEqual(verifies(result, wire), true);
+  // The third x-tag has no instance left, so a third cannot be added.
+  assert.strictEqual(verifies(result, [...wire, 'X-Tag: three']), false);
+});
+
+test('DKIM: by default, a forged Reply-To or a second From breaks the signature', async () => {
+  const headers = [
+    'From: alex@example.com',
+    'To: bob@example.com',
+    'Subject: Hello',
+    'Date: Thu, 01 Jan 2026 00:00:00 +0000',
+    'Message-ID: <1@example.com>',
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+  ];
+  const result = await signMessage(`${headers.join('\r\n')}\r\n\r\nHi\r\n`, config());
+  assert.strictEqual(verifies(result, headers), true);
+  // Fields a client shows, added after signing, now break the signature.
+  for (const forged of [
+    'Reply-To: eve@evil.example',
+    'From: eve@evil.example',
+    'Cc: eve@evil.example',
+  ]) {
+    assert.strictEqual(verifies(result, [forged, ...headers]), false, forged);
+  }
 });

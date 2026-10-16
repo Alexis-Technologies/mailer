@@ -725,7 +725,15 @@ Each signature in the `signatures` array can have the following options:
 | `privateKey`       | `string \| CryptoKey`              | (required)                          | Private key (PEM string or CryptoKey) |
 | `algorithm`        | `"rsa-sha256" \| "ed25519-sha256"` | `"rsa-sha256"`                      | Signing algorithm (a= tag)            |
 | `canonicalization` | `string`                           | `"relaxed/relaxed"`                 | Header/body canonicalization (c= tag) |
-| `headerFields`     | `string[]`                         | `["from", "to", "subject", "date"]` | Headers to sign (h= tag)              |
+| `headerFields`     | `string[]`                         | see below                           | Headers to sign (h= tag)              |
+
+By default the signature covers From, Reply-To, Subject, To, Cc, Date,
+Message-ID, In-Reply-To, References, MIME-Version and Content-Type, present or
+not, since a field absent when signed cannot be added afterwards without
+breaking the signature; From, Reply-To and Subject are listed twice, so that a
+second instance cannot be added either (over-signing, RFC 6376 §8.15). A name
+listed more than once in `headerFields` signs the instances of that field from
+the bottom up, as RFC 6376 §5.4.2 says.
 
 ### Using Ed25519 keys
 
