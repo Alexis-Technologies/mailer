@@ -70,13 +70,14 @@ class PlunkHttpClient {
    * @returns Promise that resolves to Plunk API response
    * @throws PlunkError if the request fails after all retries
    */
-  sendMessage(emailData, signal) {
+  sendMessage(emailData, signal, onRetry) {
     const url = `${this.config.baseUrl}/v1/send`;
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(emailData);
 
     return requestWithRetry({
       signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.makeRequest(url, json, attemptSignal),

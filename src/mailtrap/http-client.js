@@ -107,9 +107,9 @@ class MailtrapHttpClient {
    * @param signal Optional AbortSignal for cancellation.
    * @returns Promise that resolves to the Mailtrap response.
    */
-  sendMessage(messageData, signal) {
+  sendMessage(messageData, signal, onRetry) {
     const url = this.resolveUrl('send');
-    return this.makeRequest(url, messageData, signal);
+    return this.makeRequest(url, messageData, signal, onRetry);
   }
 
   /**
@@ -119,9 +119,9 @@ class MailtrapHttpClient {
    * @param signal Optional AbortSignal for cancellation.
    * @returns Promise that resolves to the Mailtrap batch response.
    */
-  sendBatch(requests, signal) {
+  sendBatch(requests, signal, onRetry) {
     const url = this.resolveUrl('batch');
-    return this.makeRequest(url, { requests }, signal);
+    return this.makeRequest(url, { requests }, signal, onRetry);
   }
 
   resolveUrl(kind) {
@@ -133,11 +133,12 @@ class MailtrapHttpClient {
     return `${baseUrl}/api/${kind}${suffix}`;
   }
 
-  makeRequest(url, body, signal) {
+  makeRequest(url, body, signal, onRetry) {
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(body);
     return requestWithRetry({
       signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.fetchWithAuth(url, json, attemptSignal),

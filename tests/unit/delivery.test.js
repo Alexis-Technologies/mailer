@@ -274,3 +274,26 @@ test('Delivery: a configured name cannot move a request to another host or path'
   }).send(message());
   assert.deepStrictEqual(paths, ['/v3/..%2F..%2Fadmin/messages', '/api/send/1%2F..%2F..%2Fadmin']);
 });
+
+test('Delivery: every HTTP provider tells onRetry of its retries', async (t) => {
+  // A 503, which is retried, then a 400, which is not; the providers run
+  // together so that their delays before the retry overlap.
+  const requests = new Map();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const key = String(url);
+    const count = (requests.get(key) ?? 0) + 1;
+    requests.set(key, count);
+    return new Response('{"message":"Busy"}', { status: count === 1 ? 503 : 400 });
+  });
+  await Promise.all(
+    providers.map(async ([name, , create]) => {
+      const events = [];
+      const receipt = await create().send(message(), { onRetry: (event) => events.push(event) });
+      assert.strictEqual(receipt.successful, false, name);
+      assert.strictEqual(events.length, 1, name);
+      assert.strictEqual(events[0].attempt, 1, name);
+      assert.ok(events[0].delayMilliseconds > 0, name);
+      assert.strictEqual(events[0].error.statusCode, 503, name);
+    }),
+  );
+});

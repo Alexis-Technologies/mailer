@@ -14,18 +14,22 @@ class SesHttpClient {
     this.config = config;
   }
 
-  sendMessage(messageData, signal) {
+  sendMessage(messageData, signal, onRetry) {
     const region = this.config.region;
     const url = `https://email.${region}.amazonaws.com/v2/email/outbound-emails`;
 
-    return this.makeRequest(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    return this.makeRequest(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messageData),
+        signal,
       },
-      body: JSON.stringify(messageData),
-      signal,
-    });
+      onRetry,
+    );
   }
 
   /**
@@ -38,9 +42,10 @@ class SesHttpClient {
    * @throws {SesApiError} If SES returns a client error or all retry attempts
    *                       are exhausted.
    */
-  makeRequest(url, options) {
+  makeRequest(url, options, onRetry) {
     return requestWithRetry({
       signal: options.signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),

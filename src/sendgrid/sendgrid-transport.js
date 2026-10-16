@@ -110,7 +110,11 @@ class SendGridTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendMessage(mailData, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        mailData,
+        options?.signal,
+        options?.onRetry,
+      );
 
       // SendGrid returns 202 for successful sends, but doesn't provide a message ID
       // in the response body. We'll generate a synthetic ID based on the response.

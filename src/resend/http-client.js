@@ -61,9 +61,10 @@ class ResendHttpClient {
    * @param messageData The JSON data to send to Resend.
    * @param signal Optional AbortSignal for cancellation.
    * @param idempotencyKey Optional idempotency key for request deduplication.
+   * @param onRetry Optional callback told of each retry.
    * @returns Promise that resolves to the Resend response.
    */
-  sendMessage(messageData, signal, idempotencyKey) {
+  sendMessage(messageData, signal, idempotencyKey, onRetry) {
     const url = `${this.config.baseUrl}/emails`;
     const headers = {
       'Content-Type': 'application/json',
@@ -73,12 +74,16 @@ class ResendHttpClient {
       headers['Idempotency-Key'] = idempotencyKey;
     }
 
-    return this.makeRequest(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(messageData),
-      signal,
-    });
+    return this.makeRequest(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(messageData),
+        signal,
+      },
+      onRetry,
+    );
   }
 
   /**
@@ -87,9 +92,10 @@ class ResendHttpClient {
    * @param messagesData Array of message data objects to send.
    * @param signal Optional AbortSignal for cancellation.
    * @param idempotencyKey Optional idempotency key for request deduplication.
+   * @param onRetry Optional callback told of each retry.
    * @returns Promise that resolves to the Resend batch response.
    */
-  sendBatch(messagesData, signal, idempotencyKey) {
+  sendBatch(messagesData, signal, idempotencyKey, onRetry) {
     const url = `${this.config.baseUrl}/emails/batch`;
     const headers = {
       'Content-Type': 'application/json',
@@ -99,12 +105,16 @@ class ResendHttpClient {
       headers['Idempotency-Key'] = idempotencyKey;
     }
 
-    return this.makeRequest(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(messagesData),
-      signal,
-    });
+    return this.makeRequest(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(messagesData),
+        signal,
+      },
+      onRetry,
+    );
   }
 
   /**
@@ -114,9 +124,10 @@ class ResendHttpClient {
    * @param options Fetch options.
    * @returns Promise that resolves to the parsed response.
    */
-  makeRequest(url, options) {
+  makeRequest(url, options, onRetry) {
     return requestWithRetry({
       signal: options.signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       // Resend answers a repeated Idempotency-Key with its first answer.

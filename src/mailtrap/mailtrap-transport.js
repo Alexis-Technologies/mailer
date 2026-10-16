@@ -90,7 +90,11 @@ class MailtrapTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendMessage(emailData, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        emailData,
+        options?.signal,
+        options?.onRetry,
+      );
 
       return responseToReceipt(response);
     } catch (error) {
@@ -150,7 +154,11 @@ class MailtrapTransport {
     try {
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendBatch(batchData, options?.signal);
+      const response = await this.httpClient.sendBatch(
+        batchData,
+        options?.signal,
+        options?.onRetry,
+      );
 
       if (response.success === false) {
         const errorMessage = formatErrors(response.errors) ?? 'Mailtrap batch request failed.';

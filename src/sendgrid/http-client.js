@@ -23,19 +23,24 @@ class SendGridHttpClient {
    *
    * @param messageData The JSON data to send to SendGrid.
    * @param signal Optional AbortSignal for cancellation.
+   * @param onRetry Optional callback told of each retry.
    * @returns Promise that resolves to the SendGrid response.
    */
-  sendMessage(messageData, signal) {
+  sendMessage(messageData, signal, onRetry) {
     const url = `${this.config.baseUrl}/mail/send`;
 
-    return this.makeRequest(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    return this.makeRequest(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messageData),
+        signal,
       },
-      body: JSON.stringify(messageData),
-      signal,
-    });
+      onRetry,
+    );
   }
 
   /**
@@ -48,9 +53,10 @@ class SendGridHttpClient {
    * @throws {SendGridApiError} If SendGrid returns a client error or all retry
    *                            attempts are exhausted.
    */
-  makeRequest(url, options) {
+  makeRequest(url, options, onRetry) {
     return requestWithRetry({
       signal: options.signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),

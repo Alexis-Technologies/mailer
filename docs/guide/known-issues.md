@@ -26,6 +26,7 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 - Resend's `Idempotency-Key` comes from `Math.random`.
 - SES: custom and threading headers are not sent.
 - Plunk: an attachment that cannot be read is left out with a `console.warn`.
+- JMAP does not report its retries through `onRetry`.
 - JMAP on Node 24: an authentication rejection (401) of a streamed request body (raw upload,
   import, raw submission) becomes a retryable network error, as Node's `fetch` reports it so.
 

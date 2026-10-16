@@ -110,7 +110,11 @@ class MailgunTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendMessage(formData, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        formData,
+        options?.signal,
+        options?.onRetry,
+      );
 
       return {
         successful: true,

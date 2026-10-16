@@ -77,6 +77,7 @@ class RetryTransport {
             reason: 'retry',
           },
           options?.signal,
+          options?.onRetry,
         );
         continue;
       }
@@ -106,6 +107,7 @@ class RetryTransport {
           reason: 'retry',
         },
         options?.signal,
+        options?.onRetry,
       );
     }
 
@@ -371,7 +373,12 @@ class RetryTransport {
     return Math.floor(random() * computedDelay);
   }
 
-  waitBeforeRetry(context, signal) {
+  waitBeforeRetry(context, signal, onRetry) {
+    onRetry?.({
+      attempt: context.attempt,
+      delayMilliseconds: context.delayMilliseconds,
+      error: context.error ?? context.receipt?.errors?.[0],
+    });
     const wait = this.config.wait;
     return wait(context, signal);
   }

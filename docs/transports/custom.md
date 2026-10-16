@@ -274,6 +274,11 @@ loops.
 > that won't be resolved by retrying. Only retry 5xx server errors and
 > network failures.
 
+A transport that retries on its own should call `options.onRetry` before each
+wait, with `{ attempt, delayMilliseconds, error }`, so that the decorators
+around it, such as `./otel`, can record the retry; and a decorator should pass
+the options of a send on to the transport it wraps.
+
 ### Configuration validation
 
 Robust configuration validation prevents runtime errors and provides clear

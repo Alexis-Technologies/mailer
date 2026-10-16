@@ -32,6 +32,9 @@ fixed ones below.
   `Retry-After`), `./otel` (spans and metrics, with the OpenTelemetry providers passed in, the
   attributes as `mailer.*`) and `./logger` (the lifecycle logged through any pino-like logger
   passed in, in place of upstream's LogTape transport); and `./mock` for tests.
+- **`onRetry` in the options of a send:** the HTTP providers and `./retry` call it before each
+  retry with the attempt, the wait and the error, and the decorators pass it on, so one callback
+  hears every level (not yet from `./jmap`).
 - **Documentation** for every subpath, adapted from upyo's guides.
 - **Package scaffold** set up like the other Alexis libraries: plain CommonJS with no build step,
   a hand-written `index.d.ts`, a closed `exports` map, Node.js 22 or newer, and zero runtime

@@ -114,7 +114,11 @@ class SesTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendMessage(sesMessage, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        sesMessage,
+        options?.signal,
+        options?.onRetry,
+      );
 
       const messageId = this.extractMessageId(response);
 

@@ -306,3 +306,18 @@ test('Internal: an ambiguous failure of a send is not retried, unless it has a k
   assert.strictEqual(read.sends(), 2);
   assert.strictEqual(isDeliveryUnknown(readError), false);
 });
+
+test('Internal: onRetry hears each retry, with its attempt, wait and error, before the wait', async () => {
+  const events = [];
+  const failure = new TypeError('fetch failed');
+  const busy = Object.assign(new Error('Busy'), { retryAfterMilliseconds: 1500 });
+  const { request, delays } = scripted([failure, busy, new Response('ok')], {
+    onRetry: (event) => events.push({ ...event, waitedBefore: delays.length }),
+  });
+  assert.strictEqual(await requestWithRetry(request), 'ok');
+  assert.deepStrictEqual(events, [
+    { attempt: 1, delayMilliseconds: 1, error: failure, waitedBefore: 0 },
+    { attempt: 2, delayMilliseconds: 1500, error: busy, waitedBefore: 1 },
+  ]);
+  assert.deepStrictEqual(delays, [1, 1500]);
+});

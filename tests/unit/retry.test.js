@@ -148,3 +148,27 @@ test('Retry: every attempt sends the same Message-ID, without changing the messa
   await new RetryTransport(base, { maxAttempts: 1 }).send(own);
   assert.strictEqual(ids[2], 'own@example.com');
 });
+
+test('Retry: onRetry hears the retries of the decorator and reaches the wrapped transport', async () => {
+  const events = [];
+  const seen = [];
+  const base = sequence(failure(true), failure(true), success);
+  const send = base.send;
+  base.send = (sent, options) => {
+    seen.push(options?.onRetry);
+    return send(sent, options);
+  };
+  const onRetry = (event) => events.push(event);
+  const transport = new RetryTransport(base, {
+    maxAttempts: 3,
+    jitter: 'none',
+    backoff: { baseDelayMilliseconds: 10, factor: 2 },
+    wait: async () => {},
+  });
+  assert.strictEqual((await transport.send(message(), { onRetry })).successful, true);
+  assert.deepStrictEqual(events, [
+    { attempt: 1, delayMilliseconds: 10, error: failure(true).errors[0] },
+    { attempt: 2, delayMilliseconds: 20, error: failure(true).errors[0] },
+  ]);
+  assert.deepStrictEqual(seen, [onRetry, onRetry, onRetry]);
+});

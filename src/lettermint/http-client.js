@@ -81,9 +81,9 @@ class LettermintHttpClient {
    * @param idempotencyKey Optional idempotency key for request deduplication.
    * @returns Promise that resolves to the Lettermint response.
    */
-  sendMessage(messageData, signal, idempotencyKey) {
+  sendMessage(messageData, signal, idempotencyKey, onRetry) {
     const url = `${this.config.baseUrl}/v1/send`;
-    return this.makeRequest(url, messageData, signal, idempotencyKey);
+    return this.makeRequest(url, messageData, signal, idempotencyKey, onRetry);
   }
 
   /**
@@ -94,16 +94,17 @@ class LettermintHttpClient {
    * @param idempotencyKey Optional idempotency key for request deduplication.
    * @returns Promise that resolves to the Lettermint batch response.
    */
-  sendBatch(messagesData, signal, idempotencyKey) {
+  sendBatch(messagesData, signal, idempotencyKey, onRetry) {
     const url = `${this.config.baseUrl}/v1/send/batch`;
-    return this.makeRequest(url, messagesData, signal, idempotencyKey);
+    return this.makeRequest(url, messagesData, signal, idempotencyKey, onRetry);
   }
 
-  makeRequest(url, body, signal, idempotencyKey) {
+  makeRequest(url, body, signal, idempotencyKey, onRetry) {
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(body);
     return requestWithRetry({
       signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       // Lettermint deduplicates a repeated Idempotency-Key.

@@ -84,16 +84,17 @@ class MailerooHttpClient {
    * @throws {MailerooApiError} If Maileroo returns an API error.
    * @throws {MailerooTimeoutError} If the request timeout elapses.
    */
-  sendMessage(messageData, signal) {
+  sendMessage(messageData, signal, onRetry) {
     const url = `${this.config.baseUrl}/emails`;
-    return this.makeRequest(url, messageData, signal);
+    return this.makeRequest(url, messageData, signal, onRetry);
   }
 
-  makeRequest(url, body, signal) {
+  makeRequest(url, body, signal, onRetry) {
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(body);
     return requestWithRetry({
       signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.fetchWithAuth(url, json, attemptSignal),

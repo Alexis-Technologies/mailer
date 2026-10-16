@@ -12,6 +12,7 @@ import {
   type RawTransport,
   type Receipt,
   type ReceiptError,
+  type RetryEvent,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -69,3 +70,23 @@ if (isRawTransport(transport)) expectType<RawTransport<'smtp'>>(transport);
 if (isVerifiableTransport(transport)) expectType<VerifiableTransport<'smtp'>>(transport);
 
 expectAssignable<TypeError>(new RawMessageValidationError('Bad line.', 'content', 12, 2));
+
+// onRetry hears each retry of a transport and of the decorators around it.
+declare const retried: Transport;
+expectType<Promise<Receipt>>(
+  retried.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 't' },
+    }),
+    {
+      onRetry: (event: RetryEvent) => {
+        expectType<number>(event.attempt);
+        expectType<number>(event.delayMilliseconds);
+        expectType<unknown>(event.error);
+      },
+    },
+  ),
+);

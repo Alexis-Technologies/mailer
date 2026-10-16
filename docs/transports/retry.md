@@ -192,6 +192,27 @@ for await (const receipt of transport.sendMany(messages)) {
 Receipts are yielded in the same order as input messages, even when later
 messages finish first.
 
+## Observing retries
+
+Pass `onRetry` in the options of a send to hear of every retry before its wait:
+those of `RetryTransport` and, since it passes the options on, those that an
+HTTP provider makes on its own (`retries`).  The event carries the attempt that
+failed, from 1, the wait in milliseconds and the error behind it: the error of
+the request for a provider, the error a send threw or the first `ReceiptError`
+of its receipt for `RetryTransport`.
+
+```js
+const receipt = await transport.send(message, {
+  onRetry: ({ attempt, delayMilliseconds, error }) => {
+    console.warn(`Attempt ${attempt} failed, retrying in ${delayMilliseconds} ms`, error);
+  },
+});
+```
+
+An error thrown by the callback rejects the send. `./otel` records these retries
+on its span and in its metrics, and the JMAP transport does not report its own
+yet.
+
 ## Composition
 
 Retry transport composes with other decorators because it preserves the

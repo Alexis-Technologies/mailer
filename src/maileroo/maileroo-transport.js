@@ -81,7 +81,11 @@ class MailerooTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendMessage(emailData, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        emailData,
+        options?.signal,
+        options?.onRetry,
+      );
 
       return responseToReceipt(response);
     } catch (error) {

@@ -125,6 +125,7 @@ class ResendTransport {
         emailData,
         options?.signal,
         idempotencyKey,
+        options?.onRetry,
       );
 
       return {
@@ -273,7 +274,12 @@ class ResendTransport {
 
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendBatch(batchData, options?.signal, idempotencyKey);
+      const response = await this.httpClient.sendBatch(
+        batchData,
+        options?.signal,
+        idempotencyKey,
+        options?.onRetry,
+      );
 
       // Yield receipt for each message
       for (const result of response.data) {

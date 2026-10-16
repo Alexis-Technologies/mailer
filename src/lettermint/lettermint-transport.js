@@ -91,6 +91,7 @@ class LettermintTransport {
         emailData,
         options?.signal,
         idempotencyKey,
+        options?.onRetry,
       );
 
       return responseToReceipt(response);
@@ -159,7 +160,12 @@ class LettermintTransport {
     try {
       options?.signal?.throwIfAborted();
 
-      const response = await this.httpClient.sendBatch(batchData, options?.signal, idempotencyKey);
+      const response = await this.httpClient.sendBatch(
+        batchData,
+        options?.signal,
+        idempotencyKey,
+        options?.onRetry,
+      );
 
       let responseIndex = 0;
       for (let index = 0; index < receipts.length; index++) {

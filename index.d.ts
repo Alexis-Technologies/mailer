@@ -1068,6 +1068,33 @@ export interface TransportOptions {
    * The abort signal to cancel the operation if needed.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Called before a request is sent again after a failure: by an HTTP
+   * provider that retries its own requests (`retries`), and by the `./retry`
+   * decorator.  The decorators pass it on to the transport they wrap, so one
+   * callback hears the retries of every level.  An error it throws rejects
+   * the send.  The JMAP transport does not call it yet.
+   */
+  readonly onRetry?: (event: RetryEvent) => void;
+}
+/**
+ * A retry about to happen, as {@link TransportOptions.onRetry} is told of it.
+ */
+export interface RetryEvent {
+  /**
+   * The attempt that failed, from 1.
+   */
+  readonly attempt: number;
+  /**
+   * How long the transport waits before the next attempt, in milliseconds.
+   */
+  readonly delayMilliseconds: number;
+  /**
+   * Why: the error of the failed request, such as the API error of a provider
+   * with its `statusCode`, or, from `./retry`, the error a send threw or the
+   * first `ReceiptError` of the receipt it returned.
+   */
+  readonly error: unknown;
 }
 /**
  * Optional capability for delivering already serialized MIME messages.

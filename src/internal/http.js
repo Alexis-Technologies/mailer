@@ -136,7 +136,8 @@ const startDeadline = (timeoutMs, signal) => {
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `hasIdempotencyKey`,
- *   `isIdempotent`, `sleep`.
+ *   `isIdempotent`, `sleep`, and `onRetry(event)`, the `onRetry` of the
+ *   caller's `TransportOptions`, told of each retry before its wait.
  * The deadline of an attempt lasts until its response is read, body
  * included, so a body that never ends cannot hold a send.  Between attempts
  * it waits at least the failure's `retryAfterMilliseconds`, the server's
@@ -191,8 +192,12 @@ const requestWithRetry = async (request) => {
     if (attempt >= request.retries || retryAfterMs > MAX_RETRY_AFTER_WAIT_MS) {
       throw settle(request.finalError?.(failure, attempt + 1) ?? failure);
     }
-    const delayMs = (request.retryDelayMs ?? jitteredDelayMs)(attempt, failure);
-    await wait(Math.max(delayMs, retryAfterMs), signal);
+    const waitMs = Math.max(
+      (request.retryDelayMs ?? jitteredDelayMs)(attempt, failure),
+      retryAfterMs,
+    );
+    request.onRetry?.({ attempt: attempt + 1, delayMilliseconds: waitMs, error: failure });
+    await wait(waitMs, signal);
   }
 };
 

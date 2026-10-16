@@ -24,17 +24,22 @@ class MailgunHttpClient {
    *
    * @param formData The form data to send to Mailgun.
    * @param signal Optional AbortSignal for cancellation.
+   * @param onRetry Optional callback told of each retry.
    * @returns Promise that resolves to the Mailgun response.
    */
-  sendMessage(formData, signal) {
+  sendMessage(formData, signal, onRetry) {
     // The domain is a path segment: encoded, it cannot climb the path.
     const url = `${this.config.baseUrl}/${encodeURIComponent(this.config.domain)}/messages`;
 
-    return this.makeRequest(url, {
-      method: 'POST',
-      body: formData,
-      signal,
-    });
+    return this.makeRequest(
+      url,
+      {
+        method: 'POST',
+        body: formData,
+        signal,
+      },
+      onRetry,
+    );
   }
 
   /**
@@ -46,9 +51,10 @@ class MailgunHttpClient {
    * @throws {MailgunApiError} If Mailgun returns an error response or all
    *                           retry attempts are exhausted.
    */
-  makeRequest(url, options) {
+  makeRequest(url, options, onRetry) {
     return requestWithRetry({
       signal: options.signal,
+      onRetry,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),
