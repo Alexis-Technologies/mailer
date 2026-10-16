@@ -307,8 +307,14 @@ const getStringProperty = (value, property) => {
   return propertyValue == null ? undefined : String(propertyValue);
 };
 
+// Copies the defined fields of an object literal in one pass, without the
+// entry arrays of Object.entries and Object.fromEntries.
 const omitUndefined = (value) => {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+  const result = {};
+  for (const key in value) {
+    if (value[key] !== undefined) result[key] = value[key];
+  }
+  return result;
 };
 
 module.exports = {
