@@ -68,7 +68,7 @@ describe('RetryTransport', () => {
     assert.equal(waits.length, 0);
   });
 
-  it('uses capped Retry-After metadata before computed backoff', async () => {
+  it('returns a Retry-After beyond the maximum delay rather than retrying early', async () => {
     const delays = [];
     const base = new SequenceTransport([
       createFailedReceipt(
@@ -93,9 +93,40 @@ describe('RetryTransport', () => {
       },
     });
 
-    await transport.send(message());
+    const receipt = await transport.send(message());
 
-    assert.deepEqual(delays, [2_000]);
+    // Changed after the port: upstream capped the 5 s Retry-After at the
+    // 2 s maximum delay and retried early; the receipt now goes back with it.
+    assert.deepEqual(delays, []);
+    assert.equal(receipt.successful, false);
+    assert.equal(receipt.attempts, 1);
+    assert.equal(receipt.errors?.[0]?.retryAfterMilliseconds, 5_000);
+  });
+
+  it('uses Retry-After metadata within the maximum delay before computed backoff', async () => {
+    const delays = [];
+    const base = new SequenceTransport([
+      createFailedReceipt(
+        createReceiptError('Rate limited', {
+          provider: 'base',
+          statusCode: 429,
+          retryAfterMilliseconds: 1_500,
+        }),
+      ),
+      { successful: true, messageId: 'delivered' },
+    ]);
+    const transport = createRetryTransport(base, {
+      maxAttempts: 2,
+      backoff: { baseDelayMilliseconds: 100, maxDelayMilliseconds: 2_000 },
+      jitter: false,
+      wait: (context) => {
+        delays.push(context.delayMilliseconds);
+        return Promise.resolve();
+      },
+    });
+
+    assert.equal((await transport.send(message())).successful, true);
+    assert.deepEqual(delays, [1_500]);
   });
 
   it('preserves zero Retry-After metadata', async () => {

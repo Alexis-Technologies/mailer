@@ -20,7 +20,8 @@ export interface BackoffConfig {
    */
   readonly baseDelayMilliseconds?: number;
   /**
-   * Maximum computed delay, in milliseconds.
+   * Maximum computed delay, in milliseconds.  A `Retry-After` longer than it
+   * is not retried sooner: the failure is returned with its delay.
    *
    * @default 30000
    */

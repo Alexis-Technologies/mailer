@@ -59,7 +59,11 @@ class RetryTransport {
         options?.signal?.throwIfAborted();
 
         lastThrownError = error;
-        if (attempt >= this.config.maxAttempts || !this.shouldRetryError(error)) {
+        if (
+          attempt >= this.config.maxAttempts ||
+          !this.shouldRetryError(error) ||
+          this.isRetryAfterBeyondMaxDelay(toReceiptError(error))
+        ) {
           return this.createThrownFailure(error, attempt);
         }
 
@@ -84,7 +88,11 @@ class RetryTransport {
       }
 
       const failedReceipt = this.withFailureMetadata(receipt, attempt);
-      if (attempt >= this.config.maxAttempts || !this.shouldRetryReceipt(failedReceipt)) {
+      if (
+        attempt >= this.config.maxAttempts ||
+        !this.shouldRetryReceipt(failedReceipt) ||
+        this.isRetryAfterBeyondMaxDelay(failedReceipt)
+      ) {
         return failedReceipt;
       }
 
@@ -326,6 +334,17 @@ class RetryTransport {
 
   hasRetryableError(errors) {
     return errors?.some((error) => error.retryable) ?? false;
+  }
+
+  // A server that asks to wait longer than the longest delay is not asked
+  // again sooner, where it would most likely refuse again: the failure goes
+  // back with its delay, for the caller or a queue to schedule.
+  isRetryAfterBeyondMaxDelay(failure) {
+    const retryAfterMilliseconds = getRetryAfterMilliseconds(failure);
+    return (
+      Number.isFinite(retryAfterMilliseconds) &&
+      retryAfterMilliseconds > this.config.backoff.maxDelayMilliseconds
+    );
   }
 
   calculateDelay(attempt, failure) {

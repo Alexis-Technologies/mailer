@@ -120,8 +120,10 @@ Computed retry delays use exponential backoff:
   computed delays.
 
 - `Retry-After`: When a structured receipt error includes `retryAfterMilliseconds`, retry
-  transport uses that provider-supplied delay before computed backoff.  The
-  delay is still capped by `maxDelayMilliseconds`.
+  transport uses that provider-supplied delay before computed backoff.  When it
+  is longer than `maxDelayMilliseconds`, the transport does not retry sooner,
+  where the provider would most likely refuse again: it returns the failed
+  receipt at once, with its delay, for the caller or a queue to schedule.
 
 Tests or host environments can replace waiting by passing a custom `wait`
 function:

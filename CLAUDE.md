@@ -213,6 +213,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     clients, and waited for without a bound by mailtrap and maileroo. `requestWithRetry` waits
     at least `retryAfterMilliseconds` between attempts, and when it is over 30 seconds throws
     the failure with it instead, for the caller or a queue to schedule.
+31. retry: a `Retry-After` longer than `maxDelayMilliseconds` was cut to it, so the retry came
+    sooner than the server asked and most likely met the same 429. The receipt is returned at
+    once instead.
 
 ## Repository layout
 

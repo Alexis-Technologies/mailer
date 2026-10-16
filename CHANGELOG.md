@@ -126,6 +126,9 @@ fixed ones below.
   and retried after their own backoff anyway, while `./mailtrap` and `./maileroo` waited for it
   however long it was. A longer one is no longer waited for within the send: the failure is
   returned at once with its `retryAfterMilliseconds`.
+- **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
+  longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
+  limit. The failed receipt is returned at once, with its delay.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
