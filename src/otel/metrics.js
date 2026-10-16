@@ -21,6 +21,7 @@ class MetricsCollector {
   // Counters
   attemptCounter;
   messageCounter;
+  retryCounter;
 
   // Histograms
   durationHistogram;
@@ -42,6 +43,11 @@ class MetricsCollector {
 
     this.messageCounter = this.meter.createCounter(`${config.prefix}_email_messages_total`, {
       description: 'Messages a transport returned a receipt for, by priority and status',
+      unit: '1',
+    });
+
+    this.retryCounter = this.meter.createCounter(`${config.prefix}_email_retries_total`, {
+      description: 'Requests the wrapped transport sent again after a failure',
       unit: '1',
     });
 
@@ -146,6 +152,14 @@ class MetricsCollector {
       ...labels,
       operation: 'batch',
     });
+  }
+
+  /**
+   * Records a retry of the wrapped transport, with the category of the
+   * failure it retries.
+   */
+  recordRetry(transport, errorType) {
+    this.retryCounter.add(1, { transport, error_type: errorType });
   }
 
   /**

@@ -33,5 +33,3 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 ## Decorators
 
 - `./pool`: `continueOnSuccess` is never read.
-- `./otel`: `recordRetry` is never called, so a span does not show the retries of the transport
-  it wraps.

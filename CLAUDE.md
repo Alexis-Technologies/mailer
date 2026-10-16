@@ -116,7 +116,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   over lines in a test goes through a variable (`no-unexpected-multiline`).
 - **Coverage keeps the gates of the package.** Paths that upstream reached only end to end get flat
   suites against fakes (`tests/unit/<subpath>.test.js`); `/* c8 ignore */` marks only code that is
-  dead upstream (`convertMessagesToBulk`, `recordRetry`) or unreachable on Node, each with its
+  dead upstream (`convertMessagesToBulk`) or unreachable on Node, each with its
   reason. Upstream tests of a runtime without `AbortSignal.any` are left out with a comment.
 - Ported test suites keep upstream's `describe`/`it`, so they can be compared with upyo's; new
   suites use the flat style of "Testing notes". Tests for paths that upstream's suites leave out go
@@ -133,7 +133,10 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
-8. otel (partly fixed, see 44, 45 and 48 to 51): `recordRetry` is never called.
+8. (fixed, see 44, 45 and 48 to 52) otel: `_active_sends` was not decremented after `sendMany`
+   and drifted under sampling; `durationBuckets` and `auto` were ignored; `recordRetry` was
+   never called; `sendMany` buffered its whole input; `defaultErrorClassifier` matched `"auth"`
+   as a substring.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
@@ -285,6 +288,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     them, pairs each receipt with the oldest message still waiting for one, sets the batch
     attributes of its span at the end, and keeps the first ten error messages of a failed batch
     with the count of all.
+52. otel: `recordRetry` was never called, since nothing told the decorator of a retry. The
+    wrapped transport now reports its retries through `onRetry` of `TransportOptions`; the
+    decorator records each on the span (`mailer.retry.count` and a `retry` event), counts it
+    in `mailer_email_retries_total`, and passes it on to the caller's `onRetry`.
 
 ## Repository layout
 

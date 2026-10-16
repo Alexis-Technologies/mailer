@@ -85,6 +85,7 @@ class TracingCollector {
 class LiveEmailSpan {
   span;
   attributeExtractor;
+  retryCount = 0;
 
   constructor(span, attributeExtractor) {
     this.span = span;
@@ -120,11 +121,14 @@ class LiveEmailSpan {
     });
   }
 
-  // Dead upstream: nothing calls recordRetry (CLAUDE.md, known upstream bugs).
-  /* c8 ignore start */
+  /**
+   * Records a retry of the wrapped transport, at any level: the count is of
+   * every retry the operation heard, the attempt that of the level retrying.
+   */
   recordRetry(attempt, reason) {
+    this.retryCount++;
     this.span.setAttributes({
-      'mailer.retry.count': attempt,
+      'mailer.retry.count': this.retryCount,
     });
 
     this.span.addEvent('retry', {
@@ -132,7 +136,6 @@ class LiveEmailSpan {
       ...(reason && { 'retry.reason': reason }),
     });
   }
-  /* c8 ignore stop */
 
   recordSuccess(messageId) {
     this.span.setStatus({ code: SPAN_STATUS_OK });
@@ -187,10 +190,7 @@ class NoOpEmailSpan {
   addEvent() {}
   setAttributes() {}
   recordError() {}
-  // Dead upstream: nothing calls recordRetry.
-  /* c8 ignore start */
   recordRetry() {}
-  /* c8 ignore stop */
   recordSuccess() {}
   recordFailure() {}
   recordBatchTotals() {}

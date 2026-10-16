@@ -216,6 +216,10 @@ fixed ones below.
   held it all in memory. The messages now pass on as the wrapped transport reads them; the batch
   attributes and the custom attributes of the span are set when the batch ends, and the span of
   a failed batch keeps its first ten error messages with the count of all.
+- **`./otel` records the retries of the transport it wraps** (an upstream bug): `recordRetry`
+  was never called. Through the new `onRetry`, each retry of the wrapped transport or of a
+  `./retry` inside it now adds a `retry` event and to `mailer.retry.count` on the span, and to
+  a new counter of retries, and still reaches the caller's own `onRetry`.
 
 ### Changed
 

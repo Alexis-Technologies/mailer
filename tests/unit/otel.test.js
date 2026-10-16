@@ -313,3 +313,53 @@ test('OTel: a failed batch keeps its first error messages and counts them all', 
   assert.strictEqual(JSON.parse(failed.attributes['error.messages']).length, 10);
   assert.strictEqual(span.attributes['email.error.count'], 25);
 });
+
+test('OTel: the retries of the wrapped transport reach the span, the metrics and onRetry', async () => {
+  const busy = Object.assign(new Error('Service Unavailable'), { statusCode: 503 });
+  const retrying = plain({});
+  retrying.send = async (_message, options) => {
+    options.onRetry({ attempt: 1, delayMilliseconds: 10, error: busy });
+    options.onRetry({ attempt: 2, delayMilliseconds: 20, error: busy });
+    return { successful: true, messageId: 'm1' };
+  };
+  retrying.sendMany = async function* (messages, options) {
+    for await (const message of messages) yield await retrying.send(message, options);
+  };
+  const { tracerProvider, meterProvider } = providers();
+  const transport = new OpenTelemetryTransport(retrying, { tracerProvider, meterProvider });
+  const heard = [];
+  const onRetry = (event) => heard.push(event.attempt);
+  await transport.send(createTestMessage(), { onRetry });
+  await collect(transport.sendMany([createTestMessage()], { onRetry }));
+
+  assert.deepStrictEqual(heard, [1, 2, 1, 2]);
+  for (const span of tracerProvider.getAllSpans()) {
+    assert.strictEqual(span.attributes['mailer.retry.count'], 2);
+    const retries = span.events.filter((event) => event.name === 'retry');
+    assert.deepStrictEqual(
+      retries.map((event) => event.attributes),
+      [
+        { 'retry.attempt': 1, 'retry.reason': 'service-unavailable' },
+        { 'retry.attempt': 2, 'retry.reason': 'service-unavailable' },
+      ],
+    );
+  }
+  const retries = meterProvider
+    .getAllRecords()
+    .find((metric) => metric.name === 'mailer_email_retries_total');
+  assert.strictEqual(retries.records.length, 4);
+  assert.deepStrictEqual(retries.records[0].attributes, {
+    transport: 'unknown',
+    error_type: 'service-unavailable',
+  });
+
+  // A span sampled out records nothing, and the retries still reach onRetry.
+  const unsampled = providers();
+  heard.length = 0;
+  await new OpenTelemetryTransport(retrying, {
+    ...unsampled,
+    tracing: { samplingRate: 0 },
+  }).send(createTestMessage(), { onRetry });
+  assert.deepStrictEqual(heard, [1, 2]);
+  assert.deepStrictEqual(unsampled.tracerProvider.getAllSpans(), []);
+});

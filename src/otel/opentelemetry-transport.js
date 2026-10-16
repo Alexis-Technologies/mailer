@@ -150,7 +150,10 @@ class OpenTelemetryTransport {
       }
 
       // Delegate to wrapped transport
-      const receipt = await this.wrappedTransport.send(message, options);
+      const receipt = await this.wrappedTransport.send(
+        message,
+        this.withRetryRecording(options, span),
+      );
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
       this.metricsCollector?.recordMessageOutcome(
         this.transportName,
@@ -230,7 +233,8 @@ class OpenTelemetryTransport {
     let errorMessageCount = 0;
 
     try {
-      for await (const receipt of this.wrappedTransport.sendMany(observed, options)) {
+      const sendOptions = this.withRetryRecording(options, span);
+      for await (const receipt of this.wrappedTransport.sendMany(observed, sendOptions)) {
         // A receipt answers the oldest message still waiting for one.
         const priority = head < pending.length ? pending[head++] : 'unknown';
         if (head === pending.length) {
@@ -383,6 +387,25 @@ class OpenTelemetryTransport {
     }
 
     return undefined;
+  }
+
+  /**
+   * The options passed on to the wrapped transport: its retries are recorded
+   * on the span and in the metrics, and still reach the caller's `onRetry`.
+   */
+  withRetryRecording(options, span) {
+    const metrics = this.metricsCollector;
+    if (span == null && metrics == null) return options;
+    const onRetry = options?.onRetry;
+    return {
+      ...options,
+      onRetry: (event) => {
+        const errorType = this.classifyError(event.error);
+        span?.recordRetry(event.attempt, errorType);
+        metrics?.recordRetry(this.transportName, errorType);
+        onRetry?.(event);
+      },
+    };
   }
 
   classifyError(error) {

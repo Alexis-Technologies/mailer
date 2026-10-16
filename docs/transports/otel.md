@@ -365,6 +365,9 @@ The transport collects the following key metrics:
 
 - Active operation gauges: Track concurrent email sending operations
 
+- Retries: Count the requests the wrapped transport sent again, by the category
+  of the failure; a span shows them as `retry` events and in `mailer.retry.count`
+
 - Error classification: Categorize failures by type (auth, network, etc.)
 
 These metrics are exported to your configured observability backend
