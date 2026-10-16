@@ -47,4 +47,17 @@ const checkSecureUrl = (value, name) => {
   );
 };
 
-module.exports = { checkRequestOptions, checkSecureUrl };
+/**
+ * Checks how many messages a sendMany() of a provider sends at once.
+ *
+ * @param concurrency The most sends at once.
+ * @throws {RangeError} If it is not a positive integer.
+ * @internal
+ */
+const checkConcurrency = (concurrency) => {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError('`concurrency` must be a positive integer: ' + String(concurrency));
+  }
+};
+
+module.exports = { checkConcurrency, checkRequestOptions, checkSecureUrl };

@@ -422,3 +422,104 @@ test('Internal: a log binds its component, builds records lazily, and never thro
   createLog(undefined, {}).write('warn', () => assert.fail('no logger'), 'x');
   assert.strictEqual(createLog(undefined, {}).isEnabled('warn'), false);
 });
+
+test('Internal: sendConcurrently keeps the order and at most `limit` sends at once', async () => {
+  const { sendConcurrently } = require('../../src/internal/batch.js');
+  let read = 0;
+  let inFlight = 0;
+  let most = 0;
+  const messages = (function* () {
+    for (let index = 0; index < 6; index++) {
+      read++;
+      yield index;
+    }
+  })();
+  // Later messages finish sooner, so the receipts come back out of order.
+  const send = async (index) => {
+    inFlight++;
+    most = Math.max(most, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, (6 - index) * 2));
+    inFlight--;
+    return index;
+  };
+  const receipts = [];
+  for await (const receipt of sendConcurrently(messages, 3, send)) {
+    receipts.push(receipt);
+    if (receipts.length === 1) assert.ok(read <= 3, `read ${read} before the first receipt`);
+  }
+  assert.deepStrictEqual(receipts, [0, 1, 2, 3, 4, 5]);
+  assert.strictEqual(most, 3);
+});
+
+test('Internal: sendConcurrently with a limit of 1 reads after each receipt', async () => {
+  const { sendConcurrently } = require('../../src/internal/batch.js');
+  const events = [];
+  const messages = (async function* () {
+    for (let index = 0; index < 3; index++) {
+      events.push(`read ${index}`);
+      yield index;
+    }
+  })();
+  for await (const receipt of sendConcurrently(messages, 1, async (index) => index)) {
+    events.push(`receipt ${receipt}`);
+  }
+  assert.deepStrictEqual(events, [
+    'read 0',
+    'receipt 0',
+    'read 1',
+    'receipt 1',
+    'read 2',
+    'receipt 2',
+  ]);
+});
+
+test('Internal: sendConcurrently closes its input early and surfaces failures in turn', async (t) => {
+  const { sendConcurrently } = require('../../src/internal/batch.js');
+  let closed = false;
+  const messages = (function* () {
+    try {
+      for (let index = 0; ; index++) yield index;
+    } finally {
+      closed = true;
+    }
+  })();
+  for await (const receipt of sendConcurrently(messages, 2, async (index) => index)) {
+    assert.strictEqual(receipt, 0);
+    break;
+  }
+  assert.ok(closed);
+
+  // A later send that fails while an earlier one is awaited is no unhandled
+  // rejection; its error comes when its turn does.
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const send = async (index) => {
+    if (index === 1) throw new Error('second failed');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return index;
+  };
+  const receipts = [];
+  await assert.rejects(async () => {
+    for await (const receipt of sendConcurrently([0, 1, 2], 3, send)) receipts.push(receipt);
+  }, /second failed/);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepStrictEqual(receipts, [0]);
+  assert.deepStrictEqual(unhandled, []);
+
+  const aborted = AbortSignal.abort(new Error('stop'));
+  await assert.rejects(async () => {
+    for await (const receipt of sendConcurrently([0], 1, async (index) => index, aborted)) {
+      assert.fail(receipt);
+    }
+  }, /stop/);
+});
+
+test('Internal: concurrency must be a positive integer', () => {
+  const { checkConcurrency } = require('../../src/internal/config.js');
+  for (const concurrency of [1, 8]) checkConcurrency(concurrency);
+  for (const concurrency of [0, -1, 1.5, Infinity, '2', undefined]) {
+    assert.throws(() => checkConcurrency(concurrency), RangeError, String(concurrency));
+  }
+});

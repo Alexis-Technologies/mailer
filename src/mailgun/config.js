@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailgun/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved Mailgun configuration by applying default values to optional fields.
@@ -28,6 +28,7 @@ const createMailgunConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
+    concurrency: config.concurrency ?? 1,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},
     tracking: config.tracking ?? true,
@@ -35,6 +36,7 @@ const createMailgunConfig = (config) => {
     openTracking: config.openTracking ?? true,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkConcurrency(resolved.concurrency);
   checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };

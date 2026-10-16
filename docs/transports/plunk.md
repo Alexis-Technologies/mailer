@@ -145,9 +145,15 @@ for await (const receipt of transport.sendMany(messages)) {
 ```
 
 Tags help you categorize emails and track performance through Plunk's
-analytics dashboard. The `sendMany()` method processes emails efficiently
-with built-in retry logic, ensuring reliable delivery even when some
-individual messages encounter temporary issues.
+analytics dashboard. The `sendMany()` method processes emails one after the
+other with built-in retry logic, ensuring reliable delivery even when some
+individual messages encounter temporary issues.  With `concurrency` set
+(1 by default), it sends that many at once: it reads a message only when a send
+can start and gives the receipts in the order of the messages.
+
+```js
+const transport = new PlunkTransport({ apiKey: process.env.PLUNK_API_KEY, concurrency: 4 });
+```
 
 ## Advanced features and reliability
 

@@ -195,10 +195,22 @@ for await (const receipt of transport.sendMany(messages)) {
 }
 ```
 
-The `MailgunTransport.sendMany()` method processes emails sequentially with
-built-in retry logic.  Failed emails don't prevent subsequent emails from being
-sent, and detailed error information helps you identify and resolve delivery
-issues.
+The `MailgunTransport.sendMany()` method processes emails one after the other
+with built-in retry logic.  Failed emails don't prevent subsequent emails from
+being sent, and detailed error information helps you identify and resolve
+delivery issues.
+
+With `concurrency` set (1 by default), it sends that many messages at once: it
+reads a message only when a send can start, so a long iterable costs that many
+messages of memory, and gives the receipts in the order of the messages.
+
+```js
+const transport = new MailgunTransport({
+  apiKey: process.env.MAILGUN_KEY,
+  domain: 'mg.example.com',
+  concurrency: 4,
+});
+```
 
 ## Advanced configuration and reliability
 

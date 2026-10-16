@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved Maileroo configuration by applying default values.
@@ -18,11 +18,13 @@ const createMailerooConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
+    concurrency: config.concurrency ?? 1,
     headers: config.headers == null ? {} : { ...config.headers },
     tracking: config.tracking,
     tags: config.tags == null ? undefined : { ...config.tags },
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkConcurrency(resolved.concurrency);
   checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };

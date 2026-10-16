@@ -32,6 +32,10 @@ fixed ones below.
   `Retry-After`), `./otel` (spans and metrics, with the OpenTelemetry providers passed in, the
   attributes as `mailer.*`) and `./logger` (the lifecycle logged through any pino-like logger
   passed in, in place of upstream's LogTape transport); and `./mock` for tests.
+- **`concurrency` for `sendMany` of `./sendgrid`, `./mailgun`, `./plunk` and `./maileroo`:** the
+  providers that send one message per request send that many at once (1 by default, as
+  before), reading a message only when a send can start and giving the receipts in the order of
+  the messages.
 - **`onRetry` in the options of a send:** the HTTP providers and `./retry` call it before each
   retry with the attempt, the wait and the error, and the decorators pass it on, so one callback
   hears every level (not yet from `./jmap`).

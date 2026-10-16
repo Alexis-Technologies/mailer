@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved SendGrid configuration by applying default values to optional fields.
@@ -23,6 +23,7 @@ const createSendGridConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
+    concurrency: config.concurrency ?? 1,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},
     clickTracking: config.clickTracking ?? true,
@@ -31,6 +32,7 @@ const createSendGridConfig = (config) => {
     googleAnalytics: config.googleAnalytics ?? false,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkConcurrency(resolved.concurrency);
   checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };

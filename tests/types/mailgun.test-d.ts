@@ -1,4 +1,4 @@
-import { expectAssignable, expectError, expectType } from 'tsd';
+import { expectNotAssignable, expectAssignable, expectError, expectType } from 'tsd';
 import { createMessage, type Receipt, type Transport } from '../../index.js';
 import { MailgunApiError, MailgunTransport, type MailgunConfig } from '../../src/mailgun/index.js';
 
@@ -15,6 +15,19 @@ expectType<Promise<Receipt<'mailgun'>>>(transport.send(message));
 expectType<AsyncIterable<Receipt<'mailgun'>>>(transport.sendMany([message]));
 
 expectAssignable<MailgunConfig>({ apiKey: 'key', domain: 'mg.example.com', tracking: true });
+// sendMany() sends as many messages at once.
+expectAssignable<MailgunConfig>({
+  apiKey: 'key',
+  domain: 'mg.example.com',
+  tracking: true,
+  concurrency: 4,
+});
+expectNotAssignable<MailgunConfig>({
+  apiKey: 'key',
+  domain: 'mg.example.com',
+  tracking: true,
+  concurrency: '4',
+});
 expectAssignable<Error>(new MailgunApiError('Forbidden', 403));
 expectError(new MailgunTransport({ apiKey: 'key' }));
 expectError(new MailgunTransport({ apiKey: 'key', domain: 'mg.example.com', region: 'ap' }));

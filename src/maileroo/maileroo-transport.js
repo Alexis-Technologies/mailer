@@ -7,6 +7,7 @@ const { MailerooApiError, MailerooHttpClient, MailerooTimeoutError } = require('
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { sendConcurrently } = require('../internal/batch.js');
 
 /**
  * Maileroo transport implementation for sending emails via Maileroo API.
@@ -103,11 +104,12 @@ class MailerooTransport {
    */
   async *sendMany(messages, options) {
     options?.signal?.throwIfAborted();
-
-    for await (const message of messages) {
-      options?.signal?.throwIfAborted();
-      yield await this.send(message, options);
-    }
+    yield* sendConcurrently(
+      messages,
+      this.config.concurrency,
+      (message) => this.send(message, options),
+      options?.signal,
+    );
   }
 }
 

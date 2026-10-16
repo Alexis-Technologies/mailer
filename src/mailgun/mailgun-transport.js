@@ -7,6 +7,7 @@ const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { sendConcurrently } = require('../internal/batch.js');
 
 /**
  * Mailgun transport implementation for sending emails via Mailgun API.
@@ -186,20 +187,12 @@ class MailgunTransport {
    */
   async *sendMany(messages, options) {
     options?.signal?.throwIfAborted();
-
-    const isAsyncIterable = Symbol.asyncIterator in messages;
-
-    if (isAsyncIterable) {
-      for await (const message of messages) {
-        options?.signal?.throwIfAborted();
-        yield await this.send(message, options);
-      }
-    } else {
-      for (const message of messages) {
-        options?.signal?.throwIfAborted();
-        yield await this.send(message, options);
-      }
-    }
+    yield* sendConcurrently(
+      messages,
+      this.config.concurrency,
+      (message) => this.send(message, options),
+      options?.signal,
+    );
   }
 }
 

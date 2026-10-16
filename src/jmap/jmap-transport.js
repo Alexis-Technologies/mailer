@@ -16,7 +16,7 @@ const { isUnsentRequestError } = require('../internal/unsent.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { chunks } = require('../internal/batch.js');
+const { chunks, readItems } = require('../internal/batch.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -824,12 +824,6 @@ class JmapTransport {
     });
   }
 }
-
-// The items of an iterable, synchronous or not, through one async iterator
-// that can be read from by hand and then iterated for the rest.
-const readItems = async function* (iterable) {
-  for await (const item of iterable) yield item;
-};
 
 const prepend = async function* (first, rest) {
   yield first;

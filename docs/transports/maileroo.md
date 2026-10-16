@@ -93,8 +93,10 @@ and `tag2`, alongside any default tags configured on the transport.
 
 ## Sending multiple emails
 
-The `sendMany()` method sends messages sequentially through the single-message
-Maileroo endpoint:
+The `sendMany()` method sends messages through the single-message Maileroo
+endpoint, one after the other unless `concurrency` (1 by default) lets it send
+that many at once; it reads a message only when a send can start and gives the
+receipts in the order of the messages:
 
 ```js
 const { createMessage } = require('@alexify/mailer');

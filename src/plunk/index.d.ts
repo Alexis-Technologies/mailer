@@ -58,6 +58,14 @@ export interface PlunkConfig extends TransportDependencies {
    */
   readonly retries?: number;
   /**
+   * How many messages `sendMany()` sends at once.  It reads a message only
+   * when a send can start and gives the receipts in the order of the
+   * messages; 1 sends one after the other.
+   *
+   * @default 1
+   */
+  readonly concurrency?: number;
+  /**
    * Whether to validate SSL certificates.
    *
    * @default true

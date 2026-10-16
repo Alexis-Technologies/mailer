@@ -1,4 +1,4 @@
-import { expectAssignable, expectError, expectType } from 'tsd';
+import { expectNotAssignable, expectAssignable, expectError, expectType } from 'tsd';
 import { createMessage, type Receipt, type Transport } from '../../index.js';
 import {
   MailerooApiError,
@@ -23,6 +23,14 @@ expectType<Promise<Receipt<'maileroo'>>>(transport.send(message));
 expectType<AsyncIterable<Receipt<'maileroo'>>>(transport.sendMany([message]));
 
 expectAssignable<MailerooConfig>({ apiKey: 'key', tracking: false, retries: 1 });
+// sendMany() sends as many messages at once.
+expectAssignable<MailerooConfig>({ apiKey: 'key', tracking: false, retries: 1, concurrency: 4 });
+expectNotAssignable<MailerooConfig>({
+  apiKey: 'key',
+  tracking: false,
+  retries: 1,
+  concurrency: '4',
+});
 expectAssignable<Error>(new MailerooApiError('Unauthorized', 401));
 expectAssignable<Error>(new MailerooTimeoutError(1000));
 expectError(new MailerooTransport({ timeout: 5000 }));

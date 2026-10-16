@@ -97,3 +97,30 @@ test('SendGrid: error bodies, retries, timeouts and aborts', async (t) => {
     { name: 'AbortError' },
   );
 });
+
+test('SendGrid: sendMany sends `concurrency` messages at once and keeps their order', async (t) => {
+  let inFlight = 0;
+  let most = 0;
+  let index = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    const id = `m${index++}`;
+    inFlight++;
+    most = Math.max(most, inFlight);
+    // Each answer comes sooner than the one before it.
+    await new Promise((resolve) => setTimeout(resolve, 20 - index * 4));
+    inFlight--;
+    return new Response(null, { status: 202, headers: { 'x-message-id': id } });
+  });
+  const transport = new SendGridTransport({ apiKey: 'SG.key', retries: 0, concurrency: 3 });
+  const messages = [];
+  for (let i = 0; i < 4; i++) {
+    messages.push(
+      createMessage({ from: 'a@example.com', to: 'b@example.com', subject: `${i}`, content: {} }),
+    );
+  }
+  const ids = [];
+  for await (const receipt of transport.sendMany(messages)) ids.push(receipt.messageId);
+  assert.deepStrictEqual(ids, ['m0', 'm1', 'm2', 'm3']);
+  assert.strictEqual(most, 3);
+  assert.throws(() => new SendGridTransport({ apiKey: 'SG.key', concurrency: 0 }), RangeError);
+});
