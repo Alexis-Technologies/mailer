@@ -19,6 +19,8 @@ const createResendConfig = (config) => {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://api.resend.com',
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},

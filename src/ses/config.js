@@ -36,6 +36,8 @@ const createSesConfig = (config) => {
     authentication: config.authentication,
     region: config.region ?? 'us-east-1',
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},

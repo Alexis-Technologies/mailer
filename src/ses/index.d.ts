@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/ses/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Authentication configuration for AWS SES.
@@ -75,7 +81,7 @@ export type SesAuthentication =
  * };
  * ```
  */
-export interface SesConfig {
+export interface SesConfig extends TransportDependencies {
   /** AWS authentication configuration. */
   readonly authentication: SesAuthentication;
   /**
@@ -118,15 +124,19 @@ export interface SesConfig {
  * It ensures all required fields have values, making the transport implementation simpler.
  */
 type ResolvedSesConfig = Required<
-  Omit<SesConfig, 'configurationSetName' | 'defaultTags' | 'batchSize'>
-> & {
-  /** SES configuration set name (optional) */
-  readonly configurationSetName?: string;
-  /** Default tags to apply to all emails (always defined, may be empty) */
-  readonly defaultTags: Record<string, string>;
-  /** Maximum concurrent messages in batch operations */
-  readonly batchSize: number;
-};
+  Omit<
+    SesConfig,
+    'configurationSetName' | 'defaultTags' | 'batchSize' | keyof TransportDependencies
+  >
+> &
+  TransportDependencies & {
+    /** SES configuration set name (optional) */
+    readonly configurationSetName?: string;
+    /** Default tags to apply to all emails (always defined, may be empty) */
+    readonly defaultTags: Record<string, string>;
+    /** Maximum concurrent messages in batch operations */
+    readonly batchSize: number;
+  };
 /**
  * Creates a resolved SES configuration with default values applied.
  *

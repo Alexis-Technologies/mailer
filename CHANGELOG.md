@@ -42,6 +42,10 @@ fixed ones below.
   Content-ID, and what it returns is checked (a `TypeError` otherwise). `composeMessage` and
   `SmtpTransport` take it too, and `SmtpTransport` a `fetch` for the token refresh of OAuth 2.0
   (`TransportDependencies` at the root types both).
+- **`fetch` and `generateId` in every HTTP transport:** the eight providers and `./jmap` take a
+  `fetch`, read at each request in place of the global one (an undici `Agent`, a proxy, mTLS),
+  and a `generateId` for their idempotency keys (Resend, Lettermint, the Maileroo reference) and
+  for the message IDs they make up when the provider gives none (SES, SendGrid, Plunk).
 - **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
   (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
   With a wrapped transport, the logger needs a method for that level.

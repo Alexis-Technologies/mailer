@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/plunk/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Configuration interface for Plunk transport connection settings.
@@ -20,7 +26,7 @@ import type { Message, Receipt, Transport, TransportOptions } from '../../index.
  * };
  * ```
  */
-export interface PlunkConfig {
+export interface PlunkConfig extends TransportDependencies {
   /**
    * Your Plunk API key.
    *
@@ -68,7 +74,8 @@ export interface PlunkConfig {
  * This type represents the final configuration after applying defaults,
  * used internally by the Plunk transport implementation.
  */
-export type ResolvedPlunkConfig = Required<PlunkConfig>;
+export type ResolvedPlunkConfig = Required<Omit<PlunkConfig, keyof TransportDependencies>> &
+  TransportDependencies;
 /**
  * Creates a resolved Plunk configuration by applying default values to optional fields.
  *

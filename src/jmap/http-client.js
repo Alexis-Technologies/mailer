@@ -136,7 +136,8 @@ class JmapHttpClient {
 
     // A redirect comes back as a response rather than being followed, so the
     // credentials in the headers never reach another origin.
-    return globalThis.fetch(url, { redirect: 'manual', ...options, headers, signal });
+    const fetch = this.config.fetch ?? globalThis.fetch;
+    return fetch(url, { redirect: 'manual', ...options, headers, signal });
   }
 }
 

@@ -156,7 +156,7 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
         signal: outerSignal,
       };
       try {
-        const response = await fetch(
+        const response = await (config.fetch ?? globalThis.fetch)(
           uploadUrl.replace('{accountId}', encodeURIComponent(accountId)),
           request,
         );

@@ -83,7 +83,10 @@ class LettermintTransport {
       options?.signal?.throwIfAborted();
 
       const emailData = await convertMessage(message, this.config, options?.signal);
-      const idempotencyKey = normalizeIdempotencyKey(message.idempotencyKey);
+      const idempotencyKey = normalizeIdempotencyKey(
+        message.idempotencyKey,
+        this.config.generateId,
+      );
 
       options?.signal?.throwIfAborted();
 
@@ -134,7 +137,10 @@ class LettermintTransport {
       return;
     }
 
-    const idempotencyKey = normalizeIdempotencyKey(messages[0]?.idempotencyKey);
+    const idempotencyKey = normalizeIdempotencyKey(
+      messages[0]?.idempotencyKey,
+      this.config.generateId,
+    );
     const batchData = [];
     const receipts = [];
 
@@ -194,10 +200,10 @@ class LettermintTransport {
   }
 }
 
-const normalizeIdempotencyKey = (idempotencyKey) => {
+const normalizeIdempotencyKey = (idempotencyKey, generator) => {
   return idempotencyKey != null && idempotencyKey !== ''
     ? idempotencyKey
-    : generateIdempotencyKey();
+    : generateIdempotencyKey(generator);
 };
 
 const hasIdempotencyKey = (message) => {

@@ -297,3 +297,57 @@ test('Delivery: every HTTP provider tells onRetry of its retries', async (t) => 
     }),
   );
 });
+
+test('Delivery: every HTTP transport requests through the fetch it is given', async (t) => {
+  const global = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('The global fetch was used.');
+  });
+  const jmap = (extra) =>
+    new JmapTransport({
+      sessionUrl: 'https://jmap.example.com/session',
+      bearerToken: 't',
+      ...extra,
+    });
+  for (const [name, , create] of [...providers, ['JMAP', 200, jmap]]) {
+    const urls = [];
+    const fetch = async (url) => {
+      urls.push(String(url));
+      return new Response('{"message":"No"}', { status: 400 });
+    };
+    const receipt = await create({ fetch }).send(message());
+    assert.strictEqual(receipt.successful, false, name);
+    assert.ok(urls.length > 0, name);
+  }
+  assert.strictEqual(global.mock.callCount(), 0);
+});
+
+test('Delivery: generateId makes the idempotency keys and the synthetic message IDs', async () => {
+  const generateId = (kind) => `01JKEY-${kind}`;
+  const sent = [];
+  const fetch = async (url, init) => {
+    sent.push(new Headers(init.headers));
+    return new Response('not json', { status: 200 });
+  };
+  const resend = new ResendTransport({ apiKey: 'key', retries: 0, generateId, fetch });
+  await resend.send(message());
+  assert.strictEqual(sent.at(-1).get('idempotency-key'), '01JKEY-idempotency-key');
+  const lettermint = new LettermintTransport({ apiToken: 'token', retries: 0, generateId, fetch });
+  await lettermint.send(message());
+  assert.strictEqual(sent.at(-1).get('idempotency-key'), '01JKEY-idempotency-key');
+
+  const ok = async () => new Response('{}', { status: 200 });
+  const ses = new SesTransport({
+    authentication: { type: 'credentials', accessKeyId: 'a', secretAccessKey: 'b' },
+    retries: 0,
+    generateId,
+    fetch: ok,
+  });
+  assert.strictEqual((await ses.send(message())).messageId, 'ses-01JKEY-receipt-id');
+  const sendgrid = new SendGridTransport({
+    apiKey: 'key',
+    retries: 0,
+    generateId,
+    fetch: async () => new Response(null, { status: 202 }),
+  });
+  assert.strictEqual((await sendgrid.send(message())).messageId, 'sendgrid-01JKEY-receipt-id');
+});

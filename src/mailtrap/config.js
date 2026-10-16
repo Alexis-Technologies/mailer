@@ -32,6 +32,8 @@ const createMailtrapConfig = (config) => {
     metadata: config.metadata == null ? undefined : { ...config.metadata },
     userAgent: config.userAgent ?? DEFAULT_USER_AGENT,
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers == null ? {} : { ...config.headers },

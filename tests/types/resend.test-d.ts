@@ -24,3 +24,6 @@ expectAssignable<ResendConfig>({ apiKey: 're_123', baseUrl: 'https://api.resend.
 declare const error: ResendApiError;
 expectType<number | undefined>(error.statusCode);
 expectError(new ResendTransport({}));
+
+// A fetch of the application, and a generator of the idempotency keys.
+expectAssignable<ResendConfig>({ apiKey: 'key', fetch: globalThis.fetch, generateId: () => 'k' });

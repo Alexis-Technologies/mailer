@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/mailgun/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Configuration interface for Mailgun transport connection settings.
@@ -20,7 +26,7 @@ import type { Message, Receipt, Transport, TransportOptions } from '../../index.
  * };
  * ```
  */
-export interface MailgunConfig {
+export interface MailgunConfig extends TransportDependencies {
   /**
    * Your Mailgun API key.
    *
@@ -96,7 +102,8 @@ export interface MailgunConfig {
  * This type represents the final configuration after applying defaults,
  * used internally by the Mailgun transport implementation.
  */
-type ResolvedMailgunConfig = Required<MailgunConfig>;
+type ResolvedMailgunConfig = Required<Omit<MailgunConfig, keyof TransportDependencies>> &
+  TransportDependencies;
 /**
  * Creates a resolved Mailgun configuration by applying default values to optional fields.
  *

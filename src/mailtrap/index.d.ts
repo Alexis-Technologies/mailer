@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/mailtrap/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Configuration interface for Mailtrap transport connection settings.
@@ -17,7 +23,7 @@ import type { Message, Receipt, Transport, TransportOptions } from '../../index.
  * };
  * ```
  */
-export interface MailtrapConfig {
+export interface MailtrapConfig extends TransportDependencies {
   /**
    * Your Mailtrap API token.
    *
@@ -104,16 +110,18 @@ export type ResolvedMailtrapConfig = Required<
     | 'userAgent'
     | 'sendBaseUrl'
     | 'sandboxBaseUrl'
+    | keyof TransportDependencies
   >
-> & {
-  readonly inboxId?: string | number;
-  readonly sandbox: boolean;
-  readonly metadata?: Record<string, string>;
-  readonly defaultCategory: string;
-  readonly userAgent: string;
-  readonly sendBaseUrl: string;
-  readonly sandboxBaseUrl: string;
-};
+> &
+  TransportDependencies & {
+    readonly inboxId?: string | number;
+    readonly sandbox: boolean;
+    readonly metadata?: Record<string, string>;
+    readonly defaultCategory: string;
+    readonly userAgent: string;
+    readonly sendBaseUrl: string;
+    readonly sandboxBaseUrl: string;
+  };
 /**
  * Creates a resolved Mailtrap configuration by applying default values.
  *

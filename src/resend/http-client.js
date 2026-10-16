@@ -196,6 +196,7 @@ class ResendHttpClient {
 
     // A redirect comes back as a response rather than being followed, so the
     // credentials in the headers never reach another origin.
+    const fetch = this.config.fetch ?? globalThis.fetch;
     return fetch(url, { ...options, headers, signal, redirect: 'manual' });
   }
 }

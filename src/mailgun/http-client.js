@@ -125,7 +125,8 @@ class MailgunHttpClient {
 
     // A redirect comes back as a response rather than being followed, so the
     // credentials in the headers never reach another origin.
-    return globalThis.fetch(url, { ...options, headers, signal, redirect: 'manual' });
+    const fetch = this.config.fetch ?? globalThis.fetch;
+    return fetch(url, { ...options, headers, signal, redirect: 'manual' });
   }
 }
 

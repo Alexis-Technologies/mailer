@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/lettermint/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Per-email Lettermint tracking settings.
@@ -33,7 +39,7 @@ export interface LettermintSettings {
  * };
  * ```
  */
-export interface LettermintConfig {
+export interface LettermintConfig extends TransportDependencies {
   /**
    * Your project-specific Lettermint sending API token.
    *
@@ -85,13 +91,14 @@ export interface LettermintConfig {
  * Resolved Lettermint configuration with defaults applied.
  */
 export type ResolvedLettermintConfig = Required<
-  Omit<LettermintConfig, 'route' | 'tag' | 'metadata' | 'settings'>
-> & {
-  readonly route?: string;
-  readonly tag?: string | null;
-  readonly metadata?: Record<string, string>;
-  readonly settings?: LettermintSettings;
-};
+  Omit<LettermintConfig, 'route' | 'tag' | 'metadata' | 'settings' | keyof TransportDependencies>
+> &
+  TransportDependencies & {
+    readonly route?: string;
+    readonly tag?: string | null;
+    readonly metadata?: Record<string, string>;
+    readonly settings?: LettermintSettings;
+  };
 /**
  * Creates a resolved Lettermint configuration by applying default values.
  *

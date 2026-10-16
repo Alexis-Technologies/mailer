@@ -14,6 +14,8 @@ const createLettermintConfig = (config) => {
     apiToken: config.apiToken,
     baseUrl: normalizeBaseUrl(config.baseUrl ?? 'https://api.lettermint.co'),
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     headers: config.headers ?? {},
     route: config.route,

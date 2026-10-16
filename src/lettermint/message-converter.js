@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/lettermint/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
@@ -182,10 +183,9 @@ const isStandardHeader = (headerName) => {
 /**
  * Generates a random idempotency key for request deduplication.
  *
+ * @param generator Optional generator of the application.
  * @returns A unique string suitable for use as an idempotency key.
  */
-const generateIdempotencyKey = () => {
-  return globalThis.crypto.randomUUID();
-};
+const generateIdempotencyKey = (generator) => generateId('idempotency-key', generator);
 
 module.exports = { convertMessage, generateIdempotencyKey };

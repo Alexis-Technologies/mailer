@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/plunk/src/plunk-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createPlunkConfig } = require('./config.js');
 const { PlunkApiError, PlunkHttpClient } = require('./http-client.js');
@@ -226,10 +227,7 @@ class PlunkTransport {
     // Fallback: generate synthetic message ID.  Upstream put the first eight
     // characters of the recipient's local part into it, personal data that
     // receipts carry into logs.
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-
-    return `plunk-${timestamp}-${random}`;
+    return `plunk-${generateId('receipt-id', this.config.generateId)}`;
   }
 }
 

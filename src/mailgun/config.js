@@ -24,6 +24,8 @@ const createMailgunConfig = (config) => {
     region,
     baseUrl,
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},

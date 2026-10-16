@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/ses/src/ses-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
@@ -224,10 +225,7 @@ class SesTransport {
       return messageIdHeader;
     }
 
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-
-    return `ses-${timestamp}-${random}`;
+    return `ses-${generateId('receipt-id', this.config.generateId)}`;
   }
 }
 

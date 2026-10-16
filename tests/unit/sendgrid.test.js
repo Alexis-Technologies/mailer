@@ -43,7 +43,10 @@ test('SendGrid: a 202 is a success, with the X-Message-Id or a generated id', as
   t.mock.restoreAll();
   t.mock.method(globalThis, 'fetch', async () => accepted());
   const generated = await transport.send(message());
-  assert.match(generated.messageId, /^sendgrid-\d+-\w+$/);
+  assert.match(
+    generated.messageId,
+    /^sendgrid-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
 });
 
 test('SendGrid: sendMany sends arrays and async iterables one by one', async (t) => {

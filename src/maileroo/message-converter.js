@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
@@ -48,7 +49,7 @@ const convertMessage = async (message, config, signal) => {
     from: convertAddress(message.sender),
     to: convertAddressList(message.recipients),
     subject: message.subject,
-    reference_id: createMailerooReference(message.idempotencyKey),
+    reference_id: createMailerooReference(message.idempotencyKey, config.generateId),
   };
 
   signal?.throwIfAborted();
@@ -103,12 +104,12 @@ const convertMessage = async (message, config, signal) => {
   return emailData;
 };
 
-const createMailerooReference = (idempotencyKey) => {
-  if (idempotencyKey == null || idempotencyKey === '') {
-    return crypto.getRandomValues(Buffer.allocUnsafe(12)).toString('hex');
-  }
-
-  return hashReference(idempotencyKey);
+// A reference is 24 hexadecimal digits: random ones, or the hash of the key of
+// the message or of the one the generator of the application makes.
+const createMailerooReference = (idempotencyKey, generator) => {
+  if (idempotencyKey != null && idempotencyKey !== '') return hashReference(idempotencyKey);
+  if (generator != null) return hashReference(generateId('idempotency-key', generator));
+  return crypto.getRandomValues(Buffer.allocUnsafe(12)).toString('hex');
 };
 
 // Three 32-bit FNV-1a hashes of the key with different seeds, updated together

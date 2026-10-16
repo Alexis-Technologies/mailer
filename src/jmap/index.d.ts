@@ -6,6 +6,7 @@ import type {
   RawMessage,
   RawTransport,
   Receipt,
+  TransportDependencies,
   TransportOptions,
   VerifiableTransport,
 } from '../../index.js';
@@ -13,7 +14,7 @@ import type {
 /**
  * Configuration interface for JMAP transport connection settings.
  */
-export interface JmapConfig {
+export interface JmapConfig extends TransportDependencies {
   /**
    * The JMAP session URL (e.g., `https://server/.well-known/jmap`).
    * This is used for session discovery per RFC 8620 Section 2.
@@ -87,7 +88,7 @@ export interface JmapConfig {
 /**
  * Resolved JMAP configuration with all fields populated.
  */
-export type ResolvedJmapConfig = {
+export type ResolvedJmapConfig = TransportDependencies & {
   readonly sessionUrl: string;
   readonly bearerToken: string | null;
   readonly basicAuth: {

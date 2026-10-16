@@ -14,6 +14,8 @@ const createMailerooConfig = (config) => {
     apiKey: config.apiKey,
     baseUrl: normalizeBaseUrl(config.baseUrl ?? 'https://smtp.maileroo.com/api/v2'),
     timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
     retries: config.retries ?? 3,
     headers: config.headers == null ? {} : { ...config.headers },
     tracking: config.tracking,

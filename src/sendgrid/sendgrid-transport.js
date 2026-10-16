@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/sendgrid-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createSendGridConfig } = require('./config.js');
 const { SendGridApiError, SendGridHttpClient } = require('./http-client.js');
@@ -224,12 +225,8 @@ class SendGridTransport {
       return messageIdHeader;
     }
 
-    // Generate a synthetic message ID based on timestamp
-    // This follows a similar pattern to what SendGrid might use
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-
-    return `sendgrid-${timestamp}-${random}`;
+    // A synthetic message ID, under a prefix that tells it from SendGrid's.
+    return `sendgrid-${generateId('receipt-id', this.config.generateId)}`;
   }
 }
 

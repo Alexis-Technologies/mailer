@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/maileroo/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Configuration interface for Maileroo transport connection settings.
@@ -15,7 +21,7 @@ import type { Message, Receipt, Transport, TransportOptions } from '../../index.
  * };
  * ```
  */
-export interface MailerooConfig {
+export interface MailerooConfig extends TransportDependencies {
   /**
    * Your Maileroo sending key.
    *
@@ -60,10 +66,13 @@ export interface MailerooConfig {
 /**
  * Resolved Maileroo configuration with defaults applied.
  */
-export type ResolvedMailerooConfig = Required<Omit<MailerooConfig, 'tracking' | 'tags'>> & {
-  readonly tracking?: boolean;
-  readonly tags?: Record<string, string>;
-};
+export type ResolvedMailerooConfig = Required<
+  Omit<MailerooConfig, 'tracking' | 'tags' | keyof TransportDependencies>
+> &
+  TransportDependencies & {
+    readonly tracking?: boolean;
+    readonly tags?: Record<string, string>;
+  };
 /**
  * Creates a resolved Maileroo configuration by applying default values.
  *

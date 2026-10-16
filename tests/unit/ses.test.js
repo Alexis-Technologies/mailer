@@ -108,7 +108,10 @@ test('SES: a 200 without JSON gets a generated message id', async (t) => {
   await withFetch(t, async () => new Response('not json', { status: 200 }));
   const receipt = await new SesTransport({ authentication, retries: 0 }).send(message());
   assert.strictEqual(receipt.successful, true);
-  assert.match(receipt.messageId, /^ses-\d+-\w+$/);
+  assert.match(
+    receipt.messageId,
+    /^ses-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
 });
 
 test('SES: an inline attachment without a type is sent as INLINE octet-stream', async (t) => {

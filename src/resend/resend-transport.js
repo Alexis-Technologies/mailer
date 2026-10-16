@@ -113,7 +113,8 @@ class ResendTransport {
       options?.signal?.throwIfAborted();
 
       // Use provided idempotency key or generate one for reliable delivery
-      const idempotencyKey = message.idempotencyKey ?? generateIdempotencyKey();
+      const idempotencyKey =
+        message.idempotencyKey ?? generateIdempotencyKey(this.config.generateId);
 
       const emailData = await convertMessage(message, this.config, {
         signal: options?.signal,
@@ -268,7 +269,8 @@ class ResendTransport {
 
     try {
       // Use first message's idempotency key or generate one for reliable delivery
-      const idempotencyKey = messages[0]?.idempotencyKey ?? generateIdempotencyKey();
+      const idempotencyKey =
+        messages[0]?.idempotencyKey ?? generateIdempotencyKey(this.config.generateId);
 
       const batchData = await convertMessagesBatch(messages, this.config);
 

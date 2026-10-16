@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/resend/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('../core/id.js');
 const { formatMailbox: formatAddress } = require('../core/address.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
@@ -221,11 +222,13 @@ const isStandardHeader = (headerName) => {
 
 /**
  * Generates a random idempotency key for request deduplication: a UUID from
- * crypto.randomUUID, since Resend answers a repeated key with the first
- * answer, and two sends sharing a key by chance would lose one of them.
+ * crypto.randomUUID, or what the generator of the application makes, since
+ * Resend answers a repeated key with the first answer, and two sends sharing
+ * a key by chance would lose one of them.
  *
+ * @param generator Optional generator of the application.
  * @returns A unique string suitable for use as an idempotency key
  */
-const generateIdempotencyKey = () => crypto.randomUUID();
+const generateIdempotencyKey = (generator) => generateId('idempotency-key', generator);
 
 module.exports = { convertMessage, convertMessagesBatch, generateIdempotencyKey };

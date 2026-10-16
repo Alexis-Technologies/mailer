@@ -100,6 +100,33 @@ import { createMessage } from '@alexify/mailer';
 import { SmtpTransport } from '@alexify/mailer/smtp';
 ```
 
+## Your own `fetch` and identifiers
+
+Every transport that makes HTTP requests (the HTTP providers and JMAP) takes a
+`fetch` in its configuration, used in place of the global one at each request:
+one bound to an undici `Agent` for keep-alive and connection limits, a
+`ProxyAgent` for a corporate proxy, mTLS, or an instrumented one. The package
+still depends on nothing; undici is yours:
+
+```js
+const { Agent, fetch: undiciFetch } = require('undici');
+const { ResendTransport } = require('@alexify/mailer/resend');
+
+const dispatcher = new Agent({ connections: 16, keepAliveTimeout: 30_000 });
+const transport = new ResendTransport({
+  apiKey: process.env.RESEND_API_KEY,
+  fetch: (url, init) => undiciFetch(url, { ...init, dispatcher }),
+});
+```
+
+The JMAP transport streams its raw uploads, so its `fetch` must take a body
+stream with `duplex: 'half'`, as undici's does.
+
+Every transport also takes `generateId`, which makes the identifiers otherwise
+drawn from `crypto.randomUUID()`: a generated Message-ID, an idempotency key,
+and the message ID of a receipt the provider gave none for. See
+[identifiers of your own](/messages/compose#identifiers-of-your-own).
+
 From here, see [composing messages](/messages/compose) for HTML content, multiple
 recipients and threading, [attachments](/messages/attachments), and
 [calendar invitations](/messages/calendar).

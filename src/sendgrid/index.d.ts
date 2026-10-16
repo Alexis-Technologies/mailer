@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/sendgrid/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  Receipt,
+  Transport,
+  TransportDependencies,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Configuration interface for SendGrid transport connection settings.
@@ -19,7 +25,7 @@ import type { Message, Receipt, Transport, TransportOptions } from '../../index.
  * };
  * ```
  */
-export interface SendGridConfig {
+export interface SendGridConfig extends TransportDependencies {
   /**
    * Your SendGrid API key.
    *
@@ -87,7 +93,8 @@ export interface SendGridConfig {
  * This type represents the final configuration after applying defaults,
  * used internally by the SendGrid transport implementation.
  */
-type ResolvedSendGridConfig = Required<SendGridConfig>;
+type ResolvedSendGridConfig = Required<Omit<SendGridConfig, keyof TransportDependencies>> &
+  TransportDependencies;
 /**
  * Creates a resolved SendGrid configuration by applying default values to optional fields.
  *
