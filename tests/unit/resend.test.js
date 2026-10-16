@@ -101,3 +101,18 @@ test('Resend: a display name with "<", "," or "@" stays a single mailbox', async
   });
   assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
 });
+
+test('Resend: an abort during the wait between attempts ends the send at once', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('busy', { status: 503 }));
+  const controller = new AbortController();
+  const reason = new Error('Stopped by the caller.');
+  setTimeout(() => controller.abort(reason), 20);
+  const started = performance.now();
+  await assert.rejects(
+    new ResendTransport({ apiKey: 'key', retries: 3 }).send(message(), {
+      signal: controller.signal,
+    }),
+    (error) => error === reason,
+  );
+  assert.ok(performance.now() - started < 500);
+});

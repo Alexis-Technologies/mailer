@@ -106,6 +106,8 @@ fixed ones below.
   a 2xx other than the one they expect, though the provider had taken the request. Such a failure
   is now `deliveryUnknown` (so is `./mailtrap`'s unreadable success); Plunk's `success: false` in a
   200 is a non-retryable failure.
+- **`./resend` and `./plunk` stop at once when the caller aborts during the wait between retries**
+  (known upstream bug 9): the abort took effect only after the backoff, up to ten seconds.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

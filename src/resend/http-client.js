@@ -159,8 +159,6 @@ class ResendHttpClient {
         error instanceof ResendApiError
           ? error
           : new ResendApiError(error.message, undefined, undefined, attempts),
-      // Upstream's wait ignores the signal (CLAUDE.md, known upstream bugs).
-      sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     });
   }
 

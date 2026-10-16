@@ -109,8 +109,6 @@ class PlunkHttpClient {
               attempts,
             )
           : new PlunkApiError(error.message, undefined, undefined, attempts),
-      // Upstream's wait ignores the signal (CLAUDE.md, known upstream bugs).
-      sleep: (milliseconds) => this.sleep(milliseconds),
     });
   }
 
@@ -180,16 +178,6 @@ class PlunkHttpClient {
       }
       throw error;
     }
-  }
-
-  /**
-   * Sleeps for the specified number of milliseconds.
-   *
-   * @param ms - Milliseconds to sleep
-   * @returns Promise that resolves after the delay
-   */
-  sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

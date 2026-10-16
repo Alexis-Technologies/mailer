@@ -136,8 +136,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 8. otel: `_active_sends` is not decremented after `sendMany` and drifts under sampling;
    `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
    its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
-9. resend, plunk: the sleep between retries ignores the `AbortSignal`; ses, resend, sendgrid,
-   mailgun and plunk parse `Retry-After` but do not wait for it.
+9. ses, resend, sendgrid, mailgun and plunk parse `Retry-After` but do not wait for it (the
+   sleep of resend and plunk that ignored the `AbortSignal` is fixed, see 25).
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
 11. resend: the `Idempotency-Key` comes from `Math.random`.
 12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
@@ -196,6 +196,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     (`isAccepted`) and throws `markDeliveryUnknown` (`src/internal/delivery-unknown.js`) instead
     of retrying; the transports report `deliveryUnknown`. Telling an unsent request from a sent
     one on a timeout or a reset waits for the shared HTTP client (Phase B).
+25. resend, plunk (known bug 9): the wait between retries ignored the `AbortSignal`, so an abort
+    took effect only after the backoff. They use the abortable `sleep` of `src/internal/http.js`.
 
 ## Repository layout
 

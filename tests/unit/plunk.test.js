@@ -101,3 +101,18 @@ test('Plunk: an attachment that cannot be read is left out with a warning', asyn
   assert.strictEqual(warn.mock.callCount(), 1);
   assert.strictEqual(body.attachments, undefined);
 });
+
+test('Plunk: an abort during the wait between attempts ends the send at once', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('busy', { status: 503 }));
+  const controller = new AbortController();
+  const reason = new Error('Stopped by the caller.');
+  setTimeout(() => controller.abort(reason), 20);
+  const started = performance.now();
+  await assert.rejects(
+    new PlunkTransport({ apiKey: 'key', retries: 3 }).send(message(), {
+      signal: controller.signal,
+    }),
+    (error) => error === reason,
+  );
+  assert.ok(performance.now() - started < 500);
+});
