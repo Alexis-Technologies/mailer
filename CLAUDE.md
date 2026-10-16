@@ -523,8 +523,17 @@ entry with no `node:*`, and a platform test would enforce it as in protoarray.
   - module-level functions are arrow functions assigned to `const`; classes and prototype objects
     use method shorthand; no `function` declarations;
   - `Object.create(null)` for dictionaries;
-  - hot loops (MIME encoding, header folding) avoid destructuring and use index loops, not
-    `forEach`;
+  - **loops, one pass, keyed collections** (stricter than the metaskills): `src/` uses no array
+    iteration method (`map`, `filter`, `some`, `every`, `find`, `findIndex`, `findLast`, `reduce`,
+    `flatMap`, `forEach`), cold paths included, but `for` and `for…of` loops, index loops on hot
+    paths (bytes, characters, lines, the messages of a batch), with no destructuring in them;
+    whatever a collection gives is computed in one pass with an early exit, never in chained
+    passes (`.map().join()`, `Object.entries().filter()`), and no array is made only to be
+    iterated (a spread iterable, `Array.from(string)`, `split` only to test); membership goes
+    through a module-level `Set`, keyed lookups through a `Map` built once, and caches or
+    metadata on objects the library does not own (a `Message`, a config, a transport) through a
+    `WeakMap` or `WeakSet` rather than a property on them. Plain objects stay for fixed shapes,
+    and `tests/`, `scripts/` and `bench/` are exempt;
   - prefer `const`; no `var`;
   - private class members with `#`.
 - Built-ins with the `node:` prefix; relative requires always end in `.js`.
@@ -537,12 +546,14 @@ entry with no `node:*`, and a platform test would enforce it as in protoarray.
 skills: `js-conventions`, `js-data-structures`, `data-structures`, `metautil-data-structures`,
 `js-gof`, `error-handling` and `npm-publish`.
 
-- **`js-conventions` is adapted to this toolchain** (the same copy as protoarray): oxlint/oxfmt
-  instead of ESLint/Prettier, pnpm, 100 columns, plus a Modules section (CommonJS, no
-  `'use strict'`, `node:` prefix, `.js` in relative requires). Its naming, best-practice and
-  optimization rules are upstream's.
+- **`js-conventions` is adapted to this toolchain** (the same copy as protoarray, plus the rule of
+  loops, one pass and keyed collections from "Conventions", which replaces upstream's "use array
+  methods when they improve readability"): oxlint/oxfmt instead of ESLint/Prettier, pnpm, 100
+  columns, plus a Modules section (CommonJS, no `'use strict'`, `node:` prefix, `.js` in relative
+  requires). Its other naming, best-practice and optimization rules are upstream's.
 - **`npm-publish` is adapted to the release process below:** pnpm commands, the `prepublishOnly`
-  gates plus the CI ones (size, comparison drift, docs build), this CHANGELOG's format, docs and
+  gates (the size gate and the tarball check among them) plus the CI ones (comparison drift, docs
+  build), this CHANGELOG's format, docs and
   `pnpm pack` checks, and `pnpm run release`.
 - **The other five are verbatim copies.**
 
