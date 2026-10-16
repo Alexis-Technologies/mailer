@@ -29,6 +29,7 @@ const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
 const {
   checkRequestOptions,
   exponentialDelayMs,
+  isRetryableStatus,
   jitteredDelayMs,
   requestWithRetry,
 } = require('../../src/internal/http.js');
@@ -181,4 +182,30 @@ test('Internal: a Retry-After is waited for, and not when it is longer than half
   await assert.rejects(requestWithRetry(later.request), { message: 'Busy', attempts: 1 });
   assert.strictEqual(later.sends(), 1);
   assert.deepStrictEqual(later.delays, []);
+});
+
+test('Internal: a timeout, a rate limit and a server error are retried by default', async () => {
+  assert.deepStrictEqual([400, 401, 404, 408, 422, 429, 500, 503, 301].map(isRetryableStatus), [
+    false,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+  ]);
+  const reject = async (response) =>
+    Object.assign(new Error('HTTP'), { statusCode: response.status });
+  const limited = scripted([new Response('', { status: 429 }), new Response('ok')], {
+    reject,
+    isRetryable: undefined,
+    retryDelayMs: undefined,
+  });
+  assert.strictEqual(await requestWithRetry(limited.request), 'ok');
+  assert.ok(limited.delays[0] >= 500 && limited.delays[0] <= 1000, String(limited.delays[0]));
+  const refused = scripted([new Response('', { status: 400 })], { reject, isRetryable: undefined });
+  await assert.rejects(requestWithRetry(refused.request), { statusCode: 400 });
+  assert.strictEqual(refused.sends(), 1);
 });

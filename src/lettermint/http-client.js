@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 /**
  * Lettermint API error class for API-specific failures.
@@ -124,8 +124,6 @@ class LettermintHttpClient {
           attempt + 1,
         ),
       createTimeoutError: () => new LettermintTimeoutError(this.config.timeout),
-      isRetryable: (error) => !(error instanceof LettermintApiError) || isRetryable(error),
-      retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
     });
   }
@@ -161,10 +159,6 @@ const withAttempts = (error, attempts) => {
     return error;
   }
   return Object.assign(error, { attempts });
-};
-
-const isRetryable = (error) => {
-  return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
 };
 
 const parseErrorMessage = (text, statusCode) => {

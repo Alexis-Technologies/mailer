@@ -84,6 +84,22 @@ const checkRequestOptions = (timeoutMs, retries) => {
   }
 };
 
+/**
+ * Whether a response status may succeed when the request is sent again: a
+ * request timeout (408), too many requests (429) or a server error (5xx).
+ *
+ * @param statusCode The HTTP status of the response.
+ * @returns `true` when a retry may succeed.
+ * @internal
+ */
+const isRetryableStatus = (statusCode) =>
+  statusCode === 408 || statusCode === 429 || statusCode >= 500;
+
+// A failure without a status (the network, a timeout) may pass on a retry;
+// one with a status, only as isRetryableStatus() says.
+const isRetryableFailure = (error) =>
+  error.statusCode === undefined || isRetryableStatus(error.statusCode);
+
 // The longest Retry-After a send waits for between two attempts; beyond it the
 // failure is thrown with its delay, for the caller or a queue to schedule.
 const MAX_RETRY_AFTER_WAIT_MS = 30_000;
@@ -119,8 +135,11 @@ const startDeadline = (timeoutMs, signal) => {
  * - `send(signal, attempt)`: one fetch, with the signal of the attempt;
  * - `read(response, attempt)`: the result of a 2xx response;
  * - `reject(response, attempt)`: the error of any other response;
- * - `isRetryable(error)`, `retryDelayMs(attempt, error)`;
  * - `retries`, `timeoutMs`, `signal`;
+ * - `isRetryable(error)`: by default, a failure without a status or with a
+ *   retryable one (`isRetryableStatus`), from the `statusCode` that every
+ *   provider error carries;
+ * - `retryDelayMs(attempt, error)`: by default `jitteredDelayMs`;
  * - `createTimeoutError(error)`: the error of an expired deadline, by default
  *   the `AbortError` itself;
  * - `finalError(error, attempts)`: the error thrown once retries are spent,
@@ -163,14 +182,15 @@ const requestWithRetry = async (request) => {
       const accepted = request.wrapAccepted?.(failure, attempt + 1) ?? failure;
       throw markDeliveryUnknown(accepted);
     }
-    if (!request.isRetryable(failure)) throw failure;
+    if (!(request.isRetryable ?? isRetryableFailure)(failure)) throw failure;
     const retryAfterMs = Number.isFinite(failure.retryAfterMilliseconds)
       ? failure.retryAfterMilliseconds
       : 0;
     if (attempt >= request.retries || retryAfterMs > MAX_RETRY_AFTER_WAIT_MS) {
       throw request.finalError?.(failure, attempt + 1) ?? failure;
     }
-    await wait(Math.max(request.retryDelayMs(attempt, failure), retryAfterMs), signal);
+    const delayMs = (request.retryDelayMs ?? jitteredDelayMs)(attempt, failure);
+    await wait(Math.max(delayMs, retryAfterMs), signal);
   }
 };
 
@@ -179,6 +199,7 @@ module.exports = {
   checkRequestOptions,
   exponentialDelayMs,
   isAbortError,
+  isRetryableStatus,
   jitteredDelayMs,
   requestWithRetry,
   sleep,

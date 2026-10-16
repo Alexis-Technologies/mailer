@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 /**
  * Error thrown when a Plunk API request fails.
@@ -97,8 +97,6 @@ class PlunkHttpClient {
         new Error(`Plunk API request timed out after ${this.config.timeout} ms.`),
       // Plunk refusing in a 200 (success: false) is a failure of its own.
       isAnswer: (error) => error instanceof PlunkApiError,
-      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
-      retryDelayMs: (attempt) => Math.min(exponentialDelayMs(attempt), 10000),
       finalError: (error, attempts) =>
         error instanceof PlunkApiError
           ? new PlunkApiError(
@@ -179,9 +177,6 @@ class PlunkHttpClient {
     }
   }
 }
-
-const isClientError = (error) =>
-  error instanceof PlunkApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 const truncateErrorBody = (text) => {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;

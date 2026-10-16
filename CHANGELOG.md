@@ -130,6 +130,14 @@ fixed ones below.
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.
 
+### Changed
+
+- **One retry policy for every HTTP provider.** A request timeout (408), a rate limit (429), a
+  server error (5xx) and a failure without a response are retried, after an exponential backoff
+  capped at ten seconds and spread over its upper half (jitter), or after `Retry-After`. `./ses`,
+  `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
+  waited without jitter, the first three without a cap.
+
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
   any step or after DATA; the greeting waits for a complete line; and a UTF-8 character split

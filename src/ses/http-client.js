@@ -3,7 +3,7 @@
 
 const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 class SesHttpClient {
   config;
@@ -56,8 +56,6 @@ class SesHttpClient {
         createSesApiError(response, await response.text(), attempt),
       createTimeoutError: () =>
         new Error(`SES API request timed out after ${this.config.timeout} ms.`),
-      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
-      retryDelayMs: exponentialDelayMs,
       finalError: (error, attempts) =>
         error instanceof SesApiError
           ? error
@@ -212,9 +210,6 @@ const createSesApiError = (response, text, attempt) => {
     attempt + 1,
   );
 };
-
-const isClientError = (error) =>
-  error instanceof SesApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 class SesApiError extends Error {
   statusCode;

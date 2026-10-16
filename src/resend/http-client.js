@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 /**
  * Error thrown when a Resend API request fails.
@@ -153,8 +153,6 @@ class ResendHttpClient {
       },
       createTimeoutError: () =>
         new Error(`Resend API request timed out after ${this.config.timeout} ms.`),
-      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
-      retryDelayMs: (attempt) => Math.min(exponentialDelayMs(attempt), 10000),
       finalError: (error, attempts) =>
         error instanceof ResendApiError
           ? error
@@ -184,9 +182,6 @@ class ResendHttpClient {
     return fetch(url, { ...options, headers, signal });
   }
 }
-
-const isClientError = (error) =>
-  error instanceof ResendApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 const truncateErrorBody = (text) => {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;

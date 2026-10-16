@@ -254,9 +254,10 @@ const transport = new JmapTransport({
 });
 ```
 
-The transport uses exponential backoff for retries, with delays of 1s,
-2s, 4s, etc. between attempts. Client errors (4xx responses) are not
-retried, as they typically indicate a problem with the request itself.
+The transport retries a request timeout (408), a rate limit (429), a server
+error (5xx) and a failure without a response, after an exponential backoff
+capped at ten seconds with jitter, or after `Retry-After`. Other client errors
+are not retried, as they indicate a problem with the request itself.
 
 The request that creates and submits the email (`Email/set` with
 `EmailSubmission/set`) is the exception: it is sent once, since a retry after a

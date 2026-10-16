@@ -192,3 +192,14 @@ test('SES: a request is signed as the SigV4 test suite of AWS expects', (t) => {
     );
   }
 });
+
+test('SES: a rate limit (429) is retried, a refusal (400) is not', async (t) => {
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requests++;
+    return new Response('{"message":"x"}', { status: requests === 1 ? 429 : 400 });
+  });
+  const receipt = await new SesTransport({ authentication, retries: 3 }).send(message());
+  assert.strictEqual(requests, 2);
+  assert.strictEqual(receipt.errors[0].statusCode, 400);
+});

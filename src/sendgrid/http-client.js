@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { exponentialDelayMs, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 /**
  * HTTP client wrapper for SendGrid API requests.
@@ -67,8 +67,6 @@ class SendGridHttpClient {
         createSendGridApiError(response, await response.text(), attempt),
       createTimeoutError: () =>
         new Error(`SendGrid API request timed out after ${this.config.timeout} ms.`),
-      isRetryable: (error) => !isClientError(error),
-      retryDelayMs: exponentialDelayMs,
       finalError: (error, attempts) =>
         error instanceof SendGridApiError
           ? error
@@ -172,8 +170,5 @@ const createSendGridApiError = (response, text, attempt) => {
     attempt + 1,
   );
 };
-
-const isClientError = (error) =>
-  error instanceof SendGridApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 module.exports = { SendGridHttpClient, SendGridApiError };

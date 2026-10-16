@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 /**
  * HTTP client wrapper for Mailgun API requests.
@@ -87,8 +87,6 @@ class MailgunHttpClient {
       },
       createTimeoutError: () =>
         new Error(`Mailgun API request timed out after ${this.config.timeout} ms.`),
-      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
-      retryDelayMs: exponentialDelayMs,
       finalError: (error, attempts) =>
         error instanceof MailgunApiError
           ? error
@@ -155,9 +153,6 @@ class MailgunApiError extends Error {
     this.attempts = attempts;
   }
 }
-
-const isClientError = (error) =>
-  error instanceof MailgunApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 const truncateErrorBody = (text) => {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;

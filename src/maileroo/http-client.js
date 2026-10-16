@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 const maxErrorMessageLength = 500;
 
@@ -103,8 +103,6 @@ class MailerooHttpClient {
           attempt + 1,
         ),
       createTimeoutError: () => new MailerooTimeoutError(this.config.timeout),
-      isRetryable: (error) => !(error instanceof MailerooApiError) || isRetryable(error),
-      retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
     });
   }
@@ -136,10 +134,6 @@ const withAttempts = (error, attempts) => {
     return error;
   }
   return Object.assign(error, { attempts });
-};
-
-const isRetryable = (error) => {
-  return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
 };
 
 const parseErrorMessage = (text, statusCode) => {

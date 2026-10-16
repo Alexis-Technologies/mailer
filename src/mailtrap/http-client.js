@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
+const { requestWithRetry } = require('../internal/http.js');
 
 const maxErrorMessageLength = 500;
 const sandboxRateLimitWindowMilliseconds = 10_000;
@@ -161,8 +161,6 @@ class MailtrapHttpClient {
       createTimeoutError: () => new MailtrapTimeoutError(this.config.timeout),
       // A 2xx response means Mailtrap may already have sent the message.
       wrapAccepted: (error, attempts) => new MailtrapResponseError(error, attempts),
-      isRetryable: (error) => !(error instanceof MailtrapApiError) || isRetryable(error),
-      retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
     });
   }
@@ -186,10 +184,6 @@ class MailtrapHttpClient {
     });
   }
 }
-
-const isRetryable = (error) => {
-  return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
-};
 
 const withAttempts = (error, attempts) => {
   if (error instanceof MailtrapTimeoutError) {

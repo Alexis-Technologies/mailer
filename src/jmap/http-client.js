@@ -3,7 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
-const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
+const { isAbortError, requestWithRetry } = require('../internal/http.js');
 
 /**
  * HTTP client for JMAP API requests.
@@ -46,8 +46,6 @@ class JmapHttpClient {
           parseRetryAfter(response.headers.get('Retry-After')),
           1,
         ),
-      isRetryable: () => true,
-      retryDelayMs: exponentialDelayMs,
     });
   }
 
@@ -98,10 +96,6 @@ class JmapHttpClient {
           parseRetryAfter(response.headers.get('Retry-After')),
           attempt + 1,
         ),
-      // Don't retry on 4xx errors (client errors)
-      isRetryable: (error) =>
-        !(error instanceof JmapApiError && error.statusCode >= 400 && error.statusCode < 500),
-      retryDelayMs: exponentialDelayMs,
       // The cause tells a request that never left (a refused connection) from
       // one that may have reached the server.
       finalError: (error, attempts) => {
