@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions } = require('../internal/http.js');
+const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 const DEFAULT_SEND_BASE_URL = 'https://send.api.mailtrap.io';
 const DEFAULT_SANDBOX_BASE_URL = 'https://sandbox.api.mailtrap.io';
@@ -37,6 +37,8 @@ const createMailtrapConfig = (config) => {
     headers: config.headers == null ? {} : { ...config.headers },
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkSecureUrl(resolved.sendBaseUrl, 'sendBaseUrl');
+  checkSecureUrl(resolved.sandboxBaseUrl, 'sandboxBaseUrl');
   return resolved;
 };
 

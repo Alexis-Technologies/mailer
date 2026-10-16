@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/ses/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions } = require('../internal/http.js');
+const { checkRequestOptions } = require('../internal/config.js');
 
 /**
  * Creates a resolved SES configuration with default values applied.

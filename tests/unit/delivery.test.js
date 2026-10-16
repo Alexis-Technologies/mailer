@@ -11,6 +11,7 @@ const { PlunkTransport } = require('../../src/plunk/index.js');
 const { ResendTransport } = require('../../src/resend/index.js');
 const { SendGridTransport } = require('../../src/sendgrid/index.js');
 const { SesTransport } = require('../../src/ses/index.js');
+const { JmapTransport } = require('../../src/jmap/index.js');
 
 const message = () =>
   createMessage({
@@ -165,4 +166,21 @@ test('Delivery: a redirect is not followed, nor retried', async (t) => {
     assert.strictEqual(receipt.successful, false, name);
     assert.strictEqual(receipt.errors[0].statusCode, 307, name);
   }
+});
+
+test('Delivery: a provider refuses to send its credentials over plain HTTP', () => {
+  const insecure = 'http://api.example.com';
+  const configs = [
+    () => new ResendTransport({ apiKey: 'key', baseUrl: insecure }),
+    () => new SendGridTransport({ apiKey: 'key', baseUrl: insecure }),
+    () => new MailgunTransport({ apiKey: 'key', domain: 'mg.example.com', baseUrl: insecure }),
+    () => new MailtrapTransport({ apiToken: 'token', sendBaseUrl: insecure }),
+    () => new MailerooTransport({ apiKey: 'key', baseUrl: insecure }),
+    () => new LettermintTransport({ apiToken: 'token', baseUrl: insecure }),
+    () => new PlunkTransport({ apiKey: 'key', baseUrl: insecure }),
+    () => new JmapTransport({ sessionUrl: `${insecure}/session`, bearerToken: 'token' }),
+  ];
+  for (const create of configs) assert.throws(create, TypeError);
+  const local = new ResendTransport({ apiKey: 'key', baseUrl: 'http://localhost:8080' });
+  assert.strictEqual(local.config.baseUrl, 'http://localhost:8080');
 });

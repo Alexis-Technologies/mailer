@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/jmap/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions } = require('../internal/http.js');
+const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved JMAP configuration with default values applied.
@@ -26,6 +26,8 @@ const createJmapConfig = (config) => {
     baseUrl: config.baseUrl ?? null,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkSecureUrl(resolved.sessionUrl, 'sessionUrl');
+  if (resolved.baseUrl != null) checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };
 

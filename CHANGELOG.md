@@ -131,6 +131,10 @@ fixed ones below.
   Lettermint's token, custom `headers` and the body of the OAuth2 token request (client secret,
   refresh token) went wherever a redirect pointed. Every request of the HTTP providers, `./jmap`
   and the OAuth2 refresh of `./smtp` now gets a 3xx back as a failure, which is not retried.
+- **A provider no longer sends its credentials over plain HTTP** (an upstream bug): a `baseUrl`,
+  a Mailtrap base URL or a JMAP `sessionUrl` starting with `http://` sent the API key or token in
+  clear. They must use HTTPS, or plain HTTP only to a loopback host such as a local fake server;
+  anything else is refused with a `TypeError` when the transport is made.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

@@ -221,6 +221,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `x-lettermint-token`, custom headers and the token request's body went wherever a redirect
     pointed. Every request is sent with `redirect: 'manual'` (or `'error'`), and a 3xx is a
     failure that is not retried.
+33. every HTTP provider and jmap: no URL of a config had to be HTTPS, so `http://` sent the key
+    in clear. `checkSecureUrl` (`src/internal/http.js`, with `src/internal/loopback.js`) refuses
+    anything but HTTPS or plain HTTP to a loopback host when the config is made.
 
 ## Repository layout
 

@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/plunk/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions } = require('../internal/http.js');
+const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved Plunk configuration by applying default values to optional fields.
@@ -24,6 +24,7 @@ const createPlunkConfig = (config) => {
     headers: config.headers ?? {},
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };
 

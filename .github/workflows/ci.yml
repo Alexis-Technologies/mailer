@@ -32,7 +32,7 @@ jobs:
       - run: pnpm format:check
       # Smoke: keeps the bundle-size script working and fails over the
       # min+gzip budget, which also catches a third-party module bundled in.
-      - run: pnpm size --max-gzip 8 --max-gzip-mime 6 --max-gzip-smtp 18 --max-gzip-jmap 9 --max-gzip-ses 4 --max-gzip-resend 3 --max-gzip-sendgrid 3 --max-gzip-mailgun 3 --max-gzip-mailtrap 4 --max-gzip-maileroo 4 --max-gzip-lettermint 4 --max-gzip-plunk 3 --max-gzip-pool 2 --max-gzip-retry 3 --max-gzip-mock 2 --max-gzip-otel 5 --max-gzip-logger 2
+      - run: pnpm size --max-gzip 8 --max-gzip-mime 6 --max-gzip-smtp 18 --max-gzip-jmap 10 --max-gzip-ses 5 --max-gzip-resend 3 --max-gzip-sendgrid 3 --max-gzip-mailgun 3 --max-gzip-mailtrap 4 --max-gzip-maileroo 4 --max-gzip-lettermint 4 --max-gzip-plunk 3 --max-gzip-pool 2 --max-gzip-retry 3 --max-gzip-mock 2 --max-gzip-otel 5 --max-gzip-logger 2
 
   types:
     runs-on: ubuntu-latest

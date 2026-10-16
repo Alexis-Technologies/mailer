@@ -65,26 +65,6 @@ const jitteredDelayMs = (attempt) => {
 };
 
 /**
- * Checks the timeout and the retries of a provider's configuration.
- *
- * @param timeoutMs The timeout of an attempt in milliseconds, 0 or `Infinity`
- * for none.
- * @param retries How many times a failed attempt is retried.
- * @throws {RangeError} If either is not a number of that kind.
- * @internal
- */
-const checkRequestOptions = (timeoutMs, retries) => {
-  if (typeof timeoutMs !== 'number' || !(timeoutMs >= 0)) {
-    throw new RangeError(
-      '`timeout` must be a number of milliseconds, 0 or Infinity for none: ' + String(timeoutMs),
-    );
-  }
-  if (!Number.isInteger(retries) || retries < 0) {
-    throw new RangeError('`retries` must be a non-negative integer: ' + String(retries));
-  }
-};
-
-/**
  * Whether a response status may succeed when the request is sent again: a
  * request timeout (408), too many requests (429) or a server error (5xx).
  *
@@ -196,7 +176,6 @@ const requestWithRetry = async (request) => {
 
 module.exports = {
   abortReason,
-  checkRequestOptions,
   exponentialDelayMs,
   isAbortError,
   isRetryableStatus,

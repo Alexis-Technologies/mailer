@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { checkRequestOptions } = require('../internal/http.js');
+const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 /**
  * Creates a resolved Maileroo configuration by applying default values.
@@ -20,6 +20,7 @@ const createMailerooConfig = (config) => {
     tags: config.tags == null ? undefined : { ...config.tags },
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  checkSecureUrl(resolved.baseUrl, 'baseUrl');
   return resolved;
 };
 

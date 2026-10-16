@@ -26,8 +26,8 @@ test('Internal: a reset, a timeout or a failure without a cause may have been se
 });
 
 const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
+const { checkRequestOptions, checkSecureUrl } = require('../../src/internal/config.js');
 const {
-  checkRequestOptions,
   exponentialDelayMs,
   isRetryableStatus,
   jitteredDelayMs,
@@ -208,4 +208,19 @@ test('Internal: a timeout, a rate limit and a server error are retried by defaul
   const refused = scripted([new Response('', { status: 400 })], { reject, isRetryable: undefined });
   await assert.rejects(requestWithRetry(refused.request), { statusCode: 400 });
   assert.strictEqual(refused.sends(), 1);
+});
+
+test('Internal: a provider URL is HTTPS, or plain HTTP only to a loopback host', () => {
+  const allowed = [
+    'https://api.example.com/v1',
+    'http://localhost:8080',
+    'http://mail.localhost/',
+    'http://127.0.0.1:3000',
+    'http://127.1/',
+    'http://[::1]:8080/',
+  ];
+  for (const url of allowed) checkSecureUrl(url, 'baseUrl');
+  for (const url of ['http://api.example.com', 'http://10.0.0.1/', 'ftp://a.example', 'nope']) {
+    assert.throws(() => checkSecureUrl(url, 'baseUrl'), TypeError, url);
+  }
 });
