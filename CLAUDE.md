@@ -258,6 +258,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     the `maxObjectsInSet` of the Session, so a server with a limit refused the whole batch,
     and any failure failed every message. It sends batches of at most that many (`sendBatch`),
     each failing on its own; discovery still runs once. `maxSizeRequest` is not yet followed.
+43. ses, mailgun, mailtrap, jmap: the SES `region` went into the host name unchecked
+    (`foo@evil.example/` sent the signed request to `evil.example`), and the Mailgun `domain`,
+    the Mailtrap `inboxId` and the JMAP `accountId` of a blob upload into the path unencoded.
+    The region must look like one (`us-east-1`), and the others are encoded as one segment.
 
 ## Repository layout
 

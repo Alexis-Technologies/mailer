@@ -19,7 +19,7 @@ const { Buffer } = require('node:buffer');
 const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
   signal?.throwIfAborted();
 
-  const url = uploadUrl.replace('{accountId}', accountId);
+  const url = uploadUrl.replace('{accountId}', encodeURIComponent(accountId));
 
   let authHeader;
   if (config.bearerToken) {

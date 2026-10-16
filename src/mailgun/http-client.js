@@ -27,7 +27,8 @@ class MailgunHttpClient {
    * @returns Promise that resolves to the Mailgun response.
    */
   sendMessage(formData, signal) {
-    const url = `${this.config.baseUrl}/${this.config.domain}/messages`;
+    // The domain is a path segment: encoded, it cannot climb the path.
+    const url = `${this.config.baseUrl}/${encodeURIComponent(this.config.domain)}/messages`;
 
     return this.makeRequest(url, {
       method: 'POST',

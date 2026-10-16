@@ -253,3 +253,24 @@ test('Delivery: a lost request is not sent again without a key; a refused one is
     }
   }
 });
+
+test('Delivery: a configured name cannot move a request to another host or path', async (t) => {
+  const authentication = { type: 'credentials', accessKeyId: 'a', secretAccessKey: 'b' };
+  assert.throws(() => new SesTransport({ authentication, region: 'foo@evil.example/' }), TypeError);
+  const gov = new SesTransport({ authentication, region: 'us-gov-west-1' });
+  assert.strictEqual(gov.config.region, 'us-gov-west-1');
+
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    paths.push(new URL(url).pathname);
+    return Response.json({ id: 'x', message: 'ok' });
+  });
+  await new MailgunTransport({ apiKey: 'key', domain: '../../admin', retries: 0 }).send(message());
+  await new MailtrapTransport({
+    apiToken: 'token',
+    sandbox: true,
+    inboxId: '1/../../admin',
+    retries: 0,
+  }).send(message());
+  assert.deepStrictEqual(paths, ['/v3/..%2F..%2Fadmin/messages', '/api/send/1%2F..%2F..%2Fadmin']);
+});

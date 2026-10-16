@@ -28,6 +28,9 @@ const { checkRequestOptions } = require('../internal/config.js');
  * @param config The SES configuration object.
  * @returns A resolved configuration with all defaults applied.
  */
+// An AWS region, such as us-east-1, eu-central-1 or us-gov-west-1.
+const AWS_REGION = /^[a-z]{2}(?:-[a-z]+)+-\d+$/;
+
 const createSesConfig = (config) => {
   const resolved = {
     authentication: config.authentication,
@@ -41,6 +44,10 @@ const createSesConfig = (config) => {
     batchSize: config.batchSize ?? 50,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
+  // The region goes into the host name of every request, with the signature.
+  if (!AWS_REGION.test(resolved.region)) {
+    throw new TypeError(`Invalid AWS region: ${String(resolved.region)}`);
+  }
   return resolved;
 };
 

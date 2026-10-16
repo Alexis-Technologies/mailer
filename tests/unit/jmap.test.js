@@ -341,3 +341,19 @@ test('JMAP: sendMany splits its batch by the maxObjectsInSet of the Session', as
     [true, true, false, false, true],
   );
 });
+
+test('JMAP: an account ID cannot climb the path of a blob upload', async (t) => {
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    paths.push(new URL(url).pathname);
+    return Response.json({ blobId: 'b1' });
+  });
+  const config = createJmapConfig({ sessionUrl: 'https://jmap.example.com/s', bearerToken: 't' });
+  await uploadBlob(
+    config,
+    'https://jmap.example.com/upload/{accountId}/',
+    'a/../../x',
+    new Blob(['a']),
+  );
+  assert.deepStrictEqual(paths, ['/upload/a%2F..%2F..%2Fx/']);
+});

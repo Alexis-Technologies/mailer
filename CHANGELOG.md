@@ -174,6 +174,11 @@ fixed ones below.
 - **`./jmap` respects the `maxObjectsInSet` of the server in `sendMany`** (an upstream bug): it
   sent every message in one request, which a server with a lower limit refuses whole. It sends
   batches of at most that many messages, and a batch that fails fails only its own messages.
+- **A configured name can no longer redirect a request** (an upstream bug): the SES `region` went
+  into the host name as given, so `foo@evil.example/` sent the signed request, with its session
+  token, to `evil.example`; the Mailgun `domain`, the Mailtrap `inboxId` and the JMAP account ID
+  of a blob upload went into the path unencoded. A region must look like one (`us-east-1`), and
+  the others are encoded as a single path segment.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

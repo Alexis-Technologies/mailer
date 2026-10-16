@@ -127,7 +127,9 @@ class MailtrapHttpClient {
   resolveUrl(kind) {
     const baseUrl = this.config.sandbox ? this.config.sandboxBaseUrl : this.config.sendBaseUrl;
     const suffix =
-      this.config.sandbox && this.config.inboxId != null ? `/${this.config.inboxId}` : '';
+      this.config.sandbox && this.config.inboxId != null
+        ? `/${encodeURIComponent(this.config.inboxId)}`
+        : '';
     return `${baseUrl}/api/${kind}${suffix}`;
   }
 
