@@ -116,3 +116,12 @@ test('Resend: an abort during the wait between attempts ends the send at once', 
   );
   assert.ok(performance.now() - started < 500);
 });
+
+test('Resend: an idempotency key is random, not derived from the clock and Math.random', (t) => {
+  const { generateIdempotencyKey } = require('../../src/resend/message-converter.js');
+  t.mock.method(Math, 'random', () => 0.5);
+  t.mock.timers.enable({ apis: ['Date'], now: 0 });
+  const first = generateIdempotencyKey();
+  assert.notStrictEqual(first, generateIdempotencyKey());
+  assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+});

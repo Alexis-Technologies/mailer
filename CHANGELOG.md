@@ -257,6 +257,9 @@ fixed ones below.
   the delay at once, and the send rejects with the reason of the signal.
 - **`./pool` rejects an aborted send with the reason of the signal** (an upstream bug), not with
   a new `AbortError`, like the other transports.
+- **`./resend` draws its idempotency key from `crypto.randomUUID()`** (known upstream bug 11): it
+  came from the clock and `Math.random()`, and two sends that shared a key by chance would get
+  the first one's answer, the second never going out.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

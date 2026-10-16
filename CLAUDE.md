@@ -141,7 +141,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
-11. resend: the `Idempotency-Key` comes from `Math.random`.
+11. (fixed, see 71) resend: the `Idempotency-Key` came from `Math.random`.
 12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
     an injected logger.
 13. mime: the first encoded word of a header shares its line with the field name
@@ -360,6 +360,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 70. mime: a boundary was `Date.now()` and six characters of `Math.random()` (with the
     deprecated `substr`), which two messages in one millisecond can share and an attacker can
     guess to end a part early with text of their own. It is `boundary-` and `crypto.randomUUID()`.
+71. resend (known bug 11): a generated `Idempotency-Key` was the clock and two `Math.random()`
+    strings, which two sends could share, and Resend answers a repeated key with its first
+    answer, so one of them would not go. It is `crypto.randomUUID()`.
 
 ## Repository layout
 

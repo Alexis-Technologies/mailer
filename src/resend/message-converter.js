@@ -220,17 +220,12 @@ const isStandardHeader = (headerName) => {
 };
 
 /**
- * Generates a random idempotency key for request deduplication.
+ * Generates a random idempotency key for request deduplication: a UUID from
+ * crypto.randomUUID, since Resend answers a repeated key with the first
+ * answer, and two sends sharing a key by chance would lose one of them.
  *
  * @returns A unique string suitable for use as an idempotency key
  */
-const generateIdempotencyKey = () => {
-  // Generate a UUID-like string
-  const timestamp = Date.now().toString(36);
-  const random1 = Math.random().toString(36).substring(2, 15);
-  const random2 = Math.random().toString(36).substring(2, 15);
-
-  return `${timestamp}-${random1}${random2}`;
-};
+const generateIdempotencyKey = () => crypto.randomUUID();
 
 module.exports = { convertMessage, convertMessagesBatch, generateIdempotencyKey };

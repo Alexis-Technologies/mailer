@@ -21,7 +21,6 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 - `validateSsl` is accepted and never read (SES, Resend, SendGrid, Mailgun, Mailtrap, Plunk).
 - Mailgun sends an inline attachment under its file name rather than its `contentId`, so a
   `cid:` in the HTML does not match it.
-- Resend's `Idempotency-Key` comes from `Math.random`.
 - SES: custom and threading headers are not sent.
 - Plunk: an attachment that cannot be read is left out with a `console.warn`.
 - JMAP does not report its retries through `onRetry`.
