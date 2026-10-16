@@ -5,6 +5,13 @@ const { sleep } = require('../internal/sleep.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createMockConfig } = require('./config.js');
 
+const hasAddress = (addresses, email) => {
+  for (const address of addresses) {
+    if (address.address === email) return true;
+  }
+  return false;
+};
+
 /**
  * A mock transport implementation for testing purposes.
  *
@@ -206,7 +213,10 @@ class MockTransport {
    * @returns The first matching message, or undefined if none found.
    */
   findMessageBy(predicate) {
-    return this.sentMessages.find(predicate);
+    for (const message of this.sentMessages) {
+      if (predicate(message)) return message;
+    }
+    return undefined;
   }
 
   /**
@@ -216,7 +226,11 @@ class MockTransport {
    * @returns An array of all matching messages.
    */
   findMessagesBy(predicate) {
-    return this.sentMessages.filter(predicate);
+    const found = [];
+    for (const message of this.sentMessages) {
+      if (predicate(message)) found.push(message);
+    }
+    return found;
   }
 
   /**
@@ -229,10 +243,11 @@ class MockTransport {
    * @returns An array of messages sent to the specified address.
    */
   getMessagesTo(email) {
-    return this.sentMessages.filter((message) =>
-      [...message.recipients, ...message.ccRecipients, ...message.bccRecipients].some(
-        (addr) => addr.address === email,
-      ),
+    return this.findMessagesBy(
+      (message) =>
+        hasAddress(message.recipients, email) ||
+        hasAddress(message.ccRecipients, email) ||
+        hasAddress(message.bccRecipients, email),
     );
   }
 
@@ -243,7 +258,7 @@ class MockTransport {
    * @returns An array of messages with the specified subject.
    */
   getMessagesBySubject(subject) {
-    return this.sentMessages.filter((message) => message.subject === subject);
+    return this.findMessagesBy((message) => message.subject === subject);
   }
 
   /**
