@@ -100,13 +100,15 @@ class LettermintHttpClient {
   }
 
   makeRequest(url, body, signal, idempotencyKey) {
+    // Serialized once rather than on every attempt.
+    const json = JSON.stringify(body);
     return requestWithRetry({
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       // Lettermint deduplicates a repeated Idempotency-Key.
       hasIdempotencyKey: idempotencyKey != null && idempotencyKey !== '',
-      send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal, idempotencyKey),
+      send: (attemptSignal) => this.fetchWithAuth(url, json, attemptSignal, idempotencyKey),
       read: async (response) => {
         const text = await readText(response);
         try {
@@ -132,7 +134,7 @@ class LettermintHttpClient {
     });
   }
 
-  fetchWithAuth(url, body, signal, idempotencyKey) {
+  fetchWithAuth(url, json, signal, idempotencyKey) {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'x-lettermint-token': this.config.apiToken,
@@ -151,7 +153,7 @@ class LettermintHttpClient {
     return globalThis.fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: json,
       signal,
       redirect: 'manual',
     });

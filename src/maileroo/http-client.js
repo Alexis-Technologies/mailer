@@ -90,11 +90,13 @@ class MailerooHttpClient {
   }
 
   makeRequest(url, body, signal) {
+    // Serialized once rather than on every attempt.
+    const json = JSON.stringify(body);
     return requestWithRetry({
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
-      send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
+      send: (attemptSignal) => this.fetchWithAuth(url, json, attemptSignal),
       read: async (response) => parseResponse(await readText(response)),
       reject: async (response, attempt) =>
         new MailerooApiError(
@@ -108,7 +110,7 @@ class MailerooHttpClient {
     });
   }
 
-  fetchWithAuth(url, body, signal) {
+  fetchWithAuth(url, json, signal) {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'X-API-Key': this.config.apiKey,
@@ -123,7 +125,7 @@ class MailerooHttpClient {
     return globalThis.fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: json,
       signal,
       redirect: 'manual',
     });

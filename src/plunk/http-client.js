@@ -72,12 +72,14 @@ class PlunkHttpClient {
    */
   sendMessage(emailData, signal) {
     const url = `${this.config.baseUrl}/v1/send`;
+    // Serialized once rather than on every attempt.
+    const json = JSON.stringify(emailData);
 
     return requestWithRetry({
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
-      send: (attemptSignal) => this.makeRequest(url, emailData, attemptSignal),
+      send: (attemptSignal) => this.makeRequest(url, json, attemptSignal),
       read: (response) => this.parseResponse(response),
       reject: async (response, attempt) => {
         let errorBody;
@@ -115,11 +117,11 @@ class PlunkHttpClient {
    * Makes an HTTP request to the Plunk API.
    *
    * @param url - The request URL
-   * @param emailData - The email data to send
+   * @param json - The email data, serialized as JSON
    * @param signal - Optional AbortSignal for cancellation
    * @returns Promise that resolves to the Response object
    */
-  makeRequest(url, emailData, signal) {
+  makeRequest(url, json, signal) {
     const headers = {
       Authorization: `Bearer ${this.config.apiKey}`,
       'Content-Type': 'application/json',
@@ -131,7 +133,7 @@ class PlunkHttpClient {
     return fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(emailData),
+      body: json,
       signal,
       redirect: 'manual',
     });

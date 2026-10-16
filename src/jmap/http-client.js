@@ -60,6 +60,8 @@ class JmapHttpClient {
    */
   executeRequest(apiUrl, request, signal) {
     signal?.throwIfAborted();
+    // Serialized once rather than on every attempt.
+    const json = JSON.stringify(request);
 
     return requestWithRetry({
       signal,
@@ -77,10 +79,10 @@ class JmapHttpClient {
             // A stream prevents runtime-level replay of a POST after a lost
             // response (observed with Deno even when application retries are 0).
             body: this.replayableRequests
-              ? JSON.stringify(request)
+              ? json
               : new ReadableStream({
                   start(controller) {
-                    controller.enqueue(new TextEncoder().encode(JSON.stringify(request)));
+                    controller.enqueue(Buffer.from(json));
                     controller.close();
                   },
                 }),
