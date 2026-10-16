@@ -307,6 +307,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 56. smtp: implicit TLS resolved `connect()` on the TCP `connect`, before its handshake, so the
     connection timeout did not cover the handshake and a failed one surfaced later, while the
     greeting was read. It resolves on `secureConnect`.
+57. smtp: `send` and `sendMany` composed a message only after connecting, upgrading and
+    authenticating, and a composition error, not a reusable local failure, discarded the
+    connection; in `sendMany` every later message then failed with "Connection is no longer
+    valid". A message is composed first, a failure to compose takes and fails no connection,
+    and `sendMany` connects for its first composed message (none for an empty batch).
 
 ## Repository layout
 

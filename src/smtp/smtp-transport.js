@@ -216,6 +216,9 @@ class SmtpTransport {
     try {
       const envelope = resolveEnvelopeOption(message, options?.envelope, 0);
       const dsn = resolveSmtpDsn(envelope, options?.dsn);
+      // Composed before a connection is taken: a message that cannot be
+      // composed costs no connection, and fails no connection either.
+      const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
 
       // Establishing the connection—including authentication, e.g. acquiring an
       // OAuth 2.0 access token—is part of delivery, so setup failures are
@@ -223,10 +226,6 @@ class SmtpTransport {
       // abort signal still rejects: an already-aborted signal is caught by the
       // guard above, before this method does any work.)
       connection = await this.getConnection(options?.signal);
-
-      options?.signal?.throwIfAborted();
-
-      const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
 
       options?.signal?.throwIfAborted();
 
@@ -335,37 +334,12 @@ class SmtpTransport {
   async *sendMany(messages, options) {
     options?.signal?.throwIfAborted();
 
+    // The connection is taken for the first message that is composed, so a
+    // batch of nothing, or of messages that cannot be composed, takes none.
     let connection;
-    try {
-      connection = await this.getConnection(options?.signal);
-    } catch (error) {
-      // Cancellation rejects rather than producing receipts.
-      options?.signal?.throwIfAborted();
-
-      // Connection setup (including authentication) failed, so no message can
-      // be delivered.  Report a failed receipt for each message rather than
-      // throwing.
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      // oxlint-disable-next-line no-unused-vars -- upstream
-      for await (const _ of messages) {
-        options?.signal?.throwIfAborted();
-        yield createSmtpFailure(errorMessage, error);
-      }
-      return;
-    }
-
+    // A setup that failed, including authentication, fails every message.
+    let setupError;
     let connectionValid = true;
-    let connectionReleased = false;
-
-    const releaseConnection = async () => {
-      if (connectionReleased) return;
-      connectionReleased = true;
-      if (connectionValid) {
-        await this.returnConnection(connection);
-      } else {
-        await this.discardConnection(connection);
-      }
-    };
 
     try {
       // for await takes a synchronous iterable as well.
@@ -373,17 +347,43 @@ class SmtpTransport {
       for await (const message of messages) {
         options?.signal?.throwIfAborted();
 
+        let smtpMessage;
+        try {
+          const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
+          const dsn = resolveSmtpDsn(envelope, options?.dsn);
+          smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
+        } catch (error) {
+          // A message that cannot be composed never reaches the connection.
+          yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+          continue;
+        }
+
+        if (setupError !== undefined) {
+          const errorMessage =
+            setupError instanceof Error ? setupError.message : String(setupError);
+          yield createSmtpFailure(errorMessage, setupError);
+          continue;
+        }
+
         if (!connectionValid) {
           yield createSmtpFailure('Connection is no longer valid');
           continue;
         }
 
-        try {
-          const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
-          const dsn = resolveSmtpDsn(envelope, options?.dsn);
-          const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
-          options?.signal?.throwIfAborted();
+        if (connection == null) {
+          try {
+            connection = await this.getConnection(options?.signal);
+          } catch (error) {
+            // Cancellation rejects rather than producing receipts.
+            options?.signal?.throwIfAborted();
+            setupError = error;
+            yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+            continue;
+          }
+        }
 
+        try {
+          options?.signal?.throwIfAborted();
           const result = await connection.sendMessage(smtpMessage, options?.signal);
 
           yield {
@@ -411,7 +411,13 @@ class SmtpTransport {
       // Runs on normal completion, on error, and when the consumer abandons
       // the iteration early with `break` or `return`.  Without it an abandoned
       // iteration would hold its connection slot forever.
-      await releaseConnection();
+      if (connection != null) {
+        if (connectionValid) {
+          await this.returnConnection(connection);
+        } else {
+          await this.discardConnection(connection);
+        }
+      }
     }
   }
 

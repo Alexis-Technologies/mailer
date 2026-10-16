@@ -570,3 +570,40 @@ test('SMTP: an abort while waiting for the greeting rejects with its reason', as
     await stop(server);
   }
 });
+
+test('SMTP: a message that cannot be composed takes no connection and fails no other', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  // A content type with a line break fails composition, past createMessage.
+  const broken = {
+    ...message(),
+    attachments: [
+      {
+        inline: false,
+        filename: 'a.txt',
+        contentType: 'text/plain\r\nX-Injected: yes',
+        content: new Uint8Array([0x61]),
+        contentId: '',
+      },
+    ],
+  };
+  try {
+    const transport = new SmtpTransport({ host: 'localhost', port, poolSize: 1 });
+    assert.strictEqual((await transport.send(broken)).successful, false);
+    const empty = [];
+    for await (const receipt of transport.sendMany([])) empty.push(receipt);
+    assert.deepStrictEqual(empty, []);
+    assert.strictEqual(server.getConnectionCount(), 0);
+
+    const outcomes = [];
+    for await (const receipt of transport.sendMany([broken, message(), broken, message()])) {
+      outcomes.push(receipt.successful);
+    }
+    assert.deepStrictEqual(outcomes, [false, true, false, true]);
+    assert.strictEqual(server.getReceivedMessages().length, 2);
+    assert.strictEqual(server.getConnectionCount(), 1);
+    await transport.closeAllConnections();
+  } finally {
+    await server.stop();
+  }
+});

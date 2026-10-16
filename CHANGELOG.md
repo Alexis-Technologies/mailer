@@ -201,6 +201,11 @@ fixed ones below.
   counted as made when TCP connected, so `connectionTimeout` did not cover the handshake, and a
   server that never completed it held the send until the socket timeout. It is made once the
   handshake completes.
+- **A message that cannot be composed no longer costs `./smtp` its connection** (an upstream bug):
+  the message was composed after connecting and authenticating, and an error in it discarded
+  the connection, failing every later message of a `sendMany` with "Connection is no longer
+  valid". It is now composed first and fails alone; `sendMany` connects for its first composed
+  message, and an empty batch opens no connection.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.
