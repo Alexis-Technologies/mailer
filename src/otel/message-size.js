@@ -1,8 +1,6 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/message-size.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const encoder = new TextEncoder();
-
 /**
  * Counts a string in UTF-8 bytes rather than UTF-16 code units.
  *
@@ -11,11 +9,13 @@ const encoder = new TextEncoder();
  * real size, an emoji a half.  The size these estimates report is in bytes, so
  * they have to be counted that way.
  *
+ * Counted with `Buffer.byteLength`, without encoding the text.
+ *
  * @param text The string to measure.
  * @returns The number of bytes the string occupies in UTF-8.
  */
 const utf8Length = (text) => {
-  return encoder.encode(text).length;
+  return Buffer.byteLength(text, 'utf8');
 };
 
 /**

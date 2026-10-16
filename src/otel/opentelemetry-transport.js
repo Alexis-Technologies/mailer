@@ -129,13 +129,19 @@ class OpenTelemetryTransport {
    */
   async send(message, options) {
     const startTime = performance.now();
+    // Estimated once, for the span, the metrics and the custom attributes.
+    const messageSize = estimateMessageSize(message);
 
     // Create span if tracing is enabled
-    const span = this.tracingCollector?.createSendSpan(message, this.extractNetworkAttributes());
+    const span = this.tracingCollector?.createSendSpan(
+      message,
+      this.extractNetworkAttributes(),
+      messageSize,
+    );
 
     // Record metrics start
     this.metricsCollector?.recordSendStart(this.transportName);
-    this.metricsCollector?.recordMessage(message, this.transportName);
+    this.metricsCollector?.recordMessage(message, this.transportName, messageSize);
 
     try {
       // Apply custom attributes if configured
@@ -144,7 +150,7 @@ class OpenTelemetryTransport {
           'send',
           this.transportName,
           1,
-          estimateMessageSize(message),
+          messageSize,
         );
         span.setAttributes(customAttributes);
       }

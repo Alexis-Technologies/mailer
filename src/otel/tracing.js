@@ -44,7 +44,7 @@ class TracingCollector {
   /**
    * Creates a span for a single email send operation.
    */
-  createSendSpan(message, networkAttributes) {
+  createSendSpan(message, networkAttributes, messageSize) {
     if (!this.shouldSample()) {
       return new NoOpEmailSpan();
     }
@@ -55,7 +55,10 @@ class TracingCollector {
     });
 
     // Set message attributes
-    const messageAttributes = this.attributeExtractor.extractMessageAttributes(message);
+    const messageAttributes = this.attributeExtractor.extractMessageAttributes(
+      message,
+      messageSize,
+    );
     span.setAttributes(messageAttributes);
 
     // Set network attributes if provided

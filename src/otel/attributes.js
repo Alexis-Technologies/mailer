@@ -52,7 +52,7 @@ class EmailAttributeExtractor {
   /**
    * Extracts attributes for a single message send operation.
    */
-  extractMessageAttributes(message) {
+  extractMessageAttributes(message, messageSize = estimateMessageSize(message)) {
     const attributes = {
       // General operation attributes (following OTel patterns)
       'operation.name': 'email.send',
@@ -91,7 +91,7 @@ class EmailAttributeExtractor {
     attributes['email.content.type'] = this.detectContentType(message);
 
     // Calculate message size estimate
-    attributes['email.message.size'] = estimateMessageSize(message);
+    attributes['email.message.size'] = messageSize;
 
     return attributes;
   }
