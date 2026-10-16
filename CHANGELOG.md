@@ -244,6 +244,11 @@ fixed ones below.
   dropped the errors of the transports, stopped at one that threw at once, and disposed of a
   transport listed twice twice. Each transport is now disposed of once, all of them whatever
   fails, and the failures reject the disposal as an `AggregateError`.
+- **A logger that throws no longer loses a receipt** (an upstream bug): when the logger of
+  `./logger` threw after a successful send, the send rejected, and a caller could send the
+  message again; one that threw before stopped the send. The failure of the logger is now
+  emitted as a process warning with the code `MAILER_LOGGER_FAILED`, and the send and its
+  receipt go on.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

@@ -150,3 +150,33 @@ test('Logger: a retry of the wrapped transport is logged, and still reaches onRe
     'base',
   );
 });
+
+test('Logger: a logger that throws loses no receipt and stops no send', async (t) => {
+  const warnings = t.mock.method(process, 'emitWarning', () => {});
+  const broken = () => {
+    throw new Error('Log sink is down');
+  };
+  const logger = { debug: broken, info: broken, warn: broken, error: broken };
+  let sent = 0;
+  const base = {
+    id: 'base',
+    send: async () => {
+      sent++;
+      return { successful: true, messageId: 'm1' };
+    },
+    async *sendMany(messages) {
+      for await (const sentMessage of messages) yield await base.send(sentMessage);
+    },
+  };
+  const transport = new LoggerTransport({ transport: base, logger });
+  assert.deepStrictEqual(await transport.send(message()), { successful: true, messageId: 'm1' });
+  for await (const receipt of transport.sendMany([message()])) {
+    assert.strictEqual(receipt.successful, true);
+  }
+  assert.strictEqual(sent, 2);
+  assert.ok(warnings.mock.callCount() >= 4);
+  assert.deepStrictEqual(warnings.mock.calls[0].arguments, [
+    'The logger of LoggerTransport threw: Error: Log sink is down',
+    { code: 'MAILER_LOGGER_FAILED' },
+  ]);
+});

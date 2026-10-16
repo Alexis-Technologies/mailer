@@ -89,6 +89,11 @@ to disposable wrapped transports. Completion logs are emitted as callers consume
 receipts. If a caller stops reading a batch early, the wrapped iterator is closed
 without being drained so the logging layer does not start additional delivery work.
 
+A logger that throws changes nothing of the delivery: the message is still sent,
+its receipt still comes back, and the failure is emitted as a process warning
+with the code `MAILER_LOGGER_FAILED` (`process.on('warning', …)`), since losing
+the receipt could make the caller send the message again.
+
 The retries of the wrapped transport, those an HTTP provider makes on its own and
 those of a `./retry` inside the logger transport, are logged as `email.retrying`
 events, with the attempt that failed, the wait in milliseconds, the text of the

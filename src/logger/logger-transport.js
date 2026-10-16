@@ -317,9 +317,18 @@ class LoggerTransport {
     return `${lifecycleMessage}\n\nSubject: ${message.subject}\n\n${content}`;
   }
 
-  // The properties first and the message second, as pino takes them.
+  // The properties first and the message second, as pino takes them.  A
+  // logger that throws changes nothing of the send: the message still goes,
+  // its receipt still comes back (losing it could have the caller send it
+  // again), and the failure becomes a process warning rather than vanishing.
   log(level, message, properties) {
-    this.logger[level](properties, message);
+    try {
+      this.logger[level](properties, message);
+    } catch (error) {
+      process.emitWarning(`The logger of LoggerTransport threw: ${describe(error)}`, {
+        code: 'MAILER_LOGGER_FAILED',
+      });
+    }
   }
 }
 

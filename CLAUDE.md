@@ -348,6 +348,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     transport whose async dispose threw before returning a promise, and disposed of a transport
     listed twice twice. Each is disposed of once (a WeakSet), all of them whatever fails, and
     the failures reject together as an `AggregateError`.
+67. logger: a logger that threw after a successful send turned the send into a rejection, so
+    the receipt was lost and a caller could send the message again; one that threw before
+    stopped the send. `log()` catches it and emits a process warning
+    (`MAILER_LOGGER_FAILED`); the send and its receipt go on.
 
 ## Repository layout
 
