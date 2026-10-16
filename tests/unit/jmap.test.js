@@ -429,3 +429,67 @@ test('JMAP: a retried discovery request is told through onRetry', async (t) => {
   assert.strictEqual(events[0].attempt, 1);
   assert.strictEqual(events[0].error.statusCode, 503);
 });
+
+test('JMAP: a batch goes in requests within maxSizeRequest, a message too large alone fails', async (t) => {
+  const createdOf = (args) => {
+    const created = {};
+    for (const key in args.create) created[key] = { id: key, blobId: 'b', threadId: 't' };
+    return { created };
+  };
+  const run = async (maxSizeRequest, messages) => {
+    t.mock.restoreAll();
+    const core = maxSizeRequest === undefined ? {} : { maxSizeRequest };
+    serve(t, {
+      session: session({ capabilities: { [CORE]: core, [MAIL]: {}, [SUBMISSION]: {} } }),
+      'Email/set': createdOf,
+      'EmailSubmission/set': createdOf,
+    });
+    const served = globalThis.fetch;
+    const sizes = [];
+    t.mock.method(globalThis, 'fetch', async (input, init) => {
+      if (init?.body != null && String(init.body).includes('Email/set')) {
+        sizes.push(Buffer.byteLength(String(init.body)));
+      }
+      return served(input, init);
+    });
+    const receipts = [];
+    for await (const receipt of transport().sendMany(messages)) receipts.push(receipt);
+    return { receipts, sizes };
+  };
+  const five = [message(), message(), message(), message(), message()];
+  const whole = await run(undefined, five);
+  assert.strictEqual(whole.sizes.length, 1);
+
+  const limit = Math.ceil(whole.sizes[0] / 2);
+  const split = await run(limit, five);
+  assert.ok(split.sizes.length >= 2, String(split.sizes));
+  for (const size of split.sizes) assert.ok(size <= limit, `${size} > ${limit}`);
+  assert.deepStrictEqual(
+    split.receipts.map((receipt) => receipt.successful),
+    [true, true, true, true, true],
+  );
+
+  const large = createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Large',
+    content: { text: 'x'.repeat(limit) },
+  });
+  const mixed = await run(limit, [message(), large, message()]);
+  assert.deepStrictEqual(
+    mixed.receipts.map((receipt) => receipt.successful || receipt.errors[0].code),
+    [true, 'jmap.request_too_large', true],
+  );
+  for (const size of mixed.sizes) assert.ok(size <= limit);
+
+  // A single send is refused before its request too.
+  t.mock.restoreAll();
+  const calls = serve(t, {
+    session: session({
+      capabilities: { [CORE]: { maxSizeRequest: limit }, [MAIL]: {}, [SUBMISSION]: {} },
+    }),
+  });
+  const receipt = await transport().send(large);
+  assert.strictEqual(receipt.errors[0].code, 'jmap.request_too_large');
+  assert.ok(!calls.includes('Email/set'));
+});

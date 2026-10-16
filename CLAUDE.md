@@ -266,7 +266,7 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 42. jmap: `sendMany` put every message into one Email/set and EmailSubmission/set, whatever
     the `maxObjectsInSet` of the Session, so a server with a limit refused the whole batch,
     and any failure failed every message. It sends batches of at most that many (`sendBatch`),
-    each failing on its own; discovery still runs once. `maxSizeRequest` is not yet followed.
+    each failing on its own; discovery still runs once. `maxSizeRequest` is 80.
 43. ses, mailgun, mailtrap, jmap: the SES `region` went into the host name unchecked
     (`foo@evil.example/` sent the signed request to `evil.example`), and the Mailgun `domain`,
     the Mailtrap `inboxId` and the JMAP `accountId` of a blob upload into the path unencoded.
@@ -402,6 +402,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     any text after it leaves the first line to itself.
 79. mailgun (known bug 2): an inline part was sent under its file name, which Mailgun makes its
     Content-ID, so the `cid:` of the HTML matched nothing. It goes under its `contentId`.
+80. jmap: the `maxSizeRequest` of the Session (RFC 8620 §2) was not followed, so a batch, or a
+    message with a long body, over it was refused whole. A batch goes in as many requests as
+    the limit takes (`groupBySize`, measured once per message), each failing on its own, and a
+    message whose request alone is over it fails with `jmap.request_too_large`, unsent.
 
 ## Repository layout
 

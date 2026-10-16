@@ -191,7 +191,9 @@ for await (const receipt of transport.sendMany(messages)) {
 
 The `JmapTransport.sendMany()` method batches emails into JMAP requests of as
 many as the server's `maxObjectsInSet` allows, significantly reducing HTTP
-round-trips. It discovers the account, the drafts mailbox and the identities
+round-trips, and splits a batch further so that no request is over the
+server's `maxSizeRequest` (a message too large alone fails with
+`jmap.request_too_large`, unsent). It discovers the account, the drafts mailbox and the identities
 once, reads a batch of messages at a time as it sends them, and gives each
 message its own receipt: if some emails fail, others in the batch can still
 succeed.

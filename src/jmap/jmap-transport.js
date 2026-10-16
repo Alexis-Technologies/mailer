@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/jmap/src/jmap-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { Buffer } = require('node:buffer');
 const { combineSignals } = require('../core/abort-signal.js');
 const { createRawMessagePlan, RawMessageValidationError } = require('../core/raw-message.js');
 const { deliverRawMessage, rawDiscoveryResult } = require('./raw-delivery.js');
@@ -220,11 +221,18 @@ class JmapTransport {
       // Convert message and send
       const emailCreate = convertMessage(message, draftsMailboxId, uploadedBlobs);
 
-      // Execute Email/set + EmailSubmission/set batch request
+      // Execute Email/set + EmailSubmission/set batch request, unless it is
+      // larger than the server takes (RFC 8620 §2).
+      const request = submissionRequest(accountId, emailCreate, identityId);
+      const maxSizeRequest = getMaxSizeRequest(session);
+      if (maxSizeRequest !== Infinity) {
+        const size = Buffer.byteLength(JSON.stringify(request));
+        if (size > maxSizeRequest) return requestTooLarge(size, maxSizeRequest);
+      }
       const response = await executeSubmission(
         this.submissionClient,
         session.apiUrl,
-        submissionRequest(accountId, emailCreate, identityId),
+        request,
         signal,
       );
 
@@ -429,84 +437,60 @@ class JmapTransport {
     const { session, accountId, draftsMailboxId, identityMap } = discovered;
     let processingStage = 'attachment upload';
     let attachmentsUploadedCount = 0;
+    const emailCreates = [];
+    const submissionCreates = [];
     try {
       // Upload all attachments for all messages
-      const allUploadedBlobs = new Map();
+      const allUploadedBlobs = [];
       for (let i = 0; i < batch.length; i++) {
-        const uploadedBlobs = await this.uploadAttachments(
-          session,
-          accountId,
-          batch[i].attachments,
-          signal,
+        allUploadedBlobs.push(
+          await this.uploadAttachments(session, accountId, batch[i].attachments, signal),
         );
-        allUploadedBlobs.set(i, uploadedBlobs);
         attachmentsUploadedCount = i + 1;
         signal?.throwIfAborted();
       }
 
       // Build batch Email/set and EmailSubmission/set create objects
       processingStage = 'message conversion';
-      const emailCreates = {};
-      const submissionCreates = {};
-
       for (let i = 0; i < batch.length; i++) {
         const message = batch[i];
-        const emailCreate = convertMessage(message, draftsMailboxId, allUploadedBlobs.get(i));
-
+        emailCreates.push(convertMessage(message, draftsMailboxId, allUploadedBlobs[i]));
         // Find identity for this sender
         const senderEmail = message.sender.address.toLowerCase();
         const identityId = identityMap.get(senderEmail) ?? identityMap.values().next().value;
-
-        emailCreates[`draft${i}`] = emailCreate;
-        submissionCreates[`sub${i}`] = {
-          identityId,
-          emailId: `#draft${i}`,
-        };
-      }
-
-      // Execute batch request
-      processingStage = 'batch request execution';
-      const response = await executeSubmission(
-        this.submissionClient,
-        session.apiUrl,
-        {
-          using: [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail, JMAP_CAPABILITIES.submission],
-          methodCalls: [
-            [
-              'Email/set',
-              {
-                accountId,
-                create: emailCreates,
-              },
-              'c0',
-            ],
-            [
-              'EmailSubmission/set',
-              {
-                accountId,
-                create: submissionCreates,
-              },
-              'c1',
-            ],
-          ],
-        },
-        signal,
-      );
-
-      // The results of the sets are found once for the whole batch.
-      const results = setResultsOf(response);
-      for (let i = 0; i < batch.length; i++) {
-        yield this.parseBatchResponseForIndex(results, i);
+        submissionCreates.push({ identityId, emailId: `#draft${i}` });
       }
     } catch (error) {
-      for (const failure of this.failBatch(
-        error,
-        processingStage,
-        batch.length,
-        attachmentsUploadedCount,
-        signal,
-      )) {
-        yield failure;
+      yield* this.failBatch(error, processingStage, batch.length, attachmentsUploadedCount, signal);
+      return;
+    }
+
+    // RFC 8620 §2: a request over the maxSizeRequest of the server is
+    // refused as a whole, so the batch goes in as many requests as it takes,
+    // each failing on its own.
+    const groups = groupBySize(
+      accountId,
+      emailCreates,
+      submissionCreates,
+      getMaxSizeRequest(session),
+    );
+    for (const group of groups) {
+      if (group.size !== undefined) {
+        yield requestTooLarge(group.size, getMaxSizeRequest(session));
+        continue;
+      }
+      try {
+        const response = await executeSubmission(
+          this.submissionClient,
+          session.apiUrl,
+          batchRequest(accountId, group.indices, emailCreates, submissionCreates),
+          signal,
+        );
+        // The results of the sets are found once for the whole request.
+        const results = setResultsOf(response);
+        for (const i of group.indices) yield this.parseBatchResponseForIndex(results, i);
+      } catch (error) {
+        yield* this.failBatch(error, 'batch request execution', group.indices.length, 0, signal);
       }
     }
   }
@@ -1063,6 +1047,75 @@ const verificationOperation = async (timeout, operation, signal) => {
     combined.cleanup();
   }
 };
+
+const getMaxSizeRequest = (session) => {
+  const limit = session.capabilities?.[JMAP_CAPABILITIES.core]?.maxSizeRequest;
+  return Number.isInteger(limit) && limit > 0 ? limit : Infinity;
+};
+
+// The request that creates and submits the messages of a batch at `indices`,
+// each under the creation ids of its index in the batch.
+const batchRequest = (accountId, indices, emailCreates, submissionCreates) => {
+  const create = {};
+  const submit = {};
+  for (const i of indices) {
+    create[`draft${i}`] = emailCreates[i];
+    submit[`sub${i}`] = submissionCreates[i];
+  }
+  return {
+    using: REQUIRED_CAPABILITIES,
+    methodCalls: [
+      ['Email/set', { accountId, create }, 'c0'],
+      ['EmailSubmission/set', { accountId, create: submit }, 'c1'],
+    ],
+  };
+};
+
+/**
+ * Groups the messages of a batch, in order, into requests no larger than the
+ * limit.  The size of a request is that of the request without messages and
+ * of the entries of each, measured once.
+ *
+ * @returns Groups of `indices`, or a group with the `size` of the request of
+ * one message alone that is over the limit.
+ */
+const groupBySize = (accountId, emailCreates, submissionCreates, limit) => {
+  const all = [];
+  for (let i = 0; i < emailCreates.length; i++) all.push(i);
+  if (limit === Infinity) return [{ indices: all }];
+  const empty = Buffer.byteLength(JSON.stringify(batchRequest(accountId, [], [], [])));
+  const groups = [];
+  let indices = [];
+  let size = empty;
+  for (const i of all) {
+    const entries =
+      Buffer.byteLength(`"draft${i}":${JSON.stringify(emailCreates[i])}`) +
+      Buffer.byteLength(`"sub${i}":${JSON.stringify(submissionCreates[i])}`);
+    // A comma before each entry of the two creates but the first.
+    const added = entries + (indices.length > 0 ? 2 : 0);
+    if (indices.length > 0 && size + added > limit) {
+      groups.push({ indices });
+      indices = [];
+      size = empty;
+    }
+    if (empty + entries > limit) {
+      groups.push({ size: empty + entries });
+      continue;
+    }
+    size += indices.length > 0 ? entries + 2 : entries;
+    indices.push(i);
+  }
+  if (indices.length > 0) groups.push({ indices });
+  return groups;
+};
+
+// A message whose request alone is larger than the server takes.
+const requestTooLarge = (size, limit) =>
+  createJmapFailure(
+    `The JMAP request of ${size} bytes is larger than the server's maxSizeRequest of ${limit}.`,
+    undefined,
+    { category: 'rejected', code: 'jmap.request_too_large', retryable: false },
+  );
 
 const getMaxObjectsInSet = (session) => {
   const limit = session.capabilities?.[JMAP_CAPABILITIES.core]?.maxObjectsInSet;
