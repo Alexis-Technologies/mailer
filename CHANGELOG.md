@@ -35,6 +35,11 @@ fixed ones below.
 - **`onRetry` in the options of a send:** the HTTP providers and `./retry` call it before each
   retry with the attempt, the wait and the error, and the decorators pass it on, so one callback
   hears every level (not yet from `./jmap`).
+- **`generateId` for the identifiers the library makes:** an `IdGenerator` (`(kind) => string`,
+  with `IdKind` one of `message-id`, `content-id`, `idempotency-key` and `receipt-id`) can
+  replace `crypto.randomUUID()`, such as a cuid2, a ULID or a nanoid. `generateMessageId` and
+  `createMessage` take it in their options; it gives the left half of a Message-ID or a
+  Content-ID, and what it returns is checked (a `TypeError` otherwise).
 - **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
   (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
   With a wrapped transport, the logger needs a method for that level.

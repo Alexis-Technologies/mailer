@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/core/src/message-id.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('./id.js');
 const { isDotAtomText, isDtextBetween } = require('./text.js');
 
 /**
@@ -26,11 +27,14 @@ const { isDotAtomText, isDtextBetween } = require('./text.js');
  * ```
  *
  * @param domain The domain the identifier is rooted in.
+ * @param options `generateId`, which makes the left half instead of a UUID.
  * @returns A bare message identifier, without angle brackets.
- * @throws {TypeError} If the domain is not a valid identifier right-hand side.
+ * @throws {TypeError} If the domain is not a valid identifier right-hand side,
+ *                     or `generateId` returns no dot-atom-text.
  */
-const generateMessageId = (domain) => {
-  return `${crypto.randomUUID()}@${normalizeIdRight(domain)}`;
+const generateMessageId = (domain, options) => {
+  const right = normalizeIdRight(domain);
+  return `${generateId('message-id', options?.generateId)}@${right}`;
 };
 
 /**
@@ -231,19 +235,24 @@ const resolveThreadingHeaders = (message) => {
  * `parseAddress()` accepts spellings the identifier grammar does not, such as
  * the trailing dot of a fully qualified name, which is dropped here.  A domain
  * the grammar still refuses falls back to `localhost` rather than failing the
- * send.  Uniqueness holds either way: the left half is a UUID.
+ * send.  Uniqueness holds either way: the left half is a UUID, or what the
+ * generator of the application makes.
  *
  * @param address The sender's address.
+ * @param generator Optional generator of the left half.
  * @returns A bare message identifier.
+ * @throws {TypeError} If the generator returns no dot-atom-text.
  * @internal
  */
-const generateSenderMessageId = (address) => {
-  const domain = domainOf(address).replace(/\.$/, '');
+const generateSenderMessageId = (address, generator) => {
+  const left = generateId('message-id', generator);
+  let right;
   try {
-    return generateMessageId(domain);
+    right = normalizeIdRight(domainOf(address).replace(/\.$/, ''));
   } catch {
-    return generateMessageId('localhost');
+    right = 'localhost';
   }
+  return `${left}@${right}`;
 };
 
 /**
@@ -277,19 +286,20 @@ const pinnedMessages = new WeakMap();
  * an ambiguous failure would not read as one to its recipients' servers.
  *
  * @param message The message to send.
+ * @param generator Optional generator of the left half of the identifier.
  * @returns The message itself when it has a Message-ID, either as
  * `messageId` or as a custom header; otherwise a copy carrying a generated
  * one, the same copy on every call for the same message.
  * @internal
  */
-const pinMessageId = (message) => {
+const pinMessageId = (message, generator) => {
   if (typeof message !== 'object' || message === null || message.sender == null) return message;
   if (message.messageId !== undefined || message.headers?.get('Message-ID') != null) {
     return message;
   }
   let pinned = pinnedMessages.get(message);
   if (pinned === undefined) {
-    pinned = { ...message, messageId: generateSenderMessageId(message.sender.address) };
+    pinned = { ...message, messageId: generateSenderMessageId(message.sender.address, generator) };
     pinnedMessages.set(message, pinned);
   }
   return pinned;

@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/core/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { generateId } = require('./id.js');
 const { parseAddress } = require('./address.js');
 const { isAttachment } = require('./attachment.js');
 const { resolveCalendarContent } = require('./calendar.js');
@@ -24,6 +25,8 @@ const { parseMessageId } = require('./message-id.js');
  * @param constructor The constructor parameters for the message. Uses more
  *                    user-friendly types like accepting strings for email
  *                    addresses and `File` objects for attachments.
+ * @param options `generateId`, which makes the left half of the Content-ID of
+ *                a `File` attachment instead of a UUID.
  * @returns A new {@link Message} object with all properties normalized and
  *          validated.
  * @throws {TypeError} When any email address string cannot be parsed, when an
@@ -32,9 +35,10 @@ const { parseMessageId } = require('./message-id.js');
  *                     object is invalid, when a message identifier is not
  *                     valid, when the date is not one RFC 5322 can express, or
  *                     when the calendar content is not a single well-formed
- *                     iCalendar object declaring one supported method.
+ *                     iCalendar object declaring one supported method, or when
+ *                     `generateId` returns no dot-atom-text.
  */
-const createMessage = (constructor) => {
+const createMessage = (constructor, options) => {
   const sender = checkAddress('sender', constructor.from);
   return {
     sender,
@@ -55,7 +59,7 @@ const createMessage = (constructor) => {
             attachment.type == null || attachment.type === ''
               ? 'application/octet-stream'
               : attachment.type,
-          contentId: `${crypto.randomUUID()}@${sender.address.replace(/^[^@]*@/, '')}`,
+          contentId: `${generateId('content-id', options?.generateId)}@${sender.address.replace(/^[^@]*@/, '')}`,
         });
       } else if (isAttachment(attachment)) {
         return checkAttachment(attachment);

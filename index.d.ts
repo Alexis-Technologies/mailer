@@ -663,6 +663,8 @@ export interface MessageConstructor {
  * @param constructor The constructor parameters for the message. Uses more
  *                    user-friendly types like accepting strings for email
  *                    addresses and `File` objects for attachments.
+ * @param options `generateId`, which makes the left half of the Content-ID of
+ *                a `File` attachment instead of a UUID.
  * @returns A new {@link Message} object with all properties normalized and
  *          validated.
  * @throws {TypeError} When any email address string cannot be parsed, when an
@@ -671,9 +673,13 @@ export interface MessageConstructor {
  *                     object is invalid, when a message identifier is not
  *                     valid, when the date is not one RFC 5322 can express, or
  *                     when the calendar content is not a single well-formed
- *                     iCalendar object declaring one supported method.
+ *                     iCalendar object declaring one supported method, or when
+ *                     `generateId` returns no dot-atom-text.
  */
-export declare function createMessage(constructor: MessageConstructor): Message;
+export declare function createMessage(
+  constructor: MessageConstructor,
+  options?: IdOptions,
+): Message;
 
 /**
  * Generates a globally unique message identifier rooted in a domain.
@@ -698,10 +704,39 @@ export declare function createMessage(constructor: MessageConstructor): Message;
  * ```
  *
  * @param domain The domain the identifier is rooted in.
+ * @param options `generateId`, which makes the left half instead of a UUID.
  * @returns A bare message identifier, without angle brackets.
- * @throws {TypeError} If the domain is not a valid identifier right-hand side.
+ * @throws {TypeError} If the domain is not a valid identifier right-hand side,
+ *                     or `generateId` returns no dot-atom-text.
  */
-export declare function generateMessageId(domain: string): string;
+export declare function generateMessageId(domain: string, options?: IdOptions): string;
+
+/**
+ * What an identifier the library generates is for: the left half of a
+ * Message-ID or a Content-ID, the idempotency key of a request, or the
+ * message ID of a receipt that a provider did not give one for.
+ */
+export type IdKind = 'message-id' | 'content-id' | 'idempotency-key' | 'receipt-id';
+/**
+ * Makes the identifiers the library would otherwise draw from
+ * `crypto.randomUUID()`, such as a cuid2, a ULID or a nanoid, to correlate
+ * them with the records of the application.  For a Message-ID or a
+ * Content-ID it returns the left half only, and the library adds `@` and the
+ * domain.  What it returns is checked: dot-atom-text for those two kinds, and
+ * printable ASCII without spaces, at most 256 characters, for every kind;
+ * anything else is a `TypeError` before a message is sent.
+ */
+export type IdGenerator = (kind: IdKind) => string;
+/**
+ * Options of the functions and transports that generate identifiers.
+ */
+export interface IdOptions {
+  /**
+   * The generator of the identifiers.
+   * @default () => crypto.randomUUID()
+   */
+  readonly generateId?: IdGenerator;
+}
 /**
  * Parses a message identifier, with or without the enclosing angle brackets,
  * into its bare form.

@@ -312,3 +312,43 @@ test('Receipt: a failure is classified by its status, then its code, then its wo
     code: 'configuration',
   });
 });
+
+test('Core: generateId makes the identifiers, and what it returns is checked', () => {
+  const { generateMessageId } = require('../../index.js');
+  const { pinMessageId } = require('../../src/core/message-id.js');
+  const kinds = [];
+  const generateId = (kind) => {
+    kinds.push(kind);
+    return `01JABCDEF.${kinds.length}`;
+  };
+  assert.strictEqual(generateMessageId('example.com', { generateId }), '01JABCDEF.1@example.com');
+  const message = createMessage(
+    {
+      from: 'alex@example.com',
+      to: 'bob@example.com',
+      subject: 'Hi',
+      content: { text: 'Hi' },
+      attachments: [new File(['x'], 'a.txt', { type: 'text/plain' })],
+    },
+    { generateId },
+  );
+  assert.strictEqual(message.attachments[0].contentId, '01JABCDEF.2@example.com');
+  assert.strictEqual(pinMessageId(message, generateId).messageId, '01JABCDEF.3@example.com');
+  assert.deepStrictEqual(kinds, ['message-id', 'content-id', 'message-id']);
+
+  for (const wrong of [
+    'a>\r\nBcc: eve@evil.example',
+    '',
+    'a b',
+    'a..b',
+    '.a',
+    'é',
+    'x'.repeat(257),
+    42,
+  ]) {
+    assert.throws(() => generateMessageId('example.com', { generateId: () => wrong }), {
+      name: 'TypeError',
+      message: /^Invalid message-id from generateId/,
+    });
+  }
+});

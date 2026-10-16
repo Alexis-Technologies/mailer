@@ -3,11 +3,14 @@ import {
   createFailedReceipt,
   createMessage,
   createReceiptError,
+  generateMessageId,
   isRawTransport,
   isVerifiableTransport,
   parseAddress,
   RawMessageValidationError,
   type Address,
+  type IdGenerator,
+  type IdKind,
   type Message,
   type RawTransport,
   type Receipt,
@@ -90,3 +93,8 @@ expectType<Promise<Receipt>>(
     },
   ),
 );
+
+// generateId makes the identifiers of a kind, the left half of a Message-ID.
+const ulid: IdGenerator = (kind: IdKind) => `01J${kind.length}`;
+expectType<string>(generateMessageId('example.com', { generateId: ulid }));
+expectError(generateMessageId('example.com', { generateId: () => 42 }));
