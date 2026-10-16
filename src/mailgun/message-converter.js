@@ -121,8 +121,9 @@ const appendAttachment = async (formData, attachment, signal) => {
   });
 
   if (attachment.contentId) {
-    // Inline attachment
-    formData.append('inline', blob, attachment.filename);
+    // Mailgun gives an inline part the file name it is sent under as its
+    // Content-ID, so it goes under the ID the HTML refers to by cid:.
+    formData.append('inline', blob, attachment.contentId);
   } else {
     // Regular attachment
     formData.append('attachment', blob, attachment.filename);

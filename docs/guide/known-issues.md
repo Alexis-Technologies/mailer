@@ -11,8 +11,6 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 ## HTTP providers and JMAP
 
 - `validateSsl` is accepted and never read (SES, Resend, SendGrid, Mailgun, Mailtrap, Plunk).
-- Mailgun sends an inline attachment under its file name rather than its `contentId`, so a
-  `cid:` in the HTML does not match it.
 - SES: custom and threading headers are not sent.
 - JMAP on Node 24: an authentication rejection (401) of a streamed request body (raw upload,
   import, raw submission) becomes a retryable network error, as Node's `fetch` reports it so.

@@ -75,3 +75,25 @@ test('Mailgun: a display name with "<", "," or "@" stays a single mailbox', asyn
   });
   assert.deepStrictEqual(parsed.to, [{ address: 'bob@example.com', name }]);
 });
+
+test('Mailgun: an inline part goes under its Content-ID, which cid: refers to', async () => {
+  const withLogo = createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Logo',
+    content: { html: '<img src="cid:logo@example.com">' },
+    attachments: [
+      {
+        inline: true,
+        filename: 'logo.png',
+        content: new Uint8Array([1, 2, 3]),
+        contentType: 'image/png',
+        contentId: 'logo@example.com',
+      },
+    ],
+  });
+  const form = await convertMessage(withLogo, { domain: 'mg.example.com' });
+  const inline = form.getAll('inline');
+  assert.strictEqual(inline.length, 1);
+  assert.strictEqual(inline[0].name, 'logo@example.com');
+});

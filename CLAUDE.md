@@ -131,8 +131,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 
 1. (fixed, see 77) mime: inline images (`contentId`) went into `multipart/mixed`, not
    `multipart/related`.
-2. mailgun: an inline attachment is sent under its `filename`, not its `contentId`
-   (`message-converter.js`), so a `cid:` in the HTML does not match it.
+2. (fixed, see 79) mailgun: an inline attachment was sent under its `filename`, not its
+   `contentId` (`message-converter.js`), so a `cid:` in the HTML did not match it.
 3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
 4. (fixed, see 38) SMTP AUTH PLAIN and LOGIN encoded with `btoa`, which fails on non-Latin-1
    credentials; so did Basic auth in jmap and mailgun.
@@ -400,6 +400,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     RFC 2047 §2. A field with encoded words folds at 76, the first word is split at a whole
     character to fit after the field name (`fitFirstEncodedWord`), and a name too long for
     any text after it leaves the first line to itself.
+79. mailgun (known bug 2): an inline part was sent under its file name, which Mailgun makes its
+    Content-ID, so the `cid:` of the HTML matched nothing. It goes under its `contentId`.
 
 ## Repository layout
 

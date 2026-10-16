@@ -324,6 +324,9 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./mailgun` sends an inline part under its Content-ID** (an upstream bug): Mailgun makes the
+  file name of an inline part its Content-ID, and the file name was sent, so a `cid:` in the
+  HTML matched nothing.
 - **Header lines with encoded words keep to 76 characters** (an upstream bug): the first encoded
   word shared its line with the field name (`Subject: =?UTF-8?B?…?=`, up to 84 characters), past
   what RFC 2047 allows. Such a field now folds at 76, and its first word is split to fit.
