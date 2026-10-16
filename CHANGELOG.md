@@ -87,6 +87,10 @@ fixed ones below.
   reached telemetry and logs. Without `recordSensitiveData` (otel) or `recordMessage` (logger),
   every address in that text is now `[REDACTED]`, and the logger leaves `providerDetails` out.
   `./plunk` no longer puts the start of the recipient's address into a synthetic message ID.
+- **`./otel` redacts the `error.message` attribute too** (an upstream bug): a thrown error whose
+  message began like a transport failure (`Connection…`, `Timeout…`) was recorded as it was, so
+  `Connection refused by mx for bob@example.com` named the recipient. Its addresses are now
+  `[REDACTED]` unless `recordSensitiveData` is on.
 
 ### Fixed
 

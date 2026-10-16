@@ -363,3 +363,26 @@ test('OTel: the retries of the wrapped transport reach the span, the metrics and
   assert.deepStrictEqual(heard, [1, 2]);
   assert.deepStrictEqual(unsampled.tracerProvider.getAllSpans(), []);
 });
+
+test('OTel: a safe-looking error message is recorded without its addresses', async () => {
+  const thrown = plain({});
+  thrown.send = async () => {
+    throw new Error('Connection refused by mx for bob@example.com');
+  };
+  for (const recordSensitiveData of [false, true]) {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(thrown, {
+      tracerProvider,
+      meterProvider,
+      tracing: { recordSensitiveData },
+    });
+    await assert.rejects(transport.send(createTestMessage()));
+    const [span] = tracerProvider.getAllSpans();
+    assert.strictEqual(
+      span.attributes['error.message'],
+      recordSensitiveData
+        ? 'Connection refused by mx for bob@example.com'
+        : 'Connection refused by mx for [REDACTED]',
+    );
+  }
+});

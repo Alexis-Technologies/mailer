@@ -33,6 +33,11 @@ const { estimateMessageSize } = require('./message-size.js');
  * const errorAttrs = extractor.extractErrorAttributes(error, "network");
  * ```
  */
+// The beginnings of an error message that describe the transport rather than
+// a recipient.
+const SAFE_ERROR_MESSAGE =
+  /^(?:timeout|connection|network|dns|rate limit|quota exceeded|service unavailable|internal server error|bad gateway|gateway timeout)/i;
+
 class EmailAttributeExtractor {
   recordSensitiveData;
   transportName;
@@ -153,9 +158,10 @@ class EmailAttributeExtractor {
     if (error instanceof Error) {
       attributes['error.name'] = error.name;
 
-      // Only record error message if not sensitive data mode or if it's a safe error
+      // Only record error message if not sensitive data mode or if it's a safe error,
+      // and then without the addresses a safe-looking message may still name.
       if (this.recordSensitiveData || this.isSafeErrorMessage(error.message)) {
-        attributes['error.message'] = error.message;
+        attributes['error.message'] = this.describeError(error.message);
       }
     }
 
@@ -197,20 +203,7 @@ class EmailAttributeExtractor {
   }
 
   isSafeErrorMessage(message) {
-    const safePatterns = [
-      /^timeout/i,
-      /^connection/i,
-      /^network/i,
-      /^dns/i,
-      /^rate limit/i,
-      /^quota exceeded/i,
-      /^service unavailable/i,
-      /^internal server error/i,
-      /^bad gateway/i,
-      /^gateway timeout/i,
-    ];
-
-    return safePatterns.some((pattern) => pattern.test(message));
+    return SAFE_ERROR_MESSAGE.test(message);
   }
 }
 

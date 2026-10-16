@@ -292,6 +292,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     wrapped transport now reports its retries through `onRetry` of `TransportOptions`; the
     decorator records each on the span (`mailer.retry.count` and a `retry` event), counts it
     in `mailer_email_retries_total`, and passes it on to the caller's `onRetry`.
+53. otel: the `error.message` attribute of a thrown error was recorded raw when the message
+    began like a transport failure (`Connection…`), whatever addresses followed. It goes
+    through `describeError`, the redaction of the span status and events.
 
 ## Repository layout
 
