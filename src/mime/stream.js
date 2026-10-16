@@ -3,6 +3,7 @@
 
 const { createHash } = require('node:crypto');
 const { RawMessageValidationError } = require('../core/raw-message.js');
+const { Buffer } = require('node:buffer');
 const { base64, utf8 } = require('./bytes.js');
 const { BodyHasher } = require('./dkim/body-hash.js');
 const { signWithBodyHash } = require('./dkim/sign.js');
@@ -77,7 +78,7 @@ const prepareMimeStream = async (plan, options = {}) => {
     console.warn('DKIM signing failed, sending unsigned:', error);
   }
   signal?.throwIfAborted();
-  if (headers.split('\r\n').some((line) => utf8(line).length > 998)) {
+  if (headers.split('\r\n').some((line) => Buffer.byteLength(line) > 998)) {
     throw new RangeError('Signed MIME header exceeds the RFC 5322 line limit.');
   }
   const size = utf8(headers).length + length;

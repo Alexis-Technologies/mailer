@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mime/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { Buffer } = require('node:buffer');
 const { formatPhrase } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { checkAttachment } = require('../core/message.js');
@@ -490,44 +491,51 @@ const encodeAddress = (address) => {
   return `${displayName} <${address.address}>`;
 };
 
+// Whether a word of the value, between whitespace, is longer than `limit`.
+const hasWordLongerThan = (value, limit) => {
+  let run = 0;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const isSpace = code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d;
+    run = isSpace ? 0 : run + 1;
+    if (run > limit) return true;
+  }
+  return false;
+};
+
+// An encoded word holds at most 45 bytes of text: `=?UTF-8?B?` and `?=` take
+// 12 of its 75 characters, and 45 bytes are 60 in base64.
+const MAX_ENCODED_WORD_BYTES = 45;
+
+const encodeWord = (text) => `=?UTF-8?B?${base64(utf8(text))}?=`;
+
 const encodeHeaderValue = (value, encodeLongAsciiWords = false) => {
   // RFC 2047 encoding for non-ASCII characters in headers
-  const hasLongWord = value.split(/\s+/).some((word) => word.length > 60);
-  if (!/^[\x20-\x7E]*$/.test(value) || (encodeLongAsciiWords && hasLongWord)) {
-    const encodeWord = (text) => {
-      const utf8Bytes = new TextEncoder().encode(text);
-      const encoded = base64(utf8Bytes);
-      return `=?UTF-8?B?${encoded}?=`;
-    };
-    const maxEncodedLength = 75;
-    const encodedWord = encodeWord(value);
-
-    if (encodedWord.length <= maxEncodedLength) {
-      return encodedWord;
-    }
-
-    const words = [];
-    let currentText = '';
-
-    for (const character of value) {
-      const candidate = currentText + character;
-      if (encodeWord(candidate).length <= maxEncodedLength) {
-        currentText = candidate;
-      } else {
-        if (currentText.length > 0) {
-          words.push(encodeWord(currentText));
-        }
-        currentText = character;
-      }
-    }
-
-    if (currentText.length > 0) {
-      words.push(encodeWord(currentText));
-    }
-
-    return words.join(' ');
+  const isPrintableAscii = /^[\x20-\x7E]*$/.test(value);
+  if (isPrintableAscii && !(encodeLongAsciiWords && hasWordLongerThan(value, 60))) {
+    return value;
   }
-  return value;
+
+  // Each word takes as many whole characters as fit, counted by their UTF-8
+  // length: upstream encoded the growing word again for every character.
+  const words = [];
+  let wordStart = 0;
+  let wordBytes = 0;
+  for (let i = 0; i < value.length;) {
+    const codePoint = value.codePointAt(i);
+    const characterLength = codePoint > 0xffff ? 2 : 1;
+    const characterBytes =
+      codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
+    if (wordBytes + characterBytes > MAX_ENCODED_WORD_BYTES) {
+      words.push(encodeWord(value.slice(wordStart, i)));
+      wordStart = i;
+      wordBytes = 0;
+    }
+    wordBytes += characterBytes;
+    i += characterLength;
+  }
+  if (wordStart < value.length) words.push(encodeWord(value.slice(wordStart)));
+  return words.join(' ');
 };
 
 const encodeMimeParameter = (name, value) => {
@@ -609,20 +617,32 @@ const foldHeader = (name, value) => {
   }
 
   lines.push(prefix + remaining);
-  if (lines.some((line) => utf8(line).length > 998)) {
+  if (lines.some((line) => Buffer.byteLength(line) > 998)) {
     throw new RangeError(`Header field ${name} contains a token too long to fold.`);
   }
   return lines.join('\r\n');
 };
 
+// The digits of an escaped byte, as character codes.
+const HEX_DIGITS = Buffer.from('0123456789ABCDEF', 'latin1');
+
+/**
+ * Encodes text as quoted-printable (RFC 2045 §6.7), written byte by byte into
+ * one buffer: upstream concatenated a string per byte and formatted every
+ * escape with toString(16).
+ */
 const encodeQuotedPrintable = (text) => {
   const bytes = utf8(text);
-  let result = '';
+  // At most three characters per byte, and a soft line break of three per
+  // 25 escaped bytes.
+  const output = Buffer.allocUnsafe(bytes.length * 3 + Math.ceil(bytes.length / 25) * 3 + 3);
+  let written = 0;
   let column = 0;
   for (let i = 0; i < bytes.length; i++) {
     const byte = bytes[i];
     if (byte === 13 && bytes[i + 1] === 10) {
-      result += '\r\n';
+      output[written++] = 13;
+      output[written++] = 10;
       column = 0;
       i++;
       continue;
@@ -633,17 +653,23 @@ const encodeQuotedPrintable = (text) => {
       byte === 61 ||
       (byte === 32 && (i + 1 === bytes.length || bytes[i + 1] === 13 || bytes[i + 1] === 10)) ||
       (byte === 46 && column === 0);
-    const encoded = escaped
-      ? `=${byte.toString(16).toUpperCase().padStart(2, '0')}`
-      : String.fromCharCode(byte);
-    if (column + encoded.length > 75) {
-      result += '=\r\n';
+    const width = escaped ? 3 : 1;
+    if (column + width > 75) {
+      output[written++] = 61;
+      output[written++] = 13;
+      output[written++] = 10;
       column = 0;
     }
-    result += encoded;
-    column += encoded.length;
+    if (escaped) {
+      output[written++] = 61;
+      output[written++] = HEX_DIGITS[byte >> 4];
+      output[written++] = HEX_DIGITS[byte & 15];
+    } else {
+      output[written++] = byte;
+    }
+    column += width;
   }
-  return result;
+  return output.toString('latin1', 0, written);
 };
 
 module.exports = { prepareMimeMessage };
