@@ -1,9 +1,8 @@
 // Ported from upyo v0.7.0 (packages/resend/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
 
 /**
  * Error thrown when a Resend API request fails.
@@ -113,37 +112,14 @@ class ResendHttpClient {
    * @param options Fetch options.
    * @returns Promise that resolves to the parsed response.
    */
-  async makeRequest(url, options) {
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      let isAccepted = false;
-      try {
-        const response = await this.fetchWithAuth(url, options);
-        isAccepted = response.ok;
+  makeRequest(url, options) {
+    return requestWithRetry({
+      signal: options.signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      send: (signal) => this.fetchWithAuth(url, options, signal),
+      read: async (response) => {
         const text = await response.text();
-
-        if (!response.ok) {
-          let errorMessage;
-          try {
-            const errorBody = JSON.parse(text);
-            errorMessage = errorBody.message;
-          } catch {
-            // Ignore if JSON parsing fails, as the body may be non-JSON
-          }
-
-          const parsedErrorMessage = errorMessage === '' ? undefined : errorMessage;
-          const responseMessage = truncateErrorBody(text);
-          const fallbackMessage = responseMessage === '' ? undefined : responseMessage;
-
-          throw new ResendApiError(
-            parsedErrorMessage ?? fallbackMessage ?? `HTTP ${response.status}`,
-            response.status,
-            parseRetryAfter(response.headers.get('Retry-After')),
-            attempt + 1,
-          );
-        }
-
         try {
           return JSON.parse(text);
         } catch (parseError) {
@@ -154,46 +130,38 @@ class ResendHttpClient {
             }`,
           );
         }
-      } catch (error) {
-        if (isCallerAbort(error, options.signal)) {
-          throw error;
+      },
+      reject: async (response, attempt) => {
+        const text = await response.text();
+        let errorMessage;
+        try {
+          errorMessage = JSON.parse(text).message;
+        } catch {
+          // Ignore if JSON parsing fails, as the body may be non-JSON
         }
 
-        lastError = error instanceof Error ? error : new Error(String(error));
+        const parsedErrorMessage = errorMessage === '' ? undefined : errorMessage;
+        const responseMessage = truncateErrorBody(text);
+        const fallbackMessage = responseMessage === '' ? undefined : responseMessage;
 
-        // A 2xx means the provider took the request: sending it again could
-        // deliver the message twice, so what fails after it is not retried.
-        if (isAccepted) throw markDeliveryUnknown(lastError);
-
-        // Don't retry on client errors (4xx) or AbortError
-        if (
-          error instanceof ResendApiError &&
-          error.statusCode !== undefined &&
-          error.statusCode >= 400 &&
-          error.statusCode < 500
-        ) {
-          throw error;
-        }
-
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw error;
-        }
-
-        // If this is the last attempt, throw the error
-        if (attempt === this.config.retries) {
-          if (lastError instanceof ResendApiError) {
-            throw lastError;
-          }
-          throw new ResendApiError(lastError.message, undefined, undefined, attempt + 1);
-        }
-
-        // Wait before retrying with exponential backoff
-        const backoffMs = Math.min(1000 * Math.pow(2, attempt), 10000);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
-    }
-
-    throw lastError || new Error('Request failed after all retry attempts');
+        return new ResendApiError(
+          parsedErrorMessage ?? fallbackMessage ?? `HTTP ${response.status}`,
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        );
+      },
+      createTimeoutError: () =>
+        new Error(`Resend API request timed out after ${this.config.timeout} ms.`),
+      isRetryable: (error) => !isClientError(error) && !isAbortError(error),
+      retryDelayMs: (attempt) => Math.min(exponentialDelayMs(attempt), 10000),
+      finalError: (error, attempts) =>
+        error instanceof ResendApiError
+          ? error
+          : new ResendApiError(error.message, undefined, undefined, attempts),
+      // Upstream's wait ignores the signal (CLAUDE.md, known upstream bugs).
+      sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    });
   }
 
   /**
@@ -201,9 +169,10 @@ class ResendHttpClient {
    *
    * @param url The URL to fetch.
    * @param options Fetch options.
+   * @param signal The signal of the attempt, with its deadline.
    * @returns Promise that resolves to the Response.
    */
-  async fetchWithAuth(url, options) {
+  fetchWithAuth(url, options, signal) {
     const headers = new Headers(options.headers);
 
     // Add authentication
@@ -214,39 +183,12 @@ class ResendHttpClient {
       headers.set(key, value);
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
-
-    const combinedSignal = combineSignals(controller.signal, options.signal);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-        signal: combinedSignal.signal,
-      });
-
-      return response;
-    } catch (error) {
-      if (isAbortError(error) && controller.signal.aborted && !options.signal?.aborted) {
-        // oxlint-disable-next-line preserve-caught-error -- upstream
-        throw new Error(`Resend API request timed out after ${this.config.timeout} ms.`);
-      }
-      throw error;
-    } finally {
-      combinedSignal.cleanup();
-      clearTimeout(timeoutId);
-    }
+    return fetch(url, { ...options, headers, signal });
   }
 }
 
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
+const isClientError = (error) =>
+  error instanceof ResendApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 const truncateErrorBody = (text) => {
   return text.length > 500 ? `${text.slice(0, 500)}...` : text;
