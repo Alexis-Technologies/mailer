@@ -153,6 +153,9 @@ fixed ones below.
 - **`./ses` refuses a wrong `authentication` when the transport is made** (an upstream bug): an
   unknown type, a missing key or a session without its token failed only at the first send,
   after the retries and their backoff.
+- **Credentials outside Latin-1 work** (known upstream bug 4): SMTP AUTH PLAIN and LOGIN and the
+  Basic authentication of `./jmap` and `./mailgun` encoded them with `btoa`, which throws on a
+  Cyrillic or accented character. They are encoded as UTF-8.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

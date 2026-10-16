@@ -4,6 +4,7 @@
 const { combineSignals } = require('../core/abort-signal.js');
 const { JmapApiError } = require('./errors.js');
 const { readJson, readText } = require('../internal/body.js');
+const { Buffer } = require('node:buffer');
 
 /**
  * Upload a blob to the JMAP server.
@@ -24,7 +25,8 @@ const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
   if (config.bearerToken) {
     authHeader = `Bearer ${config.bearerToken}`;
   } else if (config.basicAuth) {
-    const credentials = btoa(`${config.basicAuth.username}:${config.basicAuth.password}`);
+    const { username, password } = config.basicAuth;
+    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
     authHeader = `Basic ${credentials}`;
   } else {
     throw new Error('No authentication method configured');

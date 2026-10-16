@@ -212,3 +212,20 @@ test('JMAP: a blob upload does not follow a redirect', async (t) => {
   await uploadBlob(config, 'https://jmap.example.com/upload/{accountId}', 'a1', new Blob(['a']));
   assert.deepStrictEqual(redirects, ['manual']);
 });
+
+test('JMAP: Basic authentication encodes credentials outside Latin-1 as UTF-8', async (t) => {
+  const authorizations = new Set();
+  serve(t);
+  const original = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (input, init) => {
+    authorizations.add(new Headers(init.headers).get('Authorization'));
+    return original(input, init);
+  });
+  const receipt = await transport({
+    bearerToken: undefined,
+    basicAuth: { username: 'алекс', password: 'пароль-✓' },
+  }).send(message());
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join(' | '));
+  const expected = `Basic ${Buffer.from('алекс:пароль-✓').toString('base64')}`;
+  assert.deepStrictEqual([...authorizations], [expected]);
+});

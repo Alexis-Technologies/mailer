@@ -4,6 +4,7 @@
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
 const { readText } = require('../internal/body.js');
+const { Buffer } = require('node:buffer');
 
 /**
  * HTTP client wrapper for Mailgun API requests.
@@ -107,7 +108,7 @@ class MailgunHttpClient {
     const headers = new Headers(options.headers);
 
     // Add authentication header
-    const auth = btoa(`api:${this.config.apiKey}`);
+    const auth = Buffer.from(`api:${this.config.apiKey}`).toString('base64');
     headers.set('Authorization', `Basic ${auth}`);
 
     // Add custom headers from config

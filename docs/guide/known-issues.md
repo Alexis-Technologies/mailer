@@ -16,13 +16,11 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 
 ## SMTP
 
-- AUTH PLAIN and LOGIN fail on credentials outside Latin-1.
 - `cram-md5` is in the `SmtpAuth` type but not implemented.
 
 ## HTTP providers and JMAP
 
 - `validateSsl` is accepted and never read (SES, Resend, SendGrid, Mailgun, Mailtrap, Plunk).
-- Basic authentication in JMAP and Mailgun fails on credentials outside Latin-1.
 - Mailgun sends an inline attachment under its file name rather than its `contentId`, so a
   `cid:` in the HTML does not match it.
 - Resend's `Idempotency-Key` comes from `Math.random`.

@@ -404,3 +404,44 @@ test('SMTP: the OAuth2 token request does not follow a redirect', async () => {
   assert.strictEqual(await manager.getAccessToken(), 'token');
   assert.deepStrictEqual(redirects, ['manual']);
 });
+
+test('SMTP: AUTH PLAIN and LOGIN encode credentials outside Latin-1 as UTF-8', async () => {
+  const user = 'алекс@example.com';
+  const pass = 'пароль-ü-✓';
+  for (const method of ['plain', 'login']) {
+    const lines = [];
+    const reply = transaction((verb) =>
+      verb === 'EHLO' ? '250-localhost\r\n250 AUTH PLAIN LOGIN\r\n' : okReply(verb),
+    );
+    let loginStep = 0;
+    const { server, port } = await scripted((line, socket) => {
+      if (line.startsWith('AUTH PLAIN ')) {
+        lines.push(line.slice('AUTH PLAIN '.length));
+        socket.write('235 ok\r\n');
+      } else if (line === 'AUTH LOGIN') {
+        socket.write('334 VXNlcm5hbWU6\r\n');
+        loginStep = 1;
+      } else if (loginStep > 0) {
+        lines.push(line);
+        socket.write(loginStep++ === 1 ? '334 UGFzc3dvcmQ6\r\n' : '235 ok\r\n');
+        if (loginStep > 2) loginStep = 0;
+      } else {
+        reply(line, socket);
+      }
+    });
+    try {
+      const transport = new SmtpTransport({
+        host: '127.0.0.1',
+        port,
+        pool: false,
+        auth: { user, pass, method },
+      });
+      const receipt = await transport.send(message());
+      assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join(' | '));
+      const decoded = lines.map((line) => Buffer.from(line, 'base64').toString('utf8'));
+      assert.deepStrictEqual(decoded, method === 'plain' ? [`\0${user}\0${pass}`] : [user, pass]);
+    } finally {
+      await stop(server);
+    }
+  }
+});

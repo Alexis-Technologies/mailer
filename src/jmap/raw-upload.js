@@ -6,6 +6,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
 const { readJson, readText } = require('../internal/body.js');
+const { Buffer } = require('node:buffer');
 
 /** Runs a raw operation with a progress-resettable deadline through response parsing. @internal */
 const rawOperation = async (timeout, operation, signal) => {
@@ -139,7 +140,7 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
         } else if (config.basicAuth) {
           headers.set(
             'Authorization',
-            `Basic ${btoa(`${config.basicAuth.username}:${config.basicAuth.password}`)}`,
+            `Basic ${Buffer.from(`${config.basicAuth.username}:${config.basicAuth.password}`).toString('base64')}`,
           );
         }
       }

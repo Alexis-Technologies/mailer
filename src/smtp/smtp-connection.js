@@ -808,7 +808,7 @@ class SmtpConnection {
 
   async authPlain(auth, signal) {
     const { user, pass } = auth;
-    const credentials = btoa(`\0${user}\0${pass}`);
+    const credentials = Buffer.from(`\0${user}\0${pass}`).toString('base64');
     const response = await this.sendCommand(`AUTH PLAIN ${credentials}`, signal);
 
     if (response.code !== 235) {
@@ -834,7 +834,7 @@ class SmtpConnection {
       );
     }
 
-    response = await this.sendCommand(btoa(user), signal);
+    response = await this.sendCommand(Buffer.from(user).toString('base64'), signal);
     if (response.code !== 334) {
       throw new SmtpAuthResponseError(
         `Username authentication failed: ${response.message}`,
@@ -844,7 +844,7 @@ class SmtpConnection {
       );
     }
 
-    response = await this.sendCommand(btoa(pass), signal);
+    response = await this.sendCommand(Buffer.from(pass).toString('base64'), signal);
     if (response.code !== 235) {
       throw new SmtpAuthResponseError(
         `Password authentication failed: ${response.message}`,

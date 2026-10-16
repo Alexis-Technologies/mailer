@@ -128,8 +128,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 2. mailgun: an inline attachment is sent under its `filename`, not its `contentId`
    (`message-converter.js`), so a `cid:` in the HTML does not match it.
 3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
-4. SMTP AUTH PLAIN and LOGIN encode with `btoa`, which fails on non-Latin-1 credentials; so does
-   Basic auth in jmap and mailgun.
+4. (fixed, see 38) SMTP AUTH PLAIN and LOGIN encoded with `btoa`, which fails on non-Latin-1
+   credentials; so did Basic auth in jmap and mailgun.
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
@@ -237,6 +237,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     certificate is a non-retryable configuration error), then by words, numbers as whole words.
 37. ses: an unsupported authentication type or missing keys surfaced at the first send, inside
     the retry loop, which retried it like an outage. `SesTransport` refuses them when made.
+38. smtp, jmap, mailgun (known bug 4): credentials went through `btoa`, which throws on any
+    character outside Latin-1, inside the retry loop for the HTTP ones. They are encoded as
+    UTF-8 with `Buffer`.
 
 ## Repository layout
 

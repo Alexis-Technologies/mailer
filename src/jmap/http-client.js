@@ -5,6 +5,7 @@ const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
 const { isAbortError, requestWithRetry } = require('../internal/http.js');
 const { readJson, readText } = require('../internal/body.js');
+const { Buffer } = require('node:buffer');
 
 /**
  * HTTP client for JMAP API requests.
@@ -121,9 +122,8 @@ class JmapHttpClient {
     if (this.config.bearerToken) {
       headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
     } else if (this.config.basicAuth) {
-      const credentials = btoa(
-        `${this.config.basicAuth.username}:${this.config.basicAuth.password}`,
-      );
+      const { username, password } = this.config.basicAuth;
+      const credentials = Buffer.from(`${username}:${password}`).toString('base64');
       headers.set('Authorization', `Basic ${credentials}`);
     }
 
