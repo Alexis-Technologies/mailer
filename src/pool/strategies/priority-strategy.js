@@ -21,23 +21,23 @@ class PriorityStrategy {
    *          attempted.
    */
   select(_message, transports, attemptedIndices) {
-    // Filter to enabled transports that haven't been attempted
-    const availableTransports = transports
-      .map((entry, index) => ({ entry, index }))
-      .filter(({ entry, index }) => entry.enabled && !attemptedIndices.has(index));
+    // The enabled transports not attempted yet that share the highest
+    // priority, in their order, found in one pass rather than by mapping,
+    // filtering and sorting them on every attempt.
+    let topPriorityTransports = [];
+    let highestPriority = -Infinity;
+    for (let index = 0; index < transports.length; index++) {
+      const entry = transports[index];
+      if (!entry.enabled || attemptedIndices.has(index)) continue;
+      if (entry.priority > highestPriority) {
+        highestPriority = entry.priority;
+        topPriorityTransports = [{ entry, index }];
+      } else if (entry.priority === highestPriority) {
+        topPriorityTransports.push({ entry, index });
+      }
+    }
 
-    if (availableTransports.length < 1) return undefined;
-
-    // Sort by priority (highest first)
-    availableTransports.sort((a, b) => b.entry.priority - a.entry.priority);
-
-    // Get the highest priority value
-    const highestPriority = availableTransports[0].entry.priority;
-
-    // Filter to only transports with the highest priority
-    const topPriorityTransports = availableTransports.filter(
-      ({ entry }) => entry.priority === highestPriority,
-    );
+    if (topPriorityTransports.length < 1) return undefined;
 
     // If multiple transports have the same priority, select randomly
     if (topPriorityTransports.length > 1) {

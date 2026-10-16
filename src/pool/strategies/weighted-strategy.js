@@ -21,25 +21,26 @@ class WeightedStrategy {
    *          attempted.
    */
   select(_message, transports, attemptedIndices) {
-    // Filter to enabled transports that haven't been attempted
-    const availableTransports = transports
-      .map((entry, index) => ({ entry, index }))
-      .filter(
-        ({ entry, index }) => entry.enabled && entry.weight > 0 && !attemptedIndices.has(index),
-      );
+    // The total weight of the enabled transports not attempted yet, in one
+    // pass without building a list of them.
+    let totalWeight = 0;
+    let lastIndex = -1;
+    for (let index = 0; index < transports.length; index++) {
+      const entry = transports[index];
+      if (!entry.enabled || !(entry.weight > 0) || attemptedIndices.has(index)) continue;
+      totalWeight += entry.weight;
+      lastIndex = index;
+    }
 
-    if (availableTransports.length < 1) return undefined;
-
-    // Calculate total weight of available transports
-    const totalWeight = availableTransports.reduce((sum, { entry }) => sum + entry.weight, 0);
-
-    if (totalWeight <= 0) return undefined;
+    if (lastIndex === -1 || totalWeight <= 0) return undefined;
 
     // Random selection based on weights
     const random = Math.random() * totalWeight;
     let cumulativeWeight = 0;
 
-    for (const { entry, index } of availableTransports) {
+    for (let index = 0; index < transports.length; index++) {
+      const entry = transports[index];
+      if (!entry.enabled || !(entry.weight > 0) || attemptedIndices.has(index)) continue;
       cumulativeWeight += entry.weight;
       if (random < cumulativeWeight) {
         return { entry, index };
@@ -47,8 +48,7 @@ class WeightedStrategy {
     }
 
     // Fallback to last available transport (shouldn't normally reach here)
-    const last = availableTransports[availableTransports.length - 1];
-    return { entry: last.entry, index: last.index };
+    return { entry: transports[lastIndex], index: lastIndex };
   }
 
   /**

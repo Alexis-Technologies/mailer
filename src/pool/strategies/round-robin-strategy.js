@@ -22,7 +22,8 @@ class RoundRobinStrategy {
    *          attempted.
    */
   select(_message, transports, attemptedIndices) {
-    const enabledCount = transports.filter((t) => t.enabled).length;
+    let enabledCount = 0;
+    for (const entry of transports) if (entry.enabled) enabledCount++;
     if (enabledCount < 1) return undefined;
 
     // Try up to the number of enabled transports
