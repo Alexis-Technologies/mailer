@@ -83,6 +83,13 @@ class MetricsCollector {
   }
 
   /**
+   * Records the end of an email send operation, however it ended.
+   */
+  recordSendEnd(transport) {
+    this.activeSendsGauge.add(-1, { transport });
+  }
+
+  /**
    * Records the completion of an email send operation.
    */
   recordSendComplete(transport, duration, success, errorType) {
@@ -92,7 +99,6 @@ class MetricsCollector {
       ...(errorType && { error_type: errorType }),
     };
 
-    this.activeSendsGauge.add(-1, { transport });
     this.attemptCounter.add(1, labels);
     this.durationHistogram.record(duration, labels);
   }

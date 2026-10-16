@@ -159,3 +159,40 @@ test('OTel: metrics are recorded for every operation, and only spans are sampled
     { name: 'TypeError', message: /metrics\.samplingRate is not supported/ },
   );
 });
+
+test('OTel: active sends return to zero however a send or a batch ends', async () => {
+  const { tracerProvider, meterProvider } = providers();
+  const failing = plain({});
+  failing.send = async () => {
+    throw new Error('Connection refused');
+  };
+  failing.sendMany = async function* () {
+    yield { successful: true, messageId: 'm1' };
+    throw new Error('Connection reset');
+  };
+  const ok = new OpenTelemetryTransport(plain({}), { tracerProvider, meterProvider });
+  const broken = new OpenTelemetryTransport(failing, { tracerProvider, meterProvider });
+
+  await ok.send(createTestMessage());
+  await collect(ok.sendMany([createTestMessage(), createTestMessage()]));
+  for await (const receipt of ok.sendMany([createTestMessage(), createTestMessage()])) {
+    assert.strictEqual(receipt.successful, true);
+    break;
+  }
+  await assert.rejects(broken.send(createTestMessage()));
+  await assert.rejects(collect(broken.sendMany([createTestMessage()])));
+
+  const active = meterProvider.getAllRecords().filter((metric) => {
+    return metric.instrument === 'upDownCounter';
+  });
+  let sum = 0;
+  let changes = 0;
+  for (const metric of active) {
+    for (const record of metric.records) {
+      sum += record.value;
+      changes++;
+    }
+  }
+  assert.strictEqual(changes, 10);
+  assert.strictEqual(sum, 0);
+});

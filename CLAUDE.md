@@ -133,8 +133,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
-8. otel: `_active_sends` is not decremented after `sendMany` and drifts under sampling;
-   `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
+8. otel (partly fixed, see 44 and 45): `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
    its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
@@ -266,6 +265,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     unscaled, so each undercounted by the rate, and the UpDownCounter of active sends drifted.
     Metrics are recorded for every operation, only spans are sampled, and
     `metrics.samplingRate` throws a `TypeError`.
+45. otel: the count of active sends went up for a `sendMany` and never down. It goes down when
+    a send or a batch ends, however it ends, a batch the caller stops reading included.
 
 ## Repository layout
 

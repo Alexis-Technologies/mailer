@@ -166,6 +166,7 @@ class OpenTelemetryTransport {
 
       throw error;
     } finally {
+      this.metricsCollector?.recordSendEnd(this.transportName);
       span?.end();
     }
   }
@@ -263,6 +264,8 @@ class OpenTelemetryTransport {
 
       throw error;
     } finally {
+      // Also when the caller stops reading the receipts early.
+      this.metricsCollector?.recordSendEnd(this.transportName);
       span?.end();
     }
   }

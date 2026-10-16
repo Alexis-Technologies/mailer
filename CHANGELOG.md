@@ -186,6 +186,9 @@ fixed ones below.
   sampled with `metrics.samplingRate` and recorded unscaled, so all of them came out low by the
   rate, and the count of active sends drifted. Metrics are now recorded for every operation and
   only spans are sampled (`tracing.samplingRate`); `metrics.samplingRate` throws a `TypeError`.
+- **`./otel` counts active sends down after `sendMany`** (an upstream bug): the count went up for
+  a batch and never down. It goes down however a send or a batch ends, also when the caller
+  stops reading the receipts.
 
 ### Changed
 
