@@ -404,8 +404,10 @@ const hasNonAsciiText = (headers, parts) => {
   return false;
 };
 
+// A boundary must not occur in the parts it separates, which nothing checks,
+// so it is unguessable rather than derived from the clock and Math.random.
 const generateBoundary = () => {
-  return `boundary-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `boundary-${crypto.randomUUID()}`;
 };
 
 /**

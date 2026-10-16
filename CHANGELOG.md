@@ -55,6 +55,9 @@ fixed ones below.
 
 ### Security
 
+- **A MIME boundary can no longer be guessed** (an upstream bug): it was built from the clock and
+  `Math.random()`, so content that knew it could close a part early and add one of its own. It
+  now comes from `crypto.randomUUID()`.
 - **A DKIM setting can no longer add a header field** (an upstream bug): the signing domain,
   the selector, the signed field names, the algorithm and the canonicalization went into the
   `DKIM-Signature` field as given, so a domain such as `example.com\r\nBcc: …` added a Bcc to

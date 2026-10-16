@@ -180,3 +180,21 @@ test('MIME: a DKIM failure throws, or sends unsigned when asked to', async (t) =
     message: 'Expected DKIM bodyMode to be buffered or streaming.',
   });
 });
+
+test('MIME: a boundary is random, not derived from the clock and Math.random', async (t) => {
+  t.mock.method(Math, 'random', () => 0.5);
+  t.mock.timers.enable({ apis: ['Date'], now: 0 });
+  const boundaries = new Set();
+  for (let i = 0; i < 2; i++) {
+    const text = await wire(
+      createMessage({ ...base, subject: 'Hi', content: { text: 'Hi', html: '<p>Hi</p>' } }),
+    );
+    const boundary = /boundary="([^"]+)"/.exec(text)[1];
+    assert.match(
+      boundary,
+      /^boundary-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    boundaries.add(boundary);
+  }
+  assert.strictEqual(boundaries.size, 2);
+});

@@ -357,6 +357,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `internal/sleep.js`, and every abort rejects with the reason.
 69. pool: a send or a batch aborted by the caller rejected with a new `AbortError` rather than
     the reason of the signal. It rejects with the reason.
+70. mime: a boundary was `Date.now()` and six characters of `Math.random()` (with the
+    deprecated `substr`), which two messages in one millisecond can share and an attacker can
+    guess to end a part early with text of their own. It is `boundary-` and `crypto.randomUUID()`.
 
 ## Repository layout
 
