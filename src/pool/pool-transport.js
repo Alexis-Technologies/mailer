@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
+const { createLog } = require('../internal/log.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
 const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
@@ -80,6 +81,7 @@ class PoolTransport {
    */
   constructor(config) {
     this.config = createPoolConfig(config);
+    this.log = createLog(this.config.logger, { transport: 'pool' });
     this.strategy = this.createStrategy(this.config.strategy);
   }
 
@@ -148,6 +150,11 @@ class PoolTransport {
         deliveryUnknown = receipt.deliveryUnknown === true;
         isRejected = hasMessageRejection(receipt.errors);
         if (deliveryUnknown || isRejected) break;
+        this.log.write(
+          'debug',
+          () => ({ attempt: attempt + 1, failed: selection.entry.transport.id }),
+          'Pool failing over',
+        );
       } catch (error) {
         // Handle transport errors
         if (abortedByCaller && isCallerAbort(error, options?.signal)) {
@@ -273,7 +280,17 @@ class PoolTransport {
       case 'priority':
         return new PriorityStrategy({ random: this.config.random });
       case 'selector-based':
-        return new SelectorStrategy({ random: this.config.random });
+        return new SelectorStrategy({
+          random: this.config.random,
+          // A selector that throws is a bug of the application: it skips its
+          // transport, as upstream did, and is told to the logger.
+          onSelectorError: (error, index) =>
+            this.log.write(
+              'warn',
+              () => ({ index, error: error instanceof Error ? error.message : String(error) }),
+              'A pool selector threw; its transport is skipped',
+            ),
+        });
       default:
         throw new Error(`Unknown strategy: ${strategy}`);
     }

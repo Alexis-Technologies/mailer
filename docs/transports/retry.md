@@ -213,7 +213,8 @@ const receipt = await transport.send(message, {
 });
 ```
 
-An error thrown by the callback rejects the send. `./otel` records these retries
+A `logger` in the configuration hears each retry the decorator schedules, at
+`debug`. An error thrown by the callback rejects the send. `./otel` records these retries
 on its span and in its metrics, and the JMAP transport does not report its own
 yet.
 

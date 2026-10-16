@@ -5,6 +5,7 @@
 
 import type {
   IdOptions,
+  Logger,
   Message,
   Receipt,
   ReceiptError,
@@ -168,6 +169,10 @@ export interface RetryConfig<TProviderId extends string = string> extends IdOpti
    * Retry and throttling behavior for `sendMany()`.
    */
   readonly sendMany?: SendManyRetryConfig;
+  /**
+   * A logger: it hears each retry it schedules at `debug`.
+   */
+  readonly logger?: Logger;
 }
 /**
  * Resolved retry configuration with defaults applied.

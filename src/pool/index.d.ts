@@ -3,7 +3,7 @@
 
 /// <reference lib="esnext.disposable" />
 
-import { IdOptions, Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import { IdOptions, Logger, Message, Receipt, Transport, TransportOptions } from '../../index.js';
 
 /**
  * Result of transport selection by a strategy.
@@ -116,6 +116,11 @@ export interface PoolConfig<TProviderId extends string = string> extends IdOptio
    * @default Math.random, read at each choice
    */
   readonly random?: () => number;
+  /**
+   * A logger: it hears a failover at `debug`, and a selector that throws at
+   * `warn`.
+   */
+  readonly logger?: Logger;
 }
 /**
  * Resolved pool configuration with defaults applied.
@@ -366,9 +371,14 @@ export declare class SelectorStrategy<
   TProviderId extends string = string,
 > implements Strategy<TProviderId> {
   /**
-   * @param options `random`, the source of the random choices.
+   * @param options `random`, the source of the random choices, and
+   *                `onSelectorError`, told of a selector that throws (its
+   *                transport is skipped).
    */
-  constructor(options?: { readonly random?: () => number });
+  constructor(options?: {
+    readonly random?: () => number;
+    readonly onSelectorError?: (error: unknown, index: number) => void;
+  });
   /**
    * Selects a transport based on selector function matching.
    *

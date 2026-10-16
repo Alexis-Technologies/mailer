@@ -36,6 +36,7 @@ const createRetryConfig = (config = {}) => {
     random: config.random ?? Math.random,
     shouldRetry: config.shouldRetry,
     generateId: config.generateId,
+    logger: config.logger,
     wait: config.wait ?? defaultWait,
     sendMany: {
       maxConcurrent,

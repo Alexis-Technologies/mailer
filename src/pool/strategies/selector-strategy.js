@@ -11,11 +11,14 @@
  */
 class SelectorStrategy {
   /**
-   * @param options `random`, the source of the random choices; by default
-   *                `Math.random`, read at each choice.
+   * @param options `random`, the source of the random choices, by default
+   *                `Math.random`, read at each choice; and `onSelectorError`,
+   *                told of a selector that throws, with the error and the
+   *                index of its transport.
    */
   constructor(options) {
     this.random = options?.random;
+    this.onSelectorError = options?.onSelectorError;
   }
 
   /**
@@ -42,8 +45,9 @@ class SelectorStrategy {
           if (entry.selector(message)) {
             withSelectors.push({ entry, index });
           }
-        } catch {
-          // If selector throws, skip this transport
+        } catch (error) {
+          // If selector throws, skip this transport, and tell whoever asked.
+          this.onSelectorError?.(error, index);
         }
       } else {
         // No selector means it accepts all messages

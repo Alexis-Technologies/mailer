@@ -223,3 +223,18 @@ test('Retry: generateId makes the Message-ID pinned for every attempt', async ()
   await transport.send(message());
   assert.deepStrictEqual(ids, ['01JRETRY@example.com', '01JRETRY@example.com']);
 });
+
+test('Retry: the logger hears each retry it schedules', async () => {
+  const records = [];
+  const transport = new RetryTransport(sequence(failure(true), success), {
+    maxAttempts: 2,
+    jitter: 'none',
+    backoff: { baseDelayMilliseconds: 5 },
+    wait: async () => {},
+    logger: { debug: (properties, text) => records.push([properties, text]) },
+  });
+  await transport.send(message());
+  assert.deepStrictEqual(records, [
+    [{ transport: 'retry', attempt: 1, delayMilliseconds: 5 }, 'Retrying send'],
+  ]);
+});

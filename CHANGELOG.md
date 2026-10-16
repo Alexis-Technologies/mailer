@@ -57,6 +57,8 @@ fixed ones below.
   addresses redacted. Mail sent in plain text to another host is a `warn` with the code
   `MAILER_SMTP_PLAINTEXT`, which goes to `console.warn` when there is no logger.
   The HTTP providers and `./jmap` take one too, which hears each retry of a request at `debug`.
+  `./pool` takes one for its failovers (`debug`) and a selector that throws (`warn`; it was
+  skipped in silence), and `./retry` for the retries it schedules.
 - **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
   (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
   With a wrapped transport, the logger needs a method for that level.

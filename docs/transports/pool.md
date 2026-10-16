@@ -265,6 +265,9 @@ instead, such as a seeded one in tests. `generateId` makes the Message-ID the
 pool gives a message without one before the first attempt, so that every
 transport it tries sends the same one.
 
+A `logger` hears each failover at `debug`, and a selector that throws at `warn`:
+such a selector skips its transport, as before, but is no longer silent.
+
 ## Custom strategies
 
 For advanced use cases, you can implement custom routing strategies by

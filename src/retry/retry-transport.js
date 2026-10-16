@@ -8,6 +8,7 @@ const {
 } = require('../core/receipt.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
+const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
 
 /**
@@ -44,6 +45,7 @@ class RetryTransport {
     this.wrappedTransport = transport;
     this.id = transport.id;
     this.config = createRetryConfig(config);
+    this.log = createLog(this.config.logger, { transport: 'retry' });
   }
 
   /**
@@ -387,6 +389,11 @@ class RetryTransport {
   }
 
   waitBeforeRetry(context, signal, onRetry) {
+    this.log.write(
+      'debug',
+      () => ({ attempt: context.attempt, delayMilliseconds: context.delayMilliseconds }),
+      'Retrying send',
+    );
     onRetry?.({
       attempt: context.attempt,
       delayMilliseconds: context.delayMilliseconds,

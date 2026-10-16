@@ -202,3 +202,33 @@ test('Pool: random makes the choices, and generateId the pinned Message-ID', asy
     ['a', '01JPOOL.message-id@example.com'],
   ]);
 });
+
+test('Pool: the logger hears a selector that throws and a failover', async () => {
+  const records = [];
+  const logger = {
+    debug: (properties, text) => records.push(['debug', properties, text]),
+    warn: (properties, text) => records.push(['warn', properties, text]),
+  };
+  const refused = { successful: false, errorMessages: ['Busy'], errors: [], retryable: true };
+  const pool = new PoolTransport({
+    strategy: 'selector-based',
+    logger,
+    // The first candidate first, so that the busy one fails over.
+    random: () => 0,
+    transports: [
+      {
+        transport: failing(refused),
+        selector: () => {
+          throw new Error('Selector bug');
+        },
+      },
+      { transport: failing(refused) },
+      { transport: failing({ successful: true, messageId: 'x' }) },
+    ],
+  });
+  assert.strictEqual((await pool.send(message())).successful, true);
+  const warns = records.filter(([level]) => level === 'warn');
+  assert.ok(warns.length >= 1);
+  assert.deepStrictEqual(warns[0][1], { transport: 'pool', index: 0, error: 'Selector bug' });
+  assert.ok(records.some(([level, , text]) => level === 'debug' && text === 'Pool failing over'));
+});

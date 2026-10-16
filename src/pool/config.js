@@ -45,6 +45,7 @@ const createPoolConfig = (config) => {
     continueOnSuccess: config.continueOnSuccess ?? false,
     random: config.random,
     generateId: config.generateId,
+    logger: config.logger,
   };
 };
 
