@@ -88,8 +88,7 @@ for analysis and monitoring.
 
 ## Simplified setup
 
-For easier configuration, use the factory function, which applies sensible
-defaults:
+The factory function takes the same configuration as the constructor:
 
 ```js
 const { trace, metrics } = require('@opentelemetry/api');
@@ -109,8 +108,6 @@ const baseTransport = new SmtpTransport({
 const transport = createOpenTelemetryTransport(baseTransport, {
   tracerProvider: trace.getTracerProvider(),
   meterProvider: metrics.getMeterProvider(),
-  serviceName: 'email-service',
-  serviceVersion: '1.2.0',
   metrics: {
     enabled: true,
     prefix: 'myapp',
@@ -126,7 +123,9 @@ The providers are always passed in, while tracing or metrics are enabled: there
 is no fallback to the global providers of `@opentelemetry/api`, since this
 package does not require it.  Pass `trace.getTracerProvider()` and
 `metrics.getMeterProvider()` for the global ones, or providers of your own as
-below.
+below.  Exporters and resource attributes such as `service.name` are set up with
+the SDK that builds those providers, so the `auto`, `serviceName` and
+`serviceVersion` options of upyo throw a `TypeError` here.
 
 ## Using existing providers
 
@@ -172,8 +171,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider, // Use your existing tracer provider
     meterProvider, // Use your existing meter provider
-    serviceName: 'my-application',
-    serviceVersion: '1.0.0',
     tracing: {
       enabled: true,
       recordSensitiveData: false,
@@ -232,7 +229,6 @@ await using transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'notification-service',
     tracing: { enabled: true },
     metrics: { enabled: true },
   },
@@ -274,7 +270,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'user-service',
     tracing: {
       enabled: true,
       recordSensitiveData: false,
@@ -339,7 +334,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'marketing-service',
     metrics: {
       enabled: true,
       prefix: 'marketing',
@@ -416,7 +410,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'notification-service',
     errorClassifier: customClassifier,
     metrics: { enabled: true },
     tracing: { enabled: true },
@@ -470,7 +463,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'transactional-email',
     attributeExtractor: customExtractor,
     tracing: { enabled: true },
     metrics: { enabled: true },
@@ -505,7 +497,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'newsletter-service',
     metrics: { enabled: true },
     tracing: {
       enabled: true,
@@ -581,7 +572,6 @@ const transport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'production-email',
     metrics: {
       enabled: true,
       prefix: 'prod',
@@ -607,7 +597,6 @@ const bulkTransport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'bulk-email',
     metrics: { enabled: true },
     tracing: { enabled: false }, // Disable tracing for maximum performance
   },
@@ -643,8 +632,6 @@ const devTransport = createOpenTelemetryTransport(
   {
     tracerProvider,
     meterProvider,
-    serviceName: 'email-service-dev',
-    serviceVersion: 'dev',
     metrics: { enabled: true },
     tracing: {
       enabled: true,
@@ -658,7 +645,6 @@ const devTransport = createOpenTelemetryTransport(
 const testTransport = createOpenTelemetryTransport(new MockTransport({ failureRate: 0 }), {
   tracerProvider,
   meterProvider,
-  serviceName: 'email-service-test',
   metrics: { enabled: true },
   tracing: { enabled: true },
   errorClassifier: (error) => {

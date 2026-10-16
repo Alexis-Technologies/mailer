@@ -18,6 +18,11 @@ const DEFAULT_CONFIG = {
   },
 };
 
+// Options of upstream that set up exporters and resource attributes, which
+// belong to the OpenTelemetry SDK of the application: it builds the providers
+// passed in.  They were accepted and never read.
+const SDK_OPTIONS = ['auto', 'serviceName', 'serviceVersion'];
+
 /**
  * Creates a resolved OpenTelemetry configuration with defaults applied.
  *
@@ -25,9 +30,18 @@ const DEFAULT_CONFIG = {
  * @returns A resolved configuration with all defaults applied.
  * @throws {Error} When tracing is enabled but no TracerProvider is provided.
  * @throws {Error} When metrics are enabled but no MeterProvider is provided.
- * @throws {TypeError} When `metrics.samplingRate` is set.
+ * @throws {TypeError} When `metrics.samplingRate`, `auto`, `serviceName` or
+ *                     `serviceVersion` is set.
  */
 const createOpenTelemetryConfig = (config = {}) => {
+  for (const option of SDK_OPTIONS) {
+    if (config[option] !== undefined) {
+      throw new TypeError(
+        `${option} is not supported: exporters and resource attributes are set up ` +
+          'with the OpenTelemetry SDK of the application, whose providers are passed in.',
+      );
+    }
+  }
   // Sampled counters and histograms undercount by the sampling rate, and a
   // sampled UpDownCounter drifts, so metrics are recorded for every operation
   // and only spans are sampled.

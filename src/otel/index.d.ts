@@ -133,34 +133,6 @@ export type AttributeExtractor = (
  */
 export type ErrorClassifier = (error: unknown) => string;
 /**
- * Configuration options for auto-setup scenarios.
- */
-export interface AutoConfig {
-  /**
-   * Service name for OpenTelemetry resource attributes.
-   * @default "email-service"
-   */
-  readonly serviceName?: string;
-  /**
-   * Service version for OpenTelemetry resource attributes.
-   */
-  readonly serviceVersion?: string;
-  /**
-   * Tracing endpoint configuration.
-   */
-  readonly tracing?: {
-    readonly endpoint?: string;
-    readonly headers?: Record<string, string>;
-  };
-  /**
-   * Metrics endpoint configuration.
-   */
-  readonly metrics?: {
-    readonly endpoint?: string;
-    readonly headers?: Record<string, string>;
-  };
-}
-/**
  * Configuration for the OpenTelemetry transport.
  */
 export interface OpenTelemetryConfig {
@@ -194,11 +166,6 @@ export interface OpenTelemetryConfig {
    * Called to classify errors into categories for metrics.
    */
   readonly errorClassifier?: ErrorClassifier;
-  /**
-   * Auto-configuration options for simplified setup.
-   * When provided, missing providers will be auto-configured.
-   */
-  readonly auto?: AutoConfig;
 }
 /**
  * Resolved configuration with all defaults applied.
@@ -314,7 +281,8 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
    * @param transport The base transport to wrap with observability.
    * @param config OpenTelemetry configuration options.
    * @throws {Error} When an enabled feature has no provider.
-   * @throws {TypeError} When `metrics.samplingRate` is set.
+   * @throws {TypeError} When `auto`, `serviceName`, `serviceVersion` or
+   *                     `metrics.samplingRate` is set.
    */
   constructor(transport: Transport<TProviderId>, config?: OpenTelemetryConfig);
   /**
@@ -343,58 +311,6 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
 }
 
 /**
- * Configuration options for the createOpenTelemetryTransport factory function.
- *
- * This interface extends the base OpenTelemetryConfig with additional options
- * for service identification and auto-configuration. It provides a simplified
- * way to configure OpenTelemetry observability without manually setting up
- * providers and exporters.
- *
- * @example
- * ```typescript
- * const config: CreateOpenTelemetryTransportConfig = {
- *   serviceName: "email-service",
- *   serviceVersion: "1.2.0",
- *   tracing: {
- *     enabled: true,
- *     samplingRate: 0.1,
- *     recordSensitiveData: false,
- *   },
- *   metrics: {
- *     enabled: true,
- *     durationBuckets: [0.1, 0.5, 1, 5, 10],
- *   },
- *   auto: {
- *     tracing: {
- *       endpoint: "http://jaeger:14268/api/traces",
- *     },
- *     metrics: {
- *       endpoint: "http://prometheus:9090/api/v1/write",
- *     },
- *   },
- * };
- * ```
- */
-export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryConfig, 'auto'> {
-  /**
-   * Service name for OpenTelemetry resource attributes.
-   * This identifies your service in distributed traces and metrics.
-   * @default "email-service"
-   */
-  readonly serviceName?: string;
-  /**
-   * Service version for OpenTelemetry resource attributes.
-   * Useful for tracking performance across different deployment versions.
-   */
-  readonly serviceVersion?: string;
-  /**
-   * Auto-configuration options for setting up OpenTelemetry exporters and processors.
-   * When provided, the factory function will automatically configure the necessary
-   * infrastructure for sending telemetry data to observability backends.
-   */
-  readonly auto?: AutoConfig;
-}
-/**
  * Creates an OpenTelemetry transport for email operations with comprehensive
  * observability features.
  *
@@ -405,21 +321,18 @@ export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryCo
  * The `tracerProvider` and `meterProvider` are passed in, from the
  * application's OpenTelemetry setup: this package does not require
  * `@opentelemetry/api`, so there is no fallback to its global providers.
+ * Exporters and resource attributes, such as the service name, belong to that
+ * setup too, so the `auto`, `serviceName` and `serviceVersion` options of
+ * upstream are refused.
  *
  * @param baseTransport The underlying email transport to wrap with
  *                      OpenTelemetry instrumentation.
  * @param config Configuration options for OpenTelemetry setup including
  *               providers, sampling rates, and custom extractors.
- * @param config.serviceName Service name for OpenTelemetry resource attributes.
- *                           Defaults to "email-service".
- * @param config.serviceVersion Service version for OpenTelemetry resource
- *                              attributes.
  * @param config.tracerProvider The TracerProvider of the application, required
  *                              while tracing is enabled.
  * @param config.meterProvider The MeterProvider of the application, required
  *                             while metrics are enabled.
- * @param config.auto Auto-configuration options for setting up exporters and
- *                    processors.
  * @param config.tracing Tracing configuration including sampling rates and
  *                       span settings.
  * @param config.metrics Metrics configuration including histogram boundaries
@@ -430,24 +343,10 @@ export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryCo
  *                               types.
  * @returns An OpenTelemetry-enabled transport that instruments all email
  *          operations with traces and metrics.
+ * @throws {TypeError} When `auto`, `serviceName`, `serviceVersion` or
+ *                     `metrics.samplingRate` is set.
  *
- * @example With minimal configuration
- * ```typescript
- * import { createOpenTelemetryTransport } from "@alexify/mailer/otel";
- * import { createSmtpTransport } from "@alexify/mailer/smtp";
- *
- * const smtpTransport = createSmtpTransport({
- *   host: "smtp.example.com",
- *   port: 587,
- * });
- *
- * const transport = createOpenTelemetryTransport(smtpTransport, {
- *   serviceName: "email-service",
- *   serviceVersion: "1.0.0",
- * });
- * ```
- *
- * @example With explicit providers
+ * @example
  * ```typescript
  * import { createOpenTelemetryTransport } from "@alexify/mailer/otel";
  * import { trace, metrics } from "@opentelemetry/api";
@@ -455,7 +354,6 @@ export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryCo
  * const transport = createOpenTelemetryTransport(baseTransport, {
  *   tracerProvider: trace.getTracerProvider(),
  *   meterProvider: metrics.getMeterProvider(),
- *   serviceName: "my-email-service",
  *   tracing: {
  *     enabled: true,
  *     samplingRate: 0.1,
@@ -467,21 +365,10 @@ export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryCo
  *   },
  * });
  * ```
- *
- * @example With auto-configuration
- * ```typescript
- * const transport = createOpenTelemetryTransport(baseTransport, {
- *   serviceName: "email-service",
- *   auto: {
- *     tracing: { endpoint: "http://jaeger:14268/api/traces" },
- *     metrics: { endpoint: "http://prometheus:9090/api/v1/write" }
- *   }
- * });
- * ```
  */
 export declare function createOpenTelemetryTransport<TProviderId extends string = string>(
   baseTransport: Transport<TProviderId>,
-  config?: CreateOpenTelemetryTransportConfig,
+  config?: OpenTelemetryConfig,
 ): OpenTelemetryTransport<TProviderId>;
 /**
  * Creates a custom email attribute extractor function for OpenTelemetry

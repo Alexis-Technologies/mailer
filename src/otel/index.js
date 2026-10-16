@@ -15,21 +15,18 @@ const { defaultErrorClassifier } = require('./config.js');
  * The `tracerProvider` and `meterProvider` are passed in, from the
  * application's OpenTelemetry setup: this package does not require
  * `@opentelemetry/api`, so there is no fallback to its global providers.
+ * Exporters and resource attributes, such as the service name, belong to that
+ * setup too, so the `auto`, `serviceName` and `serviceVersion` options of
+ * upstream are refused.
  *
  * @param baseTransport The underlying email transport to wrap with
  *                      OpenTelemetry instrumentation.
  * @param config Configuration options for OpenTelemetry setup including
  *               providers, sampling rates, and custom extractors.
- * @param config.serviceName Service name for OpenTelemetry resource attributes.
- *                           Defaults to "email-service".
- * @param config.serviceVersion Service version for OpenTelemetry resource
- *                              attributes.
  * @param config.tracerProvider The TracerProvider of the application, required
  *                              while tracing is enabled.
  * @param config.meterProvider The MeterProvider of the application, required
  *                             while metrics are enabled.
- * @param config.auto Auto-configuration options for setting up exporters and
- *                    processors.
  * @param config.tracing Tracing configuration including sampling rates and
  *                       span settings.
  * @param config.metrics Metrics configuration including histogram boundaries
@@ -40,24 +37,10 @@ const { defaultErrorClassifier } = require('./config.js');
  *                               types.
  * @returns An OpenTelemetry-enabled transport that instruments all email
  *          operations with traces and metrics.
+ * @throws {TypeError} When `auto`, `serviceName`, `serviceVersion` or
+ *                     `metrics.samplingRate` is set.
  *
- * @example With minimal configuration
- * ```typescript
- * import { createOpenTelemetryTransport } from "@alexify/mailer/otel";
- * import { createSmtpTransport } from "@alexify/mailer/smtp";
- *
- * const smtpTransport = createSmtpTransport({
- *   host: "smtp.example.com",
- *   port: 587,
- * });
- *
- * const transport = createOpenTelemetryTransport(smtpTransport, {
- *   serviceName: "email-service",
- *   serviceVersion: "1.0.0",
- * });
- * ```
- *
- * @example With explicit providers
+ * @example
  * ```typescript
  * import { createOpenTelemetryTransport } from "@alexify/mailer/otel";
  * import { trace, metrics } from "@opentelemetry/api";
@@ -65,7 +48,6 @@ const { defaultErrorClassifier } = require('./config.js');
  * const transport = createOpenTelemetryTransport(baseTransport, {
  *   tracerProvider: trace.getTracerProvider(),
  *   meterProvider: metrics.getMeterProvider(),
- *   serviceName: "my-email-service",
  *   tracing: {
  *     enabled: true,
  *     samplingRate: 0.1,
@@ -77,35 +59,9 @@ const { defaultErrorClassifier } = require('./config.js');
  *   },
  * });
  * ```
- *
- * @example With auto-configuration
- * ```typescript
- * const transport = createOpenTelemetryTransport(baseTransport, {
- *   serviceName: "email-service",
- *   auto: {
- *     tracing: { endpoint: "http://jaeger:14268/api/traces" },
- *     metrics: { endpoint: "http://prometheus:9090/api/v1/write" }
- *   }
- * });
- * ```
  */
 const createOpenTelemetryTransport = (baseTransport, config = {}) => {
-  const { serviceName = 'email-service', serviceVersion, auto, ...otherConfig } = config;
-
-  // The providers come from the application, never from a global API.
-  const finalConfig = {
-    ...otherConfig,
-    // Add auto-configuration if specified
-    ...(auto && {
-      auto: {
-        serviceName,
-        serviceVersion,
-        ...auto,
-      },
-    }),
-  };
-
-  return new OpenTelemetryTransport(baseTransport, finalConfig);
+  return new OpenTelemetryTransport(baseTransport, config);
 };
 
 /**

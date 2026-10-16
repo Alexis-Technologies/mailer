@@ -23,31 +23,37 @@ describe('index', () => {
       assert.ok(transport instanceof OpenTelemetryTransport);
     });
 
+    // Changed after the port: the service name and version, and the auto
+    // configuration, were accepted and never read; they belong to the SDK
+    // that builds the providers, and are refused.
     it('should use custom service name and version', () => {
       const setup = createTestSetup();
-      const transport = createOpenTelemetryTransport(setup.mockTransport, {
-        tracerProvider: setup.tracerProvider,
-        meterProvider: setup.meterProvider,
-        serviceName: 'my-email-service',
-        serviceVersion: '1.2.3',
-      });
-
-      assert.ok(transport instanceof OpenTelemetryTransport);
+      assert.throws(
+        () =>
+          createOpenTelemetryTransport(setup.mockTransport, {
+            tracerProvider: setup.tracerProvider,
+            meterProvider: setup.meterProvider,
+            serviceName: 'my-email-service',
+            serviceVersion: '1.2.3',
+          }),
+        { name: 'TypeError', message: /^serviceName is not supported/ },
+      );
     });
 
     it('should work with auto configuration', () => {
       const setup = createTestSetup();
-      const transport = createOpenTelemetryTransport(setup.mockTransport, {
-        tracerProvider: setup.tracerProvider,
-        meterProvider: setup.meterProvider,
-        serviceName: 'email-service',
-        auto: {
-          tracing: { endpoint: 'http://jaeger:14268/api/traces' },
-          metrics: { endpoint: 'http://prometheus:9090/api/v1/write' },
-        },
-      });
-
-      assert.ok(transport instanceof OpenTelemetryTransport);
+      assert.throws(
+        () =>
+          createOpenTelemetryTransport(setup.mockTransport, {
+            tracerProvider: setup.tracerProvider,
+            meterProvider: setup.meterProvider,
+            auto: {
+              tracing: { endpoint: 'http://jaeger:14268/api/traces' },
+              metrics: { endpoint: 'http://prometheus:9090/api/v1/write' },
+            },
+          }),
+        { name: 'TypeError', message: /^auto is not supported/ },
+      );
     });
 
     // Changed in the port: the providers are passed in, with no fallback to
@@ -74,7 +80,6 @@ describe('index', () => {
         meterProvider: setup.meterProvider,
         metrics: { prefix: 'custom' },
         tracing: { recordSensitiveData: true },
-        serviceName: 'test-service',
       });
 
       assert.equal(transport.config.metrics.prefix, 'custom');

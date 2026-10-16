@@ -198,6 +198,11 @@ fixed ones below.
 - **`./otel` applies `metrics.durationBuckets`** (an upstream bug): the option was never read. The
   duration histogram passes it to the SDK as the advice `explicitBucketBoundaries`
   (OpenTelemetry API 1.7 or later), which a View of the application still overrides.
+- **`./otel` refuses the options it cannot honor** (an upstream bug): `auto`, `serviceName` and
+  `serviceVersion` were accepted and never read, since the providers are passed in and the
+  exporters and resource attributes belong to the SDK that builds them. They now throw a
+  `TypeError`; the types `AutoConfig` and `CreateOpenTelemetryTransportConfig` are removed and
+  `createOpenTelemetryTransport` takes an `OpenTelemetryConfig`.
 
 ### Changed
 

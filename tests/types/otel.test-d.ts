@@ -41,3 +41,5 @@ expectAssignable<Function>(createEmailAttributeExtractor);
 expectError(new OpenTelemetryTransport(new MockTransport(), { tracerProvider: 'global' }));
 // Metrics are recorded for every operation; only tracing has a sampling rate.
 expectError(new OpenTelemetryTransport(new MockTransport(), { metrics: { samplingRate: 0.5 } }));
+// Exporters and resource attributes belong to the SDK of the application.
+expectError(createOpenTelemetryTransport(new MockTransport(), { serviceName: 'billing' }));
