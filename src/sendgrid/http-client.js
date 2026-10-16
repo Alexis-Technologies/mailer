@@ -1,9 +1,8 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { exponentialDelayMs, requestWithRetry } = require('../internal/http.js');
 
 /**
  * HTTP client wrapper for SendGrid API requests.
@@ -48,84 +47,33 @@ class SendGridHttpClient {
    * @throws {SendGridApiError} If SendGrid returns a client error or all retry
    *                            attempts are exhausted.
    */
-  async makeRequest(url, options) {
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      let isAccepted = false;
-      try {
-        const response = await this.fetchWithAuth(url, options);
-        isAccepted = response.ok;
-
-        // Get response text
+  makeRequest(url, options) {
+    return requestWithRetry({
+      signal: options.signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      send: (signal) => this.fetchWithAuth(url, options, signal),
+      read: async (response, attempt) => {
         const text = await response.text();
-
         // SendGrid returns 202 for successful sends
-        if (response.status === 202) {
-          return {
-            statusCode: response.status,
-            body: text,
-            headers: this.headersToRecord(response.headers),
-          };
-        }
-
-        // Handle errors
-        let errorData;
-        try {
-          errorData = JSON.parse(text);
-        } catch {
-          errorData = { message: text || `HTTP ${response.status}` };
-        }
-
-        throw new SendGridApiError(
-          errorData.message || `HTTP ${response.status}`,
-          response.status,
-          errorData.errors,
-          parseRetryAfter(response.headers.get('Retry-After')),
-          attempt + 1,
-        );
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // Don't retry caller cancellation.
-        if (isCallerAbort(error, options.signal)) {
-          throw error;
-        }
-
-        // A 2xx means the provider took the request: sending it again could
-        // deliver the message twice, so what fails after it is not retried.
-        if (isAccepted) throw markDeliveryUnknown(lastError);
-
-        // Don't retry on client errors (4xx) or if it's the last attempt
-        if (
-          error instanceof SendGridApiError &&
-          error.statusCode &&
-          error.statusCode >= 400 &&
-          error.statusCode < 500
-        ) {
-          throw error;
-        }
-
-        if (attempt === this.config.retries) {
-          if (lastError instanceof SendGridApiError) {
-            throw lastError;
-          }
-          throw new SendGridApiError(
-            lastError.message,
-            undefined,
-            undefined,
-            undefined,
-            attempt + 1,
-          );
-        }
-
-        // Wait before retrying (exponential backoff)
-        const delay = Math.pow(2, attempt) * 1000;
-        await sleep(delay, options.signal);
-      }
-    }
-
-    throw lastError || new Error('Request failed after all retries');
+        if (response.status !== 202) throw createSendGridApiError(response, text, attempt);
+        return {
+          statusCode: response.status,
+          body: text,
+          headers: this.headersToRecord(response.headers),
+        };
+      },
+      reject: async (response, attempt) =>
+        createSendGridApiError(response, await response.text(), attempt),
+      createTimeoutError: () =>
+        new Error(`SendGrid API request timed out after ${this.config.timeout} ms.`),
+      isRetryable: (error) => !isClientError(error),
+      retryDelayMs: exponentialDelayMs,
+      finalError: (error, attempts) =>
+        error instanceof SendGridApiError
+          ? error
+          : new SendGridApiError(error.message, undefined, undefined, undefined, attempts),
+    });
   }
 
   /**
@@ -133,11 +81,10 @@ class SendGridHttpClient {
    *
    * @param url The URL to make the request to.
    * @param options Fetch options.
+   * @param signal The signal of the attempt, with its deadline.
    * @returns Promise that resolves to the fetch response.
-   * @throws {Error} If the configured request timeout is reached.
-   * @throws {DOMException} If the caller aborts the request.
    */
-  async fetchWithAuth(url, options) {
+  fetchWithAuth(url, options, signal) {
     const headers = new Headers(options.headers);
 
     // Add authentication header
@@ -148,27 +95,7 @@ class SendGridHttpClient {
       headers.set(key, value);
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
-
-    const combinedSignal = combineSignals(controller.signal, options.signal);
-
-    try {
-      return await globalThis.fetch(url, {
-        ...options,
-        headers,
-        signal: combinedSignal.signal,
-      });
-    } catch (error) {
-      if (isAbortError(error) && controller.signal.aborted && !options.signal?.aborted) {
-        // oxlint-disable-next-line preserve-caught-error -- upstream
-        throw new Error(`SendGrid API request timed out after ${this.config.timeout} ms.`);
-      }
-      throw error;
-    } finally {
-      combinedSignal.cleanup();
-      clearTimeout(timeoutId);
-    }
+    return globalThis.fetch(url, { ...options, headers, signal });
   }
 
   /**
@@ -229,37 +156,24 @@ class SendGridApiError extends Error {
   }
 }
 
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const sleep = (milliseconds, signal) => {
-  if (signal?.aborted) {
-    return Promise.reject(createAbortError(signal));
+const createSendGridApiError = (response, text, attempt) => {
+  let errorData;
+  try {
+    errorData = JSON.parse(text);
+  } catch {
+    errorData = { message: text || `HTTP ${response.status}` };
   }
 
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      clearTimeout(timeoutId);
-      signal?.removeEventListener('abort', abort);
-      reject(createAbortError(signal));
-    };
-
-    const timeoutId = setTimeout(() => {
-      signal?.removeEventListener('abort', abort);
-      resolve();
-    }, milliseconds);
-
-    signal?.addEventListener('abort', abort, { once: true });
-  });
+  return new SendGridApiError(
+    errorData.message || `HTTP ${response.status}`,
+    response.status,
+    errorData.errors,
+    parseRetryAfter(response.headers.get('Retry-After')),
+    attempt + 1,
+  );
 };
 
-const createAbortError = (signal) => {
-  return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
-};
+const isClientError = (error) =>
+  error instanceof SendGridApiError && error.statusCode >= 400 && error.statusCode < 500;
 
 module.exports = { SendGridHttpClient, SendGridApiError };
