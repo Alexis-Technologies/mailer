@@ -321,3 +321,50 @@ test('Internal: onRetry hears each retry, with its attempt, wait and error, befo
   ]);
   assert.deepStrictEqual(delays, [1, 1500]);
 });
+
+test('Internal: one loopback rule serves SMTP, OAuth 2.0 and the HTTP providers', () => {
+  const { isLoopbackAddress, isLoopbackHost } = require('../../src/internal/loopback.js');
+  const { OAuth2TokenManager } = require('../../src/smtp/oauth2.js');
+  const loopback = [
+    'localhost',
+    'LOCALHOST.',
+    'mail.localhost',
+    '127.0.0.1',
+    '127.12.0.3',
+    '::1',
+    '[::1]',
+    '::ffff:127.0.0.1',
+    '0:0:0:0:0:0:0:1',
+    '::1%lo0',
+  ];
+  for (const host of loopback) assert.strictEqual(isLoopbackHost(host), true, host);
+  for (const host of [
+    'example.com',
+    'localhost.example.com',
+    '10.0.0.1',
+    '::2',
+    '::ffff:10.0.0.1',
+    '127.1',
+  ]) {
+    assert.strictEqual(isLoopbackHost(host), false, host);
+  }
+  assert.strictEqual(isLoopbackAddress('localhost'), false);
+
+  // The token endpoint of OAuth 2.0 used to allow only four spellings.
+  const refresh = (tokenEndpoint) => ({
+    type: 'oauth2',
+    user: 'u',
+    clientId: 'id',
+    clientSecret: 'secret',
+    refreshToken: 'refresh',
+    tokenEndpoint,
+  });
+  for (const endpoint of [
+    'http://127.0.0.2/token',
+    'http://auth.localhost/token',
+    'http://[::ffff:7f00:1]/',
+  ]) {
+    assert.doesNotThrow(() => new OAuth2TokenManager(refresh(endpoint)), endpoint);
+  }
+  assert.throws(() => new OAuth2TokenManager(refresh('http://auth.example.com/token')), TypeError);
+});

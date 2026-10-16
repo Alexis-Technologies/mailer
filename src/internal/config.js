@@ -1,7 +1,7 @@
 // Not ported from upyo: the checks of the options that every HTTP provider
 // shares, made once, when its configuration is made.
 
-const { isLoopbackHostname } = require('./loopback.js');
+const { isLoopbackHost } = require('./loopback.js');
 
 /**
  * Checks the timeout and the retries of a provider's configuration.
@@ -40,7 +40,7 @@ const checkSecureUrl = (value, name) => {
     throw new TypeError(`\`${name}\` must be a URL: ${String(value)}`);
   }
   if (url.protocol === 'https:') return;
-  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return;
+  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return;
   throw new TypeError(
     `\`${name}\` must use HTTPS, or plain HTTP only to a loopback host, ` +
       `so that credentials are not sent in clear: ${value}`,

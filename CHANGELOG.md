@@ -189,6 +189,10 @@ fixed ones below.
   token, to `evil.example`; the Mailgun `domain`, the Mailtrap `inboxId` and the JMAP account ID
   of a blob upload went into the path unencoded. A region must look like one (`us-east-1`), and
   the others are encoded as a single path segment.
+- **One rule tells a loopback host** (an upstream bug): the OAuth 2.0 token endpoint of `./smtp`
+  could use plain `http:` only to `localhost`, `127.0.0.1` and `::1`, while SMTP AUTH without TLS
+  allowed any loopback host. Both, and the HTTP providers, now take `localhost`, a name under
+  `.localhost`, 127.0.0.0/8 and `::1`, also as an IPv4-mapped address.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

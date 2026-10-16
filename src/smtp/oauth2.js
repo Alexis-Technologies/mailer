@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/oauth2.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { isLoopbackHost } = require('../internal/loopback.js');
 const { readText } = require('../internal/body.js');
 
 /**
@@ -121,12 +122,7 @@ const assertSecureTokenEndpoint = (endpoint) => {
     throw new TypeError(`Invalid OAuth 2.0 token endpoint URL: ${endpoint}`);
   }
   if (url.protocol === 'https:') return;
-  const isLoopback =
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
-    url.hostname === '[::1]' ||
-    url.hostname === '::1';
-  if (url.protocol === 'http:' && isLoopback) return;
+  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return;
   throw new TypeError(
     'OAuth 2.0 token endpoint must use HTTPS to protect client credentials: ' + endpoint,
   );

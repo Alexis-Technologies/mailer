@@ -295,6 +295,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 53. otel: the `error.message` attribute of a thrown error was recorded raw when the message
     began like a transport failure (`Connection…`), whatever addresses followed. It goes
     through `describeError`, the redaction of the span status and events.
+54. smtp: the OAuth 2.0 token endpoint allowed `http:` only to `localhost`, `127.0.0.1` and
+    `::1`, while SMTP AUTH without TLS took any loopback host. `internal/loopback.js` holds
+    the one rule (`localhost`, `*.localhost`, 127.0.0.0/8 and `::1`, also IPv4-mapped, on
+    `net.BlockList`) for SMTP, OAuth 2.0 and the HTTP providers, in place of SMTP's own IPv4
+    and IPv6 parsers.
 
 ## Repository layout
 

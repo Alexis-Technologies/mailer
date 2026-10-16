@@ -497,7 +497,9 @@ if you don't specify one.
 > SMTP authentication requires a secure connection (`secure: true`, or a
 > successful STARTTLS upgrade on port 587).  To protect passwords and access
 > tokens, authentication over a cleartext connection to a non-loopback host is
-> refused.  Loopback hosts remain available for local development.
+> refused.  Loopback hosts remain available for local development: `localhost`,
+> a name under `.localhost`, 127.0.0.0/8 and `::1` (also IPv4-mapped), the same
+> hosts to which an OAuth 2.0 token endpoint may use plain `http:`.
 
 ### OAuth 2.0 authentication
 
