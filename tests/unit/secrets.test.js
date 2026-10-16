@@ -18,13 +18,21 @@ const { SendGridTransport } = require('../../src/sendgrid/index.js');
 const { SesTransport } = require('../../src/ses/index.js');
 const { SmtpTransport } = require('../../src/smtp/index.js');
 
+const { TEST_DKIM_PRIVATE_KEY } = require('../helpers/mime/dkim-test-keys.js');
+
 const SECRET = 'secret-value-1f3a';
+// A line of the body of the PEM key, which a transport now reads when made.
+const KEY_LINE = TEST_DKIM_PRIVATE_KEY.split('\n')[1];
 
 const transports = () => [
   new SmtpTransport({
     host: 'smtp.example.com',
     auth: { user: 'alex', pass: SECRET },
-    dkim: { signatures: [{ signingDomain: 'example.com', selector: 's', privateKey: SECRET }] },
+    dkim: {
+      signatures: [
+        { signingDomain: 'example.com', selector: 's', privateKey: TEST_DKIM_PRIVATE_KEY },
+      ],
+    },
   }),
   new SmtpTransport({
     host: 'smtp.example.com',
@@ -64,10 +72,12 @@ test('Secrets: no transport shows its credentials to util.inspect() or JSON.stri
   for (const transport of transports()) {
     const inspected = inspect(transport, { depth: Infinity });
     assert.ok(!inspected.includes(SECRET), inspected);
+    assert.ok(!inspected.includes(KEY_LINE), inspected);
     assert.ok(inspected.startsWith(`${transport.constructor.name} `), inspected);
     assert.match(inspected, /\[REDACTED\]/);
     const json = JSON.stringify(transport);
     assert.ok(!json.includes(SECRET), json);
+    assert.ok(!json.includes(KEY_LINE), json);
   }
 });
 

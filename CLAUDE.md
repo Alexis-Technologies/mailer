@@ -336,6 +336,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 63. DKIM (known bug 6): a PEM was stripped of its armor and imported as PKCS#8, so a PKCS#1
     key (`BEGIN RSA PRIVATE KEY`) failed. `createPrivateKey` of node:crypto reads either and
     the key reaches Web Crypto as PKCS#8; the import error keeps its cause.
+64. DKIM: a PEM key was parsed and imported for every message, and a broken one failed only at
+    the first send. It is imported once per signature configuration (`resolvePrivateKey`, a
+    WeakMap), and the SMTP transport reads it when it is made (`checkDkimKeys`), unless the
+    configuration sends unsigned on a signing failure.
 
 ## Repository layout
 

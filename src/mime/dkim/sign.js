@@ -153,6 +153,62 @@ const parseHeaders = (headerSection) => {
   return headers;
 };
 
+// Imported keys by the signature configuration that holds their PEM: a key is
+// parsed and imported once per configuration rather than once per message, and
+// goes with the configuration.
+const importedKeys = new WeakMap();
+
+/**
+ * Gives the private key of a signature configuration: its CryptoKey, or the
+ * import of its PEM, started once per configuration object and algorithm.
+ *
+ * @param signature A signature configuration of the caller.
+ * @returns A CryptoKey, or a promise of the imported one.
+ * @internal
+ */
+const resolvePrivateKey = (signature) => {
+  const key = signature.privateKey;
+  if (typeof key !== 'string') return key;
+  const algorithm = signature.algorithm ?? DEFAULT_ALGORITHM;
+  let cached = importedKeys.get(signature);
+  if (cached === undefined || cached.pem !== key || cached.algorithm !== algorithm) {
+    const imported = importPrivateKey(key, algorithm);
+    const entry = { pem: key, algorithm, imported };
+    importedKeys.set(signature, entry);
+    // A failed import is tried again with the next message.
+    imported.catch(() => {
+      if (importedKeys.get(signature) === entry) importedKeys.delete(signature);
+    });
+    cached = entry;
+  }
+  return cached.imported;
+};
+
+/**
+ * Checks, once and synchronously, that each PEM key of a configuration can be
+ * read, so that a broken key fails when a transport is made rather than at
+ * its first message.  A configuration that sends unsigned on a signing
+ * failure is left to do so.
+ *
+ * @param config Optional signing configuration.
+ * @throws {TypeError} If a PEM key cannot be read.
+ * @internal
+ */
+const checkDkimKeys = (config) => {
+  if (config == null || config.onSigningFailure === 'send-unsigned') return;
+  for (const signature of config.signatures) {
+    if (typeof signature.privateKey !== 'string') continue;
+    try {
+      createPrivateKey(signature.privateKey);
+    } catch (error) {
+      throw new TypeError(
+        `Invalid DKIM private key for ${signature.signingDomain}: ${error.message}`,
+        { cause: error },
+      );
+    }
+  }
+};
+
 /**
  * Gets the private key, either using a provided CryptoKey or importing from PEM.
  */
@@ -292,4 +348,4 @@ const arrayBufferToBase64 = (buffer) => {
   return btoa(binary);
 };
 
-module.exports = { signMessage, signWithBodyHash };
+module.exports = { checkDkimKeys, resolvePrivateKey, signMessage, signWithBodyHash };

@@ -22,6 +22,7 @@ const { prepareMessage } = require('./message-converter.js');
 const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
+const { checkDkimKeys } = require('../mime/dkim/sign.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
@@ -115,9 +116,12 @@ class SmtpTransport {
    *               and options.
    * @throws {RangeError} If `config.poolSize` is neither a positive integer nor
    *                        `Infinity`.
+   * @throws {TypeError} If the DKIM configuration is invalid, or a PEM key of
+   *                     it cannot be read (unless it sends unsigned).
    */
   constructor(config) {
     checkDkimConfig(config.dkim);
+    checkDkimKeys(config.dkim);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
     if (

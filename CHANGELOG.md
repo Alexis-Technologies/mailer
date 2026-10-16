@@ -232,6 +232,10 @@ fixed ones below.
   over-signs From, Reply-To and Subject.
 - **DKIM takes a PKCS#1 key** (known upstream bug 6): a `BEGIN RSA PRIVATE KEY` PEM was imported
   as PKCS#8 and failed. The PEM is now read by `node:crypto`, which takes PKCS#1 and PKCS#8.
+- **DKIM imports a key once, and `./smtp` checks it when made** (an upstream bug): a PEM key was
+  parsed and imported for every message, and a broken one failed only at the first send. It is
+  now imported once per signature configuration, and `SmtpTransport` throws a `TypeError` for
+  a PEM it cannot read, unless `onSigningFailure` is `send-unsigned`.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

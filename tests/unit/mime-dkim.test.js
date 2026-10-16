@@ -161,3 +161,38 @@ test('DKIM: a PKCS#1 key (BEGIN RSA PRIVATE KEY) signs like a PKCS#8 one', async
     message: /^Failed to import private key/,
   });
 });
+
+test('DKIM: a PEM key is imported once per configuration, and a broken one fails early', async (t) => {
+  const { composeMessage } = require('../../src/mime/index.js');
+  const { SmtpTransport } = require('../../src/smtp/index.js');
+  const { createMessage, readAttachmentContent } = require('../../index.js');
+  const importKey = t.mock.method(crypto.subtle, 'importKey');
+  const dkim = { signatures: [config()] };
+  for (let i = 0; i < 3; i++) {
+    const composed = await composeMessage(
+      createMessage({
+        from: 'alex@example.com',
+        to: 'bob@example.com',
+        subject: 'Hello',
+        content: { text: `${i}` },
+      }),
+      { dkim },
+    );
+    await readAttachmentContent(composed.content);
+  }
+  assert.strictEqual(importKey.mock.callCount(), 1);
+
+  const broken = { signatures: [config({ privateKey: '-----BEGIN PRIVATE KEY-----\nnope\n' })] };
+  assert.throws(() => new SmtpTransport({ host: 'localhost', dkim: broken }), {
+    name: 'TypeError',
+    message: /^Invalid DKIM private key for /,
+  });
+  // One that sends unsigned on a signing failure is left to do so.
+  assert.doesNotThrow(
+    () =>
+      new SmtpTransport({
+        host: 'localhost',
+        dkim: { ...broken, onSigningFailure: 'send-unsigned' },
+      }),
+  );
+});

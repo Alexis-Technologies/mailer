@@ -739,7 +739,10 @@ The signing domain and the selector must be domain names (letters, digits and
 hyphens, or U-labels that convert to such A-labels), the field names printable
 ASCII without `:` or `;`, and the algorithm and canonicalization among those
 above; anything else throws a `TypeError` when the transport is made, since
-these values are written into the `DKIM-Signature` field as they are.
+these values are written into the `DKIM-Signature` field as they are. A PEM key
+is read when the transport is made too, so a broken key fails there rather than
+at the first message (unless `onSigningFailure` is `send-unsigned`), and it is
+imported once per signature configuration, not once per message.
 
 ### Using Ed25519 keys
 
