@@ -235,6 +235,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     was `auth`, "5000 ms" a server error) and ignored the `statusCode` and the system `code` of
     the error. It classifies by `statusCode`, then by the code along the causes (a rejected
     certificate is a non-retryable configuration error), then by words, numbers as whole words.
+37. ses: an unsupported authentication type or missing keys surfaced at the first send, inside
+    the retry loop, which retried it like an outage. `SesTransport` refuses them when made.
 
 ## Repository layout
 

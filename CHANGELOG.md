@@ -150,6 +150,9 @@ fixed ones below.
   behind `fetch failed`. It now classifies by `statusCode`, then by the code along the causes
   (a refused connection or a timeout retryable, a rejected TLS certificate a configuration
   error that is not), and only then by the words of the message, status codes as whole numbers.
+- **`./ses` refuses a wrong `authentication` when the transport is made** (an upstream bug): an
+  unknown type, a missing key or a session without its token failed only at the first send,
+  after the retries and their backoff.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

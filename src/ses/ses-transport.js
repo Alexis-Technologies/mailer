@@ -58,6 +58,7 @@ class SesTransport {
    */
   constructor(config) {
     this.config = createSesConfig(config);
+    checkAuthentication(this.config.authentication);
     this.httpClient = new SesHttpClient(this.config);
   }
 
@@ -225,6 +226,22 @@ class SesTransport {
     return `ses-${timestamp}-${random}`;
   }
 }
+
+// A wrong authentication is refused when the transport is made: found at the
+// first send, it was retried like an outage before it failed.
+const checkAuthentication = (authentication) => {
+  const type = authentication?.type;
+  if (type !== 'credentials' && type !== 'session') {
+    throw new TypeError(`Unsupported authentication type: ${type}`);
+  }
+  const isFilled = (value) => typeof value === 'string' && value !== '';
+  if (!isFilled(authentication.accessKeyId) || !isFilled(authentication.secretAccessKey)) {
+    throw new TypeError('SES authentication needs an accessKeyId and a secretAccessKey.');
+  }
+  if (type === 'session' && !isFilled(authentication.sessionToken)) {
+    throw new TypeError('SES session authentication needs its sessionToken.');
+  }
+};
 
 const createSesFailure = (message, error) => {
   if (error instanceof SesApiError) {

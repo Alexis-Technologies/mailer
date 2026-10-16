@@ -45,11 +45,19 @@ test('SES: session credentials and custom headers are signed', async (t) => {
   assert.match(request.get('authorization'), /SignedHeaders=host;x-amz-date;x-amz-security-token/);
 });
 
-test('SES: an unknown authentication type fails the send', async () => {
-  const transport = new SesTransport({ authentication: { type: 'role' }, retries: 0 });
-  const receipt = await transport.send(message());
-  assert.strictEqual(receipt.successful, false);
-  assert.deepStrictEqual(receipt.errorMessages, ['Unsupported authentication type: role']);
+test('SES: a wrong authentication is refused when the transport is made', () => {
+  const wrong = [
+    { type: 'role' },
+    { type: 'credentials', accessKeyId: 'AKID' },
+    { type: 'session', accessKeyId: 'AKID', secretAccessKey: 'secret' },
+    undefined,
+  ];
+  for (const candidate of wrong) {
+    assert.throws(() => new SesTransport({ authentication: candidate }), TypeError);
+  }
+  assert.throws(() => new SesTransport({ authentication: { type: 'role' } }), {
+    message: 'Unsupported authentication type: role',
+  });
 });
 
 test('SES: HTTP and network failures become failed receipts', async (t) => {
