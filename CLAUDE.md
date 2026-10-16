@@ -154,10 +154,11 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 13. (fixed, see 78) mime: the first encoded word of a header shared its line with the field
     name (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line
     with encoded words.
-14. jmap: on Node 24, `fetch` answers a 401 to a streamed request body (raw upload, import,
-    submission) with `TypeError: fetch failed` ("expected non-null body source") instead of the
-    response, so an authentication rejection becomes a retryable network error. Node 22 returns
-    the 401. The tests of it are `todo` on Node 24 until the fix.
+14. (mostly fixed, see 81) jmap: on Node 24, `fetch` answers a 401 to a streamed request body
+    with `TypeError: fetch failed` ("expected non-null body source") instead of the response,
+    so an authentication rejection becomes a retryable network error; Node 22 returns the 401.
+    Still open for a raw message of unknown size, which has to stream; its test is `todo` on
+    Node 24.
 
 **Upstream bugs found and fixed after the port** (each in its own `fix:` commit, with a test that
 fails without it; ported tests that pinned the old behavior say "Changed after the port"):
@@ -406,6 +407,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     message with a long body, over it was refused whole. A batch goes in as many requests as
     the limit takes (`groupBySize`, measured once per message), each failing on its own, and a
     message whose request alone is over it fails with `jmap.request_too_large`, unsent.
+81. jmap (known bug 14, Node 24): the import, the submission and every raw upload went as a
+    stream, which Node 24's fetch answers with a network failure instead of an early 401.
+    Requests go as a buffer (upstream streamed them against a replay seen in Deno; Node's fetch
+    does not replay a POST), and a raw message of a known size up to 4 MiB is read into one
+    buffer after validation (`bufferRawUpload`). A raw message of unknown size still streams.
 
 ## Repository layout
 
@@ -624,8 +630,8 @@ change. **This file wins** if they ever disagree.
   `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
   until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
 - **Platform-dependent tests:** the mock SMTP server tolerates a client's connection reset (macOS
-  and Windows send an RST where Linux sends a FIN); the seven JMAP tests of a 401 to a streamed
-  body are `todo` on Node 24 (known upstream bug 14). `tests/unit/export-parity.test.js` also
+  and Windows send an RST where Linux sends a FIN); the JMAP test of a 401 to a raw message of
+  unknown size, which streams, is `todo` on Node 24 (known upstream bug 14). `tests/unit/export-parity.test.js` also
   checks that every d.ts using `AsyncDisposable` references `esnext.disposable` itself.
 
 ## Documentation site

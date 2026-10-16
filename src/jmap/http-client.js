@@ -82,17 +82,11 @@ class JmapHttpClient {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // A stream prevents runtime-level replay of a POST after a lost
-            // response (observed with Deno even when application retries are 0).
-            body: this.replayableRequests
-              ? json
-              : new ReadableStream({
-                  start(controller) {
-                    controller.enqueue(Buffer.from(json));
-                    controller.close();
-                  },
-                }),
-            ...(this.replayableRequests ? {} : { duplex: 'half', redirect: 'error' }),
+            // Upstream streamed a request that must not be replayed, against a
+            // replay seen in Deno; Node's fetch does not replay a POST, and on
+            // Node 24 it reports a 401 to a streamed body as a network failure.
+            body: json,
+            ...(this.replayableRequests ? {} : { redirect: 'error' }),
           },
           attemptSignal,
         ),

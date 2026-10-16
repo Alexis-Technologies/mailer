@@ -221,6 +221,10 @@ fixed ones below.
 - **`./jmap` respects the `maxObjectsInSet` of the server in `sendMany`** (an upstream bug): it
   sent every message in one request, which a server with a lower limit refuses whole. It sends
   batches of at most that many messages, and a batch that fails fails only its own messages.
+- **`./jmap` on Node 24 tells an authentication rejection from a network failure** (an upstream
+  bug): the import, the submission and every raw upload went as a stream, which Node 24's
+  `fetch` answers with `fetch failed` instead of an early 401. Requests go as a buffer, and a raw
+  message of a known size up to 4 MiB is uploaded from one; one of unknown size still streams.
 - **`./jmap` respects the `maxSizeRequest` of the server** (an upstream bug): a batch goes in as
   many requests as the limit takes, and a message whose request alone is over it fails with
   `jmap.request_too_large` before anything is sent, where the server refused it whole.

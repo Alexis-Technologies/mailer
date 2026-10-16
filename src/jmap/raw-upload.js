@@ -73,7 +73,10 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
           ? await analyzeRawMessage(plan, outerSignal, progress)
           : { encoding: plan.encoding, size: plan.size };
       outerSignal.throwIfAborted();
-      const source = createRawUploadBody(plan, analysis, outerSignal, progress);
+      const source =
+        analysis.size !== undefined && analysis.size <= MAX_BUFFERED_UPLOAD_BYTES
+          ? await bufferRawUpload(plan, analysis, outerSignal, progress)
+          : createRawUploadBody(plan, analysis, outerSignal, progress);
       try {
         const response = await (config.fetch ?? globalThis.fetch)(
           uploadUrl.replace('{accountId}', encodeURIComponent(accountId)),
@@ -101,6 +104,37 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
     },
     signal,
   );
+};
+
+// A raw message up to this size is uploaded from one buffer rather than a
+// stream: Node 24's fetch reports an early answer to a streamed body, such as
+// a 401, as a network failure, which a buffer avoids, at a bounded cost.
+const MAX_BUFFERED_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Reads the validated bytes of a plan into one buffer, as an upload source of
+ * the shape of {@link createRawUploadBody}.
+ *
+ * @returns The `body`, its `state` (the source ended, its size) and a
+ * `dispose()` with nothing to do.
+ * @throws {Error} If the source fails or breaks the wire rules.
+ */
+const bufferRawUpload = async (plan, analysis, outerSignal, progress) => {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of iterateRawMessage(plan, {
+    signal: outerSignal,
+    encoding: analysis.encoding,
+    expectedSize: analysis.size,
+    onProgress: progress,
+  })) {
+    // A chunk stays valid only until the next read.
+    chunks.push(Buffer.from(chunk));
+    size += chunk.length;
+  }
+  progress();
+  const state = { eof: true, size, sourceError: undefined, hasSourceError: false };
+  return { body: Buffer.concat(chunks, size), state, dispose: () => {} };
 };
 
 /**

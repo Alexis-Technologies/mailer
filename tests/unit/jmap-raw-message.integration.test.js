@@ -544,9 +544,9 @@ for (const method of ['Mailbox/get', 'Identity/get']) {
 }
 
 // The fetch of Node 24 (undici) answers a 401 to a streamed request body with
-// "expected non-null body source" instead of the response, so the transport
-// reports a retryable network error (CLAUDE.md, known upstream bug 14). The
-// fix commit lifts the todo.
+// "expected non-null body source" instead of the response (CLAUDE.md, known
+// upstream bug 14). Requests and raw messages up to 4 MiB go from a buffer, so
+// only a raw message of unknown size, streamed, still meets it.
 const streamed401 =
   Number(process.versions.node.split('.')[0]) >= 24
     ? 'Node 24 fetch turns a 401 to a streamed body into a network error'
@@ -555,46 +555,41 @@ const streamed401 =
 for (const stage of ['upload', 'import', 'submission']) {
   for (const status of [401, 403, 429, 502]) {
     for (const body of ['', 'plain response']) {
-      const todo = status === 401 ? streamed401 : undefined;
-      test(
-        `JMAP raw ${stage} HTTP ${status} retains ${body ? 'text' : 'empty'} error metadata`,
-        { todo },
-        async () => {
-          const context = await setup({ httpError: { stage, status, body } });
-          try {
-            const receipt = await context.transport.sendRaw(raw);
-            assert.ok(!receipt.successful);
-            const auth = status === 401 || status === 403;
-            const unknown = stage === 'submission' && !auth;
-            assert.equal(receipt.retryable, stage !== 'submission' && !auth);
-            assert.equal(receipt.attempts, 1);
-            const error = receipt.errors?.[0];
-            assert.ok(error);
-            assert.equal(error.code, `jmap.raw_${stage}_${unknown ? 'unknown' : 'failed'}`);
-            assert.equal(error.statusCode, status);
-            assert.equal(error.retryAfterMilliseconds, 7000);
-            assert.deepEqual(error.providerDetails, {
-              responseBody: body,
-              jmapErrorType: undefined,
-            });
-            let category = status === 429 ? 'rate-limit' : 'server-error';
-            if (unknown) category = 'unknown';
-            else if (auth) category = 'auth';
-            assert.equal(error.category, category);
-            assert.equal(context.uploads.length, 1);
-            assert.equal(
-              context.calls.filter((c) => c.name === 'Email/import').length,
-              stage === 'upload' ? 0 : 1,
-            );
-            assert.equal(
-              context.calls.filter((c) => c.name === 'EmailSubmission/set').length,
-              stage === 'submission' ? 1 : 0,
-            );
-          } finally {
-            await context.close();
-          }
-        },
-      );
+      test(`JMAP raw ${stage} HTTP ${status} retains ${body ? 'text' : 'empty'} error metadata`, async () => {
+        const context = await setup({ httpError: { stage, status, body } });
+        try {
+          const receipt = await context.transport.sendRaw(raw);
+          assert.ok(!receipt.successful);
+          const auth = status === 401 || status === 403;
+          const unknown = stage === 'submission' && !auth;
+          assert.equal(receipt.retryable, stage !== 'submission' && !auth);
+          assert.equal(receipt.attempts, 1);
+          const error = receipt.errors?.[0];
+          assert.ok(error);
+          assert.equal(error.code, `jmap.raw_${stage}_${unknown ? 'unknown' : 'failed'}`);
+          assert.equal(error.statusCode, status);
+          assert.equal(error.retryAfterMilliseconds, 7000);
+          assert.deepEqual(error.providerDetails, {
+            responseBody: body,
+            jmapErrorType: undefined,
+          });
+          let category = status === 429 ? 'rate-limit' : 'server-error';
+          if (unknown) category = 'unknown';
+          else if (auth) category = 'auth';
+          assert.equal(error.category, category);
+          assert.equal(context.uploads.length, 1);
+          assert.equal(
+            context.calls.filter((c) => c.name === 'Email/import').length,
+            stage === 'upload' ? 0 : 1,
+          );
+          assert.equal(
+            context.calls.filter((c) => c.name === 'EmailSubmission/set').length,
+            stage === 'submission' ? 1 : 0,
+          );
+        } finally {
+          await context.close();
+        }
+      });
     }
   }
 }
