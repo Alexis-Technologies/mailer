@@ -368,77 +368,39 @@ class SmtpTransport {
     };
 
     try {
-      const isAsyncIterable = Symbol.asyncIterator in messages;
+      // for await takes a synchronous iterable as well.
+      let index = 0;
+      for await (const message of messages) {
+        options?.signal?.throwIfAborted();
 
-      if (isAsyncIterable) {
-        let index = 0;
-        for await (const message of messages) {
-          options?.signal?.throwIfAborted();
-
-          if (!connectionValid) {
-            yield createSmtpFailure('Connection is no longer valid');
-            continue;
-          }
-
-          try {
-            const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
-            const dsn = resolveSmtpDsn(envelope, options?.dsn);
-            const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
-            options?.signal?.throwIfAborted();
-
-            const result = await connection.sendMessage(smtpMessage, options?.signal);
-
-            yield {
-              successful: true,
-              messageId: result.messageId,
-              provider: 'smtp',
-              rejectedRecipients: result.rejectedRecipients,
-            };
-          } catch (error) {
-            // Cancellation rejects rather than producing a receipt.
-            options?.signal?.throwIfAborted();
-
-            if (!connection.usable || !isReusableLocalFailure(error)) {
-              connectionValid = false;
-            }
-
-            yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
-          }
+        if (!connectionValid) {
+          yield createSmtpFailure('Connection is no longer valid');
+          continue;
         }
-      } else {
-        let index = 0;
-        for (const message of messages) {
+
+        try {
+          const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
+          const dsn = resolveSmtpDsn(envelope, options?.dsn);
+          const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
           options?.signal?.throwIfAborted();
 
-          if (!connectionValid) {
-            yield createSmtpFailure('Connection is no longer valid');
-            continue;
+          const result = await connection.sendMessage(smtpMessage, options?.signal);
+
+          yield {
+            successful: true,
+            messageId: result.messageId,
+            provider: 'smtp',
+            rejectedRecipients: result.rejectedRecipients,
+          };
+        } catch (error) {
+          // Cancellation rejects rather than producing a receipt.
+          options?.signal?.throwIfAborted();
+
+          if (!connection.usable || !isReusableLocalFailure(error)) {
+            connectionValid = false;
           }
 
-          try {
-            const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
-            const dsn = resolveSmtpDsn(envelope, options?.dsn);
-            const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope);
-            options?.signal?.throwIfAborted();
-
-            const result = await connection.sendMessage(smtpMessage, options?.signal);
-
-            yield {
-              successful: true,
-              messageId: result.messageId,
-              provider: 'smtp',
-              rejectedRecipients: result.rejectedRecipients,
-            };
-          } catch (error) {
-            // Cancellation rejects rather than producing a receipt.
-            options?.signal?.throwIfAborted();
-
-            if (!connection.usable || !isReusableLocalFailure(error)) {
-              connectionValid = false;
-            }
-
-            yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
-          }
+          yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
         }
       }
     } catch (error) {
