@@ -211,6 +211,9 @@ fixed ones below.
   signal, and a connection the server had closed while idle failed the next send. The reset
   now runs when the connection is taken again, under that call's signal, and a connection that
   fails it is closed and replaced by another.
+- **An idle `./smtp` connection no longer keeps the process alive** (an upstream bug): a pooled
+  socket held the event loop until its socket timeout, so a script that sent a message hung
+  unless it called `closeAllConnections()`. Idle sockets are now unref'd.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

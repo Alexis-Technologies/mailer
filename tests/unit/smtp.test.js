@@ -658,3 +658,33 @@ test('SMTP: a pooled connection whose reset fails is replaced, and an abort reje
     await server.stop();
   }
 });
+
+test('SMTP: an idle pooled connection does not keep the process alive', async () => {
+  const { spawn } = require('node:child_process');
+  const path = require('node:path');
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  const script = `
+    const { SmtpTransport } = require(${JSON.stringify(path.join(__dirname, '../../src/smtp/index.js'))});
+    const { createMessage } = require(${JSON.stringify(path.join(__dirname, '../../index.js'))});
+    const transport = new SmtpTransport({ host: 'localhost', port: ${port}, socketTimeout: 30000 });
+    transport
+      .send(createMessage({ from: 'a@example.com', to: 'b@example.com', subject: 's', content: { text: 't' } }))
+      .then((receipt) => { if (!receipt.successful) process.exitCode = 2; });
+  `;
+  const child = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
+  try {
+    const exited = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 5000);
+      child.on('exit', (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    assert.strictEqual(exited, 0, 'the process did not exit on its own');
+    assert.strictEqual(server.getReceivedMessages().length, 1);
+  } finally {
+    child.kill();
+    await server.stop();
+  }
+});

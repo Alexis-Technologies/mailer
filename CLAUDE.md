@@ -317,6 +317,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     while idle then failed the next send. RSET runs when the connection is next taken
     (`takePooledConnection`), under that caller's signal; one that fails it is closed and
     replaced.
+59. smtp: an idle pooled socket kept the event loop alive until its socket timeout, so a
+    script that sent a message did not exit without `closeAllConnections()`. A pooled socket
+    is unref'd while idle and ref'd again when taken.
 
 ## Repository layout
 

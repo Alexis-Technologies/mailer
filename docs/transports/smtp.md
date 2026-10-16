@@ -159,7 +159,10 @@ A connection handed back to the pool is reset (`RSET`) when it is next taken,
 under the signal of the call that takes it, rather than before the previous
 send returns its receipt. The reset also tells whether the server kept the
 connection while it sat idle: one that fails its reset is closed, and the call
-takes another connection or opens a new one.
+takes another connection or opens a new one. An idle connection does not keep
+the process alive, so a script that sends a message and returns can exit
+without `closeAllConnections()`, though closing still ends the session politely
+with QUIT.
 
 > [!NOTE]
 > Because a `SmtpTransport.sendMany()` call holds its connection until the

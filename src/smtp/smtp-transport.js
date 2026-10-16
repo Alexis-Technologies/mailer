@@ -519,6 +519,7 @@ class SmtpTransport {
     let pooled = this.connectionPool.pop();
     while (pooled != null) {
       if (pooled.usable) {
+        pooled.socket.ref();
         if (!pooled.needsReset) return pooled;
         try {
           await pooled.reset(signal);
@@ -664,6 +665,8 @@ class SmtpTransport {
     // (takePooledConnection), with that caller's signal: the receipt does not
     // wait for it, and it finds a connection the server dropped while idle.
     connection.needsReset = true;
+    // An idle connection does not keep the process alive.
+    connection.socket.unref();
 
     // The connection keeps its slot while it sits idle, so no separate check
     // against `poolSize` is needed here: at most `poolSize` connections can be
