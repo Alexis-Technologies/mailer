@@ -103,10 +103,10 @@ const startDeadline = (timeoutMs, isZeroTimeoutDisabled, signal) => {
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
- *   `sleep`, and
- *   until they are unified, `isZeroTimeoutDisabled` (a timeout of 0 or less
- *   means none) and `timeoutCoversBody` (the deadline lasts until `read`
- *   returns, not only until the headers arrive).
+ *   `sleep`, and until it is unified, `isZeroTimeoutDisabled` (a timeout of
+ *   0 or less means none).
+ * The deadline of an attempt lasts until its response is read, body
+ * included, so a body that never ends cannot hold a send.
  * @returns What `read` returns.
  * @internal
  */
@@ -125,7 +125,6 @@ const requestWithRetry = async (request) => {
     try {
       const response = await request.send(deadline.signal, attempt);
       isAccepted = response.ok;
-      if (request.timeoutCoversBody !== true) deadline.stop();
       if (response.ok) return await request.read(response, attempt);
       failure = await request.reject(response, attempt);
     } catch (error) {

@@ -25,23 +25,29 @@ const providers = [
   [
     'SES',
     200,
-    () =>
+    (extra) =>
       new SesTransport({
         ...options,
+        ...extra,
         authentication: { type: 'credentials', accessKeyId: 'a', secretAccessKey: 'b' },
       }),
   ],
-  ['Resend', 200, () => new ResendTransport({ ...options, apiKey: 'key' })],
-  ['SendGrid', 202, () => new SendGridTransport({ ...options, apiKey: 'key' })],
+  ['Resend', 200, (extra) => new ResendTransport({ ...options, ...extra, apiKey: 'key' })],
+  ['SendGrid', 202, (extra) => new SendGridTransport({ ...options, ...extra, apiKey: 'key' })],
   [
     'Mailgun',
     200,
-    () => new MailgunTransport({ ...options, apiKey: 'key', domain: 'mg.example.com' }),
+    (extra) =>
+      new MailgunTransport({ ...options, ...extra, apiKey: 'key', domain: 'mg.example.com' }),
   ],
-  ['Mailtrap', 200, () => new MailtrapTransport({ ...options, apiToken: 'token' })],
-  ['Maileroo', 200, () => new MailerooTransport({ ...options, apiKey: 'key' })],
-  ['Lettermint', 200, () => new LettermintTransport({ ...options, apiToken: 'token' })],
-  ['Plunk', 200, () => new PlunkTransport({ ...options, apiKey: 'key' })],
+  ['Mailtrap', 200, (extra) => new MailtrapTransport({ ...options, ...extra, apiToken: 'token' })],
+  ['Maileroo', 200, (extra) => new MailerooTransport({ ...options, ...extra, apiKey: 'key' })],
+  [
+    'Lettermint',
+    200,
+    (extra) => new LettermintTransport({ ...options, ...extra, apiToken: 'token' }),
+  ],
+  ['Plunk', 200, (extra) => new PlunkTransport({ ...options, ...extra, apiKey: 'key' })],
 ];
 
 // A 2xx whose body cannot be read: the connection broke after the headers.
@@ -82,3 +88,32 @@ test('Delivery: Plunk refusing in a 200 is sent once, a definite failure', async
   assert.strictEqual(receipt.retryable, false);
   assert.match(receipt.errorMessages[0], /Sender not verified/);
 });
+
+// A 2xx whose body never ends, until the signal of the request aborts.
+const stalled = (status, signal) => {
+  const response = new Response(null, { status });
+  const hang = () =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  Object.defineProperty(response, 'text', { value: hang });
+  Object.defineProperty(response, 'json', { value: hang });
+  return response;
+};
+
+test(
+  'Delivery: the timeout covers a body that never ends, of unknown delivery',
+  { timeout: 5000 },
+  async (t) => {
+    for (const [name, status, create] of providers) {
+      t.mock.method(globalThis, 'fetch', async (_url, init) => stalled(status, init.signal));
+      const transport = create({ timeout: 20 });
+      const started = performance.now();
+      const receipt = await transport.send(message());
+      t.mock.restoreAll();
+      assert.ok(performance.now() - started < 1000, name);
+      assert.strictEqual(receipt.successful, false, name);
+      assert.strictEqual(receipt.deliveryUnknown, true, name);
+    }
+  },
+);

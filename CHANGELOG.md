@@ -110,6 +110,10 @@ fixed ones below.
   (known upstream bug 9): the abort took effect only after the backoff, up to ten seconds.
 - **`./lettermint` rejects with the caller's abort reason** (an upstream bug): an abort during the
   wait between retries rejected with an `AbortError` of its own.
+- **The timeout of an HTTP provider covers the body of the response** (an upstream bug): it ended
+  when the headers arrived in `./ses`, `./resend`, `./sendgrid`, `./mailgun`, `./lettermint`,
+  `./plunk` and `./jmap`, so a body that never ended held the send forever. A body cut short
+  after a 2xx is of unknown delivery.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

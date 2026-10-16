@@ -200,6 +200,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     took effect only after the backoff. They use the abortable `sleep` of `src/internal/http.js`.
 26. lettermint: an abort during the wait between retries rejected with a new `AbortError`
     instead of the caller's reason. It uses the shared `sleep`, which keeps the reason.
+27. ses, resend, sendgrid, mailgun, lettermint, plunk, jmap: the timeout was cleared once the
+    headers arrived, so a body that never ended held a send forever. The deadline of
+    `requestWithRetry` lasts until the response is read, as mailtrap and maileroo had it.
 
 ## Repository layout
 

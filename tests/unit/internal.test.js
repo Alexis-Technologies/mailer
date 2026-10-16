@@ -113,7 +113,7 @@ test('Internal: a failure after a 2xx is not retried and is of unknown delivery'
   assert.strictEqual(idempotent.sends(), 2);
 });
 
-test('Internal: an expired deadline gives the timeout error, over the body only if asked', async () => {
+test('Internal: an expired deadline gives the timeout error, over the body too', async () => {
   const hang = (signal) =>
     new Promise((_resolve, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
@@ -126,7 +126,7 @@ test('Internal: an expired deadline gives the timeout error, over the body only 
     Object.defineProperty(response, 'text', { value: () => hang(signal) });
     return response;
   };
-  const body = scripted([slowBody], { timeoutMs: 5, retries: 0, timeoutCoversBody: true });
+  const body = scripted([slowBody], { timeoutMs: 5, retries: 0 });
   const error = await requestWithRetry(body.request).catch((caught) => caught);
   assert.strictEqual(error.message, 'Timed out.');
   assert.strictEqual(isDeliveryUnknown(error), true);
