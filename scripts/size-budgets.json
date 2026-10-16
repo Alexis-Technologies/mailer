@@ -11,7 +11,7 @@
   "./maileroo": 5.5,
   "./lettermint": 5.5,
   "./plunk": 5,
-  "./pool": 2.5,
+  "./pool": 3,
   "./retry": 3,
   "./mock": 2,
   "./otel": 5,

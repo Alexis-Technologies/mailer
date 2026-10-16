@@ -13,34 +13,37 @@ const createPoolConfig = (config) => {
     throw new Error('Pool must have at least one transport');
   }
 
-  const enabledTransports = config.transports.filter((entry) => entry.enabled !== false);
-
-  if (enabledTransports.length === 0) {
-    throw new Error('Pool must have at least one enabled transport');
+  // One pass resolves the entries and counts what the checks need.
+  const resolvedTransports = [];
+  let enabledCount = 0;
+  let hasValidWeights = false;
+  for (const entry of config.transports) {
+    const resolved = {
+      transport: entry.transport,
+      weight: entry.weight ?? 1,
+      priority: entry.priority ?? 0,
+      selector: entry.selector,
+      enabled: entry.enabled ?? true,
+    };
+    if (entry.enabled !== false) enabledCount++;
+    if (resolved.enabled && resolved.weight > 0) hasValidWeights = true;
+    resolvedTransports.push(resolved);
   }
 
-  const resolvedTransports = config.transports.map((entry) => ({
-    transport: entry.transport,
-    weight: entry.weight ?? 1,
-    priority: entry.priority ?? 0,
-    selector: entry.selector,
-    enabled: entry.enabled ?? true,
-  }));
-
+  if (enabledCount === 0) {
+    throw new Error('Pool must have at least one enabled transport');
+  }
   // Validate weights for weighted strategy
-  if (config.strategy === 'weighted') {
-    const hasValidWeights = resolvedTransports.some((entry) => entry.enabled && entry.weight > 0);
-    if (!hasValidWeights) {
-      throw new Error(
-        'Weighted strategy requires at least one enabled transport with positive weight',
-      );
-    }
+  if (config.strategy === 'weighted' && !hasValidWeights) {
+    throw new Error(
+      'Weighted strategy requires at least one enabled transport with positive weight',
+    );
   }
 
   return {
     strategy: config.strategy,
     transports: resolvedTransports,
-    maxRetries: config.maxRetries ?? enabledTransports.length - 1,
+    maxRetries: config.maxRetries ?? enabledCount - 1,
     timeout: config.timeout,
     continueOnSuccess: config.continueOnSuccess ?? false,
     random: config.random,

@@ -99,118 +99,82 @@ class PoolTransport {
   async send(message, options) {
     const pinned = pinMessageId(message, this.config.generateId);
     const attemptedIndices = new Set();
-    const errorMessages = [];
-    const errors = [];
-    let checkCallerAbortBeforeFailure = false;
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
     // itself was rejected).
-    let deliveryUnknown = false;
-    let isRejected = false;
+    const failure = {
+      errorMessages: [],
+      errors: [],
+      checkCallerAbort: false,
+      deliveryUnknown: false,
+      isRejected: false,
+    };
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
-      // Check for cancellation
       options?.signal?.throwIfAborted();
-
-      // Select a transport
       const selection = this.strategy.select(pinned, this.config.transports, attemptedIndices);
-
-      if (!selection) {
-        // No more transports available
-        break;
-      }
-
+      // No more transports available
+      if (!selection) break;
       attemptedIndices.add(selection.index);
 
-      let abortedByCaller = false;
-      try {
-        // Apply timeout if configured
-        const sendOptions = this.createSendOptions(options);
-
-        let receipt;
-        try {
-          receipt = await selection.entry.transport.send(pinned, sendOptions.options);
-        } catch (error) {
-          if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) {
-            abortedByCaller = true;
-          }
-          throw error;
-        } finally {
-          sendOptions.cleanup();
-        }
-
-        if (receipt.successful) {
-          return receipt;
-        }
-
-        // Collect error messages for failed attempts
-        errorMessages.push(...receipt.errorMessages);
-        errors.push(...getReceiptErrors(receipt, selection.entry.transport.id));
-        checkCallerAbortBeforeFailure = true;
-        deliveryUnknown = receipt.deliveryUnknown === true;
-        isRejected = hasMessageRejection(receipt.errors);
-        if (deliveryUnknown || isRejected) break;
+      const receipt = await this.attempt(selection, pinned, options, failure);
+      if (receipt?.successful) return receipt;
+      if (failure.deliveryUnknown || failure.isRejected) break;
+      if (receipt !== undefined) {
         this.log.write(
           'debug',
           () => ({ attempt: attempt + 1, failed: selection.entry.transport.id }),
           'Pool failing over',
         );
-      } catch (error) {
-        // Handle transport errors
-        if (abortedByCaller && isCallerAbort(error, options?.signal)) {
-          throw error;
-        }
-
-        const thrownErrors = getThrownReceiptErrors(error, selection.entry.transport.id);
-        if (thrownErrors.length > 0) {
-          errorMessages.push(...thrownErrors.map((item) => item.message));
-          errors.push(...thrownErrors);
-          checkCallerAbortBeforeFailure = true;
-          isRejected = hasMessageRejection(thrownErrors);
-          if (isRejected) break;
-          continue;
-        }
-
-        const timeoutMessage = 'Transport send timed out.';
-        const abortError = isAbortError(error);
-        const errorMessage = abortError
-          ? timeoutMessage
-          : error instanceof Error
-            ? error.message
-            : String(error);
-        errorMessages.push(errorMessage);
-        errors.push(
-          createReceiptError(errorMessage, {
-            provider: selection.entry.transport.id,
-            category: abortError ? 'timeout' : undefined,
-            retryable: abortError ? false : undefined,
-          }),
-        );
-        checkCallerAbortBeforeFailure ||= !abortError;
-        // A send cut short by the pool's timeout may already have been
-        // accepted: switching transports could deliver the message twice.
-        if (abortError) {
-          deliveryUnknown = true;
-          break;
-        }
       }
     }
-
     // All attempts failed
-    if (checkCallerAbortBeforeFailure) {
-      options?.signal?.throwIfAborted();
-    }
-
+    if (failure.checkCallerAbort) options?.signal?.throwIfAborted();
+    const { errorMessages, errors } = failure;
     return createFailedReceipt(
       errorMessages.length > 0 ? errorMessages : ['All transports failed to send the message.'],
       {
         provider: 'pool',
         errors: errors.length > 0 ? errors : undefined,
         attempts: attemptedIndices.size,
-        deliveryUnknown,
-        retryable: isRejected ? false : undefined,
+        deliveryUnknown: failure.deliveryUnknown,
+        retryable: failure.isRejected ? false : undefined,
       },
     );
+  }
+
+  /**
+   * Sends a message through the selected transport once, under the pool's
+   * timeout, and records a failure.
+   *
+   * @param selection The selected transport and its index.
+   * @param pinned The message, with its Message-ID pinned.
+   * @param options The options of the caller.
+   * @param failure What the failed attempts have gathered, updated in place.
+   * @returns The receipt of the transport, or `undefined` when it threw.
+   * @throws The caller's abort reason when the caller aborts.
+   */
+  async attempt(selection, pinned, options, failure) {
+    const transportId = selection.entry.transport.id;
+    const sendOptions = this.createSendOptions(options);
+    let receipt;
+    try {
+      receipt = await selection.entry.transport.send(pinned, sendOptions.options);
+    } catch (error) {
+      if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) throw error;
+      recordThrown(failure, error, transportId);
+      return undefined;
+    } finally {
+      sendOptions.cleanup();
+    }
+    if (!receipt.successful) {
+      for (const text of receipt.errorMessages) failure.errorMessages.push(text);
+      appendReceiptErrors(failure.errors, receipt, transportId);
+      failure.checkCallerAbort = true;
+      failure.deliveryUnknown = receipt.deliveryUnknown === true;
+      failure.isRejected = hasMessageRejection(receipt.errors);
+    }
+    return receipt;
   }
 
   /**
@@ -367,29 +331,65 @@ const isCallerAbort = (error, signal) => {
   return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
-const getReceiptErrors = (receipt, provider) => {
+// Appends the structured errors of a failed receipt, or ones made from its
+// messages, each naming the transport.
+const appendReceiptErrors = (target, receipt, provider) => {
   if (receipt.errors != null && receipt.errors.length > 0) {
-    return receipt.errors.map((error) => withReceiptErrorProvider(error, provider));
+    for (const error of receipt.errors) target.push(withReceiptErrorProvider(error, provider));
+    return;
   }
-
-  return receipt.errorMessages.map((message) =>
-    createReceiptError(message, {
-      provider: receipt.provider ?? provider,
-      retryable: receipt.retryable,
-    }),
-  );
+  for (const message of receipt.errorMessages) {
+    target.push(
+      createReceiptError(message, {
+        provider: receipt.provider ?? provider,
+        retryable: receipt.retryable,
+      }),
+    );
+  }
 };
 
 const getThrownReceiptErrors = (error, provider) => {
-  if (isReceiptError(error)) {
-    return [withReceiptErrorProvider(error, provider)];
-  }
+  const errors = [];
+  if (isReceiptError(error)) errors.push(withReceiptErrorProvider(error, provider));
+  else if (isFailedReceipt(error)) appendReceiptErrors(errors, error, provider);
+  return errors;
+};
 
-  if (isFailedReceipt(error)) {
-    return getReceiptErrors(error, provider);
+/**
+ * Records what a transport threw: a receipt error or a failed receipt as it
+ * is, anything else as an error of its own, and the pool's timeout as a send
+ * whose delivery is unknown.
+ *
+ * @param failure What the failed attempts have gathered, updated in place.
+ * @param error What the transport threw.
+ * @param transportId The id of the transport.
+ */
+const recordThrown = (failure, error, transportId) => {
+  const thrownErrors = getThrownReceiptErrors(error, transportId);
+  if (thrownErrors.length > 0) {
+    for (const item of thrownErrors) {
+      failure.errorMessages.push(item.message);
+      failure.errors.push(item);
+    }
+    failure.checkCallerAbort = true;
+    failure.isRejected = hasMessageRejection(thrownErrors);
+    return;
   }
-
-  return [];
+  const abortError = isAbortError(error);
+  let errorMessage = 'Transport send timed out.';
+  if (!abortError) errorMessage = error instanceof Error ? error.message : String(error);
+  failure.errorMessages.push(errorMessage);
+  failure.errors.push(
+    createReceiptError(errorMessage, {
+      provider: transportId,
+      category: abortError ? 'timeout' : undefined,
+      retryable: abortError ? false : undefined,
+    }),
+  );
+  failure.checkCallerAbort ||= !abortError;
+  // A send cut short by the pool's timeout may already have been accepted:
+  // switching transports could deliver the message twice.
+  if (abortError) failure.deliveryUnknown = true;
 };
 
 const withReceiptErrorProvider = (error, provider) => {
