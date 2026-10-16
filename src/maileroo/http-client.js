@@ -1,9 +1,8 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { isDeliveryUnknown, markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
 
 const maxErrorMessageLength = 500;
 
@@ -89,56 +88,30 @@ class MailerooHttpClient {
     return this.makeRequest(url, messageData, signal);
   }
 
-  async makeRequest(url, body, signal) {
-    let lastError;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      signal?.throwIfAborted();
-
-      let responseText;
-      try {
-        const { response, text } = await this.fetchWithAuth(url, body, signal);
-
-        if (!response.ok) {
-          throw new MailerooApiError(
-            parseErrorMessage(text, response.status),
-            response.status,
-            parseRetryAfter(response.headers.get('Retry-After')),
-            attempt + 1,
-          );
-        }
-
-        responseText = text;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        if (signal?.aborted || isDeliveryUnknown(error)) {
-          throw error;
-        }
-
-        if (error instanceof MailerooApiError && !isRetryable(error)) {
-          throw error;
-        }
-
-        if (attempt === this.config.retries) {
-          throw withAttempts(lastError, attempt + 1);
-        }
-
-        await sleep(calculateRetryDelay(attempt, lastError), signal);
-        continue;
-      }
-
-      try {
-        return parseResponse(responseText);
-      } catch (error) {
-        throw markDeliveryUnknown(error);
-      }
-    }
-
-    throw lastError ?? new Error('Request failed after all retry attempts.');
+  makeRequest(url, body, signal) {
+    return requestWithRetry({
+      signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      isZeroTimeoutDisabled: true,
+      timeoutCoversBody: true,
+      send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
+      read: async (response) => parseResponse(await response.text()),
+      reject: async (response, attempt) =>
+        new MailerooApiError(
+          parseErrorMessage(await response.text(), response.status),
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        ),
+      createTimeoutError: () => new MailerooTimeoutError(this.config.timeout),
+      isRetryable: (error) => !(error instanceof MailerooApiError) || isRetryable(error),
+      retryDelayMs: calculateRetryDelay,
+      finalError: withAttempts,
+    });
   }
 
-  async fetchWithAuth(url, body, signal) {
+  fetchWithAuth(url, body, signal) {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'X-API-Key': this.config.apiKey,
@@ -148,40 +121,12 @@ class MailerooHttpClient {
       headers.set(key, value);
     }
 
-    const timeoutController = new AbortController();
-    const timeoutId =
-      this.config.timeout > 0
-        ? setTimeout(() => timeoutController.abort(), this.config.timeout)
-        : undefined;
-    const requestSignal = combineSignals(timeoutController.signal, signal);
-
-    let isAccepted = false;
-    try {
-      const response = await globalThis.fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: requestSignal.signal,
-      });
-      isAccepted = response.ok;
-      const text = await response.text();
-      return { response, text };
-    } catch (error) {
-      const isTimeout =
-        error instanceof Error &&
-        error.name === 'AbortError' &&
-        timeoutController.signal.aborted &&
-        !signal?.aborted;
-      const failure = isTimeout ? new MailerooTimeoutError(this.config.timeout) : error;
-      // A 2xx means Maileroo took the request: sending it again could
-      // deliver the message twice.
-      throw isAccepted && !signal?.aborted ? markDeliveryUnknown(failure) : failure;
-    } finally {
-      requestSignal.cleanup();
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
+    return globalThis.fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
   }
 }
 
@@ -200,8 +145,7 @@ const isRetryable = (error) => {
 };
 
 const calculateRetryDelay = (attempt, error) => {
-  const baseDelay = Math.min(1000 * Math.pow(2, attempt), 10000);
-  const backoffDelay = Math.round(baseDelay / 2 + Math.random() * (baseDelay / 2));
+  const backoffDelay = jitteredDelayMs(attempt);
   if (error instanceof MailerooApiError) {
     return Math.max(backoffDelay, error.retryAfterMilliseconds ?? 0);
   }
@@ -250,40 +194,6 @@ const truncateErrorMessage = (message) => {
   return message.length > maxErrorMessageLength
     ? `${message.slice(0, maxErrorMessageLength)}...`
     : message;
-};
-
-const abortReason = (signal) => {
-  return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
-};
-
-const sleep = (ms, signal) => {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(abortReason(signal));
-      return;
-    }
-
-    const timeoutState = {};
-    const onAbort = () => {
-      if (timeoutState.id !== undefined) {
-        clearTimeout(timeoutState.id);
-      }
-      signal?.removeEventListener('abort', onAbort);
-      reject(abortReason(signal));
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-
-    timeoutState.id = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-  });
 };
 
 module.exports = { MailerooApiError, MailerooTimeoutError, MailerooHttpClient };
