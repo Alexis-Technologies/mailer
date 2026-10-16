@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/core/src/message-id.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { isDotAtomText, isDtextBetween } = require('./text.js');
+
 /**
  * Generates a globally unique message identifier rooted in a domain.
  *
@@ -154,24 +156,6 @@ const isIdRight = (value) => {
 };
 
 /**
- * Tells whether a value is a `dot-atom-text`: one or more `atext` runs joined
- * by single dots, so neither a leading, a trailing, nor a doubled dot.
- *
- * @param value The value to check.
- * @returns Whether the value is a `dot-atom-text`.
- */
-const isDotAtomText = (value) => {
-  if (value === '') return false;
-  for (const atom of value.split('.')) {
-    if (atom === '') return false;
-    for (const character of atom) {
-      if (!isAtext(character)) return false;
-    }
-  }
-  return true;
-};
-
-/**
  * Tells whether a value is a `no-fold-literal`: an address literal such as
  * `[192.0.2.1]`.
  *
@@ -186,63 +170,7 @@ const isNoFoldLiteral = (value) => {
   if (value.length < 3 || !value.startsWith('[') || !value.endsWith(']')) {
     return false;
   }
-  for (const character of value.slice(1, -1)) {
-    if (!isDtext(character)) return false;
-  }
-  return true;
-};
-
-/**
- * The ASCII punctuation RFC 5322 allows in an atom, besides letters and digits.
- */
-const asciiAtextSymbols = "!#$%&'*+-/=?^_`{|}~";
-
-/**
- * Tells whether a character is `atext`, the character class an atom is built
- * from, extended with UTF-8 by RFC 6532.
- *
- * @param character A single character, which may be a surrogate pair.
- * @returns Whether the character is `atext`.
- */
-const isAtext = (character) => {
-  const codePoint = character.codePointAt(0);
-  if (codePoint == null) return false;
-  if (codePoint > 0x7f) return isNonAsciiText(codePoint);
-  return /[A-Za-z0-9]/.test(character) || asciiAtextSymbols.includes(character);
-};
-
-/**
- * Tells whether a character is `dtext`, the character class the inside of an
- * address literal is built from, extended with UTF-8 by RFC 6532.
- *
- * Angle brackets are excluded although RFC 5322 permits them here.  They are
- * unambiguous only to a parser that tracks the literal, and an identifier
- * carrying one would be truncated by every reader that simply looks for the
- * closing bracket of the field.
- *
- * @param character A single character, which may be a surrogate pair.
- * @returns Whether the character is `dtext`.
- */
-const isDtext = (character) => {
-  const codePoint = character.codePointAt(0);
-  if (codePoint == null) return false;
-  if (codePoint > 0x7f) return isNonAsciiText(codePoint);
-  return (
-    ((codePoint >= 0x21 && codePoint <= 0x5a) || (codePoint >= 0x5e && codePoint <= 0x7e)) &&
-    character !== '<' &&
-    character !== '>'
-  );
-};
-
-/**
- * Tells whether a code point beyond ASCII may appear in a header field under
- * RFC 6532.  An unpaired surrogate may not: it cannot be encoded as UTF-8.
- *
- * @param codePoint The code point to check.
- * @returns Whether the code point is usable.
- */
-const isNonAsciiText = (codePoint) => {
-  return codePoint < 0xd800 || codePoint > 0xdfff;
+  return isDtextBetween(value, 1, value.length - 1);
 };
 
 /**

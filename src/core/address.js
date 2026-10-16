@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const net = require('node:net');
+const { ATEXT, isDotAtomText } = require('./text.js');
 
 /**
  * Formats an address object into a string representation.  This function is
@@ -27,15 +28,6 @@ const net = require('node:net');
 const formatAddress = (address) => {
   return address.name == null ? address.address : formatMailbox(address);
 };
-
-// RFC 5322 §3.2.3: the characters of an atom.
-const ATEXT = new Uint8Array(128);
-for (let code = 0x30; code <= 0x39; code++) ATEXT[code] = 1;
-for (let code = 0x41; code <= 0x5a; code++) {
-  ATEXT[code] = 1;
-  ATEXT[code + 0x20] = 1;
-}
-for (const symbol of "!#$%&'*+-/=?^_`{|}~") ATEXT[symbol.charCodeAt(0)] = 1;
 
 // A phrase of atoms separated by spaces goes as it is; anything else, such as
 // "<", ",", "@" or "." that would make a second mailbox or end this one, goes
@@ -237,7 +229,7 @@ const findClosingQuote = (text) => {
 };
 
 const isValidLocalPart = (localPart) => {
-  if (!localPart || localPart.length === 0 || new TextEncoder().encode(localPart).byteLength > 64) {
+  if (!localPart || localPart.length === 0 || Buffer.byteLength(localPart, 'utf8') > 64) {
     return false;
   }
 
@@ -271,25 +263,9 @@ const isValidLocalPart = (localPart) => {
     return true;
   }
 
-  // Check for dot-atom format (RFC 5322)
-  // No leading/trailing dots, no consecutive dots
-  if (localPart.startsWith('.') || localPart.endsWith('.') || localPart.includes('..')) {
-    return false;
-  }
-
-  // RFC 6531 extends atext with any well-formed non-ASCII UTF-8 character.
-  const asciiAtext = /^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]$/;
-  return localPart.split('.').every(
-    (atom) =>
-      atom.length > 0 &&
-      Array.from(atom).every((character) => {
-        if (asciiAtext.test(character)) return true;
-        const codePoint = character.codePointAt(0);
-        return (
-          codePoint != null && codePoint > 0x7f && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
-        );
-      }),
-  );
+  // Check for dot-atom format (RFC 5322), whose atext RFC 6531 extends with any
+  // well-formed non-ASCII UTF-8 character.
+  return isDotAtomText(localPart);
 };
 
 const isValidDomainPart = (domainPart) => {

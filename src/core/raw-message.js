@@ -36,6 +36,13 @@ class RawMessageValidationError extends TypeError {
  * @throws {RawMessageValidationError} If metadata or the source kind is invalid.
  * @internal
  */
+const areEmailAddresses = (addresses) => {
+  for (let i = 0; i < addresses.length; i++) {
+    if (!isEmailAddress(addresses[i])) return false;
+  }
+  return true;
+};
+
 const createRawMessagePlan = (message) => {
   const content = message?.content;
   if (content instanceof Promise) content.catch(() => {});
@@ -45,7 +52,7 @@ const createRawMessagePlan = (message) => {
     (envelope.from !== null && !isEmailAddress(envelope.from)) ||
     !Array.isArray(envelope.to) ||
     envelope.to.length === 0 ||
-    !Array.from(envelope.to).every(isEmailAddress)
+    !areEmailAddresses(envelope.to)
   ) {
     throw new RawMessageValidationError('Invalid raw message envelope.', 'envelope');
   }
