@@ -37,7 +37,7 @@ pnpm run check:dts               # tsc over the d.ts of every entry of the expor
 These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
 
 ```bash
-pnpm size --max-gzip 7 --max-gzip-smtp 17 …                     # the budgets: copy the size step of ci.yml
+pnpm size --max-gzip 8 --max-gzip-smtp 18 …                     # the budgets: copy the size step of ci.yml
 pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md   # the table matches docs/comparison.json
 pnpm run docs:build                                              # the docs site; a dead link fails it
 ```
