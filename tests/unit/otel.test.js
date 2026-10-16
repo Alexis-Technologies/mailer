@@ -21,6 +21,11 @@ const plain = (config, receipt = { successful: true, messageId: 'm1' }) => ({
     }
   },
 });
+const outcome = (priority, status) => ({
+  'mailer.transport.name': 'unknown',
+  'email.priority': priority,
+  'mailer.status': status,
+});
 const collect = async (iterable) => {
   const items = [];
   for await (const item of iterable) items.push(item);
@@ -64,7 +69,7 @@ test('OTel: the transport name and the network attributes come from its config',
     [
       { host: 'smtp.example.com', port: 587 },
       'smtp',
-      { 'server.address': 'smtp.example.com', 'server.port': 587 },
+      { 'network.protocol.name': 'smtp', 'server.address': 'smtp.example.com', 'server.port': 587 },
     ],
     [
       { domain: 'mg.example.com', region: 'eu' },
@@ -74,7 +79,7 @@ test('OTel: the transport name and the network attributes come from its config',
     [
       { apiKey: 'k', region: 'us', baseUrl: 'https://api.example.com:8443' },
       'sendgrid',
-      { 'server.port': 8443 },
+      { 'network.protocol.name': 'http', 'url.scheme': 'https', 'server.port': 8443 },
     ],
     [{ accessKeyId: 'a', endpoint: 'not a url' }, 'ses', {}],
     [{ version: 3 }, 'unknown', {}],
@@ -215,11 +220,11 @@ test('OTel: a message is counted once, with its priority and its outcome', async
   );
   const messages = meterProvider
     .getAllRecords()
-    .find((metric) => metric.name === 'mailer_email_messages_total');
+    .find((metric) => metric.name === 'mailer.email.messages');
   assert.deepStrictEqual(messages.records, [
-    { value: 1, attributes: { transport: 'unknown', priority: 'high', status: 'success' } },
-    { value: 1, attributes: { transport: 'unknown', priority: 'normal', status: 'success' } },
-    { value: 1, attributes: { transport: 'unknown', priority: 'low', status: 'failure' } },
+    { value: 1, attributes: outcome('high', 'success') },
+    { value: 1, attributes: outcome('normal', 'success') },
+    { value: 1, attributes: outcome('low', 'failure') },
   ]);
 });
 
@@ -241,9 +246,9 @@ test('OTel: a batch is a success, a partial failure or a failure', async () => {
     await collect(transport.sendMany([createTestMessage(), createTestMessage()]));
     const attempts = meterProvider
       .getAllRecords()
-      .find((metric) => metric.name === 'mailer_email_attempts_total');
+      .find((metric) => metric.name === 'mailer.email.attempts');
     assert.strictEqual(attempts.records.length, 1);
-    assert.strictEqual(attempts.records[0].attributes.status, status);
+    assert.strictEqual(attempts.records[0].attributes['mailer.status'], status);
   }
 });
 
@@ -257,7 +262,7 @@ test('OTel: the duration buckets reach the histogram as advice', () => {
     new OpenTelemetryTransport(plain({}), { tracerProvider, meterProvider, metrics });
     const duration = meterProvider
       .getAllRecords()
-      .find((metric) => metric.name === 'mailer_email_duration_seconds');
+      .find((metric) => metric.name === 'mailer.email.duration');
     assert.deepStrictEqual(duration.options.advice, { explicitBucketBoundaries: buckets });
   }
 });
@@ -346,11 +351,11 @@ test('OTel: the retries of the wrapped transport reach the span, the metrics and
   }
   const retries = meterProvider
     .getAllRecords()
-    .find((metric) => metric.name === 'mailer_email_retries_total');
+    .find((metric) => metric.name === 'mailer.email.retries');
   assert.strictEqual(retries.records.length, 4);
   assert.deepStrictEqual(retries.records[0].attributes, {
-    transport: 'unknown',
-    error_type: 'service-unavailable',
+    'mailer.transport.name': 'unknown',
+    'error.type': 'service-unavailable',
   });
 
   // A span sampled out records nothing, and the retries still reach onRetry.
@@ -384,5 +389,50 @@ test('OTel: a safe-looking error message is recorded without its addresses', asy
         ? 'Connection refused by mx for bob@example.com'
         : 'Connection refused by mx for [REDACTED]',
     );
+  }
+});
+
+test('OTel: the instruments are named after the semantic conventions', () => {
+  const { tracerProvider, meterProvider } = providers();
+  // oxlint-disable-next-line no-new -- the instruments are made by the constructor
+  new OpenTelemetryTransport(plain({}), {
+    tracerProvider,
+    meterProvider,
+    metrics: { prefix: 'billing' },
+  });
+  const instruments = [];
+  for (const metric of meterProvider.getAllRecords()) {
+    instruments.push(`${metric.instrument} ${metric.name} ${metric.options.unit}`);
+  }
+  assert.deepStrictEqual(instruments.sort(), [
+    'counter billing.email.attempts {attempt}',
+    'counter billing.email.messages {message}',
+    'counter billing.email.retries {retry}',
+    'histogram billing.email.attachments {attachment}',
+    'histogram billing.email.duration s',
+    'histogram billing.email.message.size By',
+    'upDownCounter billing.email.active_sends {send}',
+  ]);
+});
+
+test('OTel: an exception event carries the stack, its message redacted', async () => {
+  for (const recordSensitiveData of [false, true]) {
+    const thrown = plain({});
+    thrown.send = async () => {
+      throw new Error('Connection refused for bob@example.com');
+    };
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(thrown, {
+      tracerProvider,
+      meterProvider,
+      tracing: { recordSensitiveData },
+    });
+    await assert.rejects(transport.send(createTestMessage()));
+    const [span] = tracerProvider.getAllSpans();
+    const exception = span.events.find((event) => event.name === 'exception');
+    const stacktrace = exception.attributes['exception.stacktrace'];
+    const address = recordSensitiveData ? 'bob@example.com' : '[REDACTED]';
+    assert.ok(stacktrace.startsWith(`Error: Connection refused for ${address}\n`), stacktrace);
+    assert.match(stacktrace, /\n {4}at /);
   }
 });

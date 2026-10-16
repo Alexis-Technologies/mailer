@@ -1,5 +1,7 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/content-type.test.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+//
+// Changed after the port: metric attributes follow the semantic conventions.
 
 const { createMessage } = require('../../src/core/message.js');
 const assert = require('node:assert/strict');
@@ -66,7 +68,7 @@ describe('content type detection', () => {
     const labelled = meterProvider.meters
       .flatMap((meter) => meter.histograms)
       .flatMap((histogram) => histogram.records)
-      .map((record) => record.attributes?.content_type)
+      .map((record) => record.attributes?.['email.content.type'])
       .filter((value) => value !== undefined);
     assert.ok(labelled.length > 0, 'no histogram recorded a content type');
     for (const value of labelled) assert.equal(value, 'multipart');

@@ -164,14 +164,15 @@ class OpenTelemetryTransport {
       // Record success/failure
       if (receipt.successful) {
         span?.recordSuccess(receipt.messageId);
-        this.metricsCollector?.recordSendComplete(this.transportName, duration, true);
+        this.metricsCollector?.recordAttempt(this.transportName, 'send', duration, 'success');
       } else {
         const errorCategory = this.classifyReceipt(receipt);
         span?.recordFailure(receipt.errorMessages);
-        this.metricsCollector?.recordSendComplete(
+        this.metricsCollector?.recordAttempt(
           this.transportName,
+          'send',
           duration,
-          false,
+          'failure',
           errorCategory,
         );
       }
@@ -182,7 +183,13 @@ class OpenTelemetryTransport {
       const errorCategory = this.classifyError(error);
 
       span?.recordError(error, errorCategory);
-      this.metricsCollector?.recordSendComplete(this.transportName, duration, false, errorCategory);
+      this.metricsCollector?.recordAttempt(
+        this.transportName,
+        'send',
+        duration,
+        'failure',
+        errorCategory,
+      );
 
       throw error;
     } finally {
@@ -272,10 +279,11 @@ class OpenTelemetryTransport {
         span?.recordFailure(errorMessages, errorMessageCount);
       }
     } catch (error) {
+      const duration = (performance.now() - startTime) / 1000;
       const errorCategory = this.classifyError(error);
 
       span?.recordError(error, errorCategory);
-      metrics?.recordError(transportName, errorCategory, 'send_batch');
+      metrics?.recordAttempt(transportName, 'send_batch', duration, 'failure', errorCategory);
 
       throw error;
     } finally {
@@ -374,10 +382,12 @@ class OpenTelemetryTransport {
         if (url && typeof url === 'string') {
           try {
             const parsedUrl = new URL(url);
+            // The protocol is HTTP whether or not over TLS; the scheme says which.
             return {
-              'network.protocol.name': parsedUrl.protocol.replace(':', ''),
+              'network.protocol.name': 'http',
+              'url.scheme': parsedUrl.protocol.slice(0, -1),
               'server.address': parsedUrl.hostname,
-              ...(parsedUrl.port && { 'server.port': parseInt(parsedUrl.port) }),
+              ...(parsedUrl.port && { 'server.port': Number(parsedUrl.port) }),
             };
           } catch {
             // Invalid URL, skip network attributes

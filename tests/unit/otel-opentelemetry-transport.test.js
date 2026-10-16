@@ -1,5 +1,7 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/opentelemetry-transport.test.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+//
+// Changed after the port: metric attributes follow the semantic conventions.
 
 const { describe, it } = require('node:test');
 const { strict: assert } = require('node:assert');
@@ -114,8 +116,8 @@ describe('OpenTelemetryTransport', () => {
       // Verify error metrics
       const metrics = extractMetrics(setup.meterProvider);
       const attemptRecords =
-        metrics.find((m) => m.records.some((r) => r.attributes?.status === 'failure'))?.records ||
-        [];
+        metrics.find((m) => m.records.some((r) => r.attributes?.['mailer.status'] === 'failure'))
+          ?.records || [];
       assert.ok(attemptRecords.length > 0);
     });
 
@@ -160,9 +162,9 @@ describe('OpenTelemetryTransport', () => {
       const metrics = extractMetrics(setup.meterProvider);
       const failureRecord = metrics
         .flatMap((metric) => metric.records)
-        .find((record) => record.attributes?.status === 'failure');
+        .find((record) => record.attributes?.['mailer.status'] === 'failure');
 
-      assert.equal(failureRecord?.attributes?.error_type, 'rate-limit');
+      assert.equal(failureRecord?.attributes?.['error.type'], 'rate-limit');
     });
 
     it('should respect abort signals', async () => {
@@ -471,7 +473,7 @@ describe('OpenTelemetryTransport', () => {
       const metrics = extractMetrics(setup.meterProvider);
       const failureRecords = metrics
         .flatMap((m) => m.records)
-        .filter((r) => r.attributes?.error_type === 'custom_error');
+        .filter((r) => r.attributes?.['error.type'] === 'custom_error');
 
       assert.ok(failureRecords.length > 0);
     });

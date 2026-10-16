@@ -355,20 +355,31 @@ sampling rate, and setting `metrics.samplingRate` throws a `TypeError`.
 duration histogram (OpenTelemetry API 1.7 or later); a View of the application
 takes precedence over it.
 
-The transport collects the following key metrics:
+The instruments follow the naming of the OpenTelemetry semantic conventions:
+dotted names under `metrics.prefix` (`mailer` by default), with the unit in the
+`unit` of the instrument rather than in its name, which an exporter such as
+Prometheus turns into its own (`mailer_email_attempts_total`):
 
-- Email delivery counters: Track successful and failed send attempts
+| Instrument | Kind | Unit | Attributes |
+|---|---|---|---|
+| `mailer.email.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
+| `mailer.email.duration` | histogram | `s` | as `mailer.email.attempts` |
+| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status` |
+| `mailer.email.retries` | counter | `{retry}` | `mailer.transport.name`, `error.type` |
+| `mailer.email.message.size` | histogram | `By` | `mailer.transport.name`, `email.priority`, `email.content.type` |
+| `mailer.email.attachments` | histogram | `{attachment}` | as `mailer.email.message.size` |
+| `mailer.email.active_sends` | up-down counter | `{send}` | `mailer.transport.name` |
 
-- Duration histograms: Measure how long email operations take
+A message is counted once in `mailer.email.messages`, when its receipt comes back;
+a send operation, of one message or a whole batch, once in `mailer.email.attempts`.
+`error.type` is the category of the failure, from `errorClassifier`. The retries
+are those of the wrapped transport, reported through `onRetry`; a span shows
+them as `retry` events and in `mailer.retry.count`.
 
-- Message size histograms: Monitor email size distribution
-
-- Active operation gauges: Track concurrent email sending operations
-
-- Retries: Count the requests the wrapped transport sent again, by the category
-  of the failure; a span shows them as `retry` events and in `mailer.retry.count`
-
-- Error classification: Categorize failures by type (auth, network, etc.)
+An HTTP transport gives its spans `network.protocol.name` `http` with `url.scheme`
+(`https`), `server.address` and `server.port`; an SMTP one `smtp`. The `exception`
+event of a thrown error carries `exception.stacktrace`, with the message redacted
+like the rest of the error text.
 
 These metrics are exported to your configured observability backend
 (Prometheus, DataDog, etc.) where you can create dashboards and alerts

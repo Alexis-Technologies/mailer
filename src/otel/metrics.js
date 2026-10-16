@@ -13,6 +13,11 @@ const batchStatus = (successCount, failureCount) => {
 
 /**
  * Manages OpenTelemetry metrics collection for email operations.
+ *
+ * The instruments are named after the OpenTelemetry semantic conventions:
+ * dotted names under the prefix, units in `unit` rather than in the name,
+ * and namespaced attributes (`mailer.transport.name`, `mailer.operation.name`,
+ * `mailer.status`, `email.priority`, `email.content.type`, `error.type`).
  */
 class MetricsCollector {
   meter;
@@ -34,50 +39,45 @@ class MetricsCollector {
   constructor(meterProvider, config) {
     this.config = config;
     this.meter = meterProvider.getMeter(metadata.name, metadata.version);
+    const prefix = `${config.prefix}.email`;
 
     // Initialize counters
-    this.attemptCounter = this.meter.createCounter(`${config.prefix}_email_attempts_total`, {
-      description: 'Total number of email send attempts',
-      unit: '1',
+    this.attemptCounter = this.meter.createCounter(`${prefix}.attempts`, {
+      description: 'Send operations, of one message or a batch, by outcome',
+      unit: '{attempt}',
     });
 
-    this.messageCounter = this.meter.createCounter(`${config.prefix}_email_messages_total`, {
+    this.messageCounter = this.meter.createCounter(`${prefix}.messages`, {
       description: 'Messages a transport returned a receipt for, by priority and status',
-      unit: '1',
+      unit: '{message}',
     });
 
-    this.retryCounter = this.meter.createCounter(`${config.prefix}_email_retries_total`, {
+    this.retryCounter = this.meter.createCounter(`${prefix}.retries`, {
       description: 'Requests the wrapped transport sent again after a failure',
-      unit: '1',
+      unit: '{retry}',
     });
 
     // Initialize histograms
-    this.durationHistogram = this.meter.createHistogram(`${config.prefix}_email_duration_seconds`, {
+    this.durationHistogram = this.meter.createHistogram(`${prefix}.duration`, {
       description: 'Duration of email send operations',
       unit: 's',
       advice: { explicitBucketBoundaries: [...config.durationBuckets] },
     });
 
-    this.messageSizeHistogram = this.meter.createHistogram(
-      `${config.prefix}_email_message_size_bytes`,
-      {
-        description: 'Size of email messages in bytes',
-        unit: 'By',
-      },
-    );
+    this.messageSizeHistogram = this.meter.createHistogram(`${prefix}.message.size`, {
+      description: 'Estimated size of email messages',
+      unit: 'By',
+    });
 
-    this.attachmentCountHistogram = this.meter.createHistogram(
-      `${config.prefix}_email_attachments_count`,
-      {
-        description: 'Number of attachments per email',
-        unit: '1',
-      },
-    );
+    this.attachmentCountHistogram = this.meter.createHistogram(`${prefix}.attachments`, {
+      description: 'Number of attachments per email',
+      unit: '{attachment}',
+    });
 
     // Initialize gauge
-    this.activeSendsGauge = this.meter.createUpDownCounter(`${config.prefix}_email_active_sends`, {
-      description: 'Number of currently active email send operations',
-      unit: '1',
+    this.activeSendsGauge = this.meter.createUpDownCounter(`${prefix}.active_sends`, {
+      description: 'Email send operations in progress',
+      unit: '{send}',
     });
   }
 
@@ -85,7 +85,14 @@ class MetricsCollector {
    * Records the start of an email send operation.
    */
   recordSendStart(transport) {
-    this.activeSendsGauge.add(1, { transport });
+    this.activeSendsGauge.add(1, { 'mailer.transport.name': transport });
+  }
+
+  /**
+   * Records the end of an email send operation, however it ended.
+   */
+  recordSendEnd(transport) {
+    this.activeSendsGauge.add(-1, { 'mailer.transport.name': transport });
   }
 
   /**
@@ -94,64 +101,48 @@ class MetricsCollector {
    */
   recordMessageOutcome(transport, priority, successful) {
     this.messageCounter.add(1, {
-      transport,
-      priority,
-      status: successful ? 'success' : 'failure',
+      'mailer.transport.name': transport,
+      'email.priority': priority,
+      'mailer.status': successful ? 'success' : 'failure',
     });
   }
 
   /**
-   * Records the end of an email send operation, however it ended.
+   * Records a finished send operation: `send` or `send_batch`, its duration
+   * in seconds, its status (`success`, `failure` or, for a batch,
+   * `partial_failure`) and the category of its failure, if any.
    */
-  recordSendEnd(transport) {
-    this.activeSendsGauge.add(-1, { transport });
+  recordAttempt(transport, operation, duration, status, errorType) {
+    const attributes = {
+      'mailer.transport.name': transport,
+      'mailer.operation.name': operation,
+      'mailer.status': status,
+      ...(errorType && { 'error.type': errorType }),
+    };
+
+    this.attemptCounter.add(1, attributes);
+    this.durationHistogram.record(duration, attributes);
   }
 
   /**
-   * Records the completion of an email send operation.
+   * Records a finished batch from the counts of its receipts.
    */
-  recordSendComplete(transport, duration, success, errorType) {
-    const labels = {
-      transport,
-      status: success ? 'success' : 'failure',
-      ...(errorType && { error_type: errorType }),
-    };
-
-    this.attemptCounter.add(1, labels);
-    this.durationHistogram.record(duration, labels);
+  recordBatch(transport, duration, successCount, failureCount) {
+    this.recordAttempt(transport, 'send_batch', duration, batchStatus(successCount, failureCount));
   }
 
   /**
    * Records metrics for individual messages.
    */
   recordMessage(message, transport, messageSize = estimateMessageSize(message)) {
-    const labels = {
-      transport,
-      priority: message.priority,
-      content_type: this.getContentType(message),
+    const attributes = {
+      'mailer.transport.name': transport,
+      'email.priority': message.priority,
+      'email.content.type': this.getContentType(message),
     };
 
-    this.messageSizeHistogram.record(messageSize, labels);
-    this.attachmentCountHistogram.record(message.attachments.length, labels);
-  }
-
-  /**
-   * Records metrics for batch operations.
-   */
-  recordBatch(transport, duration, successCount, failureCount) {
-    const labels = { transport };
-
-    // Record batch-level metrics
-    this.attemptCounter.add(1, {
-      ...labels,
-      status: batchStatus(successCount, failureCount),
-      operation: 'batch',
-    });
-
-    this.durationHistogram.record(duration, {
-      ...labels,
-      operation: 'batch',
-    });
+    this.messageSizeHistogram.record(messageSize, attributes);
+    this.attachmentCountHistogram.record(message.attachments.length, attributes);
   }
 
   /**
@@ -159,19 +150,7 @@ class MetricsCollector {
    * failure it retries.
    */
   recordRetry(transport, errorType) {
-    this.retryCounter.add(1, { transport, error_type: errorType });
-  }
-
-  /**
-   * Records an error for metrics classification.
-   */
-  recordError(transport, errorType, operation = 'send') {
-    this.attemptCounter.add(1, {
-      transport,
-      status: 'failure',
-      error_type: errorType,
-      operation,
-    });
+    this.retryCounter.add(1, { 'mailer.transport.name': transport, 'error.type': errorType });
   }
 
   getContentType(message) {

@@ -9,6 +9,20 @@ const SPAN_STATUS_ERROR = 2;
 const { EmailAttributeExtractor } = require('./attributes.js');
 const metadata = require('../version.js');
 
+// The stack of an error for the `exception.stacktrace` of the semantic
+// conventions, with its message described as the status and the events
+// describe it.  Only the message is redacted where the stack repeats it: the
+// frames hold no address, and paths such as node_modules/@scope/... would read
+// as one; a stack that does not repeat its message is redacted whole.
+const describeStack = (error, extractor) => {
+  const stack = error.stack;
+  if (typeof stack !== 'string' || stack === '') return undefined;
+  const at = error.message === '' ? -1 : stack.indexOf(error.message);
+  if (at === -1) return extractor.describeError(stack);
+  const message = extractor.describeError(error.message);
+  return stack.slice(0, at) + message + stack.slice(at + error.message.length);
+};
+
 /**
  * Manages OpenTelemetry tracing for email operations.
  */
@@ -113,11 +127,13 @@ class LiveEmailSpan {
     this.span.setAttributes(errorAttributes);
 
     // Add error event
+    const stacktrace = error instanceof Error ? describeStack(error, extractor) : undefined;
     this.span.addEvent('exception', {
       'exception.type': error instanceof Error ? error.constructor.name : 'unknown',
       'exception.message': extractor.describeError(
         error instanceof Error ? error.message : String(error),
       ),
+      ...(stacktrace && { 'exception.stacktrace': stacktrace }),
     });
   }
 

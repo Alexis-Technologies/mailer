@@ -230,6 +230,16 @@ fixed ones below.
 
 ### Changed
 
+- **`./otel` names its instruments and attributes after the OpenTelemetry semantic
+  conventions.** The metrics are `mailer.email.attempts`, `.messages`, `.retries`, `.duration`,
+  `.message.size`, `.attachments` and `.active_sends` under `metrics.prefix`, with units such as
+  `{attempt}`, `s` and `By` in the instrument rather than `_total`, `_seconds` and `_bytes` in
+  the name; their attributes are `mailer.transport.name`, `mailer.operation.name`,
+  `mailer.status`, `email.priority`, `email.content.type` and `error.type` instead of
+  `transport`, `operation`, `status`, `priority`, `content_type` and `error_type`. An HTTP
+  transport's spans get `network.protocol.name: 'http'` and `url.scheme` instead of the scheme
+  as the protocol, and the `exception` event carries `exception.stacktrace`, its message
+  redacted.
 - **One retry policy for every HTTP provider.** A request timeout (408), a rate limit (429), a
   server error (5xx) and a failure without a response are retried, after an exponential backoff
   capped at ten seconds and spread over its upper half (jitter), or after `Retry-After`. `./ses`,
