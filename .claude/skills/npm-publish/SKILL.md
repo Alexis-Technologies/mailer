@@ -37,7 +37,7 @@ pnpm run check:dts               # tsc over the d.ts of every entry of the expor
 These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
 
 ```bash
-pnpm size --max-gzip 8.5 --max-gzip-smtp 20 …                   # the budgets: copy the size step of ci.yml
+pnpm size --check                                                # the budgets of scripts/size-budgets.json
 pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md   # the table matches docs/comparison.json
 pnpm run docs:build                                              # the docs site; a dead link fails it
 ```
@@ -180,7 +180,7 @@ Report the file count and the bundle size from `pnpm run size` to the user.
 Run the gates one more time after all edits:
 
 ```bash
-pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size <the flags of ci.yml> && pnpm run docs:build
+pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run docs:build
 ```
 
 Must exit 0. If it fails, fix and re-run.

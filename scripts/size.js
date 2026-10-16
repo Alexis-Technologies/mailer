@@ -1,9 +1,11 @@
 /**
- * Bundle-size report, run with `pnpm size`. With `--max-gzip <KB>` it also fails
- * when the root entry exceeds that min+gzip budget, and with
- * `--max-gzip-<subpath> <KB>` when a subpath of the exports map adds more than
- * that on top of the root entry (`--max-gzip-smtp` for `./smtp`). CI passes one
- * flag per subpath as a gate.
+ * Bundle-size report, run with `pnpm size`. With `--check` it also fails when an
+ * entry of the exports map goes over its min+gzip budget in
+ * `scripts/size-budgets.json` (in KB, keyed like the exports map: the root
+ * entry, and what each subpath adds on top of it), and when an entry has no
+ * budget there or a budget names no entry, so that a new subpath is gated from
+ * its first commit. `--budgets <file>` reads another file. CI and
+ * `prepublishOnly` run `--check`.
  *
  * Bundles the shipped entry points with esbuild the way a consumer's bundler
  * would (a serverless function, a single-file deploy), then reports:
@@ -23,14 +25,16 @@
  * tests/unit/dependencies.test.js.
  */
 
+const fs = require('node:fs');
 const { gzipSync } = require('node:zlib');
 const path = require('node:path');
 const esbuild = require('esbuild');
 const pkg = require('../package.json');
 
 const ROOT = path.join(__dirname, '..');
+const BUDGETS = path.join(__dirname, 'size-budgets.json');
 
-const ENTRY = { label: 'Node entry (index.js)', entry: 'index.js', platform: 'node' };
+const ENTRY = { label: 'Node entry (index.js)', entry: 'index.js', platform: 'node', key: '.' };
 
 // One row per subpath of the exports map.
 const subpathsOf = (exportsMap) =>
@@ -43,7 +47,7 @@ const subpathsOf = (exportsMap) =>
         entry: ENTRY.entry,
         platform: ENTRY.platform,
         subpath: file,
-        flag: `--max-gzip-${name}`,
+        key: subpath,
       };
     });
 
@@ -69,22 +73,28 @@ const bundle = async (entry, platform, minify, subpaths = []) => {
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
 
-const budget = (flag) => {
-  const args = process.argv.slice(2);
-  const index = args.indexOf(flag);
-  if (index === -1) return null;
-  const limit = Number(args[index + 1]);
-  if (!Number.isFinite(limit) || limit <= 0) {
-    throw new Error(`${flag} needs a positive number of kilobytes`);
+// What is wrong with a budgets file for an exports map: an entry without a
+// budget, a budget for no entry, or one that is not a positive number of KB.
+const budgetProblems = (budgets, exportsMap) => {
+  const problems = [];
+  for (const key of Object.keys(exportsMap)) {
+    if (!Object.hasOwn(budgets, key)) problems.push(`${key} has no budget`);
   }
-  return limit * 1024;
+  for (const [key, limit] of Object.entries(budgets)) {
+    if (!Object.hasOwn(exportsMap, key)) {
+      problems.push(`${key} has a budget but is not in the exports map`);
+    } else if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) {
+      problems.push(`${key} needs a budget of a positive number of kilobytes`);
+    }
+  }
+  return problems;
 };
 
-const measure = async ({ label, entry, platform }, subpaths) => {
+const measure = async ({ label, key, entry, platform }, subpaths) => {
   const raw = await bundle(entry, platform, false, subpaths);
   const min = await bundle(entry, platform, true, subpaths);
   const gzip = gzipSync(min, { level: 9 });
-  return { label, raw: raw.length, min: min.length, gzip: gzip.length };
+  return { label, key, raw: raw.length, min: min.length, gzip: gzip.length };
 };
 
 const exceeded = (row, max) => {
@@ -101,7 +111,7 @@ const extrasOf = async (core, size = measure, subpaths = SUBPATHS) => {
     const both = await size(entry, [entry.subpath]);
     extras.push({
       label: entry.label,
-      max: budget(entry.flag),
+      key: entry.key,
       raw: both.raw - core.raw,
       min: both.min - core.min,
       gzip: both.gzip - core.gzip,
@@ -111,17 +121,29 @@ const extrasOf = async (core, size = measure, subpaths = SUBPATHS) => {
 };
 
 const main = async () => {
-  const maxGzip = budget('--max-gzip');
+  const args = process.argv.slice(2);
+  const index = args.indexOf('--budgets');
+  const file = index === -1 ? BUDGETS : path.resolve(args[index + 1]);
+  const budgets = args.includes('--check') ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  if (budgets !== null) {
+    const problems = budgetProblems(budgets, pkg.exports);
+    for (const problem of problems) console.error(`${path.relative(ROOT, file)}: ${problem}`);
+    if (problems.length > 0) {
+      process.exitCode = 1;
+      return;
+    }
+  }
   const core = await measure(ENTRY);
-  const extras = await extrasOf(core);
+  const rows = [core, ...(await extrasOf(core))];
   console.log('| Entry | raw | min | min+gzip |');
   console.log('| ----- | ---:| ---:| --------:|');
-  for (const row of [core, ...extras]) {
+  for (const row of rows) {
     console.log(`| ${row.label} | ${kb(row.raw)} | ${kb(row.min)} | ${kb(row.gzip)} |`);
   }
-  if (maxGzip !== null && core.gzip > maxGzip) exceeded(core, maxGzip);
-  for (const row of extras) {
-    if (row.max !== null && row.gzip > row.max) exceeded(row, row.max);
+  if (budgets === null) return;
+  for (const row of rows) {
+    const max = budgets[row.key] * 1024;
+    if (row.gzip > max) exceeded(row, max);
   }
 };
 
@@ -132,4 +154,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { SUBPATHS, subpathsOf, extrasOf };
+module.exports = { SUBPATHS, budgetProblems, subpathsOf, extrasOf };

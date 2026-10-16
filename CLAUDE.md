@@ -42,7 +42,7 @@ pnpm run test:types                # tsd: tests/types/*.test-d.ts, one file per 
 pnpm run check:dts                 # tsc --noEmit --strict over the d.ts of every entry
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
-pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 8.5 KB min+gzip and each subpath
+pnpm size [--check]                # esbuild bundle sizes; --check gates every entry by scripts/size-budgets.json
 pnpm bench [filter] [--json] [--save] [--compare]   # ops/sec harness, manual only; --save writes bench/baseline.json
 pnpm docs:comparison               # renders docs/comparison.json into docs/guide/comparison.md
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
@@ -388,7 +388,8 @@ tests/
   fixtures/<sub>/   static fixtures (certificates)
   types/*.test-d.ts tsd assertions, one file per entry
 scripts/
-  size.js           bundle-size report and budget gates, one per subpath (CI smoke)
+  size.js           bundle-size report; --check gates each entry of the exports map
+  size-budgets.json the min+gzip budget of each entry in KB (the root, and each subpath on top)
   check-dts.js      tsc --strict over the d.ts of every entry of the exports map
   comparison.js     renders docs/comparison.json into docs/guide/comparison.md
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
@@ -557,8 +558,9 @@ change. **This file wins** if they ever disagree.
   (minified and not) and checks its exports through the result, so the shipped files keep working
   after a consumer's bundler (a serverless function, a single-file deploy).
 - `tests/unit/dependencies.test.js` guards "Zero dependencies" above.
-- `tests/unit/scripts.test.js` runs `scripts/size.js` with a budget it always meets and one it
-  never can.
+- `tests/unit/scripts.test.js` checks that every entry of the exports map has a budget in
+  `scripts/size-budgets.json` and nothing else does, and runs `scripts/size.js --check` with
+  budgets it always meets, budgets it never can and a missing one.
 - New behavior needs a test that fails without the change. Network transports are tested
   against local fake servers (`tests/helpers/smtp/mock-smtp-server.js` on `node:net`, servers on
   `node:http`) or a stubbed `fetch` (`t.mock.method(globalThis, 'fetch', …)`), never against a

@@ -30,9 +30,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
-      # Smoke: keeps the bundle-size script working and fails over the
-      # min+gzip budget, which also catches a third-party module bundled in.
-      - run: pnpm size --max-gzip 8.5 --max-gzip-mime 7 --max-gzip-smtp 20 --max-gzip-jmap 11.5 --max-gzip-ses 6 --max-gzip-resend 5.5 --max-gzip-sendgrid 5 --max-gzip-mailgun 5 --max-gzip-mailtrap 6 --max-gzip-maileroo 5.5 --max-gzip-lettermint 5.5 --max-gzip-plunk 5 --max-gzip-pool 2.5 --max-gzip-retry 3 --max-gzip-mock 2 --max-gzip-otel 5 --max-gzip-logger 2.5
+      # Fails over the min+gzip budget of an entry in scripts/size-budgets.json,
+      # which also catches a third-party module bundled in, and on an entry of
+      # the exports map without a budget.
+      - run: pnpm size --check
 
   types:
     runs-on: ubuntu-latest

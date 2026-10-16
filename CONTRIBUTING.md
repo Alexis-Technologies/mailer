@@ -51,13 +51,13 @@ pnpm run format
 pnpm run test:coverage
 pnpm run test:types
 pnpm run check:dts
-pnpm size --max-gzip 4
+pnpm size --check
 ```
 
 `prepublishOnly` runs lint, format check, coverage, tsd and `check:dts`; CI adds the bundle-size
-gate (4 KB min+gzip), the comparison drift check and the docs build. Treat that as the merge gate.
-Coverage of `src/` is 100% with no `c8 ignore` comments: an unreachable branch is removed, not
-ignored.
+gate (a min+gzip budget per entry of the exports map, in `scripts/size-budgets.json`), the
+comparison drift check and the docs build. Treat that as the merge gate. A new subpath needs a
+budget there, or `pnpm size --check` fails.
 
 The comparison table in `docs/guide/comparison.md` is generated: edit `docs/comparison.json` and
 run `pnpm docs:comparison`.
