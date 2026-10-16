@@ -85,7 +85,8 @@ if (!receipt.successful) console.error(receipt.errorMessages);
 | `/mock` | an in-memory transport for tests |
 
 Every transport takes `generateId` for the identifiers it makes (a ULID or a cuid2 instead of a
-UUID), and every HTTP transport a `fetch`, such as one bound to an undici `Agent` or a proxy; see
+UUID) and a pino-like `logger` for what happens inside it, and every HTTP transport a `fetch`,
+such as one bound to an undici `Agent` or a proxy; see
 [your own fetch and identifiers](https://mailerat.vercel.app/guide/getting-started#your-own-fetch-and-identifiers).
 
 The same names import from ESM (`import { SmtpTransport } from '@alexify/mailer/smtp'`). The

@@ -180,3 +180,36 @@ Lifecycle errors without an associated message stay on one line.
 > [redaction].
 
 [redaction]: https://getpino.io/#/docs/redaction
+
+## Internal diagnostics
+
+The decorator sees a send from the outside: it starts, it is retried, it ends
+with a receipt. What happens inside a transport is told by the `logger` option
+of the transport itself, which every transport and decorator takes:
+
+```js
+const pino = require('pino');
+const { SmtpTransport } = require('@alexify/mailer/smtp');
+const { LoggerTransport } = require('@alexify/mailer/logger');
+
+const logger = pino({ level: 'debug' }).child({ component: 'mail' });
+
+const transport = new LoggerTransport({
+  // The lifecycle of each send.
+  logger,
+  // The connections, STARTTLS, authentication and pool of SMTP.
+  transport: new SmtpTransport({ host: 'smtp.example.com', logger }),
+});
+```
+
+A transport binds its records to itself through `logger.child({ transport })`
+when the logger has `child`, and builds a record only for a level the logger
+writes (`isLevelEnabled`). It writes `debug` for its lifecycle and retries,
+`trace` for the SMTP protocol, and `warn` for a degradation: mail sent in plain
+text (`MAILER_SMTP_PLAINTEXT`), a DKIM signature skipped under `send-unsigned`
+(`MAILER_DKIM_UNSIGNED`), a pool selector that throws. It never writes a
+credential or an address, nor the failure of a message, which its receipt
+already carries. Without a logger it writes nothing but the two warnings of
+mail sent with less protection than asked, to `console.warn`; and a logger that
+throws changes nothing of a send, its failure being emitted as a process warning
+with the code `MAILER_LOGGER_FAILED`.
