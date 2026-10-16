@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mock/src/mock-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { sleep } = require('../internal/sleep.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createMockConfig } = require('./config.js');
 
@@ -46,17 +47,10 @@ class MockTransport {
    */
   async send(message, options) {
     // Check for cancellation
-    if (options?.signal?.aborted) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
+    options?.signal?.throwIfAborted();
 
-    // Apply delay if configured
-    await this.applyDelay();
-
-    // Check for cancellation after delay
-    if (options?.signal?.aborted) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
+    // Apply delay if configured; an abort ends it with the signal's reason.
+    await this.applyDelay(options?.signal);
 
     // Store the message
     this.sentMessages.push(message);
@@ -80,9 +74,7 @@ class MockTransport {
    */
   async *sendMany(messages, options) {
     for await (const message of messages) {
-      if (options?.signal?.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError');
-      }
+      options?.signal?.throwIfAborted();
       yield await this.send(message, options);
     }
   }
@@ -323,7 +315,7 @@ class MockTransport {
     this.messageIdCounter = 1;
   }
 
-  async applyDelay() {
+  async applyDelay(signal) {
     let delayMs = this.config.delay;
 
     if (
@@ -335,7 +327,7 @@ class MockTransport {
     }
 
     if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await sleep(delayMs, signal);
     }
   }
 

@@ -352,6 +352,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     the receipt was lost and a caller could send the message again; one that threw before
     stopped the send. `log()` catches it and emits a process warning
     (`MAILER_LOGGER_FAILED`); the send and its receipt go on.
+68. mock: the simulated delay ignored the `AbortSignal`, and an abort rejected with a new
+    `AbortError` instead of the reason of the signal. The delay is the abortable sleep of
+    `internal/sleep.js`, and every abort rejects with the reason.
 
 ## Repository layout
 

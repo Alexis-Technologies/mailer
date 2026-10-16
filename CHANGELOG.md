@@ -249,6 +249,9 @@ fixed ones below.
   message again; one that threw before stopped the send. The failure of the logger is now
   emitted as a process warning with the code `MAILER_LOGGER_FAILED`, and the send and its
   receipt go on.
+- **`./mock` honors an abort during its delay** (an upstream bug): the simulated delay ran to its
+  end whatever the signal said, and an abort rejected with a new `AbortError`. An abort now ends
+  the delay at once, and the send rejects with the reason of the signal.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

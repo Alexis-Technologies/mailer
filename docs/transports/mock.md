@@ -102,8 +102,10 @@ try {
 ```
 
 Delay simulation helps test timeout handling and ensures your application
-can handle slower network conditions. Failure simulation verifies that your
-error handling code works correctly when email services are unavailable.
+can handle slower network conditions: an `AbortSignal` passed to the send ends
+the delay at once, and the send rejects with the reason of the signal, as a
+real transport does. Failure simulation verifies that your error handling code
+works correctly when email services are unavailable.
 
 ## Testing specific failure scenarios
 

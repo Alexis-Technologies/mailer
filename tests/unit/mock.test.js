@@ -71,3 +71,15 @@ test('Mock: waiting for messages times out', async () => {
     { message: 'Timeout waiting for message' },
   );
 });
+
+test('Mock: an abort ends the configured delay, with the reason of the signal', async () => {
+  const transport = new MockTransport({ delay: 5000 });
+  const controller = new AbortController();
+  const reason = new Error('Stop.');
+  const started = performance.now();
+  const sending = transport.send(message('Hello'), { signal: controller.signal });
+  setTimeout(() => controller.abort(reason), 20);
+  await assert.rejects(sending, (error) => error === reason);
+  assert.ok(performance.now() - started < 1000);
+  assert.strictEqual(transport.getSentMessagesCount(), 0);
+});
