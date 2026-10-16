@@ -105,7 +105,10 @@ const iterateRawMessage = async function* (plan, options = {}) {
     for (let start = 0; start < chunk.length; start += 32768) {
       options.signal?.throwIfAborted();
       const window = chunk.subarray(start, start + 32768);
-      for (const byte of window) {
+      // An index loop: the iterator protocol of for...of costs more than the
+      // checks on each byte.
+      for (let index = 0; index < window.length; index++) {
+        const byte = window[index];
         if (pendingCr) {
           if (byte !== 10) fail('Expected LF after CR.');
           if (line === 1 && column === 0) {
