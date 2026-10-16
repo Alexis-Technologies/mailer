@@ -133,7 +133,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
-8. otel (partly fixed, see 44 and 45): `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
+8. otel (partly fixed, see 44, 45 and 48): `auto` is ignored; `recordRetry` is never called; `sendMany` buffers
    its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
@@ -272,6 +272,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     once, with the priority of its message and its status.
 47. otel: a batch in which every message failed was counted as a `partial_failure`. It is a
     `failure`; `partial_failure` is left for a batch with both outcomes.
+48. otel: `metrics.durationBuckets` was never read. The duration histogram passes it to the SDK
+    as the advice `explicitBucketBoundaries`.
 
 ## Repository layout
 

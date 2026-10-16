@@ -195,6 +195,9 @@ fixed ones below.
   `status`.
 - **`./otel` tells a failed batch from a partly failed one** (an upstream bug): a batch in which
   every message failed was counted with `status: 'partial_failure'`. It is now a `failure`.
+- **`./otel` applies `metrics.durationBuckets`** (an upstream bug): the option was never read. The
+  duration histogram passes it to the SDK as the advice `explicitBucketBoundaries`
+  (OpenTelemetry API 1.7 or later), which a View of the application still overrides.
 
 ### Changed
 

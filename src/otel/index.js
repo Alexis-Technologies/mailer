@@ -73,7 +73,7 @@ const { defaultErrorClassifier } = require('./config.js');
  *   },
  *   metrics: {
  *     enabled: true,
- *     histogramBoundaries: [10, 50, 100, 500, 1000, 5000],
+ *     durationBuckets: [0.1, 0.5, 1, 5, 10],
  *   },
  * });
  * ```

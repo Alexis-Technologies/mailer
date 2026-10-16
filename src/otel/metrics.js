@@ -49,6 +49,7 @@ class MetricsCollector {
     this.durationHistogram = this.meter.createHistogram(`${config.prefix}_email_duration_seconds`, {
       description: 'Duration of email send operations',
       unit: 's',
+      advice: { explicitBucketBoundaries: [...config.durationBuckets] },
     });
 
     this.messageSizeHistogram = this.meter.createHistogram(

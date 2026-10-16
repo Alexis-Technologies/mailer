@@ -43,6 +43,8 @@ export interface TracerProvider {
 export interface MetricOptions {
   description?: string;
   unit?: string;
+  /** Hints for the SDK, such as the bucket boundaries of a histogram. */
+  advice?: { explicitBucketBoundaries?: number[] };
 }
 
 /** A counter, or an up-down counter, of the OpenTelemetry API. */
@@ -89,7 +91,9 @@ export interface MetricsConfig extends ObservabilityConfig {
    */
   readonly prefix?: string;
   /**
-   * Custom histogram buckets for duration metrics (in seconds).
+   * Bucket boundaries of the duration histogram, in seconds, passed to the SDK
+   * as the advice `explicitBucketBoundaries` (OpenTelemetry API 1.7 or later;
+   * a View of the application takes precedence).
    * @default [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]
    */
   readonly durationBuckets?: readonly number[];
@@ -358,7 +362,7 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
  *   },
  *   metrics: {
  *     enabled: true,
- *     histogramBoundaries: [10, 50, 100, 500, 1000],
+ *     durationBuckets: [0.1, 0.5, 1, 5, 10],
  *   },
  *   auto: {
  *     tracing: {
@@ -459,7 +463,7 @@ export interface CreateOpenTelemetryTransportConfig extends Omit<OpenTelemetryCo
  *   },
  *   metrics: {
  *     enabled: true,
- *     histogramBoundaries: [10, 50, 100, 500, 1000, 5000],
+ *     durationBuckets: [0.1, 0.5, 1, 5, 10],
  *   },
  * });
  * ```

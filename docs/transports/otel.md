@@ -357,6 +357,9 @@ Metrics are recorded for every operation; `tracing.samplingRate` samples
 only the spans. A sampled counter would undercount by the sampling rate, and a
 sampled count of active sends would drift, so the metrics configuration has no
 sampling rate, and setting `metrics.samplingRate` throws a `TypeError`.
+`durationBuckets` reaches the SDK as the advice `explicitBucketBoundaries` of the
+duration histogram (OpenTelemetry API 1.7 or later); a View of the application
+takes precedence over it.
 
 The transport collects the following key metrics:
 

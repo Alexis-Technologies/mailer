@@ -246,3 +246,18 @@ test('OTel: a batch is a success, a partial failure or a failure', async () => {
     assert.strictEqual(attempts.records[0].attributes.status, status);
   }
 });
+
+test('OTel: the duration buckets reach the histogram as advice', () => {
+  for (const [metrics, buckets] of [
+    [{}, [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]],
+    [{ durationBuckets: [0.5, 2] }, [0.5, 2]],
+  ]) {
+    const { tracerProvider, meterProvider } = providers();
+    // oxlint-disable-next-line no-new -- the instruments are made by the constructor
+    new OpenTelemetryTransport(plain({}), { tracerProvider, meterProvider, metrics });
+    const duration = meterProvider
+      .getAllRecords()
+      .find((metric) => metric.name === 'mailer_email_duration_seconds');
+    assert.deepStrictEqual(duration.options.advice, { explicitBucketBoundaries: buckets });
+  }
+});
