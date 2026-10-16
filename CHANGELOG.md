@@ -236,6 +236,10 @@ fixed ones below.
   parsed and imported for every message, and a broken one failed only at the first send. It is
   now imported once per signature configuration, and `SmtpTransport` throws a `TypeError` for
   a PEM it cannot read, unless `onSigningFailure` is `send-unsigned`.
+- **`./retry` no longer hides a bug of the transport it wraps** (an upstream bug): any thrown
+  error was retried and then turned into a failed receipt, a `TypeError` of a programming
+  mistake included. A built-in error that is no recognizable delivery failure now rejects the
+  send at once; a network failure reported by `fetch` as a `TypeError` is still retried.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

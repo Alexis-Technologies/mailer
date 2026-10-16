@@ -172,3 +172,37 @@ test('Retry: onRetry hears the retries of the decorator and reaches the wrapped 
   ]);
   assert.deepStrictEqual(seen, [onRetry, onRetry, onRetry]);
 });
+
+test('Retry: a bug of the wrapped transport rejects, a network TypeError is retried', async () => {
+  let calls = 0;
+  const bug = new TypeError("Cannot read properties of undefined (reading 'address')");
+  const buggy = {
+    id: 'base',
+    send: async () => {
+      calls++;
+      throw bug;
+    },
+    async *sendMany() {},
+  };
+  const options = { maxAttempts: 3, wait: async () => {} };
+  await assert.rejects(
+    new RetryTransport(buggy, options).send(message()),
+    (error) => error === bug,
+  );
+  assert.strictEqual(calls, 1);
+
+  calls = 0;
+  const network = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+  });
+  const flaky = {
+    ...buggy,
+    send: async () => {
+      calls++;
+      throw network;
+    },
+  };
+  const receipt = await new RetryTransport(flaky, options).send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(calls, 3);
+});

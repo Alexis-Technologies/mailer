@@ -13,6 +13,16 @@ const { createRetryConfig } = require('./config.js');
 /**
  * Transport decorator that retries transient delivery failures.
  */
+// The built-in errors of a bug in code, such as reading a property of
+// undefined, as opposed to a failure of delivery.  A network failure is also
+// a TypeError under fetch ("fetch failed"), but its causes classify it.
+const PROGRAMMER_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
+
+const isProgrammerError = (error) => {
+  if (!PROGRAMMER_ERRORS.some((type) => error instanceof type)) return false;
+  return classifyReceiptError(error).category === 'unknown';
+};
+
 class RetryTransport {
   id;
 
@@ -57,6 +67,9 @@ class RetryTransport {
         receipt = await this.wrappedTransport.send(pinned, options);
       } catch (error) {
         options?.signal?.throwIfAborted();
+        // A bug of the wrapped transport is not a delivery failure to retry
+        // or to hide in a receipt.
+        if (isProgrammerError(error)) throw error;
 
         lastThrownError = error;
         if (

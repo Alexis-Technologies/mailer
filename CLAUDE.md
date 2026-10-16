@@ -340,6 +340,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     the first send. It is imported once per signature configuration (`resolvePrivateKey`, a
     WeakMap), and the SMTP transport reads it when it is made (`checkDkimKeys`), unless the
     configuration sends unsigned on a signing failure.
+65. retry: every error the wrapped transport threw became a failed receipt, retried first, so a
+    bug such as reading a property of `undefined` was retried and hidden. A `TypeError`,
+    `RangeError`, `ReferenceError` or `SyntaxError` that `classifyReceiptError` does not
+    recognize (category `unknown`) is rethrown at once; a fetch failure keeps being retried.
 
 ## Repository layout
 

@@ -89,7 +89,11 @@ none, so that a duplicate can be told apart.
 If a wrapped transport throws a transient error instead of returning a failed
 receipt, retry transport retries it using the same classifier used by
 *@alexify/mailer*.  After all attempts are exhausted, thrown delivery failures are
-converted into a failed receipt.  Caller cancellation errors are rethrown.
+converted into a failed receipt.  Caller cancellation errors are rethrown, and so
+is a bug of the wrapped transport: a `TypeError`, `RangeError`, `ReferenceError`
+or `SyntaxError` that is no recognizable delivery failure (such as reading a
+property of `undefined`) rejects the send at once, without a retry, while a
+network failure that `fetch` reports as a `TypeError` is still retried.
 
 You can override classification with `shouldRetry` when a provider needs
 application-specific logic:
