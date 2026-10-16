@@ -21,7 +21,7 @@ const { OAuth2TokenManager } = require('./oauth2.js');
 const { prepareMessage } = require('./message-converter.js');
 const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
-const { validateDkimBodyMode } = require('../mime/dkim/types.js');
+const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 
@@ -117,7 +117,7 @@ class SmtpTransport {
    *                        `Infinity`.
    */
   constructor(config) {
-    validateDkimBodyMode(config.dkim);
+    checkDkimConfig(config.dkim);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
     if (

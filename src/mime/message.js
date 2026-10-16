@@ -11,7 +11,7 @@ const {
   resolveThreadingHeaders,
 } = require('../core/message-id.js');
 const { resolveCalendarContent } = require('../core/calendar.js');
-const { validateDkimBodyMode } = require('./dkim/types.js');
+const { checkDkimConfig } = require('./dkim/types.js');
 const { attachmentEncodedSize, encodeAttachment } = require('./mime-stream.js');
 const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
 
@@ -42,7 +42,7 @@ const prepareMimeMessage = (message, dkimConfig) => {
             headerFields: signature.headerFields == null ? undefined : [...signature.headerFields],
           })),
         };
-  if (dkim != null) validateDkimBodyMode(dkim);
+  if (dkim != null) checkDkimConfig(dkim);
   const parts = buildMimeParts(message);
   const first = parts[0];
   if (typeof first !== 'string') throw new TypeError('Missing MIME headers.');

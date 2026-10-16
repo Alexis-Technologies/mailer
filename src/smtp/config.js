@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { validateDkimBodyMode } = require('../mime/dkim/types.js');
+const { checkDkimConfig } = require('../mime/dkim/types.js');
 
 /**
  * Creates a resolved SMTP configuration by applying default values to optional fields.
@@ -15,7 +15,7 @@ const { validateDkimBodyMode } = require('../mime/dkim/types.js');
  * @internal
  */
 const createSmtpConfig = (config) => {
-  validateDkimBodyMode(config.dkim);
+  checkDkimConfig(config.dkim);
   const port = config.port ?? 587;
 
   return {

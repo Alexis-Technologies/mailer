@@ -100,3 +100,36 @@ test('DKIM: by default, a forged Reply-To or a second From breaks the signature'
     assert.strictEqual(verifies(result, [forged, ...headers]), false, forged);
   }
 });
+
+test('DKIM: a domain, selector or field name that could break the signature field is refused', async () => {
+  const { composeMessage } = require('../../src/mime/index.js');
+  const { SmtpTransport } = require('../../src/smtp/index.js');
+  const { createMessage } = require('../../index.js');
+  const message = createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Hello',
+    content: { text: 'Hi' },
+  });
+  const wrong = [
+    { signingDomain: 'example.com\r\nBcc: eve@evil.example' },
+    { signingDomain: 'example.com; x=1' },
+    { signingDomain: '-example.com' },
+    { selector: 'mail\r\nX: y' },
+    { selector: 'a;b' },
+    { headerFields: ['from', 'subject; x=1'] },
+    { headerFields: ['from:to'] },
+    { algorithm: 'rsa-sha1' },
+    { canonicalization: 'relaxed' },
+  ];
+  for (const extra of wrong) {
+    const signatures = [config(extra)];
+    await assert.rejects(composeMessage(message, { dkim: { signatures } }), TypeError);
+    // The SMTP transport refuses it when it is made, before any message.
+    assert.throws(() => new SmtpTransport({ host: 'localhost', dkim: { signatures } }), TypeError);
+  }
+  // An internationalized domain may stay in U-labels (RFC 8616).
+  await composeMessage(message, {
+    dkim: { signatures: [config({ signingDomain: 'приклад.укр' })] },
+  });
+});

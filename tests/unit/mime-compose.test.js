@@ -294,9 +294,18 @@ test('nested and signed Unicode headers determine MIME encoding', async () => {
     ).encoding,
     'utf8',
   );
+  // Changed after the port: a signing domain of 1000 characters is no domain
+  // name and is refused as such; an h= of many fields still makes a signature
+  // line longer than 998 octets.
   await assert.rejects(
     composeMessage(message(), {
       dkim: { signatures: [{ ...signature, signingDomain: 'x'.repeat(1000) }] },
+    }),
+    TypeError,
+  );
+  await assert.rejects(
+    composeMessage(message(), {
+      dkim: { signatures: [{ ...signature, headerFields: Array(100).fill('x-long-field-name') }] },
     }),
     RangeError,
   );

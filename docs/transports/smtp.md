@@ -735,6 +735,12 @@ second instance cannot be added either (over-signing, RFC 6376 §8.15). A name
 listed more than once in `headerFields` signs the instances of that field from
 the bottom up, as RFC 6376 §5.4.2 says.
 
+The signing domain and the selector must be domain names (letters, digits and
+hyphens, or U-labels that convert to such A-labels), the field names printable
+ASCII without `:` or `;`, and the algorithm and canonicalization among those
+above; anything else throws a `TypeError` when the transport is made, since
+these values are written into the `DKIM-Signature` field as they are.
+
 ### Using Ed25519 keys
 
 Ed25519 offers shorter keys than RSA while providing equivalent security.

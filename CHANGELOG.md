@@ -55,6 +55,12 @@ fixed ones below.
 
 ### Security
 
+- **A DKIM setting can no longer add a header field** (an upstream bug): the signing domain,
+  the selector, the signed field names, the algorithm and the canonicalization went into the
+  `DKIM-Signature` field as given, so a domain such as `example.com\r\nBcc: …` added a Bcc to
+  every message, and a `;` ended a tag early. They must now be valid (domain names, field names
+  without `:` or `;`, known algorithms and canonicalizations), or the SMTP transport refuses
+  them when it is made and `composeMessage` throws a `TypeError`.
 - **An address can no longer end the path of an SMTP command** (an upstream bug). A quote in the
   domain hid a second `@` from the scan of `isEmailAddress`, and `URL.canParse` accepted the rest
   as userinfo, so `user@example.com> NOTIFY=NEVER ORCPT=rfc822;a"@x.com` passed and became

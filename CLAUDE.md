@@ -328,6 +328,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     Content-Type could be changed or added without breaking the signature. It adds Reply-To,
     Cc, Message-ID, In-Reply-To, References, MIME-Version and Content-Type, and over-signs
     From, Reply-To and Subject.
+62. DKIM: `signingDomain`, `selector`, the names in `headerFields`, the algorithm and the
+    canonicalization went into the DKIM-Signature field unchecked, so a domain with a line
+    break added a header field such as Bcc to the message, and a `;` ended a tag early.
+    `checkDkimConfig` refuses them, from the SMTP constructor and at every composition.
 
 ## Repository layout
 
