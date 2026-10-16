@@ -91,16 +91,14 @@ const convertMessage = async (message, _config, signal) => {
     );
   }
 
-  // Convert attachments (limit to 5 as per Plunk documentation)
+  // Convert attachments (limit to 5 as per Plunk documentation).  One that
+  // cannot be read fails the send, as on the other providers: upstream left
+  // it out with a console.warn, and the message went without it.
   const attachments = [];
   const maxAttachments = Math.min(sourceAttachments.length, 5);
 
   for (let i = 0; i < maxAttachments; i++) {
-    const attachment = sourceAttachments[i];
-    const convertedAttachment = await convertAttachment(attachment, signal);
-    if (convertedAttachment) {
-      attachments.push(convertedAttachment);
-    }
+    attachments.push(await convertAttachment(sourceAttachments[i], signal));
   }
 
   // Build Plunk email object
@@ -138,28 +136,16 @@ const convertMessage = async (message, _config, signal) => {
  * Converts a Upyo attachment to Plunk format.
  *
  * @param attachment - The Upyo attachment to convert
- * @returns Promise that resolves to Plunk attachment or null if conversion fails
+ * @returns Promise that resolves to Plunk attachment
+ * @throws The error of reading its content.
  */
 const convertAttachment = async (attachment, signal) => {
-  try {
-    // Get content as Uint8Array
-    const content = await readAttachmentContent(attachment.content, signal);
-
-    // Convert to base64
-    const base64Content = toBase64(content);
-
-    return {
-      filename: attachment.filename,
-      content: base64Content,
-      contentType: attachment.contentType,
-    };
-  } catch (error) {
-    signal?.throwIfAborted();
-    // Log error but don't fail the entire send operation
-    // oxlint-disable-next-line no-console -- upstream
-    console.warn(`Failed to convert attachment ${attachment.filename}:`, error);
-    return null;
-  }
+  const content = await readAttachmentContent(attachment.content, signal);
+  return {
+    filename: attachment.filename,
+    content: toBase64(content),
+    contentType: attachment.contentType,
+  };
 };
 
 module.exports = { convertMessage };

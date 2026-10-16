@@ -219,11 +219,9 @@ describe('convertMessage', () => {
       ],
     });
 
-    const result = await convertMessage(message, config);
-
-    // Should only include the working attachment
-    assert.equal(result.attachments?.length, 1);
-    assert.equal(result.attachments?.[0].filename, 'working.txt');
+    // Changed after the port: an attachment that cannot be read fails the
+    // conversion, rather than being left out of a message sent without it.
+    await assert.rejects(convertMessage(message, config), { message: 'Failed to read' });
   });
 
   it('should not include optional fields when not present', async () => {

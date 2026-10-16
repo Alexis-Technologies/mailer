@@ -277,6 +277,9 @@ fixed ones below.
   it went to `console.warn` whatever the application logged with. It now goes to the `logger`
   of `composeMessage` or of the SMTP transport, as a `warn` with the code
   `MAILER_DKIM_UNSIGNED`, and to `console.warn` only when there is no logger.
+- **`./plunk` fails a send whose attachment cannot be read** (known upstream bug 12): it left the
+  attachment out with a `console.warn` and sent the message without it, reported as sent. The
+  send now fails before any request, as on the other providers.
 - **`./resend` draws its idempotency key from `crypto.randomUUID()`** (known upstream bug 11): it
   came from the clock and `Math.random()`, and two sends that shared a key by chance would get
   the first one's answer, the second never going out.

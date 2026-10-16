@@ -78,10 +78,8 @@ test('Plunk: a 5xx is retried after a backoff', async (t) => {
   assert.strictEqual(receipt.successful, true);
 });
 
-test('Plunk: an attachment that cannot be read is left out with a warning', async (t) => {
-  let body;
-  t.mock.method(globalThis, 'fetch', async (url, init) => {
-    body = JSON.parse(init.body);
+test('Plunk: an attachment that cannot be read fails the send, and nothing is sent', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => {
     return Response.json({ success: true, emails: [], timestamp: 'now' });
   });
   const warn = t.mock.method(console, 'warn', () => {});
@@ -97,9 +95,11 @@ test('Plunk: an attachment that cannot be read is left out with a warning', asyn
       contentId: '',
     },
   ];
-  await new PlunkTransport(config).send(message({ attachments }));
-  assert.strictEqual(warn.mock.callCount(), 1);
-  assert.strictEqual(body.attachments, undefined);
+  const receipt = await new PlunkTransport(config).send(message({ attachments }));
+  assert.strictEqual(receipt.successful, false);
+  assert.deepStrictEqual(receipt.errorMessages, ['Cannot read attachment']);
+  assert.strictEqual(fetch.mock.callCount(), 0);
+  assert.strictEqual(warn.mock.callCount(), 0);
 });
 
 test('Plunk: an abort during the wait between attempts ends the send at once', async (t) => {
