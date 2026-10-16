@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { combineSignals } = require('../core/abort-signal.js');
+const { jitteredDelayMs, requestWithRetry } = require('../internal/http.js');
 
 const maxErrorMessageLength = 500;
 const sandboxRateLimitWindowMilliseconds = 10_000;
@@ -130,65 +130,46 @@ class MailtrapHttpClient {
     return `${baseUrl}/api/${kind}${suffix}`;
   }
 
-  async makeRequest(url, body, signal) {
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= this.config.retries; attempt++) {
-      signal?.throwIfAborted();
-
-      let responseText;
-      try {
-        const { response, text } = await this.fetchWithAuth(url, body, signal);
-        responseText = text;
-
-        if (!response.ok) {
-          const message = parseErrorMessage(responseText, response.status);
-          throw new MailtrapApiError(
-            message,
-            response.status,
-            parseRetryAfter(response.headers.get('Retry-After')) ??
-              inferSandboxRetryAfter(message, response.status, this.config.sandbox),
-            attempt + 1,
+  makeRequest(url, body, signal) {
+    return requestWithRetry({
+      signal,
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      isZeroTimeoutDisabled: true,
+      timeoutCoversBody: true,
+      send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
+      read: async (response) => {
+        const text = await response.text();
+        try {
+          return JSON.parse(text);
+        } catch (error) {
+          throw new SyntaxError(
+            `Invalid JSON response from Mailtrap API: ${
+              error instanceof Error ? error.message : String(error)
+            }.`,
           );
         }
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        if (error instanceof MailtrapResponseError) {
-          throw new MailtrapResponseError(error.cause, attempt + 1);
-        }
-
-        if (error instanceof MailtrapApiError && !isRetryable(error)) {
-          throw error;
-        }
-
-        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) {
-          throw error;
-        }
-
-        if (attempt === this.config.retries) {
-          throw withAttempts(lastError, attempt + 1);
-        }
-
-        await sleep(calculateRetryDelay(attempt, lastError), signal);
-        continue;
-      }
-
-      try {
-        return JSON.parse(responseText);
-      } catch (error) {
-        throw new SyntaxError(
-          `Invalid JSON response from Mailtrap API: ${
-            error instanceof Error ? error.message : String(error)
-          }.`,
+      },
+      reject: async (response, attempt) => {
+        const message = parseErrorMessage(await response.text(), response.status);
+        return new MailtrapApiError(
+          message,
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')) ??
+            inferSandboxRetryAfter(message, response.status, this.config.sandbox),
+          attempt + 1,
         );
-      }
-    }
-
-    throw lastError ?? new Error('Request failed after all retry attempts.');
+      },
+      createTimeoutError: () => new MailtrapTimeoutError(this.config.timeout),
+      // A 2xx response means Mailtrap may already have sent the message.
+      wrapAccepted: (error, attempts) => new MailtrapResponseError(error, attempts),
+      isRetryable: (error) => !(error instanceof MailtrapApiError) || isRetryable(error),
+      retryDelayMs: calculateRetryDelay,
+      finalError: withAttempts,
+    });
   }
 
-  async fetchWithAuth(url, body, signal) {
+  fetchWithAuth(url, body, signal) {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'Api-Token': this.config.apiToken,
@@ -199,45 +180,12 @@ class MailtrapHttpClient {
       headers.set(key, value);
     }
 
-    const timeoutController = new AbortController();
-    const timeoutId =
-      this.config.timeout > 0
-        ? setTimeout(() => timeoutController.abort(), this.config.timeout)
-        : undefined;
-    const requestSignal = combineSignals(timeoutController.signal, signal);
-
-    let response;
-    try {
-      response = await globalThis.fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: requestSignal.signal,
-      });
-      const text = await response.text();
-      return { response, text };
-    } catch (error) {
-      signal?.throwIfAborted();
-      let cause = error;
-      if (
-        error instanceof Error &&
-        error.name === 'AbortError' &&
-        timeoutController.signal.aborted &&
-        !signal?.aborted
-      ) {
-        cause = new MailtrapTimeoutError(this.config.timeout);
-      }
-      // A 2xx response means Mailtrap may already have sent the message.
-      if (response?.ok) {
-        throw new MailtrapResponseError(cause);
-      }
-      throw cause;
-    } finally {
-      requestSignal.cleanup();
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
+    return globalThis.fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
   }
 }
 
@@ -246,8 +194,7 @@ const isRetryable = (error) => {
 };
 
 const calculateRetryDelay = (attempt, error) => {
-  const baseDelay = Math.min(1000 * Math.pow(2, attempt), 10000);
-  const backoffDelay = Math.round(baseDelay / 2 + Math.random() * (baseDelay / 2));
+  const backoffDelay = jitteredDelayMs(attempt);
   if (error instanceof MailtrapApiError) {
     return Math.max(backoffDelay, error.retryAfterMilliseconds ?? 0);
   }
@@ -307,40 +254,6 @@ const truncateErrorMessage = (message) => {
   return message.length > maxErrorMessageLength
     ? `${message.slice(0, maxErrorMessageLength)}...`
     : message;
-};
-
-const abortReason = (signal) => {
-  return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
-};
-
-const sleep = (ms, signal) => {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(abortReason(signal));
-      return;
-    }
-
-    const timeoutState = {};
-    const onAbort = () => {
-      if (timeoutState.id !== undefined) {
-        clearTimeout(timeoutState.id);
-      }
-      signal?.removeEventListener('abort', onAbort);
-      reject(abortReason(signal));
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-
-    timeoutState.id = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-  });
 };
 
 module.exports = {

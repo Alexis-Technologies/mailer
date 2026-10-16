@@ -152,3 +152,16 @@ test('Mailtrap: batches that fail, partly or whole, fail their messages', async 
   );
   assert.deepStrictEqual(allBroken[0].errorMessages, ['Cannot read attachment']);
 });
+
+test('Mailtrap: a 200 that is not JSON is sent once, of unknown delivery', async (t) => {
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requests++;
+    return new Response('<html>accepted</html>', { status: 200 });
+  });
+  const receipt = await new MailtrapTransport({ ...config, retries: 3 }).send(message());
+  assert.strictEqual(requests, 1);
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.retryable, false);
+});
