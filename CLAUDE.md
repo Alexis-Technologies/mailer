@@ -133,8 +133,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
 6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
 7. pool: `continueOnSuccess` is never read.
-8. otel (partly fixed, see 44, 45 and 48 to 50): `recordRetry` is never called; `sendMany`
-   buffers its whole input.
+8. otel (partly fixed, see 44, 45 and 48 to 51): `recordRetry` is never called.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
@@ -281,6 +280,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     network check (`"Author unknown"` was `auth`, `"timeout after 5000ms"` a server error), and
     disagreed with the categories of the receipts. It is `classifyReceiptError` of the root, plus
     `aborted` for an `AbortError`, which upstream counted as a network failure.
+51. otel: `sendMany` read its whole input into an array before sending the first message, and
+    kept every receipt to the end. It passes the messages on as the wrapped transport reads
+    them, pairs each receipt with the oldest message still waiting for one, sets the batch
+    attributes of its span at the end, and keeps the first ten error messages of a failed batch
+    with the count of all.
 
 ## Repository layout
 

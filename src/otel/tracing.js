@@ -53,9 +53,10 @@ class TracingCollector {
   }
 
   /**
-   * Creates a span for a batch email send operation.
+   * Creates a span for a batch email send operation.  Its batch attributes
+   * come at its end (`recordBatchTotals`), once the batch has been read.
    */
-  createBatchSpan(messages, batchSize, networkAttributes) {
+  createBatchSpan(networkAttributes) {
     if (!this.shouldSample()) {
       return new NoOpEmailSpan();
     }
@@ -64,10 +65,6 @@ class TracingCollector {
     const span = this.tracer.startSpan(spanName, {
       kind: SPAN_KIND_CLIENT,
     });
-
-    // Set batch attributes
-    const batchAttributes = this.attributeExtractor.extractBatchAttributes(messages, batchSize);
-    span.setAttributes(batchAttributes);
 
     // Set network attributes if provided
     if (networkAttributes) {
@@ -151,7 +148,11 @@ class LiveEmailSpan {
     });
   }
 
-  recordFailure(errorMessages) {
+  /**
+   * Records a failure from its error messages, or the first of them when
+   * `errorCount` says how many there were in all.
+   */
+  recordFailure(errorMessages, errorCount = errorMessages.length) {
     const extractor = this.attributeExtractor;
     const described = [];
     for (const errorMessage of errorMessages) described.push(extractor.describeError(errorMessage));
@@ -161,13 +162,17 @@ class LiveEmailSpan {
     });
 
     this.span.setAttributes({
-      'email.error.count': errorMessages.length,
+      'email.error.count': errorCount,
     });
 
     this.span.addEvent('email.send_failed', {
-      'error.count': errorMessages.length,
+      'error.count': errorCount,
       'error.messages': JSON.stringify(described),
     });
+  }
+
+  recordBatchTotals(totals) {
+    this.span.setAttributes(this.attributeExtractor.extractBatchAttributes(totals));
   }
 
   end() {
@@ -188,6 +193,7 @@ class NoOpEmailSpan {
   /* c8 ignore stop */
   recordSuccess() {}
   recordFailure() {}
+  recordBatchTotals() {}
   end() {}
 }
 

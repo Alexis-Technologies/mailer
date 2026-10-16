@@ -274,3 +274,42 @@ test('OTel: the default classifier reads words and status codes whole', () => {
     assert.strictEqual(defaultErrorClassifier(new Error(text)), category, text);
   }
 });
+
+test('OTel: sendMany passes the messages on as they come', async () => {
+  const { tracerProvider, meterProvider } = providers();
+  let produced = 0;
+  const messages = async function* () {
+    while (produced < 1000) {
+      produced++;
+      yield createTestMessage({ recipients: [{ address: 'bob@example.com' }] });
+    }
+  };
+  const transport = new OpenTelemetryTransport(plain({}), { tracerProvider, meterProvider });
+  let received = 0;
+  for await (const receipt of transport.sendMany(messages())) {
+    assert.strictEqual(receipt.successful, true);
+    if (++received === 3) break;
+  }
+  assert.ok(produced <= 4, `read ${produced} messages for 3 receipts`);
+  const [span] = tracerProvider.getAllSpans();
+  assert.strictEqual(span.attributes['email.batch.size'], 3);
+  assert.strictEqual(span.attributes['email.batch.total_recipients'], 3);
+  assert.strictEqual(span.ended, true);
+});
+
+test('OTel: a failed batch keeps its first error messages and counts them all', async () => {
+  const { tracerProvider, meterProvider } = providers();
+  let index = 0;
+  const transport = new OpenTelemetryTransport(
+    plain({}, () => ({ successful: false, errorMessages: [`Rejected ${index++}`], errors: [] })),
+    { tracerProvider, meterProvider },
+  );
+  const batch = [];
+  for (let i = 0; i < 25; i++) batch.push(createTestMessage());
+  await collect(transport.sendMany(batch));
+  const [span] = tracerProvider.getAllSpans();
+  const failed = span.events.find((event) => event.name === 'email.send_failed');
+  assert.strictEqual(failed.attributes['error.count'], 25);
+  assert.strictEqual(JSON.parse(failed.attributes['error.messages']).length, 10);
+  assert.strictEqual(span.attributes['email.error.count'], 25);
+});

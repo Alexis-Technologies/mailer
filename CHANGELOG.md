@@ -208,6 +208,11 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./otel` streams `sendMany`** (an upstream bug): it read the whole input into an array before
+  the first message went out, and kept every receipt to the end, so a long or endless batch
+  held it all in memory. The messages now pass on as the wrapped transport reads them; the batch
+  attributes and the custom attributes of the span are set when the batch ends, and the span of
+  a failed batch keeps its first ten error messages with the count of all.
 
 ### Changed
 

@@ -6,6 +6,18 @@ const { MetricsCollector } = require('./metrics.js');
 const { TracingCollector } = require('./tracing.js');
 const { estimateMessageSize } = require('./message-size.js');
 
+// How many error messages of a failed batch its span keeps; the count says how
+// many there were in all.
+const MAX_RECORDED_ERROR_MESSAGES = 10;
+
+// Passes the messages of a batch on one at a time, telling `onMessage` of each.
+const observeMessages = async function* (messages, onMessage) {
+  for await (const message of messages) {
+    onMessage(message);
+    yield message;
+  }
+};
+
 /**
  * OpenTelemetry decorator transport that adds observability to any existing transport.
  *
@@ -185,56 +197,55 @@ class OpenTelemetryTransport {
    */
   async *sendMany(messages, options) {
     const startTime = performance.now();
-    const messageArray = [];
-
-    // Collect messages for batch metrics
-    for await (const message of messages) {
-      messageArray.push(message);
-    }
-
-    const batchSize = messageArray.length;
+    const metrics = this.metricsCollector;
+    const transportName = this.transportName;
 
     // Create batch span if tracing is enabled
-    const span = this.tracingCollector?.createBatchSpan(
-      messageArray,
-      batchSize,
-      this.extractNetworkAttributes(),
-    );
+    const span = this.tracingCollector?.createBatchSpan(this.extractNetworkAttributes());
 
     // Record batch start
-    this.metricsCollector?.recordSendStart(this.transportName);
+    metrics?.recordSendStart(transportName);
+
+    // The messages are observed as the wrapped transport reads them rather
+    // than collected first, so a batch of any length takes bounded memory.
+    // The priority of each waits in `pending` for the receipt that answers it.
+    const totals = { count: 0, recipients: 0, attachments: 0, size: 0 };
+    const pending = [];
+    let head = 0;
+    const observed = observeMessages(messages, (message) => {
+      const size = estimateMessageSize(message);
+      totals.count++;
+      totals.recipients +=
+        message.recipients.length + message.ccRecipients.length + message.bccRecipients.length;
+      totals.attachments += message.attachments.length;
+      totals.size += size;
+      pending.push(message.priority);
+      metrics?.recordMessage(message, transportName, size);
+    });
 
     let successCount = 0;
     let failureCount = 0;
-    const receipts = [];
+    // The first error messages of the failed receipts, and how many in all.
+    const errorMessages = [];
+    let errorMessageCount = 0;
 
     try {
-      // Apply custom attributes if configured
-      if (this.config.attributeExtractor && span) {
-        const totalSize = messageArray.reduce((sum, msg) => sum + estimateMessageSize(msg), 0);
-        const customAttributes = this.config.attributeExtractor(
-          'send_batch',
-          this.transportName,
-          batchSize,
-          totalSize,
-        );
-        span.setAttributes(customAttributes);
-      }
-
-      // Delegate to wrapped transport
-      for await (const receipt of this.wrappedTransport.sendMany(messageArray, options)) {
-        // A receipt answers the message at its position in the batch.
-        this.metricsCollector?.recordMessageOutcome(
-          this.transportName,
-          messageArray[receipts.length]?.priority ?? 'unknown',
-          receipt.successful,
-        );
-        receipts.push(receipt);
+      for await (const receipt of this.wrappedTransport.sendMany(observed, options)) {
+        // A receipt answers the oldest message still waiting for one.
+        const priority = head < pending.length ? pending[head++] : 'unknown';
+        if (head === pending.length) {
+          pending.length = 0;
+          head = 0;
+        }
+        metrics?.recordMessageOutcome(transportName, priority, receipt.successful);
 
         if (receipt.successful) {
           successCount++;
         } else {
           failureCount++;
+          for (const errorMessage of receipt.errorMessages) {
+            if (errorMessageCount++ < MAX_RECORDED_ERROR_MESSAGES) errorMessages.push(errorMessage);
+          }
         }
 
         yield receipt;
@@ -243,13 +254,7 @@ class OpenTelemetryTransport {
       const duration = (performance.now() - startTime) / 1000;
 
       // Record batch completion
-      this.metricsCollector?.recordBatch(
-        messageArray,
-        this.transportName,
-        duration,
-        successCount,
-        failureCount,
-      );
+      metrics?.recordBatch(transportName, duration, successCount, failureCount);
 
       // Update span based on results
       if (failureCount === 0) {
@@ -260,24 +265,28 @@ class OpenTelemetryTransport {
           failure_count: failureCount,
         });
       } else {
-        const allErrorMessages = receipts
-          .filter((r) => !r.successful)
-          .flatMap((r) => r.errorMessages);
-        span?.recordFailure(allErrorMessages);
+        span?.recordFailure(errorMessages, errorMessageCount);
       }
     } catch (error) {
-      // oxlint-disable-next-line no-underscore-dangle, no-unused-vars -- upstream
-      const _duration = (performance.now() - startTime) / 1000;
       const errorCategory = this.classifyError(error);
 
       span?.recordError(error, errorCategory);
-      this.metricsCollector?.recordError(this.transportName, errorCategory, 'send_batch');
+      metrics?.recordError(transportName, errorCategory, 'send_batch');
 
       throw error;
     } finally {
       // Also when the caller stops reading the receipts early.
-      this.metricsCollector?.recordSendEnd(this.transportName);
-      span?.end();
+      metrics?.recordSendEnd(transportName);
+      if (span) {
+        span.recordBatchTotals(totals);
+        // Apply custom attributes if configured
+        if (this.config.attributeExtractor) {
+          span.setAttributes(
+            this.config.attributeExtractor('send_batch', transportName, totals.count, totals.size),
+          );
+        }
+        span.end();
+      }
     }
   }
 

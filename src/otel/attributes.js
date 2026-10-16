@@ -92,30 +92,24 @@ class EmailAttributeExtractor {
   }
 
   /**
-   * Extracts attributes for batch send operations.
+   * Extracts attributes for batch send operations, from the totals of the
+   * messages the batch read.
    */
-  extractBatchAttributes(messages, batchSize) {
-    const totalAttachments = messages.reduce((sum, msg) => sum + msg.attachments.length, 0);
-    const totalSize = messages.reduce((sum, msg) => sum + estimateMessageSize(msg), 0);
-
+  extractBatchAttributes(totals) {
     const attributes = {
       // General operation attributes
       'operation.name': 'email.send_batch',
       'operation.type': 'email',
 
       // Batch-specific attributes
-      'email.batch.size': batchSize,
-      'email.batch.total_recipients': messages.reduce(
-        (sum, msg) =>
-          sum + msg.recipients.length + msg.ccRecipients.length + msg.bccRecipients.length,
-        0,
-      ),
-      'email.batch.total_attachments': totalAttachments,
-      'email.batch.total_size': totalSize,
+      'email.batch.size': totals.count,
+      'email.batch.total_recipients': totals.recipients,
+      'email.batch.total_attachments': totals.attachments,
+      'email.batch.total_size': totals.size,
 
       // Upyo-specific attributes
       'mailer.transport.name': this.transportName,
-      'mailer.batch.size': batchSize,
+      'mailer.batch.size': totals.count,
     };
 
     // Add transport version if available

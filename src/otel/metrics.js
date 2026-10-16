@@ -118,14 +118,13 @@ class MetricsCollector {
   /**
    * Records metrics for individual messages.
    */
-  recordMessage(message, transport) {
+  recordMessage(message, transport, messageSize = estimateMessageSize(message)) {
     const labels = {
       transport,
       priority: message.priority,
       content_type: this.getContentType(message),
     };
 
-    const messageSize = estimateMessageSize(message);
     this.messageSizeHistogram.record(messageSize, labels);
     this.attachmentCountHistogram.record(message.attachments.length, labels);
   }
@@ -133,9 +132,7 @@ class MetricsCollector {
   /**
    * Records metrics for batch operations.
    */
-  recordBatch(messages, transport, duration, successCount, failureCount) {
-    // oxlint-disable-next-line no-underscore-dangle, no-unused-vars -- upstream
-    const _totalMessages = messages.length;
+  recordBatch(transport, duration, successCount, failureCount) {
     const labels = { transport };
 
     // Record batch-level metrics
@@ -149,11 +146,6 @@ class MetricsCollector {
       ...labels,
       operation: 'batch',
     });
-
-    // Record individual message metrics
-    for (const message of messages) {
-      this.recordMessage(message, transport);
-    }
   }
 
   /**
