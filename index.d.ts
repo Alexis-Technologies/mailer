@@ -728,11 +728,48 @@ export type IdKind = 'message-id' | 'content-id' | 'idempotency-key' | 'receipt-
  */
 export type IdGenerator = (kind: IdKind) => string;
 /**
+ * A log level, by pino's names.
+ */
+export type LoggerLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+/**
+ * A log method that takes the structured properties first and the message
+ * second, as pino's do.
+ */
+export type LogMethod = (properties: object, message: string) => unknown;
+/**
+ * A pino-like logger: a pino logger, a child of one
+ * (`logger.child({ component: 'mail' })`), or anything with the methods of the
+ * levels it is used with.  `child` and `isLevelEnabled`, which pino has, are
+ * used when present: the first to bind the transport to every record, the
+ * second to skip building one that would not be written.
+ */
+export interface Logger {
+  readonly trace?: LogMethod;
+  readonly debug?: LogMethod;
+  readonly info?: LogMethod;
+  readonly warn?: LogMethod;
+  readonly error?: LogMethod;
+  readonly fatal?: LogMethod;
+  readonly child?: (bindings: object) => Logger;
+  readonly isLevelEnabled?: (level: string) => boolean;
+}
+/**
  * What a transport may be given in place of a global of the runtime: the
- * generator of its identifiers and, for one that makes HTTP requests, the
- * `fetch` it makes them with.
+ * generator of its identifiers, its logger and, for one that makes HTTP
+ * requests, the `fetch` it makes them with.
  */
 export interface TransportDependencies extends IdOptions {
+  /**
+   * A logger for what happens inside the transport, which its receipts do
+   * not tell: the connections, upgrades and authentication of SMTP, the
+   * retries of a request, a selector that throws (`debug`, `trace` for the
+   * SMTP protocol, `warn` for a degradation).  The failures of messages are
+   * in their receipts and are not logged again.  Without a logger the
+   * transport writes nothing, except a warning through `console.warn` when it
+   * sends mail without TLS or without the DKIM signature it was asked for.
+   * Credentials and addresses are never logged.
+   */
+  readonly logger?: Logger;
   /**
    * The `fetch` of the requests, such as one bound to an undici `Agent` with
    * keep-alive and connection limits, a `ProxyAgent` or mTLS:

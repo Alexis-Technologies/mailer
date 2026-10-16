@@ -368,3 +368,57 @@ test('Internal: one loopback rule serves SMTP, OAuth 2.0 and the HTTP providers'
   }
   assert.throws(() => new OAuth2TokenManager(refresh('http://auth.example.com/token')), TypeError);
 });
+
+test('Internal: a log binds its component, builds records lazily, and never throws', (t) => {
+  const { createLog, warnDegradation } = require('../../src/internal/log.js');
+  const records = [];
+  const pinoLike = (bindings = {}) => ({
+    child: (more) => pinoLike({ ...bindings, ...more }),
+    isLevelEnabled: (level) => level !== 'trace',
+    debug: (properties, message) =>
+      records.push(['debug', { ...bindings, ...properties }, message]),
+    trace: () => assert.fail('trace is not enabled'),
+    warn: (properties, message) => records.push(['warn', { ...bindings, ...properties }, message]),
+  });
+  const log = createLog(pinoLike(), { transport: 'smtp' });
+  log.write('debug', { step: 'connect' }, 'Connected.');
+  log.write('trace', () => assert.fail('built for a level not written'), 'Never.');
+  log.write('info', { step: 'none' }, 'No info method.');
+  // A logger without child() gets the bindings in each record.
+  const plain = [];
+  createLog({ debug: (properties) => plain.push(properties) }, { transport: 'ses' }).write(
+    'debug',
+    { attempt: 1 },
+    'Retrying.',
+  );
+  assert.deepStrictEqual(records, [
+    ['debug', { transport: 'smtp', step: 'connect' }, 'Connected.'],
+  ]);
+  assert.deepStrictEqual(plain, [{ transport: 'ses', attempt: 1 }]);
+
+  const warnings = t.mock.method(process, 'emitWarning', () => {});
+  createLog(
+    {
+      debug: () => {
+        throw new Error('Sink down');
+      },
+    },
+    {},
+  ).write('debug', {}, 'x');
+  assert.strictEqual(warnings.mock.calls[0].arguments[1].code, 'MAILER_LOGGER_FAILED');
+
+  // A degradation goes to the logger, or to console.warn without one.
+  warnDegradation(log, 'MAILER_SMTP_PLAINTEXT', 'Sent without TLS.', { host: 'mx' });
+  assert.deepStrictEqual(records.at(-1), [
+    'warn',
+    { transport: 'smtp', code: 'MAILER_SMTP_PLAINTEXT', host: 'mx' },
+    'Sent without TLS.',
+  ]);
+  const consoleWarn = t.mock.method(console, 'warn', () => {});
+  warnDegradation(createLog(undefined, {}), 'MAILER_DKIM_UNSIGNED', 'Sent unsigned.');
+  assert.deepStrictEqual(consoleWarn.mock.calls[0].arguments, [
+    'MAILER_DKIM_UNSIGNED: Sent unsigned.',
+  ]);
+  createLog(undefined, {}).write('warn', () => assert.fail('no logger'), 'x');
+  assert.strictEqual(createLog(undefined, {}).isEnabled('warn'), false);
+});

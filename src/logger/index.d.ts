@@ -4,33 +4,20 @@
 
 /// <reference lib="esnext.disposable" />
 
-import type { IdOptions, Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  IdOptions,
+  Logger,
+  LoggerLevel,
+  Message,
+  Receipt,
+  Transport,
+  TransportOptions,
+} from '../../index.js';
 
-/**
- * A log level, by pino's names (LogTape's `warning` is `warn`).
- */
-export type LoggerLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
-
-/**
- * A log method that takes the structured properties first and the message
- * second, as pino's do.
- */
-export type LogMethod = (properties: object, message: string) => unknown;
-
-/**
- * The logger the transport writes to: a pino logger, a child of one
- * (`logger.child({ component: 'mail' })`), or anything with the methods of the
- * levels in use. `debug`, `info` and `error` are the default levels, and `warn`
- * when a transport is wrapped.
- */
-export interface Logger {
-  readonly trace?: LogMethod;
-  readonly debug?: LogMethod;
-  readonly info?: LogMethod;
-  readonly warn?: LogMethod;
-  readonly error?: LogMethod;
-  readonly fatal?: LogMethod;
-}
+// The logger types are those of the root entry, shared by every transport;
+// LoggerTransport writes with `debug`, `info` and `error` by default, and
+// `warn` when it wraps a transport.
+export type { Logger, LoggerLevel, LogMethod } from '../../index.js';
 
 /**
  * Log levels used for email delivery lifecycle events.
