@@ -105,32 +105,30 @@ const convertMessage = async (message, config, signal) => {
 
 const createMailerooReference = (idempotencyKey) => {
   if (idempotencyKey == null || idempotencyKey === '') {
-    const bytes = new Uint8Array(12);
-    crypto.getRandomValues(bytes);
-    return bytesToHex(bytes);
+    return crypto.getRandomValues(Buffer.allocUnsafe(12)).toString('hex');
   }
 
   return hashReference(idempotencyKey);
 };
 
-const bytesToHex = (bytes) => {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-};
-
+// Three 32-bit FNV-1a hashes of the key with different seeds, updated together
+// in a single pass over its UTF-8 bytes.
 const hashReference = (value) => {
-  const bytes = new TextEncoder().encode(value);
-  const seeds = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b];
-
-  return seeds
-    .map((seed) => {
-      let hash = seed;
-      for (const byte of bytes) {
-        hash ^= byte;
-        hash = Math.imul(hash, 0x01000193);
-      }
-      return (hash >>> 0).toString(16).padStart(8, '0');
-    })
-    .join('');
+  const bytes = Buffer.from(value, 'utf8');
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  let third = 0x85ebca6b;
+  for (let index = 0; index < bytes.length; index++) {
+    const byte = bytes[index];
+    first = Math.imul(first ^ byte, 0x01000193);
+    second = Math.imul(second ^ byte, 0x01000193);
+    third = Math.imul(third ^ byte, 0x01000193);
+  }
+  const digest = Buffer.allocUnsafe(12);
+  digest.writeUInt32BE(first >>> 0, 0);
+  digest.writeUInt32BE(second >>> 0, 4);
+  digest.writeUInt32BE(third >>> 0, 8);
+  return digest.toString('hex');
 };
 
 const convertAddress = (address) => {
