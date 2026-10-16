@@ -32,12 +32,13 @@ pnpm run format:check            # oxfmt
 pnpm run test:coverage           # tests under the c8 coverage gate
 pnpm run test:types              # tsd
 pnpm run check:dts               # tsc over the d.ts of every entry of the exports map
+pnpm size --check                # the budgets of scripts/size-budgets.json
+pnpm run check:pack              # the tarball: every file of the exports map, nothing else
 ```
 
-These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
+These are the same gates `prepublishOnly` runs. CI adds two more; run them too:
 
 ```bash
-pnpm size --check                                                # the budgets of scripts/size-budgets.json
 pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md   # the table matches docs/comparison.json
 pnpm run docs:build                                              # the docs site; a dead link fails it
 ```
@@ -163,10 +164,12 @@ Check these fields are correct:
 
 ```bash
 pnpm pack --dry-run
+pnpm run check:pack
 pnpm run size
 ```
 
-Review the file list:
+`check:pack` fails on a file of the exports map missing from the tarball or a file outside the
+`files` allowlist; review the file list anyway:
 
 - Source files (`src/`) and root entry points are included
 - Type definitions are included
@@ -180,7 +183,7 @@ Report the file count and the bundle size from `pnpm run size` to the user.
 Run the gates one more time after all edits:
 
 ```bash
-pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run docs:build
+pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack && pnpm run docs:build
 ```
 
 Must exit 0. If it fails, fix and re-run.

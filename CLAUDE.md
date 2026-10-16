@@ -40,6 +40,7 @@ node --test --test-name-pattern="Bundle" tests/unit/*.test.js   # filter by name
 pnpm run test:coverage             # c8 over src/, gated at 98 lines/statements, 90 branches, 100 functions
 pnpm run test:types                # tsd: tests/types/*.test-d.ts, one file per entry
 pnpm run check:dts                 # tsc --noEmit --strict over the d.ts of every entry
+pnpm run check:pack                # the files `pnpm publish` would pack: the exports map, nothing else
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
 pnpm size [--check]                # esbuild bundle sizes; --check gates every entry by scripts/size-budgets.json
@@ -48,9 +49,9 @@ pnpm docs:comparison               # renders docs/comparison.json into docs/guid
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
 ```
 
-`prepublishOnly` runs lint + format:check + test:coverage + test:types + check:dts. CI adds the
-size gate, the comparison drift check and the docs build. Treat that as the pre-merge gate. There
-is no build step.
+`prepublishOnly` runs lint + format:check + test:coverage + test:types + check:dts + the size
+gate + check:pack. CI adds the comparison drift check and the docs build. Treat that as the
+pre-merge gate. There is no build step.
 
 ## No build step: CommonJS + hand-written types
 
@@ -391,6 +392,7 @@ scripts/
   size.js           bundle-size report; --check gates each entry of the exports map
   size-budgets.json the min+gzip budget of each entry in KB (the root, and each subpath on top)
   check-dts.js      tsc --strict over the d.ts of every entry of the exports map
+  check-pack.js     the tarball holds every file of the exports map and nothing outside `files`
   comparison.js     renders docs/comparison.json into docs/guide/comparison.md
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
 docs/               VitePress site (mailerat.vercel.app), not published
@@ -609,5 +611,5 @@ Manual, as in the sibling repositories. The `npm-publish` skill walks through it
 2. Turn `## [Unreleased]` in CHANGELOG.md into `## [X.Y.Z] - YYYY-MM-DD` and add its link
    reference.
 3. Commit, then tag `vX.Y.Z`.
-4. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`; `publishConfig.access` is
-   public).
+4. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`, which includes the size
+   gate and the tarball check; `publishConfig.access` is public).

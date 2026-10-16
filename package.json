@@ -111,6 +111,7 @@
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",
+    "check:pack": "node scripts/check-pack.js",
     "lint": "oxlint src tests scripts bench",
     "format": "oxfmt src tests scripts bench",
     "format:check": "oxfmt --check src tests scripts bench",
@@ -120,7 +121,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "docs:comparison": "node scripts/comparison.js",
-    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts",
+    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack",
     "release": "pnpm publish"
   },
   "tsd": {

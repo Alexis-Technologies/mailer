@@ -34,6 +34,9 @@ jobs:
       # which also catches a third-party module bundled in, and on an entry of
       # the exports map without a budget.
       - run: pnpm size --check
+      # The tarball holds every file of the exports map and nothing outside
+      # the files allowlist.
+      - run: pnpm run check:pack
 
   types:
     runs-on: ubuntu-latest

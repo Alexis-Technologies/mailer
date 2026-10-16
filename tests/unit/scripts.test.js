@@ -110,6 +110,41 @@ test('Scripts: size reports the entries and, with --check, enforces their budget
   assert.strictEqual(unbudgeted.stdout, '');
 });
 
+test('Scripts: check-pack wants every file of the exports map and nothing else', () => {
+  const { packProblems } = require('../../scripts/check-pack.js');
+  const manifest = {
+    main: 'index.js',
+    types: 'index.d.ts',
+    exports: {
+      '.': { types: './index.d.ts', default: './index.js' },
+      './smtp': { types: './src/smtp/index.d.ts', default: './src/smtp/index.js' },
+    },
+  };
+  const complete = [
+    'package.json',
+    'README.md',
+    'CHANGELOG.md',
+    'LICENSE',
+    'SECURITY.md',
+    'index.js',
+    'index.d.ts',
+    'src/smtp/index.js',
+    'src/smtp/index.d.ts',
+    'src/smtp/smtp-connection.js',
+  ];
+  assert.deepStrictEqual(packProblems(complete, manifest), []);
+  const broken = complete.filter((file) => file !== 'src/smtp/index.d.ts' && file !== 'LICENSE');
+  broken.push('tests/unit/smtp.test.js', 'docs/index.md', 'scripts/size.js', 'src/smtp/notes.md');
+  assert.deepStrictEqual(packProblems(broken, manifest), [
+    'LICENSE is missing from the tarball',
+    'src/smtp/index.d.ts is missing from the tarball',
+    'tests/unit/smtp.test.js should not be in the tarball',
+    'docs/index.md should not be in the tarball',
+    'scripts/size.js should not be in the tarball',
+    'src/smtp/notes.md should not be in the tarball',
+  ]);
+});
+
 test('Scripts: check-dts compiles the types of every entry of the exports map', () => {
   const { typesOf } = require('../../scripts/check-dts.js');
   assert.deepStrictEqual(
