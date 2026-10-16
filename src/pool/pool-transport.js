@@ -238,27 +238,25 @@ class PoolTransport {
    * It ensures proper cleanup of resources held by the underlying transports.
    */
   async [Symbol.asyncDispose]() {
-    const disposalPromises = [];
-
+    const disposals = [];
+    // A transport listed twice is disposed of once.
+    const seen = new WeakSet();
     for (const entry of this.config.transports) {
       const transport = entry.transport;
-
-      // Check for AsyncDisposable
-      if (typeof transport[Symbol.asyncDispose] === 'function') {
-        const asyncDispose = transport[Symbol.asyncDispose]();
-        disposalPromises.push(Promise.resolve(asyncDispose));
-      } // Check for Disposable
-      else if (typeof transport[Symbol.dispose] === 'function') {
-        try {
-          transport[Symbol.dispose]();
-        } catch {
-          // Ignore disposal errors
-        }
-      }
+      if (seen.has(transport)) continue;
+      seen.add(transport);
+      disposals.push(dispose(transport));
     }
 
-    // Wait for all async disposals to complete
-    await Promise.allSettled(disposalPromises);
+    // Every transport is disposed of, whichever fails; the failures come
+    // together afterwards rather than being dropped.
+    const errors = [];
+    for (const result of await Promise.allSettled(disposals)) {
+      if (result.status === 'rejected') errors.push(result.reason);
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, `Failed to dispose of ${errors.length} pooled transports.`);
+    }
   }
 
   /**
@@ -426,6 +424,16 @@ const hasMessageRejection = (errors) => {
     if (error.category === 'validation' || error.category === 'rejected') return true;
   }
   return false;
+};
+
+// Disposes of a transport, asynchronously or not; an error it throws at once
+// rejects rather than stopping the disposal of the others.
+const dispose = async (transport) => {
+  if (typeof transport[Symbol.asyncDispose] === 'function') {
+    await transport[Symbol.asyncDispose]();
+  } else if (typeof transport[Symbol.dispose] === 'function') {
+    transport[Symbol.dispose]();
+  }
 };
 
 module.exports = { PoolTransport };

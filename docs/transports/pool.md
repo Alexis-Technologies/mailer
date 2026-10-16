@@ -455,7 +455,9 @@ try {
 ```
 
 The pool ensures that all underlying transports are properly cleaned up,
-preventing connection leaks and ensuring graceful shutdown.
+preventing connection leaks and ensuring graceful shutdown. Each transport is
+disposed of once, even when it is listed twice, and one that fails stops no
+other: the disposal rejects afterwards with an `AggregateError` of the failures.
 
 ## Testing with pools
 

@@ -240,6 +240,10 @@ fixed ones below.
   error was retried and then turned into a failed receipt, a `TypeError` of a programming
   mistake included. A built-in error that is no recognizable delivery failure now rejects the
   send at once; a network failure reported by `fetch` as a `TypeError` is still retried.
+- **`./pool` disposes of every transport and reports what failed** (an upstream bug): disposal
+  dropped the errors of the transports, stopped at one that threw at once, and disposed of a
+  transport listed twice twice. Each transport is now disposed of once, all of them whatever
+  fails, and the failures reject the disposal as an `AggregateError`.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

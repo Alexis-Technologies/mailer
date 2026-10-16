@@ -237,6 +237,8 @@ export declare class PoolTransport<TProviderId extends string = string>
    *
    * This method is called automatically when using the `await using` syntax.
    * It ensures proper cleanup of resources held by the underlying transports.
+   * Each transport is disposed of once, whichever of them fails.
+   * @throws {AggregateError} With the errors of the transports that failed.
    */
   [Symbol.asyncDispose](): Promise<void>;
 }

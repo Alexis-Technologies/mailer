@@ -52,20 +52,58 @@ test('Pool: a timeout applies without a caller signal, and retries stop at the l
   assert.strictEqual(failing.getSentMessagesCount(), 1);
 });
 
-test('Pool: a transport whose dispose throws does not fail the disposal', async () => {
-  const throwing = {
-    id: 'sync',
+test('Pool: every transport is disposed of once, and the failures come together', async () => {
+  const disposed = [];
+  const transport = (id, dispose) => ({
+    id,
     send: async () => ({ successful: true, messageId: 'x' }),
     async *sendMany() {},
-    [Symbol.dispose]() {
-      throw new Error('dispose failed');
+    ...dispose,
+  });
+  const syncError = new Error('sync dispose failed');
+  const asyncError = new Error('async dispose failed');
+  const shared = transport('shared', {
+    async [Symbol.asyncDispose]() {
+      disposed.push('shared');
     },
-  };
+  });
   const pool = new PoolTransport({
     strategy: 'round-robin',
-    transports: [{ transport: throwing }],
+    transports: [
+      {
+        transport: transport('sync', {
+          [Symbol.dispose]() {
+            disposed.push('sync');
+            throw syncError;
+          },
+        }),
+      },
+      // Throws before it returns a promise.
+      {
+        transport: transport('eager', {
+          [Symbol.asyncDispose]() {
+            disposed.push('eager');
+            throw asyncError;
+          },
+        }),
+      },
+      { transport: shared },
+      { transport: shared },
+      {
+        transport: transport('last', {
+          [Symbol.dispose]() {
+            disposed.push('last');
+          },
+        }),
+      },
+    ],
   });
-  await pool[Symbol.asyncDispose]();
+  await assert.rejects(pool[Symbol.asyncDispose](), (error) => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepStrictEqual(error.errors, [syncError, asyncError]);
+    return true;
+  });
+  assert.deepStrictEqual(disposed, ['sync', 'eager', 'shared', 'last']);
 });
 
 const failing = (receipt, sent = []) => ({

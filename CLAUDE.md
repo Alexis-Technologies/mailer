@@ -344,6 +344,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     bug such as reading a property of `undefined` was retried and hidden. A `TypeError`,
     `RangeError`, `ReferenceError` or `SyntaxError` that `classifyReceiptError` does not
     recognize (category `unknown`) is rethrown at once; a fetch failure keeps being retried.
+66. pool: dispose swallowed the errors of the transports (`catch {}`, `allSettled`), stopped at a
+    transport whose async dispose threw before returning a promise, and disposed of a transport
+    listed twice twice. Each is disposed of once (a WeakSet), all of them whatever fails, and
+    the failures reject together as an `AggregateError`.
 
 ## Repository layout
 
