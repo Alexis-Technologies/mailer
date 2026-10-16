@@ -4,6 +4,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
+const { isUnsentRequestError } = require('./unsent.js');
 
 const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
 
@@ -107,9 +108,17 @@ const startDeadline = (timeoutMs, signal) => {
 
 /**
  * Sends a request with a deadline per attempt, retrying what the provider
- * says to retry.  A failure after a 2xx response is never retried: the
- * provider took the request, so it is thrown marked as of unknown delivery,
- * unless the request is idempotent.
+ * says to retry.
+ *
+ * A failure that leaves it unknown whether the provider took the request is
+ * ambiguous: a failure after a 2xx, a gateway timeout (504), and a failure
+ * without any response, unless its causes show that the connection was never
+ * made.  Sending the request again after one could deliver the message twice,
+ * so an ambiguous failure is thrown at once, marked as of unknown delivery.
+ * A request with an idempotency key (`hasIdempotencyKey`), which the provider
+ * deduplicates, is retried after one instead, and its last failure is marked
+ * if any attempt was ambiguous.  A read (`isIdempotent`) is retried with no
+ * marking at all.
  *
  * @param request What the provider passes in:
  * - `send(signal, attempt)`: one fetch, with the signal of the attempt;
@@ -126,8 +135,8 @@ const startDeadline = (timeoutMs, signal) => {
  *   by default the last failure;
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
- *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
- *   `sleep`.
+ *   thrown as it is rather than as of unknown delivery), `hasIdempotencyKey`,
+ *   `isIdempotent`, `sleep`.
  * The deadline of an attempt lasts until its response is read, body
  * included, so a body that never ends cannot hold a send.  Between attempts
  * it waits at least the failure's `retryAfterMilliseconds`, the server's
@@ -138,13 +147,20 @@ const startDeadline = (timeoutMs, signal) => {
 const requestWithRetry = async (request) => {
   const signal = request.signal;
   const wait = request.sleep ?? sleep;
+  const isRead = request.isIdempotent === true;
+  const hasKey = request.hasIdempotencyKey === true;
+  let wasAmbiguous = false;
+  // The last failure, marked when an attempt left the delivery unknown.
+  const settle = (error) => (wasAmbiguous && !isRead ? markDeliveryUnknown(error) : error);
   for (let attempt = 0; ; attempt++) {
     signal?.throwIfAborted();
     const deadline = startDeadline(request.timeoutMs, signal);
+    let hasResponse = false;
     let isAccepted = false;
     let failure;
     try {
       const response = await request.send(deadline.signal, attempt);
+      hasResponse = true;
       isAccepted = response.ok;
       if (response.ok) return await request.read(response, attempt);
       failure = await request.reject(response, attempt);
@@ -157,17 +173,23 @@ const requestWithRetry = async (request) => {
     if (!(failure instanceof Error)) failure = new Error(String(failure));
 
     if (signal?.aborted) throw abortReason(signal);
-    if (isAccepted && request.isIdempotent !== true) {
-      if (request.isAnswer?.(failure) === true) throw failure;
-      const accepted = request.wrapAccepted?.(failure, attempt + 1) ?? failure;
-      throw markDeliveryUnknown(accepted);
+    if (isAccepted && request.isAnswer?.(failure) === true) throw settle(failure);
+    const isAmbiguous =
+      isAccepted || (hasResponse ? failure.statusCode === 504 : !isUnsentRequestError(failure));
+    if (isAmbiguous && !isRead) {
+      wasAmbiguous = true;
+      if (!hasKey) {
+        const wrapped = isAccepted ? request.wrapAccepted?.(failure, attempt + 1) : undefined;
+        throw markDeliveryUnknown(wrapped ?? request.finalError?.(failure, attempt + 1) ?? failure);
+      }
     }
-    if (!(request.isRetryable ?? isRetryableFailure)(failure)) throw failure;
+    const isRetryable = isAccepted || (request.isRetryable ?? isRetryableFailure)(failure);
+    if (!isRetryable) throw settle(failure);
     const retryAfterMs = Number.isFinite(failure.retryAfterMilliseconds)
       ? failure.retryAfterMilliseconds
       : 0;
     if (attempt >= request.retries || retryAfterMs > MAX_RETRY_AFTER_WAIT_MS) {
-      throw request.finalError?.(failure, attempt + 1) ?? failure;
+      throw settle(request.finalError?.(failure, attempt + 1) ?? failure);
     }
     const delayMs = (request.retryDelayMs ?? jitteredDelayMs)(attempt, failure);
     await wait(Math.max(delayMs, retryAfterMs), signal);

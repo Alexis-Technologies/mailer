@@ -283,7 +283,11 @@ describe('MailgunTransport - Network Errors', () => {
         assert.equal(receipt.errorMessages.length, 1);
         assert.equal(receipt.errorMessages[0], 'Network error');
         assert.equal(receipt.provider, 'mailgun');
-        assert.equal(receipt.retryable, true);
+        // Changed after the port: a failure without a response may have
+        // reached Mailgun, which has no idempotency key, so its delivery is
+        // unknown and it is not retryable (upstream: retryable).
+        assert.equal(receipt.retryable, false);
+        assert.equal(receipt.deliveryUnknown, true);
         assert.equal(receipt.attempts, 1);
         assert.equal(receipt.errors?.[0]?.category, 'network');
       }
@@ -788,7 +792,10 @@ describe('MailgunTransport - Connection Timeouts', () => {
       if (!receipt.successful) {
         assert.equal(receipt.errorMessages.length, 1);
         assert.equal(receipt.errors?.[0]?.category, 'timeout');
-        assert.ok(receipt.retryable);
+        // Changed after the port: a timeout before any response may have come
+        // after Mailgun took the request (upstream: retryable).
+        assert.equal(receipt.retryable, false);
+        assert.equal(receipt.deliveryUnknown, true);
         assert.equal(receipt.attempts, 1);
       }
     } finally {

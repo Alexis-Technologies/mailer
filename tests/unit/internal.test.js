@@ -44,6 +44,8 @@ const scripted = (responses, overrides = {}) => {
   const request = {
     retries: 2,
     timeoutMs: 1000,
+    // The retry mechanics, apart from the rules of an ambiguous failure.
+    isIdempotent: true,
     send: async (signal) => {
       const next = responses[Math.min(sends++, responses.length - 1)];
       if (typeof next === 'function') return next(signal);
@@ -87,12 +89,13 @@ test('Internal: a failure after a 2xx is not retried and is of unknown delivery'
     Object.defineProperty(response, 'text', { value: () => Promise.reject(new Error('reset')) });
     return response;
   };
-  const { request, sends } = scripted([unreadable]);
+  const { request, sends } = scripted([unreadable], { isIdempotent: false });
   const error = await requestWithRetry(request).catch((caught) => caught);
   assert.strictEqual(sends(), 1);
   assert.strictEqual(isDeliveryUnknown(error), true);
 
   const wrapped = scripted([unreadable], {
+    isIdempotent: false,
     wrapAccepted: (cause) => new Error('wrapped', { cause }),
   });
   const wrapping = await requestWithRetry(wrapped.request).catch((caught) => caught);
@@ -101,6 +104,7 @@ test('Internal: a failure after a 2xx is not retried and is of unknown delivery'
 
   const refusal = new RejectedError('Refused in the body.');
   const answered = scripted([new Response('{}')], {
+    isIdempotent: false,
     read: async () => {
       throw refusal;
     },
@@ -128,7 +132,7 @@ test('Internal: an expired deadline gives the timeout error, over the body too',
     Object.defineProperty(response, 'text', { value: () => hang(signal) });
     return response;
   };
-  const body = scripted([slowBody], { timeoutMs: 5, retries: 0 });
+  const body = scripted([slowBody], { timeoutMs: 5, retries: 0, isIdempotent: false });
   const error = await requestWithRetry(body.request).catch((caught) => caught);
   assert.strictEqual(error.message, 'Timed out.');
   assert.strictEqual(isDeliveryUnknown(error), true);
@@ -261,4 +265,44 @@ test('Internal: a body is read within its bound, as text or JSON', async () => {
 
   const declared = new Response('small', { headers: { 'Content-Length': '999999999' } });
   await assert.rejects(readText(declared), RangeError);
+});
+
+test('Internal: an ambiguous failure of a send is not retried, unless it has a key', async () => {
+  const refused = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }),
+  });
+  const reset = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('reset'), { code: 'ECONNRESET' }),
+  });
+  const reject = async (response) =>
+    Object.assign(new Error('HTTP'), { statusCode: response.status });
+  const plain = { isIdempotent: false, reject };
+
+  const lost = scripted([reset, new Response('ok')], plain);
+  const lostError = await requestWithRetry(lost.request).catch((caught) => caught);
+  assert.strictEqual(lost.sends(), 1);
+  assert.strictEqual(isDeliveryUnknown(lostError), true);
+
+  const gateway = scripted([new Response('', { status: 504 }), new Response('ok')], plain);
+  const gatewayError = await requestWithRetry(gateway.request).catch((caught) => caught);
+  assert.strictEqual(gateway.sends(), 1);
+  assert.strictEqual(isDeliveryUnknown(gatewayError), true);
+
+  const never = scripted([refused, new Response('ok')], plain);
+  assert.strictEqual(await requestWithRetry(never.request), 'ok');
+  assert.strictEqual(never.sends(), 2);
+
+  const keyed = scripted([reset, new Response('', { status: 503 })], {
+    ...plain,
+    hasIdempotencyKey: true,
+    retries: 1,
+  });
+  const keyedError = await requestWithRetry(keyed.request).catch((caught) => caught);
+  assert.strictEqual(keyed.sends(), 2);
+  assert.strictEqual(isDeliveryUnknown(keyedError), true);
+
+  const read = scripted([reset, new Response('', { status: 503 })], { reject, retries: 1 });
+  const readError = await requestWithRetry(read.request).catch((caught) => caught);
+  assert.strictEqual(read.sends(), 2);
+  assert.strictEqual(isDeliveryUnknown(readError), false);
 });

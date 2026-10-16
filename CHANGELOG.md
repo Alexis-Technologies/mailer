@@ -156,6 +156,13 @@ fixed ones below.
 - **Credentials outside Latin-1 work** (known upstream bug 4): SMTP AUTH PLAIN and LOGIN and the
   Basic authentication of `./jmap` and `./mailgun` encoded them with `btoa`, which throws on a
   Cyrillic or accented character. They are encoded as UTF-8.
+- **An HTTP provider no longer resends a request that may have arrived** (an upstream bug): a
+  timeout, a lost connection or a gateway timeout (504) before any usable answer was retried,
+  though the provider may have taken the request. Unless the failure shows that the connection
+  was never made (a refused connection, an unknown host, a rejected certificate), it is now an
+  unknown delivery, not retried, for `./ses`, `./sendgrid`, `./mailgun`, `./mailtrap`,
+  `./maileroo` and `./plunk`. `./resend` and `./lettermint`, which send an idempotency key that
+  the provider deduplicates, still retry, and report the last failure as of unknown delivery.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

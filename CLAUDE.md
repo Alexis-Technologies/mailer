@@ -195,7 +195,7 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     was retried, re-sending a message the provider had taken. Each client notes the 2xx
     (`isAccepted`) and throws `markDeliveryUnknown` (`src/internal/delivery-unknown.js`) instead
     of retrying; the transports report `deliveryUnknown`. Telling an unsent request from a sent
-    one on a timeout or a reset waits for the shared HTTP client (Phase B).
+    one on a timeout or a reset is 39.
 25. resend, plunk (known bug 9): the wait between retries ignored the `AbortSignal`, so an abort
     took effect only after the backoff. They use the abortable `sleep` of `src/internal/http.js`.
 26. lettermint: an abort during the wait between retries rejected with a new `AbortError`
@@ -240,6 +240,12 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 38. smtp, jmap, mailgun (known bug 4): credentials went through `btoa`, which throws on any
     character outside Latin-1, inside the retry loop for the HTTP ones. They are encoded as
     UTF-8 with `Buffer`.
+39. every HTTP provider: a timeout, a reset or a 504 before any usable answer was retried, and
+    the provider may already have taken the request. `requestWithRetry` treats such a failure as
+    ambiguous: unless the causes show a connection that was never made (`isUnsentRequestError`),
+    it is thrown as `deliveryUnknown` without a retry; a request with an idempotency key
+    (`hasIdempotencyKey`: resend, lettermint) is retried and only its last failure is marked; a
+    read (`isIdempotent`: jmap queries) is retried and never marked.
 
 ## Repository layout
 

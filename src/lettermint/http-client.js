@@ -104,6 +104,8 @@ class LettermintHttpClient {
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
+      // Lettermint deduplicates a repeated Idempotency-Key.
+      hasIdempotencyKey: idempotencyKey != null && idempotencyKey !== '',
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal, idempotencyKey),
       read: async (response) => {
         const text = await readText(response);

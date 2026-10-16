@@ -426,6 +426,14 @@ describe('MailtrapTransport - API Errors', () => {
           timeout: 10,
         });
         const receipt = await transport.send(createMessage());
+        // Changed after the port: a network failure or a timeout without any
+        // response may have reached Mailtrap, which has no idempotency key,
+        // so it is not retried but of unknown delivery; upstream retried it.
+        if (failure === 'network' || failure === 'timeout') {
+          assert.equal(receipt.deliveryUnknown, true);
+          assert.equal(requests, 1);
+          return;
+        }
         assert.ok(receipt.successful);
         assert.equal(requests, 2);
       } finally {

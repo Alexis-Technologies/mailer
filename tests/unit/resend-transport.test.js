@@ -264,6 +264,7 @@ describe('ResendTransport - Network Errors', () => {
 
       const transport = new ResendTransport({
         apiKey: 'test-key',
+        retries: 0,
       });
 
       const message = {
@@ -287,8 +288,13 @@ describe('ResendTransport - Network Errors', () => {
         assert.ok(receipt.errorMessages.length > 0);
         assert.ok(receipt.errorMessages[0].includes('Network error'));
         assert.equal(receipt.provider, 'resend');
-        assert.equal(receipt.retryable, true);
-        assert.equal(receipt.attempts, 4);
+        // Changed after the port: Resend deduplicates by Idempotency-Key, so
+        // such a failure is retried, but once the retries are spent (none
+        // here) the request may have been taken: its delivery is unknown
+        // (upstream: retryable, after three retries).
+        assert.equal(receipt.retryable, false);
+        assert.equal(receipt.deliveryUnknown, true);
+        assert.equal(receipt.attempts, 1);
         assert.equal(receipt.errors?.[0]?.category, 'network');
       }
     } finally {

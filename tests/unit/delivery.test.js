@@ -21,7 +21,10 @@ const message = () =>
     content: { text: 'Hi' },
   });
 
-const options = { retries: 3 };
+// One retry: a provider that resends shows two requests, as Resend and Lettermint do with
+// the idempotency key they always send.
+const options = { retries: 1 };
+const expectedRequests = (name) => (name === 'Resend' || name === 'Lettermint' ? 2 : 1);
 const providers = [
   [
     'SES',
@@ -71,7 +74,7 @@ test('Delivery: a 2xx with an unreadable body is sent once, of unknown delivery'
     });
     const receipt = await create().send(message());
     t.mock.restoreAll();
-    assert.strictEqual(requests, 1, name);
+    assert.strictEqual(requests, expectedRequests(name), name);
     assert.strictEqual(receipt.successful, false, name);
     assert.strictEqual(receipt.deliveryUnknown, true, name);
     assert.strictEqual(receipt.retryable, false, name);
@@ -223,5 +226,29 @@ test('Delivery: the failure of fetch stays the cause of the provider error', asy
     let cause = error;
     while (cause !== refused && cause?.cause != null) cause = cause.cause;
     assert.strictEqual(cause, refused, `${name}: ${error.name}`);
+  }
+});
+
+test('Delivery: a lost request is not sent again without a key; a refused one is', async (t) => {
+  const failed = (code) =>
+    new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
+  for (const [name, , create] of providers) {
+    for (const code of ['ECONNRESET', 'ECONNREFUSED']) {
+      let requests = 0;
+      t.mock.method(globalThis, 'fetch', async () => {
+        requests++;
+        throw failed(code);
+      });
+      const receipt = await create().send(message());
+      t.mock.restoreAll();
+      if (code === 'ECONNREFUSED') {
+        assert.strictEqual(requests, 2, `${name} ${code}`);
+        assert.strictEqual(receipt.deliveryUnknown, undefined, `${name} ${code}`);
+        assert.strictEqual(receipt.retryable, true, `${name} ${code}`);
+      } else {
+        assert.strictEqual(requests, expectedRequests(name), `${name} ${code}`);
+        assert.strictEqual(receipt.deliveryUnknown, true, `${name} ${code}`);
+      }
+    }
   }
 });

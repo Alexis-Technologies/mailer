@@ -11,6 +11,7 @@ const {
 } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -255,6 +256,7 @@ const createMailtrapFailure = (message, error) => {
 
   if (error instanceof MailtrapApiError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'mailtrap',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -264,6 +266,7 @@ const createMailtrapFailure = (message, error) => {
 
   if (error instanceof MailtrapTimeoutError) {
     return createFailedReceipt(message, {
+      deliveryUnknown: isDeliveryUnknown(error),
       provider: 'mailtrap',
       category: 'timeout',
       code: 'timeout',
@@ -273,6 +276,7 @@ const createMailtrapFailure = (message, error) => {
   }
 
   return createFailedReceipt(message, {
+    deliveryUnknown: isDeliveryUnknown(error),
     provider: 'mailtrap',
     attempts: getErrorAttempts(error),
   });

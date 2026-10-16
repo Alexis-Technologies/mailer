@@ -461,8 +461,11 @@ describe('MailerooTransport - send', { concurrency: false }, () => {
         });
         const receipt = await transport.send(createMessage());
 
-        assert.equal(calls, 2);
-        assert.ok(receipt.successful);
+        // Changed after the port: the timeout came before any response, so
+        // Maileroo may have taken the request; it is not retried but of
+        // unknown delivery (upstream retried it and succeeded).
+        assert.equal(calls, 1);
+        assert.equal(receipt.deliveryUnknown, true);
       },
     );
   });

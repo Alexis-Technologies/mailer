@@ -914,6 +914,7 @@ const createJmapFailure = (message, error, override = {}) => {
     category: override.category,
     code: override.code,
     retryable: override.retryable,
+    deliveryUnknown: isDeliveryUnknown(error),
   });
 };
 

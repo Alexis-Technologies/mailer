@@ -119,6 +119,8 @@ class ResendHttpClient {
       signal: options.signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
+      // Resend answers a repeated Idempotency-Key with its first answer.
+      hasIdempotencyKey: options.headers?.['Idempotency-Key'] != null,
       send: (signal) => this.fetchWithAuth(url, options, signal),
       read: async (response) => {
         const text = await readText(response);

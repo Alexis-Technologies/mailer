@@ -911,8 +911,10 @@ export type Receipt<TProviderId extends string = string> =
       readonly retryable?: boolean;
       /**
        * `true` when the transport cannot tell whether the message was
-       * accepted: the request or the message data went out, but no answer
-       * came back (a timeout or a closed connection after the end of `DATA`).
+       * accepted: the request or the message data went out, but no usable
+       * answer came back (a timeout or a lost connection after the request
+       * went out or after the end of `DATA`, a 2xx that could not be read, a
+       * gateway timeout).
        * Sending it again may deliver it twice, so such a receipt is never
        * retryable, `./retry` does not retry it and `./pool` does not pass it
        * to another transport; reconcile it from the provider's delivery

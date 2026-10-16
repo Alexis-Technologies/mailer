@@ -251,7 +251,11 @@ describe('SendGridTransport', { concurrency: false }, () => {
         assert.equal(receipt.successful, false);
         if (!receipt.successful) {
           assert.equal(receipt.provider, 'sendgrid');
-          assert.equal(receipt.retryable, true);
+          // Changed after the port: a failure without a response may have
+          // reached SendGrid, which has no idempotency key, so its delivery
+          // is unknown and it is not retryable (upstream: retryable).
+          assert.equal(receipt.retryable, false);
+          assert.equal(receipt.deliveryUnknown, true);
           assert.equal(receipt.errors?.[0]?.category, 'network');
         }
       },
