@@ -331,6 +331,9 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./smtp` refuses an authentication method it does not have when it is made** (an upstream
+  bug): `cram-md5` was in the type and failed at the first send. It is gone from the type, and an
+  unknown `method` throws a `TypeError` from the constructor.
 - **`./ses` sends custom and threading header fields** (an upstream bug): they were dropped, so a
   reply lost its place in the thread. They go in the `Headers` of the message, up to the 15 SES
   takes; the fields SES sets itself are left out.

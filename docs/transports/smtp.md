@@ -518,9 +518,10 @@ const outlookTransport = new SmtpTransport({
 ```
 
 When using services like Gmail, you'll need to generate an app-specific password
-rather than using your regular account password.  The transport automatically
-detects server capabilities and chooses the appropriate authentication method
-if you don't specify one.
+rather than using your regular account password.  Without `method`, a password
+signs in with PLAIN, and OAuth 2.0 credentials with XOAUTH2 when the server
+offers it, OAUTHBEARER otherwise.  CRAM-MD5 is not supported, and a method the
+transport does not know is refused when the transport is made.
 
 > [!IMPORTANT]
 > SMTP authentication requires a secure connection (`secure: true`, or a

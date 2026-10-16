@@ -4,10 +4,6 @@ The transport layer is ported from [upyo](https://github.com/dahlia/upyo) 0.7.0 
 behavior, bugs included, until each bug is fixed on its own with a test. This page lists the ones
 still open; the fixed ones are in the [changelog](https://github.com/Alexis-Technologies/mailer/blob/main/CHANGELOG.md).
 
-## SMTP
-
-- `cram-md5` is in the `SmtpAuth` type but not implemented.
-
 ## HTTP providers and JMAP
 
 - `validateSsl` is accepted and never read (SES, Resend, SendGrid, Mailgun, Mailtrap, Plunk).

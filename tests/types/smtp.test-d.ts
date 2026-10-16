@@ -20,6 +20,13 @@ const transport = new SmtpTransport({
   tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
 });
 expectAssignable<RawTransport<'smtp'>>(transport);
+// cram-md5 was never implemented, and is not a method.
+expectError(
+  new SmtpTransport({
+    host: 'smtp.example.com',
+    auth: { user: 'a', pass: 'b', method: 'cram-md5' },
+  }),
+);
 expectAssignable<VerifiableTransport<'smtp'>>(transport);
 expectAssignable<AsyncDisposable>(transport);
 

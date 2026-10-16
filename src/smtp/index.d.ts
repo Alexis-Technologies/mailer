@@ -138,7 +138,7 @@ export interface SmtpConfig extends TransportDependencies {
  * const passwordAuth: SmtpAuth = {
  *   user: 'username@domain.com',
  *   pass: 'password',
- *   method: 'plain' // or 'login', 'cram-md5'
+ *   method: 'plain' // or 'login'
  * };
  *
  * // OAuth 2.0 with a (possibly refreshing) access token
@@ -173,7 +173,7 @@ export type OAuth2TokenProvider = (signal?: AbortSignal) => string | Promise<str
  * const auth: SmtpUserPassAuth = {
  *   user: 'username@domain.com',
  *   pass: 'password',
- *   method: 'plain' // or 'login', 'cram-md5'
+ *   method: 'plain' // or 'login'
  * };
  * ```
  */
@@ -190,7 +190,7 @@ export interface SmtpUserPassAuth {
    * Authentication method.
    * @default "plain"
    */
-  readonly method?: 'plain' | 'login' | 'cram-md5';
+  readonly method?: 'plain' | 'login';
 }
 /**
  * OAuth 2.0 authentication configuration using a directly supplied access

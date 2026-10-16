@@ -136,7 +136,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
 4. (fixed, see 38) SMTP AUTH PLAIN and LOGIN encoded with `btoa`, which fails on non-Latin-1
    credentials; so did Basic auth in jmap and mailgun.
-5. `cram-md5` is in the `SmtpAuth` type but not implemented.
+5. (fixed, see 83) `cram-md5` was in the `SmtpAuth` type but not implemented.
 6. (fixed, see 63) DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) was imported as PKCS#8 and
    failed.
 7. pool: `continueOnSuccess` is never read.
@@ -416,6 +416,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     lost its place in the thread. They go in the `Headers` of Simple content (SES v2, up to 15
     fields of 996 characters, the ones SES sets left out, values beyond ASCII as encoded words);
     more fail the send before any request.
+83. smtp (known bug 5): `cram-md5` was a `method` of the type and failed at the first send, as
+    did any method the connection did not know. It is gone from the type (an obsolete mechanism
+    whose server keeps a password equivalent, where AUTH goes over TLS anyway), and
+    `SmtpTransport` refuses an unknown method when it is made (`checkAuthMethod`).
 
 ## Repository layout
 

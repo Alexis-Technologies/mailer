@@ -208,20 +208,24 @@ test('SMTP: AUTH LOGIN rejected at the method or at the user name', async () => 
   }
 });
 
-test('SMTP: an unsupported AUTH method fails the send', async () => {
-  const server = new MockSmtpServer();
-  const port = await server.start();
-  server.setCapabilities(['AUTH PLAIN LOGIN CRAM-MD5']);
-  try {
-    const transport = new SmtpTransport({
-      host: 'localhost',
-      port,
-      pool: false,
-      auth: { user: 'alex', pass: 'secret', method: 'cram-md5' },
+test('SMTP: an unsupported AUTH method is refused when the transport is made', () => {
+  // cram-md5 was in the type of upstream and never implemented.
+  for (const auth of [
+    { user: 'alex', pass: 'secret', method: 'cram-md5' },
+    { user: 'alex', pass: 'secret', method: 'xoauth2' },
+    { user: 'alex', accessToken: 'token', method: 'plain' },
+  ]) {
+    assert.throws(() => new SmtpTransport({ host: 'localhost', auth }), {
+      name: 'TypeError',
+      message: `Unsupported authentication method: ${auth.method}`,
     });
-    assert.match(await failureOf(transport), /Unsupported authentication method: cram-md5/);
-  } finally {
-    await server.stop();
+  }
+  for (const auth of [
+    { user: 'alex', pass: 'secret', method: 'login' },
+    { user: 'alex', accessToken: 'token', method: 'oauthbearer' },
+    { user: 'alex', pass: 'secret' },
+  ]) {
+    assert.ok(new SmtpTransport({ host: 'localhost', auth }));
   }
 });
 

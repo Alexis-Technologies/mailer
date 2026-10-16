@@ -16,6 +16,7 @@ const { checkDkimConfig } = require('../mime/dkim/types.js');
  */
 const createSmtpConfig = (config) => {
   checkDkimConfig(config.dkim);
+  checkAuthMethod(config.auth);
   const port = config.port ?? 587;
 
   return {
@@ -37,4 +38,18 @@ const createSmtpConfig = (config) => {
   };
 };
 
-module.exports = { createSmtpConfig };
+// The mechanisms of each kind of credentials; an unknown one is refused when
+// the transport is made rather than at the first send.
+const PASSWORD_METHODS = new Set(['plain', 'login']);
+const OAUTH2_METHODS = new Set(['xoauth2', 'oauthbearer']);
+
+const checkAuthMethod = (auth) => {
+  if (auth?.method == null) return;
+  const methods =
+    'accessToken' in auth || 'refreshToken' in auth ? OAUTH2_METHODS : PASSWORD_METHODS;
+  if (!methods.has(auth.method)) {
+    throw new TypeError(`Unsupported authentication method: ${auth.method}`);
+  }
+};
+
+module.exports = { checkAuthMethod, createSmtpConfig };
