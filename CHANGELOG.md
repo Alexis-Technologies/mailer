@@ -329,6 +329,11 @@ fixed ones below.
   in memory, or never sent. SES now reads `batchSize` messages at a time, Resend 100 (the batch
   API is chosen per chunk, where it used to be all or nothing for the whole input) and JMAP a
   batch of `maxObjectsInSet`, after one discovery.
+- **`./retry` holds back at most `maxConcurrent` receipts in `sendMany`** (an upstream bug):
+  while a slow first message was out, each later one that finished made room for the next, so
+  the whole input could be sent and its receipts held for the first. A freed slot is still
+  refilled, but no more than `maxConcurrent` finished receipts wait for an earlier one, and a
+  settled send wakes the loop instead of a `Promise.race` over all the sends in flight.
 - **`./otel` streams `sendMany`** (an upstream bug): it read the whole input into an array before
   the first message went out, and kept every receipt to the end, so a long or endless batch
   held it all in memory. The messages now pass on as the wrapped transport reads them; the batch

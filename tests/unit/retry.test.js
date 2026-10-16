@@ -238,3 +238,31 @@ test('Retry: the logger hears each retry it schedules', async () => {
     [{ transport: 'retry', attempt: 1, delayMilliseconds: 5 }, 'Retrying send'],
   ]);
 });
+
+test('Retry: a slow first message holds at most maxConcurrent receipts back', async () => {
+  let started = 0;
+  let releaseFirst;
+  const first = new Promise((resolve) => (releaseFirst = resolve));
+  const base = {
+    id: 'base',
+    send: async () => {
+      const index = started++;
+      if (index === 0) await first;
+      return { successful: true, messageId: `m${index}`, provider: 'base' };
+    },
+    async *sendMany() {},
+  };
+  const transport = createRetryTransport(base, { maxAttempts: 1, sendMany: { maxConcurrent: 2 } });
+  const messages = (function* () {
+    for (let index = 0; index < 100; index++) yield message();
+  })();
+  const receipts = transport.sendMany(messages)[Symbol.asyncIterator]();
+  const pending = receipts.next();
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  // The first, the one that took its freed slot, and one more: the two
+  // finished ones wait for the first, and nothing else starts.
+  assert.strictEqual(started, 3);
+  releaseFirst();
+  assert.strictEqual((await pending).value.messageId, 'm0');
+  await receipts.return();
+});

@@ -193,6 +193,12 @@ for await (const receipt of transport.sendMany(messages)) {
 }
 ```
 
+Receipts come in the order of the messages.  A slot that a later message frees
+is refilled while an earlier one is still out, but no more than
+`maxConcurrent` finished receipts wait for an earlier one: past that, no new
+message starts until the slow one ends, so a stuck first message cannot let the
+whole input go out behind it.
+
 Receipts are yielded in the same order as input messages, even when later
 messages finish first.
 

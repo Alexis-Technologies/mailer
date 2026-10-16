@@ -142,139 +142,31 @@ class RetryTransport {
    * @throws {DOMException} If the operation is aborted.
    */
   async *sendMany(messages, options) {
-    const iterator = toAsyncIterator(messages);
-    const inFlight = new Map();
-    const completed = new Map();
-    let inputDone = false;
-    let nextLaunchIndex = 0;
-    let nextYieldIndex = 0;
-    let launchPromise;
-    let launchError;
-    let hasLaunchError = false;
-    let hasQueuedFailure = false;
-    let pullingInput = false;
-    let closed = false;
     const controller = new AbortController();
     const combinedSignal = combineSignals(controller.signal, options?.signal);
-    const sendOptions = {
-      ...options,
-      signal: combinedSignal.signal,
-    };
-
-    const launchNext = async () => {
-      if (inputDone) return;
-      combinedSignal.signal.throwIfAborted();
-
-      pullingInput = true;
-      let inputPull;
-      try {
-        inputPull = Promise.resolve(iterator.next());
-      } catch (error) {
-        inputPull = Promise.reject(error);
-      }
-      inputPull = inputPull.finally(() => {
-        pullingInput = false;
-      });
-      const next = await raceWithAbort(inputPull, combinedSignal.signal);
-      if (closed) return;
-      if (next.done) {
-        inputDone = true;
-        return;
-      }
-
-      const index = nextLaunchIndex++;
-      if (index > 0) await this.waitBetweenSendMany(combinedSignal.signal);
-      if (closed) return;
-      const promise = this.send(next.value, sendOptions).then(
-        (receipt) => ({
-          index,
-          successful: true,
-          receipt,
-        }),
-        (error) => ({
-          index,
-          successful: false,
-          error,
-        }),
-      );
-      inFlight.set(index, promise);
-    };
-
-    const startLaunch = () => {
-      if (
-        launchPromise != null ||
-        inputDone ||
-        hasLaunchError ||
-        hasQueuedFailure ||
-        inFlight.size >= this.config.sendMany.maxConcurrent
-      ) {
-        return;
-      }
-
-      launchPromise = launchNext()
-        .catch((error) => {
-          launchError = error;
-          hasLaunchError = true;
-        })
-        .finally(() => {
-          launchPromise = undefined;
-        });
-    };
-
+    const signal = combinedSignal.signal;
+    const run = new SendManyRun(this, toAsyncIterator(messages), { ...options, signal });
     try {
-      startLaunch();
-
-      while (
-        inFlight.size > 0 ||
-        completed.has(nextYieldIndex) ||
-        // oxlint-disable-next-line no-unmodified-loop-condition -- upstream
-        launchPromise != null ||
-        // oxlint-disable-next-line no-unmodified-loop-condition -- upstream
-        !inputDone
-      ) {
-        combinedSignal.signal.throwIfAborted();
-
-        while (completed.has(nextYieldIndex)) {
-          const result = completed.get(nextYieldIndex);
-          completed.delete(nextYieldIndex);
-          if (result == null) break;
+      run.launch();
+      while (run.isActive()) {
+        signal.throwIfAborted();
+        for (let result = run.takeNext(); result !== undefined; result = run.takeNext()) {
           if (!result.successful) throw result.error;
           yield result.receipt;
-          nextYieldIndex++;
-          startLaunch();
+          run.launch();
         }
-
-        if (hasLaunchError && inFlight.size <= 0) throw launchError;
-
-        startLaunch();
-        if (inFlight.size <= 0 && launchPromise == null) break;
-
-        const launch = launchPromise?.then(() => ({
-          launched: true,
-        }));
-        const result = await raceWithAbort(
-          Promise.race([...inFlight.values(), ...(launch == null ? [] : [launch])]),
-          combinedSignal.signal,
-        );
-        if ('launched' in result) continue;
-        inFlight.delete(result.index);
-        completed.set(result.index, result);
-        if (!result.successful) hasQueuedFailure = true;
-        startLaunch();
+        if (run.hasLaunchError && run.inFlight <= 0) throw run.launchError;
+        run.launch();
+        if (run.inFlight <= 0 && run.launching === undefined) break;
+        await raceWithAbort(run.progress(), signal);
+        run.launch();
       }
-      if (hasLaunchError) throw launchError;
+      if (run.hasLaunchError) throw run.launchError;
     } finally {
-      closed = true;
+      run.closed = true;
       controller.abort(new DOMException('The operation was aborted.', 'AbortError'));
-      launchPromise?.catch(() => {});
       try {
-        const closeIterator = () => (inputDone ? undefined : iterator.return?.());
-        const closePromise = closeIterator();
-        if (pullingInput) {
-          closePromise?.catch(() => {});
-        } else {
-          await closePromise;
-        }
+        await run.close();
       } finally {
         combinedSignal.cleanup();
       }
@@ -479,6 +371,160 @@ const getRetryAfterMilliseconds = (failure) => {
   }
   return undefined;
 };
+
+/**
+ * The state of one sendMany() of the retry decorator.  Messages are read and
+ * sent up to `maxConcurrent` at a time, and a slot freed by a later message
+ * is refilled while an earlier one is still out; a send that finishes waits
+ * among the completed ones until the receipts before it are given, and no
+ * more than `maxConcurrent` wait, so that a slow first message cannot let the
+ * whole input be sent and its receipts held.  Each send that settles, and each
+ * launch that ends, wakes the loop through progress(), with no race over the
+ * sends in flight.
+ */
+class SendManyRun {
+  inFlight = 0;
+  launching = undefined;
+  launchError = undefined;
+  hasLaunchError = false;
+  closed = false;
+  #transport;
+  #iterator;
+  #sendOptions;
+  #completed = new Map();
+  #nextLaunchIndex = 0;
+  #nextYieldIndex = 0;
+  #inputDone = false;
+  #pullingInput = false;
+  #hasQueuedFailure = false;
+  #wake = undefined;
+  #woken = false;
+
+  /**
+   * @param transport The retry decorator.
+   * @param iterator The async iterator of the messages.
+   * @param sendOptions The options of each send, with the signal of the batch.
+   */
+  constructor(transport, iterator, sendOptions) {
+    this.#transport = transport;
+    this.#iterator = iterator;
+    this.#sendOptions = sendOptions;
+  }
+
+  /** Starts reading and sending the next message, when a slot is free. */
+  launch() {
+    const maxConcurrent = this.#transport.config.sendMany.maxConcurrent;
+    if (
+      this.launching !== undefined ||
+      this.#inputDone ||
+      this.hasLaunchError ||
+      this.#hasQueuedFailure ||
+      this.inFlight >= maxConcurrent ||
+      this.#completed.size >= maxConcurrent
+    ) {
+      return;
+    }
+    this.launching = this.#launchNext()
+      .catch((error) => {
+        this.launchError = error;
+        this.hasLaunchError = true;
+      })
+      .finally(() => {
+        this.launching = undefined;
+        this.#notify();
+      });
+  }
+
+  /** The result of the next message in order, once it is there. */
+  takeNext() {
+    const result = this.#completed.get(this.#nextYieldIndex);
+    if (result === undefined) return undefined;
+    this.#completed.delete(this.#nextYieldIndex);
+    if (result.successful) this.#nextYieldIndex++;
+    return result;
+  }
+
+  isActive() {
+    return (
+      this.inFlight > 0 ||
+      this.#completed.has(this.#nextYieldIndex) ||
+      this.launching !== undefined ||
+      !this.#inputDone
+    );
+  }
+
+  /** Settles at the next send that settles or launch that ends, at once if one did since. */
+  progress() {
+    if (this.#woken) {
+      this.#woken = false;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => (this.#wake = resolve));
+  }
+
+  /** Closes the input unless it ended, without waiting for a read in progress. */
+  close() {
+    this.launching?.catch(() => {});
+    if (this.#inputDone) return undefined;
+    const closing = this.#iterator.return?.();
+    if (this.#pullingInput) {
+      closing?.catch(() => {});
+      return undefined;
+    }
+    return closing;
+  }
+
+  #notify() {
+    if (this.#wake === undefined) {
+      this.#woken = true;
+      return;
+    }
+    const resolve = this.#wake;
+    this.#wake = undefined;
+    resolve();
+  }
+
+  #record(result) {
+    this.inFlight--;
+    this.#completed.set(result.index, result);
+    if (!result.successful) this.#hasQueuedFailure = true;
+    this.#notify();
+  }
+
+  async #pull() {
+    this.#pullingInput = true;
+    let inputPull;
+    try {
+      inputPull = Promise.resolve(this.#iterator.next());
+    } catch (error) {
+      inputPull = Promise.reject(error);
+    }
+    const pulled = inputPull.finally(() => {
+      this.#pullingInput = false;
+    });
+    return await raceWithAbort(pulled, this.#sendOptions.signal);
+  }
+
+  async #launchNext() {
+    if (this.#inputDone) return;
+    const signal = this.#sendOptions.signal;
+    signal.throwIfAborted();
+    const next = await this.#pull();
+    if (this.closed) return;
+    if (next.done) {
+      this.#inputDone = true;
+      return;
+    }
+    const index = this.#nextLaunchIndex++;
+    if (index > 0) await this.#transport.waitBetweenSendMany(signal);
+    if (this.closed) return;
+    this.inFlight++;
+    this.#transport.send(next.value, this.#sendOptions).then(
+      (receipt) => this.#record({ index, successful: true, receipt }),
+      (error) => this.#record({ index, successful: false, error }),
+    );
+  }
+}
 
 const toAsyncIterator = (values) => {
   const asyncIterator = values[Symbol.asyncIterator];

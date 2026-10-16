@@ -377,6 +377,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     batch at a time (`chunks` of `internal/batch.js`): SES `batchSize` messages, Resend 100,
     each chunk choosing between the batch API and single requests, and JMAP `maxObjectsInSet`
     after one discovery, made only when there is a first message.
+75. retry: `sendMany` counted only the sends in flight against `maxConcurrent`, so while a
+    slow first message was out, every later one that finished freed its slot for the next,
+    and the whole input could be sent with its receipts held for the first; it also raced all
+    the sends in flight on every turn. No more than `maxConcurrent` finished receipts wait for
+    an earlier one (`SendManyRun`), and a send that settles wakes the loop instead of a race.
 
 ## Repository layout
 
