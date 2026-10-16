@@ -15,6 +15,7 @@ const {
   iterateAttachmentContent,
   iterateRawMessage,
   parseAddress,
+  parseRetryAfter,
   RawMessageValidationError,
   readAttachmentContent,
   resolveCalendarContent,
@@ -279,4 +280,13 @@ test('Receipt: an unknown delivery is never retryable, nor are the errors made f
   assert.strictEqual(receipt.retryable, false);
   assert.strictEqual(receipt.errors[0].retryable, false);
   assert.strictEqual('deliveryUnknown' in createFailedReceipt('Busy', { statusCode: 503 }), false);
+});
+
+test('Receipt: a Retry-After longer than a day is read as a day', () => {
+  const now = new Date('2026-10-16T00:00:00Z');
+  const dayMs = 24 * 60 * 60 * 1000;
+  assert.strictEqual(parseRetryAfter('120', now), 120_000);
+  assert.strictEqual(parseRetryAfter('99999999999', now), dayMs);
+  assert.strictEqual(parseRetryAfter('Wed, 21 Oct 2099 07:28:00 GMT', now), dayMs);
+  assert.strictEqual(parseRetryAfter('Fri, 16 Oct 2026 00:01:00 GMT', now), 60_000);
 });

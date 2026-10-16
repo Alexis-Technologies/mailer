@@ -1006,7 +1006,8 @@ export declare function createFailedReceipt<TProviderId extends string = string>
   readonly successful: false;
 };
 /**
- * Parses an HTTP `Retry-After` header value into milliseconds.
+ * Parses an HTTP `Retry-After` header value into milliseconds.  A delay
+ * longer than a day is read as a day.
  *
  * @param value Header value to parse.
  * @param now Current time used when parsing HTTP dates.

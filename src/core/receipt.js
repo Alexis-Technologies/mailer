@@ -220,6 +220,9 @@ const createFailedReceipt = (error, options = {}) => {
 /**
  * Parses an HTTP `Retry-After` header value into milliseconds.
  *
+ * A delay longer than a day is read as a day: no sender waits longer within a
+ * send, and a value such as `99999999999` would otherwise mean centuries.
+ *
  * @param value Header value to parse.
  * @param now Current time used when parsing HTTP dates.
  * @returns Retry delay in milliseconds, or `undefined` if invalid.
@@ -229,16 +232,17 @@ const parseRetryAfter = (value, now = new Date()) => {
 
   const trimmed = value.trim();
   if (/^\d+$/.test(trimmed)) {
-    const delay = Number(trimmed) * 1000;
-    return delay;
+    return Math.min(Number(trimmed) * 1000, MAX_RETRY_AFTER_MS);
   }
 
   const timestamp = Date.parse(trimmed);
   if (Number.isNaN(timestamp)) return undefined;
 
-  const delay = timestamp - now.getTime();
-  return delay > 0 ? delay : undefined;
+  const delayMs = timestamp - now.getTime();
+  return delayMs > 0 ? Math.min(delayMs, MAX_RETRY_AFTER_MS) : undefined;
 };
+
+const MAX_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const getStringProperty = (value, property) => {
   if (value instanceof Error) {

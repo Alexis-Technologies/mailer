@@ -119,6 +119,8 @@ fixed ones below.
   `./jmap` while it meant none in the others, and `Infinity` became 1 ms. A negative or
   non-numeric `timeout`, and `retries` that are not a non-negative whole number, are refused
   with a `RangeError` when the transport is made.
+- **`parseRetryAfter` reads a delay longer than a day as a day** (an upstream bug): a value such as
+  `99999999999` meant about 3,170 years.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

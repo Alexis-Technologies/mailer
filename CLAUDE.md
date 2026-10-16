@@ -207,6 +207,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     four, `Infinity` became 1 ms, and neither `timeout` nor `retries` was checked. 0 and
     `Infinity` now mean none everywhere, and `checkRequestOptions` refuses anything else that is
     not a non-negative number, or retries that are not a whole number, when the config is made.
+29. core: `parseRetryAfter` had no upper bound (`99999999999` gave about 3,170 years); a delay
+    longer than a day is read as a day.
 
 ## Repository layout
 
