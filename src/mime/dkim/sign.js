@@ -9,6 +9,7 @@
  * @see https://www.rfc-editor.org/rfc/rfc6376
  */
 
+const { createPrivateKey } = require('node:crypto');
 const {
   canonicalizeBodyRelaxed,
   canonicalizeBodySimple,
@@ -164,22 +165,13 @@ const getPrivateKey = (key, algorithm) => {
 };
 
 /**
- * Imports a PEM-encoded private key for use with Web Crypto API.
+ * Imports a PEM-encoded private key for use with Web Crypto API.  The PEM is
+ * read by node:crypto, which takes PKCS#8 (`BEGIN PRIVATE KEY`) and PKCS#1
+ * (`BEGIN RSA PRIVATE KEY`) alike, and handed to Web Crypto as PKCS#8.
  */
 const importPrivateKey = async (pem, algorithm) => {
   try {
-    // Remove PEM headers/footers and whitespace
-    const pemContents = pem
-      .replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----/, '')
-      .replace(/-----END (?:RSA )?PRIVATE KEY-----/, '')
-      .replace(/\s/g, '');
-
-    // Decode Base64 to binary
-    const binaryString = atob(pemContents);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    const bytes = createPrivateKey(pem).export({ type: 'pkcs8', format: 'der' });
 
     // Determine the algorithm parameters based on DKIM algorithm
     const keyAlgorithm =
@@ -189,9 +181,9 @@ const importPrivateKey = async (pem, algorithm) => {
 
     return await crypto.subtle.importKey('pkcs8', bytes, keyAlgorithm, false, ['sign']);
   } catch (error) {
-    // oxlint-disable-next-line preserve-caught-error -- upstream
     throw new Error(
       `Failed to import private key: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 };

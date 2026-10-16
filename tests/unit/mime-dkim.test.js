@@ -133,3 +133,31 @@ test('DKIM: a domain, selector or field name that could break the signature fiel
     dkim: { signatures: [config({ signingDomain: 'приклад.укр' })] },
   });
 });
+
+test('DKIM: a PKCS#1 key (BEGIN RSA PRIVATE KEY) signs like a PKCS#8 one', async () => {
+  const { generateKeyPairSync } = require('node:crypto');
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  assert.match(privateKey, /^-----BEGIN RSA PRIVATE KEY-----/);
+  const result = await signMessage(
+    'From: alex@example.com\r\nSubject: Hello\r\n\r\nHi\r\n',
+    config({ privateKey, headerFields: ['from', 'subject'] }),
+  );
+  const signature = /(?:^|;\s*)b=([^;]+)$/.exec(result.signature)[1];
+  const unsigned = result.signature.slice(0, -signature.length);
+  const input = ['from:alex@example.com', 'subject:Hello', `dkim-signature:${unsigned.trim()}`];
+  assert.ok(
+    verify(
+      'RSA-SHA256',
+      Buffer.from(input.join('\r\n')),
+      publicKey,
+      Buffer.from(signature, 'base64'),
+    ),
+  );
+  await assert.rejects(signMessage('From: a@example.com\r\n\r\n', config({ privateKey: 'nope' })), {
+    message: /^Failed to import private key/,
+  });
+});

@@ -230,6 +230,8 @@ fixed ones below.
   Message-ID or Content-Type changed, without breaking the signature. The default now also
   covers Reply-To, Cc, Message-ID, In-Reply-To, References, MIME-Version and Content-Type, and
   over-signs From, Reply-To and Subject.
+- **DKIM takes a PKCS#1 key** (known upstream bug 6): a `BEGIN RSA PRIVATE KEY` PEM was imported
+  as PKCS#8 and failed. The PEM is now read by `node:crypto`, which takes PKCS#1 and PKCS#8.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

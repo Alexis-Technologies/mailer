@@ -131,7 +131,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 4. (fixed, see 38) SMTP AUTH PLAIN and LOGIN encoded with `btoa`, which fails on non-Latin-1
    credentials; so did Basic auth in jmap and mailgun.
 5. `cram-md5` is in the `SmtpAuth` type but not implemented.
-6. DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) is imported as PKCS#8 and fails.
+6. (fixed, see 63) DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) was imported as PKCS#8 and
+   failed.
 7. pool: `continueOnSuccess` is never read.
 8. (fixed, see 44, 45 and 48 to 52) otel: `_active_sends` was not decremented after `sendMany`
    and drifted under sampling; `durationBuckets` and `auto` were ignored; `recordRetry` was
@@ -332,6 +333,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     canonicalization went into the DKIM-Signature field unchecked, so a domain with a line
     break added a header field such as Bcc to the message, and a `;` ended a tag early.
     `checkDkimConfig` refuses them, from the SMTP constructor and at every composition.
+63. DKIM (known bug 6): a PEM was stripped of its armor and imported as PKCS#8, so a PKCS#1
+    key (`BEGIN RSA PRIVATE KEY`) failed. `createPrivateKey` of node:crypto reads either and
+    the key reaches Web Crypto as PKCS#8; the import error keeps its cause.
 
 ## Repository layout
 
