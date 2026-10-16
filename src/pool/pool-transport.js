@@ -95,7 +95,7 @@ class PoolTransport {
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   async send(message, options) {
-    const pinned = pinMessageId(message);
+    const pinned = pinMessageId(message, this.config.generateId);
     const attemptedIndices = new Set();
     const errorMessages = [];
     const errors = [];
@@ -269,11 +269,11 @@ class PoolTransport {
       case 'round-robin':
         return new RoundRobinStrategy();
       case 'weighted':
-        return new WeightedStrategy();
+        return new WeightedStrategy({ random: this.config.random });
       case 'priority':
-        return new PriorityStrategy();
+        return new PriorityStrategy({ random: this.config.random });
       case 'selector-based':
-        return new SelectorStrategy();
+        return new SelectorStrategy({ random: this.config.random });
       default:
         throw new Error(`Unknown strategy: ${strategy}`);
     }

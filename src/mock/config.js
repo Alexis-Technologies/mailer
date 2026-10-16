@@ -32,6 +32,7 @@ const createMockConfig = (config = {}) => {
     randomDelayRange: config.randomDelayRange ?? { min: 0, max: 0 },
     failureRate: config.failureRate ?? 0,
     generateUniqueMessageIds: config.generateUniqueMessageIds ?? true,
+    random: config.random,
   };
 };
 

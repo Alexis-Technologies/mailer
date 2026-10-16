@@ -166,6 +166,11 @@ export interface OpenTelemetryConfig {
    * Called to classify errors into categories for metrics.
    */
   readonly errorClassifier?: ErrorClassifier;
+  /**
+   * The source of the sampling of the spans, a function like `Math.random`.
+   * @default Math.random, read at each span
+   */
+  readonly random?: () => number;
 }
 /**
  * Resolved configuration with all defaults applied.

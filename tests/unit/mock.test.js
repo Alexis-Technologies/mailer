@@ -83,3 +83,10 @@ test('Mock: an abort ends the configured delay, with the reason of the signal', 
   assert.ok(performance.now() - started < 1000);
   assert.strictEqual(transport.getSentMessagesCount(), 0);
 });
+
+test('Mock: random decides the simulated failures', async () => {
+  const failing = new MockTransport({ failureRate: 0.5, random: () => 0.1 });
+  assert.strictEqual((await failing.send(message('Hi'))).successful, false);
+  const passing = new MockTransport({ failureRate: 0.5, random: () => 0.9 });
+  assert.strictEqual((await passing.send(message('Hi'))).successful, true);
+});

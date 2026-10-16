@@ -4,7 +4,7 @@
 
 /// <reference lib="esnext.disposable" />
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type { IdOptions, Message, Receipt, Transport, TransportOptions } from '../../index.js';
 
 /**
  * A log level, by pino's names (LogTape's `warning` is `warn`).
@@ -68,7 +68,7 @@ export interface LoggerTransportLevels {
  *
  * @typeParam TProviderId The provider id of the wrapped transport.
  */
-export interface LoggerTransportOptions<TProviderId extends string = 'logger'> {
+export interface LoggerTransportOptions<TProviderId extends string = 'logger'> extends IdOptions {
   /**
    * The logger to write to. It must have a method for each configured level;
    * the transport checks that when it is made.

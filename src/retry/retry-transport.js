@@ -57,7 +57,7 @@ class RetryTransport {
   async send(message, options) {
     options?.signal?.throwIfAborted();
 
-    const pinned = pinMessageId(message);
+    const pinned = pinMessageId(message, this.config.generateId);
     let lastThrownError;
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       options?.signal?.throwIfAborted();

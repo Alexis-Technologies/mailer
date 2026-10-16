@@ -52,6 +52,12 @@ export interface MockConfig {
    * @default true
    */
   readonly generateUniqueMessageIds?: boolean;
+  /**
+   * The source of the random choices, a function like `Math.random` (for
+   * tests, a deterministic one).
+   * @default Math.random, read at each choice
+   */
+  readonly random?: () => number;
 }
 /**
  * Resolved mock configuration with all optional fields filled with default values.

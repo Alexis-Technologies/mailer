@@ -3,7 +3,14 @@
 
 /// <reference lib="esnext.disposable" />
 
-import type { Message, Receipt, ReceiptError, Transport, TransportOptions } from '../../index.js';
+import type {
+  IdOptions,
+  Message,
+  Receipt,
+  ReceiptError,
+  Transport,
+  TransportOptions,
+} from '../../index.js';
 
 /**
  * Jitter mode for computed retry delays.
@@ -124,7 +131,7 @@ export interface SendManyRetryConfig {
 /**
  * Configuration for the retry transport decorator.
  */
-export interface RetryConfig<TProviderId extends string = string> {
+export interface RetryConfig<TProviderId extends string = string> extends IdOptions {
   /**
    * Total number of send attempts, including the first one.
    *

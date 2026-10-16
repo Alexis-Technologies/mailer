@@ -35,6 +35,7 @@ const createRetryConfig = (config = {}) => {
     jitter: config.jitter ?? 'full',
     random: config.random ?? Math.random,
     shouldRetry: config.shouldRetry,
+    generateId: config.generateId,
     wait: config.wait ?? defaultWait,
     sendMany: {
       maxConcurrent,

@@ -257,6 +257,14 @@ Every attempt of one `send()` carries the same `Message-ID`: a message without
 one gets a generated one before the first attempt, so a recipient's server can
 tell a duplicate apart.
 
+### Determinism and identifiers
+
+The weighted, priority and selector strategies choose at random among their
+candidates; `random`, a function like `Math.random`, makes those choices
+instead, such as a seeded one in tests. `generateId` makes the Message-ID the
+pool gives a message without one before the first attempt, so that every
+transport it tries sends the same one.
+
 ## Custom strategies
 
 For advanced use cases, you can implement custom routing strategies by

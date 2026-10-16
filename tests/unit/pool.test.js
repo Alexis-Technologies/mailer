@@ -174,3 +174,31 @@ test('Pool: an abort rejects with the reason of the signal', async () => {
   const batch = pool.sendMany([message()], { signal: controller.signal });
   await assert.rejects(batch[Symbol.asyncIterator]().next(), (e) => e === reason);
 });
+
+test('Pool: random makes the choices, and generateId the pinned Message-ID', async () => {
+  const received = [];
+  const recording = (id) => ({
+    id,
+    send: async (sent) => {
+      received.push([id, sent.messageId]);
+      return { successful: true, messageId: id };
+    },
+    async *sendMany() {},
+  });
+  const values = [0.9, 0.1];
+  const pool = new PoolTransport({
+    strategy: 'weighted',
+    transports: [
+      { transport: recording('a'), weight: 1 },
+      { transport: recording('b'), weight: 1 },
+    ],
+    random: () => values.shift(),
+    generateId: (kind) => `01JPOOL.${kind}`,
+  });
+  await pool.send(message());
+  await pool.send(message());
+  assert.deepStrictEqual(received, [
+    ['b', '01JPOOL.message-id@example.com'],
+    ['a', '01JPOOL.message-id@example.com'],
+  ]);
+});

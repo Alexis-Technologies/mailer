@@ -3,6 +3,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { inspect } = require('node:util');
+const { generateId } = require('../core/id.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
@@ -191,7 +192,7 @@ class LoggerTransport {
   createSyntheticReceipt() {
     return {
       successful: true,
-      messageId: `logger-${crypto.randomUUID()}`,
+      messageId: `logger-${generateId('receipt-id', this.config.generateId)}`,
       provider: this.id,
       attempts: 1,
       timestamp: new Date().toISOString(),

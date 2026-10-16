@@ -55,6 +55,9 @@ if (receipt.successful) {
 A log-only receipt uses the provider id `"logger"` and a generated message id, but
 it does not imply that an email was delivered outside the application.
 
+A log-only transport returns a receipt whose message ID is `logger-` and a UUID,
+or what `generateId` makes when it is given.
+
 ## Decorating another transport
 
 Pass another transport through the `transport` option to add logs around real

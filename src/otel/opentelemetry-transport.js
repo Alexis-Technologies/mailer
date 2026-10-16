@@ -116,6 +116,7 @@ class OpenTelemetryTransport {
         this.config.tracing,
         this.transportName,
         this.transportVersion,
+        this.config.random,
       );
     }
   }

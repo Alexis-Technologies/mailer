@@ -46,6 +46,11 @@ fixed ones below.
   `fetch`, read at each request in place of the global one (an undici `Agent`, a proxy, mTLS),
   and a `generateId` for their idempotency keys (Resend, Lettermint, the Maileroo reference) and
   for the message IDs they make up when the provider gives none (SES, SendGrid, Plunk).
+- **`generateId` and `random` in the decorators:** `./retry` and `./pool` take `generateId` for
+  the Message-ID they pin before the first attempt, and `./logger` for the message ID of a
+  log-only receipt; `random`, a function like `Math.random`, makes the choices of the pool
+  strategies (their constructors take it too), the simulated failures and delays of `./mock`,
+  and the span sampling of `./otel`.
 - **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
   (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
   With a wrapped transport, the logger needs a method for that level.

@@ -11,6 +11,14 @@
  */
 class WeightedStrategy {
   /**
+   * @param options `random`, the source of the random choices; by default
+   *                `Math.random`, read at each choice.
+   */
+  constructor(options) {
+    this.random = options?.random;
+  }
+
+  /**
    * Selects a transport based on weighted random distribution.
    *
    * @param _message The message to send (unused in this strategy).
@@ -35,7 +43,7 @@ class WeightedStrategy {
     if (lastIndex === -1 || totalWeight <= 0) return undefined;
 
     // Random selection based on weights
-    const random = Math.random() * totalWeight;
+    const random = (this.random ?? Math.random)() * totalWeight;
     let cumulativeWeight = 0;
 
     for (let index = 0; index < transports.length; index++) {

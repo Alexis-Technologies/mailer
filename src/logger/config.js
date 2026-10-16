@@ -45,6 +45,7 @@ const resolveLoggerTransportOptions = (options) => {
     logger,
     recordMessage: options.recordMessage ?? false,
     levels,
+    generateId: options.generateId,
   };
 };
 

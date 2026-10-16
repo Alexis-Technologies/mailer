@@ -180,3 +180,9 @@ test('Logger: a logger that throws loses no receipt and stops no send', async (t
     { code: 'MAILER_LOGGER_FAILED' },
   ]);
 });
+
+test('Logger: generateId makes the message ID of a log-only receipt', async () => {
+  const logger = { debug: () => {}, info: () => {}, error: () => {} };
+  const transport = new LoggerTransport({ logger, generateId: () => '01JLOG' });
+  assert.strictEqual((await transport.send(message())).messageId, 'logger-01JLOG');
+});

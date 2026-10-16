@@ -43,6 +43,8 @@ const createPoolConfig = (config) => {
     maxRetries: config.maxRetries ?? enabledTransports.length - 1,
     timeout: config.timeout,
     continueOnSuccess: config.continueOnSuccess ?? false,
+    random: config.random,
+    generateId: config.generateId,
   };
 };
 

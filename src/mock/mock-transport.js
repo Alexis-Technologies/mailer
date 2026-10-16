@@ -323,7 +323,7 @@ class MockTransport {
       (this.config.randomDelayRange.min > 0 || this.config.randomDelayRange.max > 0)
     ) {
       const { min, max } = this.config.randomDelayRange;
-      delayMs = Math.random() * (max - min) + min;
+      delayMs = (this.config.random ?? Math.random)() * (max - min) + min;
     }
 
     if (delayMs > 0) {
@@ -333,7 +333,10 @@ class MockTransport {
 
   getResponse() {
     // Check for random failure first
-    if (this.config.failureRate > 0 && Math.random() < this.config.failureRate) {
+    if (
+      this.config.failureRate > 0 &&
+      (this.config.random ?? Math.random)() < this.config.failureRate
+    ) {
       return createFailedReceipt('Simulated random failure', {
         provider: 'mock',
         category: 'unknown',

@@ -107,6 +107,10 @@ the delay at once, and the send rejects with the reason of the signal, as a
 real transport does. Failure simulation verifies that your error handling code
 works correctly when email services are unavailable.
 
+`random`, a function like `Math.random`, decides the simulated failures of
+`failureRate` and the delays of `randomDelayRange`, so that a test can make them
+happen exactly when it wants.
+
 ## Testing specific failure scenarios
 
 For testing specific error conditions, you can configure the mock transport

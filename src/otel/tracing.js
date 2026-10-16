@@ -31,8 +31,9 @@ class TracingCollector {
   config;
   attributeExtractor;
 
-  constructor(tracerProvider, config, transportName, transportVersion) {
+  constructor(tracerProvider, config, transportName, transportVersion, random) {
     this.config = config;
+    this.random = random;
     this.tracer = tracerProvider.getTracer(metadata.name, metadata.version);
     this.attributeExtractor = new EmailAttributeExtractor(
       transportName,
@@ -92,7 +93,7 @@ class TracingCollector {
   }
 
   shouldSample() {
-    return Math.random() < this.config.samplingRate;
+    return (this.random ?? Math.random)() < this.config.samplingRate;
   }
 }
 

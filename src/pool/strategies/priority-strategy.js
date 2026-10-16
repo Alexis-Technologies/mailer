@@ -11,6 +11,14 @@
  */
 class PriorityStrategy {
   /**
+   * @param options `random`, the source of the random choices; by default
+   *                `Math.random`, read at each choice.
+   */
+  constructor(options) {
+    this.random = options?.random;
+  }
+
+  /**
    * Selects the highest priority transport that hasn't been attempted.
    *
    * @param _message The message to send (unused in this strategy).
@@ -41,7 +49,7 @@ class PriorityStrategy {
 
     // If multiple transports have the same priority, select randomly
     if (topPriorityTransports.length > 1) {
-      const randomIndex = Math.floor(Math.random() * topPriorityTransports.length);
+      const randomIndex = Math.floor((this.random ?? Math.random)() * topPriorityTransports.length);
       return topPriorityTransports[randomIndex];
     }
 

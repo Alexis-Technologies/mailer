@@ -436,3 +436,20 @@ test('OTel: an exception event carries the stack, its message redacted', async (
     assert.match(stacktrace, /\n {4}at /);
   }
 });
+
+test('OTel: random decides which operations get a span', async () => {
+  for (const [value, spans] of [
+    [0.9, 0],
+    [0.1, 1],
+  ]) {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(plain({}), {
+      tracerProvider,
+      meterProvider,
+      tracing: { samplingRate: 0.5 },
+      random: () => value,
+    });
+    await transport.send(createTestMessage());
+    assert.strictEqual(tracerProvider.getAllSpans().length, spans);
+  }
+});

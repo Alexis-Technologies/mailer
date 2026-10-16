@@ -3,7 +3,7 @@
 
 /// <reference lib="esnext.disposable" />
 
-import { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import { IdOptions, Message, Receipt, Transport, TransportOptions } from '../../index.js';
 
 /**
  * Result of transport selection by a strategy.
@@ -84,7 +84,7 @@ export interface TransportEntry<TProviderId extends string = string> {
 /**
  * Configuration options for the pool transport.
  */
-export interface PoolConfig<TProviderId extends string = string> {
+export interface PoolConfig<TProviderId extends string = string> extends IdOptions {
   /**
    * The strategy to use for selecting transports.
    * Can be a built-in strategy name or a custom Strategy instance.
@@ -110,6 +110,12 @@ export interface PoolConfig<TProviderId extends string = string> {
    * when using selector-based strategy. Defaults to false.
    */
   readonly continueOnSuccess?: boolean;
+  /**
+   * The source of the random choices, a function like `Math.random` (for
+   * tests, a deterministic one).
+   * @default Math.random, read at each choice
+   */
+  readonly random?: () => number;
 }
 /**
  * Resolved pool configuration with defaults applied.
@@ -120,6 +126,8 @@ export interface ResolvedPoolConfig<TProviderId extends string = string> {
   readonly maxRetries: number;
   readonly timeout?: number;
   readonly continueOnSuccess: boolean;
+  readonly random?: () => number;
+  readonly generateId?: IdOptions['generateId'];
 }
 /**
  * Resolved transport entry with defaults applied.
@@ -286,6 +294,10 @@ export declare class WeightedStrategy<
   TProviderId extends string = string,
 > implements Strategy<TProviderId> {
   /**
+   * @param options `random`, the source of the random choices.
+   */
+  constructor(options?: { readonly random?: () => number });
+  /**
    * Selects a transport based on weighted random distribution.
    *
    * @param _message The message to send (unused in this strategy).
@@ -318,6 +330,10 @@ export declare class PriorityStrategy<
   TProviderId extends string = string,
 > implements Strategy<TProviderId> {
   /**
+   * @param options `random`, the source of the random choices.
+   */
+  constructor(options?: { readonly random?: () => number });
+  /**
    * Selects the highest priority transport that hasn't been attempted.
    *
    * @param _message The message to send (unused in this strategy).
@@ -349,6 +365,10 @@ export declare class PriorityStrategy<
 export declare class SelectorStrategy<
   TProviderId extends string = string,
 > implements Strategy<TProviderId> {
+  /**
+   * @param options `random`, the source of the random choices.
+   */
+  constructor(options?: { readonly random?: () => number });
   /**
    * Selects a transport based on selector function matching.
    *

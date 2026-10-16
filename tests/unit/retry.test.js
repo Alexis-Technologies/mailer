@@ -206,3 +206,20 @@ test('Retry: a bug of the wrapped transport rejects, a network TypeError is retr
   assert.strictEqual(receipt.successful, false);
   assert.strictEqual(calls, 3);
 });
+
+test('Retry: generateId makes the Message-ID pinned for every attempt', async () => {
+  const ids = [];
+  const base = sequence(failure(true), success);
+  const send = base.send;
+  base.send = (sent, options) => {
+    ids.push(sent.messageId);
+    return send(sent, options);
+  };
+  const transport = new RetryTransport(base, {
+    maxAttempts: 2,
+    wait: async () => {},
+    generateId: () => '01JRETRY',
+  });
+  await transport.send(message());
+  assert.deepStrictEqual(ids, ['01JRETRY@example.com', '01JRETRY@example.com']);
+});

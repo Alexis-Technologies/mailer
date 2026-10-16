@@ -11,6 +11,14 @@
  */
 class SelectorStrategy {
   /**
+   * @param options `random`, the source of the random choices; by default
+   *                `Math.random`, read at each choice.
+   */
+  constructor(options) {
+    this.random = options?.random;
+  }
+
+  /**
    * Selects a transport based on selector function matching.
    *
    * @param message The message to send.
@@ -49,7 +57,7 @@ class SelectorStrategy {
     if (candidates.length < 1) return undefined;
 
     // Select randomly from candidates
-    const randomIndex = Math.floor(Math.random() * candidates.length);
+    const randomIndex = Math.floor((this.random ?? Math.random)() * candidates.length);
     return candidates[randomIndex];
   }
 

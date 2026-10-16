@@ -66,6 +66,7 @@ const createOpenTelemetryConfig = (config = {}) => {
     },
     attributeExtractor: config.attributeExtractor,
     errorClassifier: config.errorClassifier,
+    random: config.random,
   };
 
   // Validate required providers
