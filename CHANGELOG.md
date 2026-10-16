@@ -193,6 +193,8 @@ fixed ones below.
   twice, its size at the start and then its successes and failures, and every message with
   `priority: 'normal'`. It now takes each receipt once, with the priority of its message and its
   `status`.
+- **`./otel` tells a failed batch from a partly failed one** (an upstream bug): a batch in which
+  every message failed was counted with `status: 'partial_failure'`. It is now a `failure`.
 
 ### Changed
 

@@ -270,6 +270,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 46. otel: the message counter took every message of a batch twice (its size at the start, then
     its successes and failures), and always with `priority: 'normal'`. It takes each receipt
     once, with the priority of its message and its status.
+47. otel: a batch in which every message failed was counted as a `partial_failure`. It is a
+    `failure`; `partial_failure` is left for a batch with both outcomes.
 
 ## Repository layout
 

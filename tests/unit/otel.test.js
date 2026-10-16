@@ -222,3 +222,27 @@ test('OTel: a message is counted once, with its priority and its outcome', async
     { value: 1, attributes: { transport: 'unknown', priority: 'low', status: 'failure' } },
   ]);
 });
+
+test('OTel: a batch is a success, a partial failure or a failure', async () => {
+  const failure = { successful: false, errorMessages: ['Rejected'], errors: [] };
+  const sent = { successful: true, messageId: 'm1' };
+  const cases = [
+    [[sent, sent], 'success'],
+    [[sent, failure], 'partial_failure'],
+    [[failure, failure], 'failure'],
+  ];
+  for (const [receipts, status] of cases) {
+    const { tracerProvider, meterProvider } = providers();
+    let index = 0;
+    const transport = new OpenTelemetryTransport(
+      plain({}, () => receipts[index++]),
+      { tracerProvider, meterProvider },
+    );
+    await collect(transport.sendMany([createTestMessage(), createTestMessage()]));
+    const attempts = meterProvider
+      .getAllRecords()
+      .find((metric) => metric.name === 'mailer_email_attempts_total');
+    assert.strictEqual(attempts.records.length, 1);
+    assert.strictEqual(attempts.records[0].attributes.status, status);
+  }
+});

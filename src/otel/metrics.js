@@ -4,6 +4,13 @@
 const metadata = require('../version.js');
 const { estimateMessageSize } = require('./message-size.js');
 
+// A batch with no failure succeeded, one with no success failed, and the rest
+// failed in part.
+const batchStatus = (successCount, failureCount) => {
+  if (failureCount === 0) return 'success';
+  return successCount === 0 ? 'failure' : 'partial_failure';
+};
+
 /**
  * Manages OpenTelemetry metrics collection for email operations.
  */
@@ -133,7 +140,7 @@ class MetricsCollector {
     // Record batch-level metrics
     this.attemptCounter.add(1, {
       ...labels,
-      status: failureCount === 0 ? 'success' : 'partial_failure',
+      status: batchStatus(successCount, failureCount),
       operation: 'batch',
     });
 
