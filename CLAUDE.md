@@ -267,6 +267,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `metrics.samplingRate` throws a `TypeError`.
 45. otel: the count of active sends went up for a `sendMany` and never down. It goes down when
     a send or a batch ends, however it ends, a batch the caller stops reading included.
+46. otel: the message counter took every message of a batch twice (its size at the start, then
+    its successes and failures), and always with `priority: 'normal'`. It takes each receipt
+    once, with the priority of its message and its status.
 
 ## Repository layout
 

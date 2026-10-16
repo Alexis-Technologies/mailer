@@ -34,7 +34,7 @@ class MetricsCollector {
     });
 
     this.messageCounter = this.meter.createCounter(`${config.prefix}_email_messages_total`, {
-      description: 'Total number of email messages processed',
+      description: 'Messages a transport returned a receipt for, by priority and status',
       unit: '1',
     });
 
@@ -70,15 +70,19 @@ class MetricsCollector {
   /**
    * Records the start of an email send operation.
    */
-  recordSendStart(transport, messageCount = 1) {
-    const labels = {
-      transport,
-    };
+  recordSendStart(transport) {
+    this.activeSendsGauge.add(1, { transport });
+  }
 
-    this.activeSendsGauge.add(1, labels);
-    this.messageCounter.add(messageCount, {
-      ...labels,
-      priority: 'normal', // Default, will be overridden by recordMessage if available
+  /**
+   * Records the receipt of one message, once, with the priority of the
+   * message and whether it was sent.
+   */
+  recordMessageOutcome(transport, priority, successful) {
+    this.messageCounter.add(1, {
+      transport,
+      priority,
+      status: successful ? 'success' : 'failure',
     });
   }
 
@@ -141,21 +145,6 @@ class MetricsCollector {
     // Record individual message metrics
     for (const message of messages) {
       this.recordMessage(message, transport);
-    }
-
-    // Record success/failure breakdown
-    if (successCount > 0) {
-      this.messageCounter.add(successCount, {
-        ...labels,
-        status: 'success',
-      });
-    }
-
-    if (failureCount > 0) {
-      this.messageCounter.add(failureCount, {
-        ...labels,
-        status: 'failure',
-      });
     }
   }
 

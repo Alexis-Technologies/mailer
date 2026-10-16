@@ -122,7 +122,7 @@ class OpenTelemetryTransport {
     const span = this.tracingCollector?.createSendSpan(message, this.extractNetworkAttributes());
 
     // Record metrics start
-    this.metricsCollector?.recordSendStart(this.transportName, 1);
+    this.metricsCollector?.recordSendStart(this.transportName);
     this.metricsCollector?.recordMessage(message, this.transportName);
 
     try {
@@ -140,6 +140,11 @@ class OpenTelemetryTransport {
       // Delegate to wrapped transport
       const receipt = await this.wrappedTransport.send(message, options);
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
+      this.metricsCollector?.recordMessageOutcome(
+        this.transportName,
+        message.priority,
+        receipt.successful,
+      );
 
       // Record success/failure
       if (receipt.successful) {
@@ -197,7 +202,7 @@ class OpenTelemetryTransport {
     );
 
     // Record batch start
-    this.metricsCollector?.recordSendStart(this.transportName, batchSize);
+    this.metricsCollector?.recordSendStart(this.transportName);
 
     let successCount = 0;
     let failureCount = 0;
@@ -218,6 +223,12 @@ class OpenTelemetryTransport {
 
       // Delegate to wrapped transport
       for await (const receipt of this.wrappedTransport.sendMany(messageArray, options)) {
+        // A receipt answers the message at its position in the batch.
+        this.metricsCollector?.recordMessageOutcome(
+          this.transportName,
+          messageArray[receipts.length]?.priority ?? 'unknown',
+          receipt.successful,
+        );
         receipts.push(receipt);
 
         if (receipt.successful) {

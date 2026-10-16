@@ -189,6 +189,10 @@ fixed ones below.
 - **`./otel` counts active sends down after `sendMany`** (an upstream bug): the count went up for
   a batch and never down. It goes down however a send or a batch ends, also when the caller
   stops reading the receipts.
+- **`./otel` counts each message once** (an upstream bug): the message counter took a batch
+  twice, its size at the start and then its successes and failures, and every message with
+  `priority: 'normal'`. It now takes each receipt once, with the priority of its message and its
+  `status`.
 
 ### Changed
 

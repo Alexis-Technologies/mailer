@@ -154,8 +154,15 @@ class MockTracerProvider {
   }
 }
 
+// Changed after the port: an instrument keeps its name and options, so that
+// tests can tell the instruments apart.
 class MockMetricInstrument {
   records = [];
+
+  constructor(name, options) {
+    this.name = name;
+    this.options = options;
+  }
 
   record(value, attributes) {
     this.records.push({ value, attributes });
@@ -211,20 +218,20 @@ class MockMeter {
   upDownCounters = [];
   histograms = [];
 
-  createCounter(_name, _options) {
-    const counter = new MockCounter();
+  createCounter(name, options) {
+    const counter = new MockCounter(name, options);
     this.counters.push(counter);
     return counter;
   }
 
-  createUpDownCounter(_name, _options) {
-    const upDownCounter = new MockUpDownCounter();
+  createUpDownCounter(name, options) {
+    const upDownCounter = new MockUpDownCounter(name, options);
     this.upDownCounters.push(upDownCounter);
     return upDownCounter;
   }
 
-  createHistogram(_name, _options) {
-    const histogram = new MockHistogram();
+  createHistogram(name, options) {
+    const histogram = new MockHistogram(name, options);
     this.histograms.push(histogram);
     return histogram;
   }
@@ -288,18 +295,24 @@ class MockMeterProvider {
       meter.counters.forEach((counter) => {
         allRecords.push({
           instrument: 'counter',
+          name: counter.name,
+          options: counter.options,
           records: [...counter.records],
         });
       });
       meter.upDownCounters.forEach((upDownCounter) => {
         allRecords.push({
           instrument: 'upDownCounter',
+          name: upDownCounter.name,
+          options: upDownCounter.options,
           records: [...upDownCounter.records],
         });
       });
       meter.histograms.forEach((histogram) => {
         allRecords.push({
           instrument: 'histogram',
+          name: histogram.name,
+          options: histogram.options,
           records: [...histogram.records],
         });
       });

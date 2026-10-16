@@ -14,7 +14,7 @@ const providers = () => ({
 });
 const plain = (config, receipt = { successful: true, messageId: 'm1' }) => ({
   config,
-  send: async () => receipt,
+  send: async (message) => (typeof receipt === 'function' ? receipt(message) : receipt),
   async *sendMany(messages) {
     for await (const message of messages) {
       yield typeof receipt === 'function' ? receipt(message) : receipt;
@@ -195,4 +195,30 @@ test('OTel: active sends return to zero however a send or a batch ends', async (
   }
   assert.strictEqual(changes, 10);
   assert.strictEqual(sum, 0);
+});
+
+test('OTel: a message is counted once, with its priority and its outcome', async () => {
+  const { tracerProvider, meterProvider } = providers();
+  const failure = { successful: false, errorMessages: ['Rejected'], errors: [] };
+  const transport = new OpenTelemetryTransport(
+    plain({}, (message) =>
+      message.priority === 'low' ? failure : { successful: true, messageId: 'm1' },
+    ),
+    { tracerProvider, meterProvider },
+  );
+  await transport.send(createTestMessage({ priority: 'high' }));
+  await collect(
+    transport.sendMany([
+      createTestMessage({ priority: 'normal' }),
+      createTestMessage({ priority: 'low' }),
+    ]),
+  );
+  const messages = meterProvider
+    .getAllRecords()
+    .find((metric) => metric.name === 'mailer_email_messages_total');
+  assert.deepStrictEqual(messages.records, [
+    { value: 1, attributes: { transport: 'unknown', priority: 'high', status: 'success' } },
+    { value: 1, attributes: { transport: 'unknown', priority: 'normal', status: 'success' } },
+    { value: 1, attributes: { transport: 'unknown', priority: 'low', status: 'failure' } },
+  ]);
 });
