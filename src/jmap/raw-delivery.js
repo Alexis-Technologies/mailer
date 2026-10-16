@@ -5,7 +5,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { RawMessageValidationError } = require('../core/raw-message.js');
 const { JMAP_ERROR_TYPES, JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
-const { isRecord, rawOperation, uploadRawMessage } = require('./raw-upload.js');
+const { findOnlyResponse, isRecord, rawOperation, uploadRawMessage } = require('./raw-upload.js');
 
 const using = [
   'urn:ietf:params:jmap:core',
@@ -14,14 +14,13 @@ const using = [
 ];
 
 const failure = (message, stage, retryable, unknown = false, error) => {
+  let category;
+  if (unknown) category = 'unknown';
+  else if (error?.statusCode === undefined && !retryable) category = 'rejected';
   return createFailedReceipt(message, {
     provider: 'jmap',
     code: `jmap.raw_${stage}_${unknown ? 'unknown' : 'failed'}`,
-    category: unknown
-      ? 'unknown'
-      : error?.statusCode !== undefined || retryable
-        ? undefined
-        : 'rejected',
+    category,
     statusCode: error?.statusCode,
     retryAfterMilliseconds: error?.retryAfterMilliseconds,
     providerDetails: error
@@ -39,13 +38,10 @@ const methodResult = (response, name, id, accountId) => {
   if (!isRecord(response) || !Array.isArray(response.methodResponses)) {
     throw new JmapApiError('Invalid raw JMAP method response.');
   }
-  const matches = response.methodResponses.filter(
-    (entry) => Array.isArray(entry) && entry[2] === id,
-  );
-  if (matches.length !== 1) {
+  const result = findOnlyResponse(response.methodResponses, id);
+  if (result === undefined) {
     throw new JmapApiError('Missing or contradictory raw JMAP method response.');
   }
-  const result = matches[0];
   if (
     !Array.isArray(result) ||
     result.length !== 3 ||
@@ -136,146 +132,167 @@ const deliverRawMessage = async (
     const uploaded = await uploadRawMessage(config, session.uploadUrl, accountId, plan, signal);
     signal?.throwIfAborted();
     stage = 'import';
-    const imported = methodResult(
-      await execute({
-        using,
-        methodCalls: [
-          [
-            'Email/import',
-            {
-              accountId,
-              emails: {
-                raw: {
-                  blobId: uploaded.blobId,
-                  mailboxIds: { [draftsMailboxId]: true },
-                },
-              },
-            },
-            'raw-import',
-          ],
-        ],
-      }),
-      'Email/import',
-      'raw-import',
-      accountId,
-    );
-    if (imported.name === 'error') {
-      return failure(
-        errorDescription(imported.args),
-        'import',
-        imported.args.type === 'serverPartialFail',
-      );
-    }
-    const { created, rejected } = creation(imported.args);
-    let emailId;
-    if (created && typeof created.id === 'string') emailId = created.id;
-    else if (
-      rejected?.type === 'alreadyExists' &&
-      typeof rejected.existingId === 'string' &&
-      rejected.existingId
-    ) {
-      const existing = methodResult(
-        await execute({
-          using,
-          methodCalls: [
-            [
-              'Email/get',
-              {
-                accountId,
-                ids: [rejected.existingId],
-                properties: ['id', 'blobId'],
-              },
-              'raw-existing',
-            ],
-          ],
-        }),
-        'Email/get',
-        'raw-existing',
-        accountId,
-      );
-      const list = existing.args.list;
-      if (
-        existing.name === 'error' ||
-        !Array.isArray(list) ||
-        list.length !== 1 ||
-        !isRecord(list[0]) ||
-        list[0].id !== rejected.existingId ||
-        list[0].blobId !== uploaded.blobId
-      ) {
-        return failure('Existing Email does not match the uploaded raw blob.', 'import', false);
-      }
-      emailId = rejected.existingId;
-    } else {
-      return failure(errorDescription(rejected ?? { type: 'invalidResult' }), 'import', false);
-    }
+    const emailId = await importRawEmail(execute, accountId, draftsMailboxId, uploaded.blobId);
+    if (typeof emailId !== 'string') return emailId;
     signal?.throwIfAborted();
     stage = 'submission';
-    const submitted = methodResult(
-      await execute({
-        using,
-        methodCalls: [
-          [
-            'EmailSubmission/set',
-            {
-              accountId,
-              create: {
-                raw: {
-                  emailId,
-                  identityId,
-                  envelope: {
-                    mailFrom: { email: plan.envelope.from ?? '' },
-                    rcptTo: plan.envelope.to.map((email) => ({ email })),
-                  },
-                },
-              },
-            },
-            'raw-submit',
-          ],
-        ],
-      }),
-      'EmailSubmission/set',
-      'raw-submit',
-      accountId,
-    );
-    if (submitted.name === 'error') {
-      // RFC 8620 permits partial state changes for serverPartialFail.
-      return failure(
-        errorDescription(submitted.args),
-        'submission',
-        false,
-        submitted.args.type === 'serverPartialFail',
-      );
-    }
-    const result = creation(submitted.args);
-    if (result.rejected) {
-      return failure(errorDescription(result.rejected), 'submission', false);
-    }
-    if (!result.created || typeof result.created.id !== 'string') {
-      throw new JmapApiError('Missing raw submission ID.');
-    }
-    signal?.throwIfAborted();
-    return { successful: true, provider: 'jmap', messageId: result.created.id };
+    const receipt = await submitRawEmail(execute, accountId, emailId, identityId, plan.envelope);
+    if (receipt.successful) signal?.throwIfAborted();
+    return receipt;
   } catch (error) {
     signal?.throwIfAborted();
-    const message = error instanceof Error ? error.message : String(error);
-    if (error instanceof RawMessageValidationError) {
-      return createFailedReceipt(message, {
-        provider: 'jmap',
-        code: 'jmap.raw_message_invalid',
-        category: 'validation',
-        retryable: false,
-        attempts: 1,
-      });
-    }
-    const definite = isRequestRejection(error);
+    return rawDeliveryFailure(error, stage);
+  }
+};
+
+/**
+ * Imports the uploaded blob into the drafts mailbox, or finds the Email the
+ * server already holds for it.
+ *
+ * @returns The id of the Email, or the receipt of a failure.
+ */
+const importRawEmail = async (execute, accountId, draftsMailboxId, blobId) => {
+  const imported = methodResult(
+    await execute({
+      using,
+      methodCalls: [
+        [
+          'Email/import',
+          {
+            accountId,
+            emails: { raw: { blobId, mailboxIds: { [draftsMailboxId]: true } } },
+          },
+          'raw-import',
+        ],
+      ],
+    }),
+    'Email/import',
+    'raw-import',
+    accountId,
+  );
+  if (imported.name === 'error') {
     return failure(
-      message,
-      stage,
-      stage !== 'submission' && !definite,
-      stage === 'submission' && !definite,
-      error instanceof JmapApiError ? error : undefined,
+      errorDescription(imported.args),
+      'import',
+      imported.args.type === 'serverPartialFail',
     );
   }
+  const { created, rejected } = creation(imported.args);
+  if (created && typeof created.id === 'string') return created.id;
+  if (
+    rejected?.type === 'alreadyExists' &&
+    typeof rejected.existingId === 'string' &&
+    rejected.existingId
+  ) {
+    return existingEmailId(execute, accountId, rejected.existingId, blobId);
+  }
+  return failure(errorDescription(rejected ?? { type: 'invalidResult' }), 'import', false);
+};
+
+// The Email the server already holds, if it is the one of the uploaded blob.
+const existingEmailId = async (execute, accountId, existingId, blobId) => {
+  const existing = methodResult(
+    await execute({
+      using,
+      methodCalls: [
+        [
+          'Email/get',
+          { accountId, ids: [existingId], properties: ['id', 'blobId'] },
+          'raw-existing',
+        ],
+      ],
+    }),
+    'Email/get',
+    'raw-existing',
+    accountId,
+  );
+  const list = existing.args.list;
+  if (
+    existing.name === 'error' ||
+    !Array.isArray(list) ||
+    list.length !== 1 ||
+    !isRecord(list[0]) ||
+    list[0].id !== existingId ||
+    list[0].blobId !== blobId
+  ) {
+    return failure('Existing Email does not match the uploaded raw blob.', 'import', false);
+  }
+  return existingId;
+};
+
+/**
+ * Submits the imported Email once with the envelope of the plan.
+ *
+ * @returns The receipt of the submission.
+ * @throws {JmapApiError} If the server answers without a submission id.
+ */
+const submitRawEmail = async (execute, accountId, emailId, identityId, envelope) => {
+  const rcptTo = [];
+  for (const email of envelope.to) rcptTo.push({ email });
+  const submitted = methodResult(
+    await execute({
+      using,
+      methodCalls: [
+        [
+          'EmailSubmission/set',
+          {
+            accountId,
+            create: {
+              raw: {
+                emailId,
+                identityId,
+                envelope: { mailFrom: { email: envelope.from ?? '' }, rcptTo },
+              },
+            },
+          },
+          'raw-submit',
+        ],
+      ],
+    }),
+    'EmailSubmission/set',
+    'raw-submit',
+    accountId,
+  );
+  if (submitted.name === 'error') {
+    // RFC 8620 permits partial state changes for serverPartialFail.
+    return failure(
+      errorDescription(submitted.args),
+      'submission',
+      false,
+      submitted.args.type === 'serverPartialFail',
+    );
+  }
+  const result = creation(submitted.args);
+  if (result.rejected) {
+    return failure(errorDescription(result.rejected), 'submission', false);
+  }
+  if (!result.created || typeof result.created.id !== 'string') {
+    throw new JmapApiError('Missing raw submission ID.');
+  }
+  return { successful: true, provider: 'jmap', messageId: result.created.id };
+};
+
+// A failure of a stage that threw: a definite rejection before submission may
+// be retried, and a submission without a definite answer may have gone.
+const rawDeliveryFailure = (error, stage) => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof RawMessageValidationError) {
+    return createFailedReceipt(message, {
+      provider: 'jmap',
+      code: 'jmap.raw_message_invalid',
+      category: 'validation',
+      retryable: false,
+      attempts: 1,
+    });
+  }
+  const definite = isRequestRejection(error);
+  return failure(
+    message,
+    stage,
+    stage !== 'submission' && !definite,
+    stage === 'submission' && !definite,
+    error instanceof JmapApiError ? error : undefined,
+  );
 };
 
 /** Validates raw discovery responses before accepting delivery identifiers. @internal */

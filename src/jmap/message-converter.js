@@ -275,22 +275,34 @@ const convertMessage = (message, draftMailboxId, uploadedBlobs) => {
     bodyStructure,
     bodyValues,
     ...(message.recipients.length > 0 && {
-      to: message.recipients.map(formatAddress),
+      to: formatAddresses(message.recipients),
     }),
     ...(message.ccRecipients.length > 0 && {
-      cc: message.ccRecipients.map(formatAddress),
+      cc: formatAddresses(message.ccRecipients),
     }),
     ...(message.bccRecipients.length > 0 && {
-      bcc: message.bccRecipients.map(formatAddress),
+      bcc: formatAddresses(message.bccRecipients),
     }),
     ...(message.replyRecipients.length > 0 && {
-      replyTo: message.replyRecipients.map(formatAddress),
+      replyTo: formatAddresses(message.replyRecipients),
     }),
     ...identity.properties,
     ...headerProperties,
   };
 
   return email;
+};
+
+const formatAddresses = (addresses) => {
+  const formatted = [];
+  for (const address of addresses) formatted.push(formatAddress(address));
+  return formatted;
+};
+
+const checkMessageIds = (ids) => {
+  const checked = [];
+  for (const id of ids) checked.push(checkMessageId(id));
+  return checked;
 };
 
 /**
@@ -329,13 +341,13 @@ const resolveIdentity = (message) => {
   if (message.inReplyTo != null) {
     owned.add('in-reply-to');
     if (message.inReplyTo.length > 0) {
-      properties.inReplyTo = message.inReplyTo.map(checkMessageId);
+      properties.inReplyTo = checkMessageIds(message.inReplyTo);
     }
   }
   if (message.references != null) {
     owned.add('references');
     if (message.references.length > 0) {
-      properties.references = message.references.map(checkMessageId);
+      properties.references = checkMessageIds(message.references);
     }
   }
 

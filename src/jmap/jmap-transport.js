@@ -4,7 +4,7 @@
 const { combineSignals } = require('../core/abort-signal.js');
 const { createRawMessagePlan, RawMessageValidationError } = require('../core/raw-message.js');
 const { deliverRawMessage, rawDiscoveryResult } = require('./raw-delivery.js');
-const { isRecord, rawOperation } = require('./raw-upload.js');
+const { findOnlyResponse, isRecord, rawOperation } = require('./raw-upload.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { uploadBlob } = require('./blob-uploader.js');
@@ -89,7 +89,7 @@ class JmapTransport {
       if (this.config.baseUrl) session = this.rewriteSessionUrls(session);
       validateVerificationApiUrl(session.apiUrl);
       checkSessionUrls(session, this.config);
-      if (!Object.values(JMAP_CAPABILITIES).every((cap) => cap in session.capabilities)) {
+      if (!hasRequiredCapabilities(session.capabilities)) {
         throw new JmapApiError('JMAP session lacks core, mail, or submission capability.');
       }
       const accountId = this.config.accountId ?? findMailAccount(session);
@@ -127,7 +127,7 @@ class JmapTransport {
         return verificationResult(response, method, accountId);
       };
       const mailboxes = await get('Mailbox/get', { properties: ['id', 'role'] }, signal);
-      if (!mailboxes.list.some((mailbox) => mailbox.role === 'drafts')) {
+      if (findDraftsMailbox(mailboxes.list, false) === undefined) {
         throw new JmapApiError(`No drafts mailbox found in JMAP account: ${accountId}`);
       }
       const identityId = this.config.identityId;
@@ -142,9 +142,7 @@ class JmapTransport {
       if (
         identities.notFound.length > 0 ||
         identities.list.length === 0 ||
-        !identities.list.every(
-          (identity) => typeof identity.email === 'string' && identity.email.length > 0,
-        ) ||
+        !haveEmails(identities.list) ||
         (identityId != null &&
           (identities.list.length !== 1 || identities.list[0].id !== identityId))
       ) {
@@ -216,32 +214,7 @@ class JmapTransport {
       const response = await executeSubmission(
         this.submissionClient,
         session.apiUrl,
-        {
-          using: [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail, JMAP_CAPABILITIES.submission],
-          methodCalls: [
-            [
-              'Email/set',
-              {
-                accountId,
-                create: { draft: emailCreate },
-              },
-              'c0',
-            ],
-            [
-              'EmailSubmission/set',
-              {
-                accountId,
-                create: {
-                  submission: {
-                    identityId,
-                    emailId: '#draft',
-                  },
-                },
-              },
-              'c1',
-            ],
-          ],
-        },
+        submissionRequest(accountId, emailCreate, identityId),
         signal,
       );
 
@@ -298,11 +271,11 @@ class JmapTransport {
           JMAP_CAPABILITIES.submission in account.accountCapabilities
         );
       };
-      const accountId = this.config.accountId ?? Object.keys(session.accounts).find(capable);
+      const accountId = this.config.accountId ?? findAccount(session.accounts, capable);
       if (
         accountId == null ||
         !capable(accountId) ||
-        !Object.values(JMAP_CAPABILITIES).every((capability) => capability in session.capabilities)
+        !hasRequiredCapabilities(session.capabilities)
       ) {
         return createJmapFailure('No writable mail and submission account found.', undefined, {
           category: 'configuration',
@@ -501,9 +474,10 @@ class JmapTransport {
         signal,
       );
 
-      // Parse batch response and yield individual receipts
+      // The results of the sets are found once for the whole batch.
+      const results = setResultsOf(response);
       for (let i = 0; i < batch.length; i++) {
-        yield this.parseBatchResponseForIndex(response, i);
+        yield this.parseBatchResponseForIndex(results, i);
       }
     } catch (error) {
       for (const failure of this.failBatch(
@@ -539,14 +513,10 @@ class JmapTransport {
 
     // For any error during batch processing, yield failure for all messages
     // with detailed stage information
-    const baseMessage =
-      error instanceof Error && error.name === 'AbortError'
-        ? `Request aborted: ${error.message}`
-        : error instanceof JmapApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : String(error);
+    let baseMessage = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      baseMessage = `Request aborted: ${error.message}`;
+    }
 
     // Build detailed error message with stage and progress info
     let detailedMessage = `Failed during ${processingStage}: ${baseMessage}`;
@@ -657,7 +627,7 @@ class JmapTransport {
 
     const mailboxResponse = strict
       ? rawDiscoveryResult(response, 'Mailbox/get', accountId)
-      : response.methodResponses.find((r) => r[0] === 'Mailbox/get')?.[1];
+      : findMethodResponse(response.methodResponses, 'Mailbox/get')?.[1];
 
     if (!mailboxResponse) {
       throw new JmapApiError('No Mailbox/get response received');
@@ -669,17 +639,7 @@ class JmapTransport {
       throw new JmapApiError('No mailboxes found');
     }
 
-    if (
-      strict &&
-      (!Array.isArray(mailboxes) ||
-        !mailboxes.every(
-          (mailbox) => isRecord(mailbox) && typeof mailbox.id === 'string' && mailbox.id.length > 0,
-        ))
-    ) {
-      throw new JmapApiError('Invalid mailbox identifiers in raw discovery.');
-    }
-    // Find drafts mailbox
-    const drafts = mailboxes.find((m) => m.role === 'drafts');
+    const drafts = findDraftsMailbox(mailboxes, strict);
 
     if (!drafts) {
       throw new JmapApiError('No drafts mailbox found');
@@ -744,7 +704,7 @@ class JmapTransport {
 
     const identityResponse = strict
       ? rawDiscoveryResult(response, 'Identity/get', accountId)
-      : response.methodResponses.find((r) => r[0] === 'Identity/get')?.[1];
+      : findMethodResponse(response.methodResponses, 'Identity/get')?.[1];
 
     if (!identityResponse) {
       throw new JmapApiError('No Identity/get response received');
@@ -756,21 +716,14 @@ class JmapTransport {
       throw new JmapApiError('No identities found');
     }
 
-    if (
-      strict &&
-      (!Array.isArray(identities) ||
-        !identities.every(
-          (identity) =>
-            isRecord(identity) &&
-            typeof identity.id === 'string' &&
-            identity.id.length > 0 &&
-            typeof identity.email === 'string',
-        ))
-    ) {
+    if (strict && !Array.isArray(identities)) {
       throw new JmapApiError('Invalid identity identifiers in raw discovery.');
     }
     const identityMap = new Map();
     for (const identity of identities) {
+      if (strict && !isIdentity(identity)) {
+        throw new JmapApiError('Invalid identity identifiers in raw discovery.');
+      }
       identityMap.set(identity.email.toLowerCase(), identity.id);
     }
 
@@ -818,48 +771,15 @@ class JmapTransport {
    */
   parseResponse(response) {
     const errors = [];
-
-    // Check Email/set response
-    const emailResponse = response.methodResponses.find((r) => r[0] === 'Email/set');
-
-    if (emailResponse) {
-      const emailResult = emailResponse[1];
-
-      if (emailResult.notCreated) {
-        for (const [key, error] of Object.entries(emailResult.notCreated)) {
-          errors.push(
-            `Email creation failed (${key}): ${error.type}${
-              error.description ? ` - ${error.description}` : ''
-            }`,
-          );
-        }
-      }
+    const { email, submission } = setResultsOf(response);
+    for (const key in email?.notCreated) {
+      errors.push(describeSetError(`Email creation failed (${key})`, email.notCreated[key]));
     }
-
-    // Check EmailSubmission/set response
-    const submissionResponse = response.methodResponses.find((r) => r[0] === 'EmailSubmission/set');
-
-    if (submissionResponse) {
-      const submissionResult = submissionResponse[1];
-
-      if (submissionResult.notCreated) {
-        for (const [key, error] of Object.entries(submissionResult.notCreated)) {
-          errors.push(
-            `Email submission failed (${key}): ${error.type}${
-              error.description ? ` - ${error.description}` : ''
-            }`,
-          );
-        }
-      }
-
-      // Success case
-      if (submissionResult.created?.submission) {
-        return {
-          successful: true,
-          messageId: submissionResult.created.submission.id,
-          provider: 'jmap',
-        };
-      }
+    for (const key in submission?.notCreated) {
+      errors.push(describeSetError(`Email submission failed (${key})`, submission.notCreated[key]));
+    }
+    if (submission?.created?.submission) {
+      return { successful: true, messageId: submission.created.submission.id, provider: 'jmap' };
     }
 
     // If no errors but no success either, something is wrong
@@ -876,55 +796,24 @@ class JmapTransport {
   }
 
   /**
-   * Parses the JMAP batch response to extract receipt for a specific index.
-   * @param response The JMAP response.
+   * Gives the receipt of one message of a batch from the results of its sets.
+   * @param results The Email/set and EmailSubmission/set results of the batch.
    * @param index The message index in the batch.
    * @returns A receipt indicating success or failure for that message.
    */
-  parseBatchResponseForIndex(response, index) {
+  parseBatchResponseForIndex(results, index) {
     const errors = [];
     const draftKey = `draft${index}`;
     const subKey = `sub${index}`;
-
-    // Check Email/set response
-    const emailResponse = response.methodResponses.find((r) => r[0] === 'Email/set');
-
-    if (emailResponse) {
-      const emailResult = emailResponse[1];
-
-      if (emailResult.notCreated?.[draftKey]) {
-        const error = emailResult.notCreated[draftKey];
-        errors.push(
-          `Email creation failed: ${error.type}${
-            error.description ? ` - ${error.description}` : ''
-          }`,
-        );
-      }
+    const { email, submission } = results;
+    if (email?.notCreated?.[draftKey]) {
+      errors.push(describeSetError('Email creation failed', email.notCreated[draftKey]));
     }
-
-    // Check EmailSubmission/set response
-    const submissionResponse = response.methodResponses.find((r) => r[0] === 'EmailSubmission/set');
-
-    if (submissionResponse) {
-      const submissionResult = submissionResponse[1];
-
-      if (submissionResult.notCreated?.[subKey]) {
-        const error = submissionResult.notCreated[subKey];
-        errors.push(
-          `Email submission failed: ${error.type}${
-            error.description ? ` - ${error.description}` : ''
-          }`,
-        );
-      }
-
-      // Success case
-      if (submissionResult.created?.[subKey]) {
-        return {
-          successful: true,
-          messageId: submissionResult.created[subKey].id,
-          provider: 'jmap',
-        };
-      }
+    if (submission?.notCreated?.[subKey]) {
+      errors.push(describeSetError('Email submission failed', submission.notCreated[subKey]));
+    }
+    if (submission?.created?.[subKey]) {
+      return { successful: true, messageId: submission.created[subKey].id, provider: 'jmap' };
     }
 
     // If no errors but no success either
@@ -940,6 +829,100 @@ class JmapTransport {
     });
   }
 }
+
+const REQUIRED_CAPABILITIES = [
+  JMAP_CAPABILITIES.core,
+  JMAP_CAPABILITIES.mail,
+  JMAP_CAPABILITIES.submission,
+];
+
+const hasRequiredCapabilities = (capabilities) => {
+  for (const capability of REQUIRED_CAPABILITIES) {
+    if (!(capability in capabilities)) return false;
+  }
+  return true;
+};
+
+// The first account, in the order of the Session, that `capable` accepts.
+const findAccount = (accounts, capable) => {
+  for (const id in accounts) {
+    if (Object.hasOwn(accounts, id) && capable(id)) return id;
+  }
+  return undefined;
+};
+
+const findMethodResponse = (methodResponses, method) => {
+  for (const entry of methodResponses) {
+    if (entry[0] === method) return entry;
+  }
+  return undefined;
+};
+
+// The results of the first Email/set and EmailSubmission/set of a response,
+// found in one pass.
+const setResultsOf = (response) => {
+  let email;
+  let submission;
+  for (const entry of response.methodResponses) {
+    if (entry[0] === 'Email/set') email ??= entry[1];
+    else if (entry[0] === 'EmailSubmission/set') submission ??= entry[1];
+  }
+  return { email, submission };
+};
+
+const describeSetError = (prefix, error) =>
+  `${prefix}: ${error.type}${error.description ? ` - ${error.description}` : ''}`;
+
+/**
+ * Finds the drafts mailbox, checking every mailbox of a raw discovery.
+ *
+ * @param mailboxes The mailboxes of the account.
+ * @param strict Whether each mailbox must carry an identifier.
+ * @returns The first mailbox with the drafts role, if any.
+ * @throws {JmapApiError} If a strict discovery has an invalid mailbox.
+ */
+const findDraftsMailbox = (mailboxes, strict) => {
+  if (strict && !Array.isArray(mailboxes)) {
+    throw new JmapApiError('Invalid mailbox identifiers in raw discovery.');
+  }
+  let drafts;
+  for (const mailbox of mailboxes) {
+    if (strict && !(isRecord(mailbox) && typeof mailbox.id === 'string' && mailbox.id !== '')) {
+      throw new JmapApiError('Invalid mailbox identifiers in raw discovery.');
+    }
+    if (drafts === undefined && mailbox.role === 'drafts') {
+      drafts = mailbox;
+      if (!strict) break;
+    }
+  }
+  return drafts;
+};
+
+const haveEmails = (identities) => {
+  for (const identity of identities) {
+    if (typeof identity.email !== 'string' || identity.email.length === 0) return false;
+  }
+  return true;
+};
+
+const isIdentity = (identity) =>
+  isRecord(identity) &&
+  typeof identity.id === 'string' &&
+  identity.id.length > 0 &&
+  typeof identity.email === 'string';
+
+// The request that creates the draft of one message and submits it.
+const submissionRequest = (accountId, emailCreate, identityId) => ({
+  using: REQUIRED_CAPABILITIES,
+  methodCalls: [
+    ['Email/set', { accountId, create: { draft: emailCreate } }, 'c0'],
+    [
+      'EmailSubmission/set',
+      { accountId, create: { submission: { identityId, emailId: '#draft' } } },
+      'c1',
+    ],
+  ],
+});
 
 // Sends the request that creates and submits emails.  A failure without an
 // answer from the server, unless the connection was never made, leaves it
@@ -1104,13 +1087,10 @@ const verificationResult = (response, method, accountId) => {
   if (!isRecord(response) || !Array.isArray(response.methodResponses)) {
     throw new JmapApiError('Invalid JMAP verification response.');
   }
-  const matches = response.methodResponses.filter(
-    (entry) => Array.isArray(entry) && entry[2] === 'verify',
-  );
-  if (matches.length !== 1) {
+  const entry = findOnlyResponse(response.methodResponses, 'verify');
+  if (entry === undefined) {
     throw new JmapApiError('Missing or duplicate JMAP verification response.');
   }
-  const entry = matches[0];
   if (!Array.isArray(entry) || entry.length !== 3 || !isRecord(entry[1])) {
     throw new JmapApiError('Invalid JMAP verification method response.');
   }
@@ -1138,10 +1118,12 @@ const verificationResult = (response, method, accountId) => {
   }
   const list = [];
   const ids = new Set();
+  let roles = true;
   for (const item of result.list) {
     if (!isRecord(item) || typeof item.id !== 'string' || !item.id || ids.has(item.id)) {
       throw new JmapApiError(`Invalid JMAP discovery identifiers: ${method}`);
     }
+    if (item.role != null && typeof item.role !== 'string') roles = false;
     ids.add(item.id);
     list.push(item);
   }
@@ -1153,11 +1135,7 @@ const verificationResult = (response, method, accountId) => {
     ids.add(id);
     notFound.push(id);
   }
-  if (
-    method === 'Mailbox/get' &&
-    (notFound.length > 0 ||
-      !list.every((item) => item.role == null || typeof item.role === 'string'))
-  ) {
+  if (method === 'Mailbox/get' && (notFound.length > 0 || !roles)) {
     throw new JmapApiError('Invalid JMAP mailbox discovery result.');
   }
   return { list, notFound };
