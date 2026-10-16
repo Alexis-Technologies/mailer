@@ -65,12 +65,12 @@ class MailgunHttpClient {
         const text = await readText(response);
         try {
           return JSON.parse(text);
-        } catch (jsonError) {
+        } catch (error) {
           // This handles cases where the request was successful (e.g., 2xx status)
           // but the response body is not valid JSON.
           throw new Error(
-            `Successfully received response but failed to parse JSON: ${jsonError.message}`,
-            { cause: jsonError },
+            `Successfully received response but failed to parse JSON: ${error.message}`,
+            { cause: error },
           );
         }
       },

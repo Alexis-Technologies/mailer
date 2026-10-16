@@ -140,12 +140,12 @@ class ResendHttpClient {
         const text = await readText(response);
         try {
           return JSON.parse(text);
-        } catch (parseError) {
+        } catch (error) {
           throw new Error(
             `Invalid JSON response from Resend API: ${
-              parseError instanceof Error ? parseError.message : String(parseError)
+              error instanceof Error ? error.message : String(error)
             }`,
-            { cause: parseError },
+            { cause: error },
           );
         }
       },
