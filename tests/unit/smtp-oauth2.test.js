@@ -170,7 +170,7 @@ describe('OAuth2TokenManager', () => {
 
   test('calls fetchFn without binding it to the manager', async () => {
     const receivers = [];
-    function recordingFetch() {
+    const recordingFetch = function () {
       receivers.push(this);
       return Promise.resolve(
         new Response(JSON.stringify({ access_token: 't', expires_in: 3600 }), {
@@ -178,7 +178,7 @@ describe('OAuth2TokenManager', () => {
           headers: { 'content-type': 'application/json' },
         }),
       );
-    }
+    };
     const auth = {
       user: 'u@e.com',
       clientId: 'client-id',

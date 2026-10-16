@@ -77,12 +77,8 @@ const setup = async () => {
       stalled.resolve();
       return;
     }
-    const list =
-      name === 'Mailbox/get'
-        ? state.drafts
-          ? [{ id: 'drafts', role: 'drafts' }]
-          : []
-        : [{ id: state.identity, email: '*@example.com' }];
+    let list = [{ id: state.identity, email: '*@example.com' }];
+    if (name === 'Mailbox/get') list = state.drafts ? [{ id: 'drafts', role: 'drafts' }] : [];
     const response = state.methodError
       ? ['error', { type: 'forbidden', description: 'Not allowed.' }, id]
       : [

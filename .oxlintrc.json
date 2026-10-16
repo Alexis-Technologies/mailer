@@ -255,14 +255,99 @@
     "no-setter-return": "error",
     "no-unused-private-class-members": "error",
     "no-constant-binary-expression": "error",
-    "no-console": "error"
+    "no-console": "error",
+    "func-style": [
+      "error",
+      "expression"
+    ],
+    "no-nested-ternary": "error",
+    "max-depth": [
+      "error",
+      {
+        "max": 4
+      }
+    ]
   },
   "overrides": [
     {
       "files": [
+        "src/**"
+      ],
+      "plugins": [
+        "unicorn"
+      ],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "property": "map",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "filter",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "some",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "every",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "find",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "findIndex",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "findLast",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "findLastIndex",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "reduce",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "reduceRight",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "flatMap",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          },
+          {
+            "property": "forEach",
+            "message": "src/ iterates with loops in one pass (CLAUDE.md, Conventions)."
+          }
+        ],
+        "max-lines-per-function": [
+          "warn",
+          {
+            "max": 80,
+            "skipBlankLines": true,
+            "skipComments": true
+          }
+        ],
+        "unicorn/no-array-for-each": "error",
+        "unicorn/no-array-reduce": "error",
+        "unicorn/no-useless-spread": "error",
+        "unicorn/prefer-set-has": "error"
+      }
+    },
+    {
+      "files": [
         "scripts/**",
         "bench/**",
-        "tests/**"
+        "tests/e2e/**",
+        "tests/helpers/**"
       ],
       "rules": {
         "no-console": "off"

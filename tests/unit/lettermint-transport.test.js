@@ -36,7 +36,7 @@ it('rejects a singleton batch canceled during attachment acquisition', async () 
   );
 });
 
-function createMessage(overrides = {}) {
+const createMessage = (overrides = {}) => {
   return {
     sender: { address: 'sender@example.com' },
     recipients: [{ address: 'recipient@example.com' }],
@@ -51,7 +51,7 @@ function createMessage(overrides = {}) {
     headers: new Headers(),
     ...overrides,
   };
-}
+};
 
 let fetchMockChain = Promise.resolve();
 

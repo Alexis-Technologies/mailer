@@ -4,6 +4,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { JmapTransport } = require('../../src/jmap/jmap-transport.js');
+const { requestUrl } = require('../helpers/jmap/request-url.js');
 
 const baseMessage = {
   sender: { address: 'sender@example.com' },
@@ -26,8 +27,7 @@ describe('sendMany batch - success', () => {
     try {
       const requests = [];
       globalThis.fetch = (input, init) => {
-        const url =
-          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url = requestUrl(input);
 
         const body = init?.body ? JSON.parse(init.body) : null;
         requests.push({ url, body });
@@ -200,8 +200,7 @@ describe('sendMany batch - partial failure', () => {
 
     try {
       globalThis.fetch = (input, init) => {
-        const url =
-          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url = requestUrl(input);
 
         const body = init?.body ? JSON.parse(init.body) : null;
 
@@ -366,8 +365,7 @@ describe('sendMany batch - attachment upload timeout', () => {
 
     try {
       globalThis.fetch = (input, init) => {
-        const url =
-          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url = requestUrl(input);
 
         const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : null;
 

@@ -201,7 +201,7 @@ describe('JmapTransport E2E Tests', { skip: !isStalwartTestingEnabled(), concurr
    * Extracts and decodes the `text/calendar` part of a composed message,
    * whichever transfer encoding the server chose for it.
    */
-  function decodeCalendarPart(mime) {
+  const decodeCalendarPart = (mime) => {
     const marker = mime.search(/^Content-Type:\s*text\/calendar/im);
     assert.ok(marker >= 0, 'no text/calendar part');
     const headerEnd = mime.indexOf('\r\n\r\n', marker);
@@ -233,7 +233,7 @@ describe('JmapTransport E2E Tests', { skip: !isStalwartTestingEnabled(), concurr
       return new TextDecoder().decode(Uint8Array.from(bytes));
     }
     return payload;
-  }
+  };
 
   it('should send an email with attachment', async () => {
     const config = getTestConfig();
@@ -425,7 +425,7 @@ describe('JmapTransport E2E Tests', { skip: !isStalwartTestingEnabled(), concurr
    * Downloads the RFC 5322 message the server composed for a subject, which
    * is the only way to see whether a part header survived `Email/set`.
    */
-  async function downloadComposedMime(config, subject) {
+  const downloadComposedMime = async (config, subject) => {
     const { sessionUrl, basicAuth, bearerToken, baseUrl } = config.jmap;
     const authorization =
       bearerToken == null
@@ -484,13 +484,13 @@ describe('JmapTransport E2E Tests', { skip: !isStalwartTestingEnabled(), concurr
     });
     assert.ok(download.ok, `download failed: ${download.status}`);
     return await download.text();
-  }
+  };
 
   /**
    * Reads back the stored Email with a given subject through raw JMAP, so
    * that an assertion sees the server's own representation.
    */
-  async function fetchStoredEmail(config, subject) {
+  const fetchStoredEmail = async (config, subject) => {
     const { sessionUrl, basicAuth, bearerToken, baseUrl } = config.jmap;
     const authorization =
       bearerToken == null
@@ -539,5 +539,5 @@ describe('JmapTransport E2E Tests', { skip: !isStalwartTestingEnabled(), concurr
       `no stored Email found for subject ${JSON.stringify(subject)}`,
     );
     return emails[0];
-  }
+  };
 });

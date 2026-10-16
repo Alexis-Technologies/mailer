@@ -31,6 +31,11 @@ const message = () =>
     content: { text: 'Test' },
   });
 
+const authKind = (auth) => {
+  if (auth == null) return 'none';
+  return 'pass' in auth ? 'password' : 'oauth';
+};
+
 for (const auth of [
   undefined,
   { user: 'u', pass: 'p' },
@@ -39,7 +44,7 @@ for (const auth of [
     accessToken: 'token',
   },
 ]) {
-  test(`verify performs fresh setup without delivery, auth=${auth == null ? 'none' : 'pass' in auth ? 'password' : 'oauth'}`, async () => {
+  test(`verify performs fresh setup without delivery, auth=${authKind(auth)}`, async () => {
     const server = new MockSmtpServer();
     const port = await server.start();
     const transport = new SmtpTransport({

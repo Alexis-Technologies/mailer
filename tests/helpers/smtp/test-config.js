@@ -24,9 +24,9 @@ const getTestConfig = () => {
   };
 };
 
-function isMailpitTestingEnabled() {
+const isMailpitTestingEnabled = () => {
   return !!process.env.MAILPIT_API_URL || !!process.env.MAILPIT_SMTP_HOST;
-}
+};
 
 /**
  * Whether the OAuth 2.0 end-to-end tests are configured to run.
@@ -62,8 +62,7 @@ const getOAuth2TestConfig = () => {
 
   const user = process.env.SMTP_OAUTH2_USER;
   const mechanism = process.env.SMTP_OAUTH2_MECHANISM;
-  const method =
-    mechanism === 'oauthbearer' ? 'oauthbearer' : mechanism === 'xoauth2' ? 'xoauth2' : undefined;
+  const method = mechanism === 'oauthbearer' || mechanism === 'xoauth2' ? mechanism : undefined;
 
   // An empty SMTP_OAUTH2_ACCESS_TOKEN is treated as "not set" (matching
   // isOAuth2TestingEnabled), so the refresh-token flow is used in that case.

@@ -75,21 +75,21 @@ const collect = async (raw, signal) =>
 for (const kind of ['bytes', 'promise', 'blob', 'factory']) {
   test(`independent parser decodes Unicode, alternatives and ${kind} attachments`, async () => {
     const bytes = Uint8Array.from({ length: 65539 }, (_, i) => i % 251);
-    const source =
-      kind === 'bytes'
-        ? bytes
-        : kind === 'promise'
-          ? Promise.resolve(bytes)
-          : kind === 'blob'
-            ? new Blob([bytes])
-            : async function* () {
-                const reused = new Uint8Array(13);
-                for (let offset = 0; offset < bytes.length; offset += reused.length) {
-                  const slice = bytes.subarray(offset, offset + reused.length);
-                  reused.set(slice);
-                  yield reused.subarray(0, slice.length);
-                }
-              };
+    const sources = {
+      bytes: () => bytes,
+      promise: () => Promise.resolve(bytes),
+      blob: () => new Blob([bytes]),
+      factory: () =>
+        async function* () {
+          const reused = new Uint8Array(13);
+          for (let offset = 0; offset < bytes.length; offset += reused.length) {
+            const slice = bytes.subarray(offset, offset + reused.length);
+            reused.set(slice);
+            yield reused.subarray(0, slice.length);
+          }
+        },
+    };
+    const source = sources[kind]();
     const raw = await composeMessage({
       ...message(),
       content: { text: '한글\r\nNext \nend\r', html: '<b>한글</b>' },

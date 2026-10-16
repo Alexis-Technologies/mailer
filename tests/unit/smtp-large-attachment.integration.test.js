@@ -8,6 +8,25 @@ const { Buffer } = require('node:buffer');
 const { createHash, verify } = require('node:crypto');
 const { createMessage } = require('../../src/core/message.js');
 const { SmtpTransport } = require('../../src/smtp/smtp-transport.js');
+
+// Changed after the port: each name of h= takes the next instance of its field
+// from the bottom up, and a name with none left adds nothing (RFC 6376
+// §5.4.2).
+const selectSignedHeaders = (headers, names) => {
+  const used = new Set();
+  const selected = [];
+  for (const name of names) {
+    const prefix = `${name.toLowerCase()}:`;
+    for (let i = headers.length - 1; i >= 0; i--) {
+      if (!used.has(i) && headers[i].toLowerCase().startsWith(prefix)) {
+        used.add(i);
+        selected.push(headers[i]);
+        break;
+      }
+    }
+  }
+  return selected;
+};
 const {
   TEST_DKIM_PRIVATE_KEY,
   TEST_DKIM_PUBLIC_KEY,
@@ -156,20 +175,8 @@ for (const megabytes of [8, 64]) {
               }),
           );
           assert.equal(tags.get('bh'), bodyHash.digest('base64'));
-          // Changed after the port: each name takes the next instance from the
-          // bottom up, and a name with none left adds nothing (RFC 6376 §5.4.2),
-          // as the default h= now lists absent and over-signed fields.
-          const used = new Set();
-          const selected = [];
-          for (const name of tags.get('h').split(':')) {
-            for (let i = headers.length - 1; i >= 0; i--) {
-              if (!used.has(i) && headers[i].toLowerCase().startsWith(`${name.toLowerCase()}:`)) {
-                used.add(i);
-                selected.push(headers[i]);
-                break;
-              }
-            }
-          }
+          // The default h= now lists absent and over-signed fields.
+          const selected = selectSignedHeaders(headers, tags.get('h').split(':'));
           selected.push(signature.replace(/b=[^;]*$/, 'b='));
           assert.ok(
             verify(

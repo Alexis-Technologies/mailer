@@ -517,8 +517,13 @@ entry with no `node:*`, and a platform test would enforce it as in protoarray.
 - Formatting: 2 spaces, single quotes, semicolons, trailing commas, **100 columns**, LF
   (`.oxfmtrc.json`, `.editorconfig`). Lint: `.oxlintrc.json` (shared with protoarray: the explicit
   rule list, plus the `correctness` and `suspicious` categories as errors and `no-console`
-  everywhere but `scripts/` and `bench/`). Suppress a rule only for an intentional construct, with
-  a targeted `// oxlint-disable-next-line <rule>`.
+  everywhere but `scripts/`, `bench/` and the opt-in suites, `tests/e2e/` and `tests/helpers/`).
+  The code style below is enforced where a rule exists: `func-style` (expressions),
+  `no-nested-ternary` and `max-depth` 4 everywhere; in `src/`, `no-restricted-properties` on the
+  array iteration methods, the unicorn rules `no-array-for-each`, `no-array-reduce`,
+  `no-useless-spread` and `prefer-set-has`, and `max-lines-per-function` 80 as a warning.
+  Suppress a rule only for an intentional construct, with a targeted
+  `// oxlint-disable-next-line <rule>`; `pnpm lint` fails on a directive that suppresses nothing.
 - Code style:
   - module-level functions are arrow functions assigned to `const`; classes and prototype objects
     use method shorthand; no `function` declarations;

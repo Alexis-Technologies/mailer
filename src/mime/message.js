@@ -458,6 +458,8 @@ const monthNames = [
   'Dec',
 ];
 
+const pad = (value) => value.toString().padStart(2, '0');
+
 /**
  * Formats a date as an RFC 5322 §3.3 `date-time` in UTC.
  *
@@ -475,7 +477,6 @@ const formatDate = (date) => {
   if (Number.isNaN(time) || year < 1900) {
     throw new TypeError(`Invalid date: ${JSON.stringify(date)}`);
   }
-  const pad = (value) => value.toString().padStart(2, '0');
   return (
     `${dayNames[date.getUTCDay()]}, ${pad(date.getUTCDate())} ` +
     `${monthNames[date.getUTCMonth()]} ${year.toString().padStart(4, '0')} ` +

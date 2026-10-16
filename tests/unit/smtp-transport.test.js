@@ -502,12 +502,9 @@ describe('SmtpTransport', () => {
       try {
         await transport.closeAllConnections();
         await transport[Symbol.asyncDispose]();
-      } catch (error) {
-        // Cleanup should not throw additional errors
-        console.warn(
-          'Cleanup error (might be expected):',
-          error instanceof Error ? error.message : String(error),
-        );
+      } catch {
+        // Cleanup may fail after the failure above, which this test does not
+        // check (changed after the port: it was logged with console.warn).
       }
 
       // Test should complete without hanging

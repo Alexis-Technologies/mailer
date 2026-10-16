@@ -112,7 +112,7 @@
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",
     "check:pack": "node scripts/check-pack.js",
-    "lint": "oxlint src tests scripts bench",
+    "lint": "oxlint --report-unused-disable-directives-severity=error src tests scripts bench",
     "format": "oxfmt src tests scripts bench",
     "format:check": "oxfmt --check src tests scripts bench",
     "size": "node scripts/size.js",

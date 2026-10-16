@@ -4,6 +4,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { JmapTransport } = require('../../src/jmap/jmap-transport.js');
+const { requestUrl } = require('../helpers/jmap/request-url.js');
 
 const baseMessage = {
   sender: { address: 'sender@example.com' },
@@ -27,8 +28,7 @@ describe('JmapTransport send success', () => {
       const fetchInfo = { count: 0 };
       globalThis.fetch = (input, _init) => {
         fetchInfo.count++;
-        const url =
-          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url = requestUrl(input);
 
         // First call: session fetch
         if (url.includes('.well-known/jmap')) {

@@ -24,14 +24,14 @@ const getTestConfig = () => {
   };
 };
 
-function isE2eTestingEnabled() {
+const isE2eTestingEnabled = () => {
   return !!(
     process.env.MAILGUN_KEY &&
     process.env.MAILGUN_FROM &&
     process.env.MAILGUN_TO &&
     process.env.MAILGUN_DOMAIN
   );
-}
+};
 
 const createTestMessage = (options = {}) => {
   const config = getTestConfig();

@@ -872,10 +872,6 @@ describe('MailgunTransport - Concurrent Error Handling', () => {
       // Should have processed all messages
       assert.equal(successful.length + failed.length, 4);
 
-      // If the mocking works as expected, we should have some failures
-      // But the exact distribution might vary based on implementation
-      console.log(`Successful: ${successful.length}, Failed: ${failed.length}`);
-
       // At minimum, we should have processed all messages
       assert.ok(receipts.length === 4);
     } finally {

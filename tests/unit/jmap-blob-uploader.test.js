@@ -5,6 +5,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { uploadBlob } = require('../../src/jmap/blob-uploader.js');
 const { createJmapConfig } = require('../../src/jmap/config.js');
+const { requestUrl } = require('../helpers/jmap/request-url.js');
 
 describe('uploadBlob', () => {
   const config = createJmapConfig({
@@ -25,8 +26,7 @@ describe('uploadBlob', () => {
       };
 
       globalThis.fetch = (input, init) => {
-        const url =
-          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const url = requestUrl(input);
         capturedRequest.url = url;
         capturedRequest.headers = new Headers(init?.headers);
         capturedRequest.body = init?.body;

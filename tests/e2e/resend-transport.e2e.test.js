@@ -435,13 +435,13 @@ describe('ResendTransport E2E quota helpers', () => {
   });
 });
 
-function acceptDailyQuotaLimit(receipt, label) {
+const acceptDailyQuotaLimit = (receipt, label) => {
   if (!isDailyQuotaLimitReceipt(receipt)) return false;
   console.log(`${label} test skipped due to Resend daily quota.`);
   return true;
-}
+};
 
-function assertBatchReceipts(receipts) {
+const assertBatchReceipts = (receipts) => {
   let dailyQuotaFailures = 0;
   for (const receipt of receipts) {
     if (isDailyQuotaLimitReceipt(receipt)) {
@@ -451,9 +451,9 @@ function assertBatchReceipts(receipts) {
     assert.ok(receipt.successful);
   }
   return dailyQuotaFailures;
-}
+};
 
-function isDailyQuotaLimitReceipt(receipt) {
+const isDailyQuotaLimitReceipt = (receipt) => {
   return (
     !receipt.successful &&
     receipt.errors?.some((error) => error.statusCode === 429) === true &&
@@ -461,4 +461,4 @@ function isDailyQuotaLimitReceipt(receipt) {
       message.toLowerCase().includes('daily email sending quota'),
     )
   );
-}
+};

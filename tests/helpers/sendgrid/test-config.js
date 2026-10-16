@@ -22,9 +22,9 @@ const getTestConfig = () => {
   };
 };
 
-function isE2eTestingEnabled() {
+const isE2eTestingEnabled = () => {
   return !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM && process.env.SENDGRID_TO);
-}
+};
 
 const createTestMessage = (options = {}) => {
   const config = getTestConfig();

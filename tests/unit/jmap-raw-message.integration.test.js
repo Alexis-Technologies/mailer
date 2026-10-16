@@ -577,10 +577,10 @@ for (const stage of ['upload', 'import', 'submission']) {
               responseBody: body,
               jmapErrorType: undefined,
             });
-            assert.equal(
-              error.category,
-              unknown ? 'unknown' : auth ? 'auth' : status === 429 ? 'rate-limit' : 'server-error',
-            );
+            let category = status === 429 ? 'rate-limit' : 'server-error';
+            if (unknown) category = 'unknown';
+            else if (auth) category = 'auth';
+            assert.equal(error.category, category);
             assert.equal(context.uploads.length, 1);
             assert.equal(
               context.calls.filter((c) => c.name === 'Email/import').length,

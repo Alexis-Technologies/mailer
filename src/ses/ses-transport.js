@@ -229,6 +229,8 @@ class SesTransport {
   }
 }
 
+const isFilled = (value) => typeof value === 'string' && value !== '';
+
 // A wrong authentication is refused when the transport is made: found at the
 // first send, it was retried like an outage before it failed.
 const checkAuthentication = (authentication) => {
@@ -236,7 +238,6 @@ const checkAuthentication = (authentication) => {
   if (type !== 'credentials' && type !== 'session') {
     throw new TypeError(`Unsupported authentication type: ${type}`);
   }
-  const isFilled = (value) => typeof value === 'string' && value !== '';
   if (!isFilled(authentication.accessKeyId) || !isFilled(authentication.secretAccessKey)) {
     throw new TypeError('SES authentication needs an accessKeyId and a secretAccessKey.');
   }

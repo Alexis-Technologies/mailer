@@ -279,9 +279,9 @@ class PoolTransport {
       abortSource ??= 'timeout';
       timeoutController.abort(createAbortError());
     }, this.config.timeout);
-    let cleanupAbortSource = () => {};
+    let cleanupAbortSource = noop;
     let signal = timeoutController.signal;
-    let cleanupCombinedSignal = () => {};
+    let cleanupCombinedSignal = noop;
 
     // Combine with existing signal if present
     if (options?.signal) {
@@ -322,6 +322,8 @@ class PoolTransport {
     };
   }
 }
+
+const noop = () => {};
 
 const createAbortError = () => {
   return new DOMException('The operation was aborted.', 'AbortError');

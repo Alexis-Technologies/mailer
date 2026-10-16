@@ -237,26 +237,26 @@ describe('PlunkTransport E2E quota helpers', () => {
   });
 });
 
-function assertSuccessful(receipt) {
+const assertSuccessful = (receipt) => {
   assert.ok(receipt.successful, 'Send should be successful');
   assert.ok(receipt.messageId, 'Should have a message ID');
-}
+};
 
-function acceptQuotaLimit(receipt, label) {
+const acceptQuotaLimit = (receipt, label) => {
   if (!isQuotaLimitReceipt(receipt)) return false;
   console.log(`${label} test skipped due to Plunk transactional limit.`);
   return true;
-}
+};
 
-function isQuotaLimitedBatch(receipts) {
+const isQuotaLimitedBatch = (receipts) => {
   const failures = receipts.filter((receipt) => !receipt.successful);
   return failures.length > 0 && failures.every(isQuotaLimitReceipt);
-}
+};
 
-function isQuotaLimitReceipt(receipt) {
+const isQuotaLimitReceipt = (receipt) => {
   return (
     !receipt.successful &&
     receipt.errors?.some((error) => error.statusCode === 402) === true &&
     receipt.errorMessages.some((message) => message.includes('transactional limit'))
   );
-}
+};

@@ -101,12 +101,9 @@ class MockTracer {
   }
 
   startActiveSpan(name, optionsOrFn, contextOrFn, fn) {
-    const actualFn =
-      typeof optionsOrFn === 'function'
-        ? optionsOrFn
-        : typeof contextOrFn === 'function'
-          ? contextOrFn
-          : fn;
+    let actualFn = fn;
+    if (typeof optionsOrFn === 'function') actualFn = optionsOrFn;
+    else if (typeof contextOrFn === 'function') actualFn = contextOrFn;
     const span = this.startSpan(name, typeof optionsOrFn === 'object' ? optionsOrFn : undefined);
     return actualFn(span);
   }

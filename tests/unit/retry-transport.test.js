@@ -1089,22 +1089,22 @@ describe('RetryTransport', () => {
   });
 });
 
-function message(subject = 'Hello') {
+const message = (subject = 'Hello') => {
   return createMessage({
     from: 'sender@example.com',
     to: 'recipient@example.com',
     subject,
     content: { text: 'Hello' },
   });
-}
+};
 
-async function collect(values) {
+const collect = async (values) => {
   const result = [];
   for await (const value of values) result.push(value);
   return result;
-}
+};
 
-function createDeferred() {
+const createDeferred = () => {
   let resolve;
   let reject;
   // oxlint-disable-next-line promise/param-names -- upstream
@@ -1115,9 +1115,9 @@ function createDeferred() {
   assert.ok(resolve != null);
   assert.ok(reject != null);
   return { promise, resolve, reject };
-}
+};
 
-async function waitFor(predicate) {
+const waitFor = async (predicate) => {
   const deadline = Date.now() + 1_000;
   while (!predicate()) {
     if (Date.now() >= deadline) {
@@ -1125,9 +1125,9 @@ async function waitFor(predicate) {
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-}
+};
 
-async function settlesWithin(promise, milliseconds = 10) {
+const settlesWithin = async (promise, milliseconds = 10) => {
   let timeout;
   try {
     return await Promise.race([
@@ -1142,18 +1142,18 @@ async function settlesWithin(promise, milliseconds = 10) {
   } finally {
     if (timeout != null) clearTimeout(timeout);
   }
-}
+};
 
-function rejectAfter(milliseconds) {
+const rejectAfter = (milliseconds) => {
   return new Promise((_resolve, reject) => {
     setTimeout(() => reject(new Error('Timed out waiting for rejection.')), milliseconds);
   });
-}
+};
 
 // oxlint-disable-next-line no-shadow -- upstream
-function createAbortError(message = 'The operation was aborted.') {
+const createAbortError = (message = 'The operation was aborted.') => {
   return new DOMException(message, 'AbortError');
-}
+};
 
 class SequenceTransport {
   id = 'base';
@@ -1185,7 +1185,7 @@ class SequenceTransport {
   }
 }
 
-function isReceiptError(value) {
+const isReceiptError = (value) => {
   return (
     typeof value === 'object' &&
     value != null &&
@@ -1193,7 +1193,7 @@ function isReceiptError(value) {
     'retryable' in value &&
     'message' in value
   );
-}
+};
 
 class TrackingTransport {
   id = 'base';

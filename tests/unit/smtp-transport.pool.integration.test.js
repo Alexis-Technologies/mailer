@@ -406,10 +406,8 @@ describe('SmtpTransport connection limit', () => {
 
   test('shutdown waits for a paused batch to be returned', async () => {
     const { server, transport } = await setupTest({ poolSize: 1 });
-    const batch = transport.sendMany([createTestMessage(), createTestMessage()])[
-      // oxlint-disable-next-line no-unexpected-multiline -- upstream
-      Symbol.asyncIterator
-    ]();
+    const receipts = transport.sendMany([createTestMessage(), createTestMessage()]);
+    const batch = receipts[Symbol.asyncIterator]();
     try {
       assert.ok((await batch.next()).value?.successful);
       let closed = false;

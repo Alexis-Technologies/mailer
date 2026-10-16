@@ -567,7 +567,7 @@ describe('LoggerTransport', () => {
 // A pino-like logger that records each call, and the matching LogTape's
 // recorder offered: assertLogged() and filter() over level, message and
 // properties (a partial object, or a predicate).
-function createRecorder() {
+const createRecorder = () => {
   const records = [];
   const logger = {};
   for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
@@ -601,11 +601,11 @@ function createRecorder() {
       );
     },
   };
-}
+};
 
-async function withRecorder(run) {
+const withRecorder = async (run) => {
   await run(createRecorder());
-}
+};
 
 class RecordingTransport {
   id = 'base';

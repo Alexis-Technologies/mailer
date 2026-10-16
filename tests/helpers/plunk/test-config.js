@@ -25,9 +25,9 @@ const getTestConfig = () => {
   };
 };
 
-function isE2eTestingEnabled() {
+const isE2eTestingEnabled = () => {
   return !!(process.env.PLUNK_API_KEY && process.env.PLUNK_FROM && process.env.PLUNK_TO);
-}
+};
 
 const createTestMessage = (options = {}) => {
   const config = getTestConfig();
