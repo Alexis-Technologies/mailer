@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/retry/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { sleep } = require('../internal/sleep.js');
+
 /**
  * Creates a resolved retry configuration.
  *
@@ -44,26 +46,7 @@ const createRetryConfig = (config = {}) => {
 const defaultWait = async (context, signal) => {
   signal?.throwIfAborted();
   if (context.delayMilliseconds <= 0) return;
-
-  await new Promise((resolve, reject) => {
-    const cleanup = () => signal?.removeEventListener('abort', abort);
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, context.delayMilliseconds);
-    const abort = () => {
-      clearTimeout(timeout);
-      cleanup();
-      reject(signal?.reason ?? createAbortError());
-    };
-
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
-
-    signal?.addEventListener('abort', abort, { once: true });
-  });
+  await sleep(context.delayMilliseconds, signal);
 };
 
 const assertIntegerAtLeast = (value, minimum, name) => {
@@ -76,10 +59,6 @@ const assertFiniteAtLeast = (value, minimum, name) => {
   if (!Number.isFinite(value) || value < minimum) {
     throw new RangeError(`${name} must be greater than or equal to ${minimum}.`);
   }
-};
-
-const createAbortError = () => {
-  return new DOMException('The operation was aborted.', 'AbortError');
 };
 
 module.exports = { createRetryConfig };

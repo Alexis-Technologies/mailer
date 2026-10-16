@@ -5,43 +5,9 @@
 const { combineSignals } = require('../core/abort-signal.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
+const { abortReason, sleep } = require('./sleep.js');
 
 const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
-
-/**
- * The reason of an aborted signal, or an `AbortError` when it has none.
- *
- * @param signal The aborted signal.
- * @returns The value to reject or throw with.
- * @internal
- */
-const abortReason = (signal) =>
-  signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
-
-/**
- * Waits, and stops waiting when the signal aborts, rejecting with its reason.
- *
- * @param milliseconds How long to wait.
- * @param signal The caller's signal.
- * @returns A promise settled when the wait ends.
- * @internal
- */
-const sleep = (milliseconds, signal) =>
-  new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(abortReason(signal));
-      return;
-    }
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(abortReason(signal));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, milliseconds);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
 
 /**
  * The delay before retry `attempt` (from 0): one second, doubled each time.
