@@ -324,6 +324,9 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **Header lines with encoded words keep to 76 characters** (an upstream bug): the first encoded
+  word shared its line with the field name (`Subject: =?UTF-8?B?…?=`, up to 84 characters), past
+  what RFC 2047 allows. Such a field now folds at 76, and its first word is split to fit.
 - **Inline images go in `multipart/related`** (an upstream bug): `./mime`, and so `./smtp`,
   put inline parts in the `multipart/mixed` of the files, so some clients showed an image the
   HTML refers to by `cid:` as an attachment. They now go with the body in a `multipart/related`

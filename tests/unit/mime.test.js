@@ -38,9 +38,14 @@ test('MIME: non-ASCII names, subjects and filenames round-trip through encoded w
     ],
   });
   const text = await wire(message);
-  // RFC 5322's hard limit; upstream puts the first encoded word next to the field
-  // name, past the 76 characters of RFC 2047 (CLAUDE.md, known upstream bugs).
-  for (const line of headerBlock(text).split('\r\n')) assert.ok(line.length <= 998, line);
+  // RFC 2047 §2: a line with an encoded word holds 76 characters at most; the
+  // first word, next to the field name, is split to fit.
+  const header = headerBlock(text);
+  assert.match(header, /^Subject: =\?UTF-8\?B\?/m);
+  assert.match(header, /^From: =\?UTF-8\?B\?/m);
+  for (const line of header.split('\r\n')) {
+    if (line.includes('=?')) assert.ok(line.length <= 76, `${line.length}: ${line}`);
+  }
   const parsed = await PostalMime.parse(text);
   assert.strictEqual(parsed.subject, subject);
   assert.deepStrictEqual(parsed.from, { address: 'alex@example.com', name: 'Алекс Долід' });
@@ -264,4 +269,23 @@ test('MIME: an inline image goes in multipart/related with its HTML, a file besi
       ['report.pdf', false],
     ],
   );
+});
+
+test('MIME: a field name too long for encoded text after it puts the text on the next line', async () => {
+  const name = `X-${'Long-'.repeat(12)}Name`;
+  // A Headers object takes Latin-1 text only.
+  const value = 'Café crème brûlée, déjà vu';
+  const text = await wire(createMessage({ ...base, subject: 'a', headers: { [name]: value } }));
+  const lines = headerBlock(text).split('\r\n');
+  const at = lines.findIndex((line) => line.toLowerCase().startsWith(`${name.toLowerCase()}:`));
+  assert.strictEqual(lines[at].toLowerCase(), `${name.toLowerCase()}:`);
+  for (let i = at + 1; lines[i]?.startsWith(' '); i++) assert.ok(lines[i].length <= 76, lines[i]);
+  const parsed = await PostalMime.parse(text);
+  const header = parsed.headers.find((field) => field.key === name.toLowerCase());
+  // Adjacent encoded words decode as one text (RFC 2047 §6.2), split only at
+  // whole characters.
+  const decoded = header.value
+    .replace(/\?=\s+=\?/g, '?==?')
+    .replace(/=\?UTF-8\?B\?([^?]*)\?=/g, (_, encoded) => Buffer.from(encoded, 'base64').toString());
+  assert.strictEqual(decoded, value);
 });

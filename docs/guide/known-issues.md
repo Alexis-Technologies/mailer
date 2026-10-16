@@ -4,11 +4,6 @@ The transport layer is ported from [upyo](https://github.com/dahlia/upyo) 0.7.0 
 behavior, bugs included, until each bug is fixed on its own with a test. This page lists the ones
 still open; the fixed ones are in the [changelog](https://github.com/Alexis-Technologies/mailer/blob/main/CHANGELOG.md).
 
-## Messages and MIME
-
-- The first encoded word of a header shares its line with the field name
-  (`Subject: =?UTF-8?B?…?=`), past the 76 characters that RFC 2047 allows such a line.
-
 ## SMTP
 
 - `cram-md5` is in the `SmtpAuth` type but not implemented.

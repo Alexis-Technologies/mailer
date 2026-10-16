@@ -151,9 +151,9 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 11. (fixed, see 71) resend: the `Idempotency-Key` came from `Math.random`.
 12. (fixed, see 72 and 73) `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of
     an injected logger.
-13. mime: the first encoded word of a header shares its line with the field name
-    (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line with
-    encoded words.
+13. (fixed, see 78) mime: the first encoded word of a header shared its line with the field
+    name (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line
+    with encoded words.
 14. jmap: on Node 24, `fetch` answers a 401 to a streamed request body (raw upload, import,
     submission) with `TypeError: fetch failed` ("expected non-null body source") instead of the
     response, so an authentication rejection becomes a retryable network error. Node 22 returns
@@ -395,6 +395,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     could show an image the HTML refers to by `cid:` as an attachment. They go with the body in
     a `multipart/related` whose `type` names the root part (RFC 2387), which sits first in a
     `multipart/mixed` when there are files too, as `./jmap` already built it.
+78. mime (known bug 13): a line with an encoded word could reach 84 characters, as the first
+    word shared its line with the field name and other lines folded at 78, past the 76 of
+    RFC 2047 §2. A field with encoded words folds at 76, the first word is split at a whole
+    character to fit after the field name (`fitFirstEncodedWord`), and a name too long for
+    any text after it leaves the first line to itself.
 
 ## Repository layout
 

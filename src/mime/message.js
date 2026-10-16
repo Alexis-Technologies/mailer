@@ -653,10 +653,18 @@ const foldHeader = (name, value) => {
       'Header field name must contain printable ASCII characters other than colon.',
     );
   }
-  const recommendedLineLength = 78;
+  // RFC 2047 §2 holds a line with an encoded word to 76 characters.
+  const hasEncodedWords = value.includes('=?');
+  const recommendedLineLength = hasEncodedWords ? MAX_ENCODED_LINE_LENGTH : 78;
   const lines = [];
   let prefix = `${name}: `;
-  let remaining = value;
+  let remaining = hasEncodedWords ? fitFirstEncodedWord(prefix, value) : value;
+  if (remaining === undefined) {
+    // A field name too long to leave room for any encoded text after it.
+    lines.push(`${name}:`);
+    prefix = ' ';
+    remaining = value;
+  }
 
   while (prefix.length + remaining.length > recommendedLineLength) {
     const availableLength = recommendedLineLength - prefix.length;
@@ -701,6 +709,36 @@ const foldHeader = (name, value) => {
     throw new RangeError(`Header field ${name} contains a token too long to fold.`);
   }
   return folded;
+};
+
+const MAX_ENCODED_LINE_LENGTH = 76;
+const ENCODED_WORD = /^=\?UTF-8\?B\?([A-Za-z0-9+/=]*)\?=$/;
+
+/**
+ * Splits the encoded word a value starts with when it would not fit on the
+ * first line after the field name, so that the first line keeps text and
+ * stays within 76 characters; the rest of the word folds to the next line.
+ * Adjacent encoded words decode as one text (RFC 2047 §6.2).
+ *
+ * @param prefix The field name with its colon and space.
+ * @param value The encoded value.
+ * @returns The value, with its first word split if it had to be, or
+ * `undefined` when not even one character fits after the field name.
+ */
+const fitFirstEncodedWord = (prefix, value) => {
+  const space = value.indexOf(' ');
+  const end = space === -1 ? value.length : space;
+  const match = ENCODED_WORD.exec(value.slice(0, end));
+  if (match === null || prefix.length + end <= MAX_ENCODED_LINE_LENGTH) return value;
+  const bytes = Buffer.from(match[1], 'base64');
+  // 12 characters of `=?UTF-8?B?` and `?=`, then 4 of base64 per 3 bytes.
+  let cut = Math.floor((MAX_ENCODED_LINE_LENGTH - prefix.length - 12) / 4) * 3;
+  // A UTF-8 character is not split: a continuation byte moves the cut back.
+  while (cut > 0 && (bytes[cut] & 0xc0) === 0x80) cut--;
+  if (cut <= 0) return undefined;
+  const first = `=?UTF-8?B?${base64(bytes.subarray(0, cut))}?=`;
+  const rest = `=?UTF-8?B?${base64(bytes.subarray(cut))}?=`;
+  return `${first} ${rest}${value.slice(end)}`;
 };
 
 // The digits of an escaped byte, as character codes.
