@@ -397,3 +397,35 @@ test('JMAP: sendMany of nothing discovers nothing', async (t) => {
   for await (const receipt of transport().sendMany([])) assert.fail(receipt);
   assert.deepStrictEqual(calls, []);
 });
+
+test('JMAP: a retried discovery request is told through onRetry', async (t) => {
+  // The shortest jittered wait: half of the first delay.
+  t.mock.method(Math, 'random', () => 0);
+  let mailboxCalls = 0;
+  const handlers = {
+    session: session(),
+    'Mailbox/get': () => {
+      mailboxCalls++;
+      return defaults['Mailbox/get']();
+    },
+  };
+  serve(t, handlers);
+  const served = globalThis.fetch;
+  let failed = false;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (!failed && String(input).endsWith('/api') && init.body.includes('Mailbox/get')) {
+      failed = true;
+      return new Response('busy', { status: 503 });
+    }
+    return served(input, init);
+  });
+  const events = [];
+  const receipt = await transport({ retries: 1 }).send(message(), {
+    onRetry: (event) => events.push(event),
+  });
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(mailboxCalls, 1);
+  assert.strictEqual(events.length, 1);
+  assert.strictEqual(events[0].attempt, 1);
+  assert.strictEqual(events[0].error.statusCode, 503);
+});

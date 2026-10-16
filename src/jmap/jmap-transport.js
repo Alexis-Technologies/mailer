@@ -187,7 +187,14 @@ class JmapTransport {
       }
 
       // Get drafts mailbox ID
-      const draftsMailboxId = await this.getDraftsMailboxId(session, accountId, signal);
+      const onRetry = options?.onRetry;
+      const draftsMailboxId = await this.getDraftsMailboxId(
+        session,
+        accountId,
+        signal,
+        false,
+        onRetry,
+      );
       signal?.throwIfAborted();
 
       // Get identity ID
@@ -196,6 +203,8 @@ class JmapTransport {
         accountId,
         message.sender.address,
         signal,
+        false,
+        onRetry,
       );
       signal?.throwIfAborted();
 
@@ -286,12 +295,20 @@ class JmapTransport {
       }
       const drafts = await rawOperation(
         this.config.timeout,
-        (owned) => this.getDraftsMailboxId(session, accountId, owned, true),
+        (owned) => this.getDraftsMailboxId(session, accountId, owned, true, options?.onRetry),
         signal,
       );
       const identity = await rawOperation(
         this.config.timeout,
-        (owned) => this.getIdentityId(session, accountId, plan.envelope.from ?? '', owned, true),
+        (owned) =>
+          this.getIdentityId(
+            session,
+            accountId,
+            plan.envelope.from ?? '',
+            owned,
+            true,
+            options?.onRetry,
+          ),
         signal,
       );
       return await deliverRawMessage(
@@ -336,7 +353,7 @@ class JmapTransport {
     const input = readItems(messages);
     const first = await input.next();
     if (first.done) return;
-    const discovery = await this.discoverForBatch(signal);
+    const discovery = await this.discoverForBatch(signal, options?.onRetry);
     if (discovery.failure !== undefined) {
       yield discovery.failure();
       while (!(await input.next()).done) yield discovery.failure();
@@ -356,11 +373,12 @@ class JmapTransport {
    * account, its drafts mailbox and its identities.
    *
    * @param signal Cancellation signal.
+   * @param onRetry Optional callback of each retry.
    * @returns The `discovered` values, or the `failure` that makes the receipt
    * of each message when discovery fails.
    * @throws The caller's abort reason if cancelled.
    */
-  async discoverForBatch(signal) {
+  async discoverForBatch(signal, onRetry) {
     let processingStage = 'initialization';
     try {
       signal?.throwIfAborted();
@@ -382,11 +400,17 @@ class JmapTransport {
       }
 
       processingStage = 'mailbox discovery';
-      const draftsMailboxId = await this.getDraftsMailboxId(session, accountId, signal);
+      const draftsMailboxId = await this.getDraftsMailboxId(
+        session,
+        accountId,
+        signal,
+        false,
+        onRetry,
+      );
       signal?.throwIfAborted();
 
       processingStage = 'identity resolution';
-      const identityMap = await this.getIdentityMap(session, accountId, signal);
+      const identityMap = await this.getIdentityMap(session, accountId, signal, false, onRetry);
       signal?.throwIfAborted();
 
       return { discovered: { session, accountId, draftsMailboxId, identityMap } };
@@ -599,9 +623,11 @@ class JmapTransport {
    * @param session The JMAP session.
    * @param accountId The account ID.
    * @param signal Optional abort signal.
+   * @param strict Whether the discovery is the checked one of sendRaw().
+   * @param onRetry Optional callback of each retry.
    * @returns The drafts mailbox ID.
    */
-  async getDraftsMailboxId(session, accountId, signal, strict = false) {
+  async getDraftsMailboxId(session, accountId, signal, strict = false, onRetry = undefined) {
     const response = await this.httpClient.executeRequest(
       session.apiUrl,
       {
@@ -618,6 +644,7 @@ class JmapTransport {
         ],
       },
       signal,
+      onRetry,
     );
 
     const mailboxResponse = strict
@@ -649,15 +676,24 @@ class JmapTransport {
    * @param accountId The account ID.
    * @param senderEmail The sender's email address.
    * @param signal Optional abort signal.
+   * @param strict Whether the discovery is the checked one of sendRaw().
+   * @param onRetry Optional callback of each retry.
    * @returns The identity ID.
    */
-  async getIdentityId(session, accountId, senderEmail, signal, strict = false) {
+  async getIdentityId(
+    session,
+    accountId,
+    senderEmail,
+    signal,
+    strict = false,
+    onRetry = undefined,
+  ) {
     // If identity ID is configured, use it
     if (this.config.identityId) {
       return this.config.identityId;
     }
 
-    const identityMap = await this.getIdentityMap(session, accountId, signal, strict);
+    const identityMap = await this.getIdentityMap(session, accountId, signal, strict, onRetry);
     const matching = identityMap.get(senderEmail.toLowerCase());
     if (matching) {
       return matching;
@@ -672,9 +708,11 @@ class JmapTransport {
    * @param session The JMAP session.
    * @param accountId The account ID.
    * @param signal Optional abort signal.
+   * @param strict Whether the discovery is the checked one of sendRaw().
+   * @param onRetry Optional callback of each retry.
    * @returns Map of lowercase email to identity ID.
    */
-  async getIdentityMap(session, accountId, signal, strict = false) {
+  async getIdentityMap(session, accountId, signal, strict = false, onRetry = undefined) {
     // If identity ID is configured, return a map with just that
     if (this.config.identityId) {
       return new Map([['*', this.config.identityId]]);
@@ -695,6 +733,7 @@ class JmapTransport {
         ],
       },
       signal,
+      onRetry,
     );
 
     const identityResponse = strict

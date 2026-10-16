@@ -36,9 +36,9 @@ fixed ones below.
   providers that send one message per request send that many at once (1 by default, as
   before), reading a message only when a send can start and giving the receipts in the order of
   the messages.
-- **`onRetry` in the options of a send:** the HTTP providers and `./retry` call it before each
-  retry with the attempt, the wait and the error, and the decorators pass it on, so one callback
-  hears every level (not yet from `./jmap`).
+- **`onRetry` in the options of a send:** the HTTP providers, `./jmap` (whose discovery requests
+  are the ones it retries) and `./retry` call it before each retry with the attempt, the wait and
+  the error, and the decorators pass it on, so one callback hears every level.
 - **`generateId` for the identifiers the library makes:** an `IdGenerator` (`(kind) => string`,
   with `IdKind` one of `message-id`, `content-id`, `idempotency-key` and `receipt-id`) can
   replace `crypto.randomUUID()`, such as a cuid2, a ULID or a nanoid. `generateMessageId` and

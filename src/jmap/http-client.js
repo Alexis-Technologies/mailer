@@ -59,9 +59,10 @@ class JmapHttpClient {
    * @param apiUrl The JMAP API URL.
    * @param request The JMAP request payload.
    * @param signal Optional abort signal.
+   * @param onRetry Optional callback of each retry.
    * @returns The JMAP response.
    */
-  executeRequest(apiUrl, request, signal) {
+  executeRequest(apiUrl, request, signal, onRetry) {
     signal?.throwIfAborted();
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(request);
@@ -69,6 +70,7 @@ class JmapHttpClient {
     return requestWithRetry({
       log: this.log,
       signal,
+      onRetry,
       retries: this.replayableRequests ? this.config.retries : 0,
       timeoutMs: this.config.timeout,
       // A JMAP request is retried after a 2xx it could not read, as upstream
