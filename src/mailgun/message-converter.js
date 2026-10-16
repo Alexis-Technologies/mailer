@@ -5,6 +5,7 @@ const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
+const { lowerCaseNames } = require('../internal/headers.js');
 
 /**
  * Converts a Upyo Message to Mailgun API FormData format.
@@ -89,7 +90,7 @@ const convertMessage = async (message, config, signal) => {
   // and from a custom header otherwise.  A field the message owns but left
   // empty writes nothing, which is how a caller drops an inherited header.
   const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+  const ownedHeaders = lowerCaseNames(threading.keys());
 
   // Custom headers
   for (const [key, value] of message.headers.entries()) {
@@ -149,6 +150,21 @@ const appendAttachment = async (formData, attachment, signal) => {
   }
 };
 
+// Built once, not on every call.
+const STANDARD_HEADERS = new Set([
+  'from',
+  'to',
+  'cc',
+  'bcc',
+  'reply-to',
+  'subject',
+  'date',
+  'message-id',
+  'content-type',
+  'content-transfer-encoding',
+  'mime-version',
+]);
+
 /**
  * Checks if a header is a standard email header that should not be prefixed with 'h:'.
  *
@@ -156,21 +172,7 @@ const appendAttachment = async (formData, attachment, signal) => {
  * @returns True if it's a standard header
  */
 const isStandardHeader = (headerName) => {
-  const standardHeaders = [
-    'from',
-    'to',
-    'cc',
-    'bcc',
-    'reply-to',
-    'subject',
-    'date',
-    'message-id',
-    'content-type',
-    'content-transfer-encoding',
-    'mime-version',
-  ];
-
-  return standardHeaders.includes(headerName.toLowerCase());
+  return STANDARD_HEADERS.has(headerName.toLowerCase());
 };
 
 module.exports = { convertMessage };

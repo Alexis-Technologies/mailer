@@ -6,6 +6,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
+const { lowerCaseNames } = require('../internal/headers.js');
 
 /**
  * Converts a Upyo Message to SendGrid API JSON format.
@@ -119,7 +120,7 @@ const convertMessage = async (message, config, signal) => {
   // and from a custom header otherwise.  A field the message owns but left
   // empty writes nothing, which is how a caller drops an inherited header.
   const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+  const ownedHeaders = lowerCaseNames(threading.keys());
 
   for (const [key, value] of message.headers.entries()) {
     // Skip standard headers that are handled separately
@@ -233,6 +234,24 @@ const convertAttachment = async (attachment, signal) => {
   return sendGridAttachment;
 };
 
+// Built once, not on every call.
+const STANDARD_HEADERS = new Set([
+  'from',
+  'to',
+  'cc',
+  'bcc',
+  'reply-to',
+  'subject',
+  'date',
+  'message-id',
+  'content-type',
+  'content-transfer-encoding',
+  'mime-version',
+  'x-priority',
+  'x-msmail-priority',
+  'importance',
+]);
+
 /**
  * Checks if a header is a standard email header that should not be added as custom header.
  *
@@ -240,24 +259,7 @@ const convertAttachment = async (attachment, signal) => {
  * @returns True if it's a standard header
  */
 const isStandardHeader = (headerName) => {
-  const standardHeaders = [
-    'from',
-    'to',
-    'cc',
-    'bcc',
-    'reply-to',
-    'subject',
-    'date',
-    'message-id',
-    'content-type',
-    'content-transfer-encoding',
-    'mime-version',
-    'x-priority',
-    'x-msmail-priority',
-    'importance',
-  ];
-
-  return standardHeaders.includes(headerName.toLowerCase());
+  return STANDARD_HEADERS.has(headerName.toLowerCase());
 };
 
 module.exports = { convertMessage };

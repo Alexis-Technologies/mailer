@@ -7,6 +7,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
+const { lowerCaseNames } = require('../internal/headers.js');
 
 /**
  * Converts a Upyo Message to Resend API JSON format.
@@ -114,7 +115,7 @@ const convertMessage = async (message, _config, options = {}) => {
   // and from a custom header otherwise.  A field the message owns but left
   // empty writes nothing, which is how a caller drops an inherited header.
   const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+  const ownedHeaders = lowerCaseNames(threading.keys());
 
   for (const [key, value] of message.headers.entries()) {
     // Skip standard headers that are handled separately
@@ -193,6 +194,21 @@ const convertAttachment = async (attachment, signal) => {
   return resendAttachment;
 };
 
+// Built once, not on every call.
+const STANDARD_HEADERS = new Set([
+  'from',
+  'to',
+  'cc',
+  'bcc',
+  'reply-to',
+  'subject',
+  'content-type',
+  'content-transfer-encoding',
+  'mime-version',
+  'date',
+  'message-id',
+]);
+
 /**
  * Checks if a header is a standard email header that should not be prefixed.
  *
@@ -200,21 +216,7 @@ const convertAttachment = async (attachment, signal) => {
  * @returns True if the header is a standard header
  */
 const isStandardHeader = (headerName) => {
-  const standardHeaders = new Set([
-    'from',
-    'to',
-    'cc',
-    'bcc',
-    'reply-to',
-    'subject',
-    'content-type',
-    'content-transfer-encoding',
-    'mime-version',
-    'date',
-    'message-id',
-  ]);
-
-  return standardHeaders.has(headerName.toLowerCase());
+  return STANDARD_HEADERS.has(headerName.toLowerCase());
 };
 
 /**

@@ -6,6 +6,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
+const { lowerCaseNames } = require('../internal/headers.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -95,7 +96,7 @@ const convertMessage = async (message, config, signal) => {
   // and from a custom header otherwise.  A field the message owns but left
   // empty writes nothing, which is how a caller drops an inherited header.
   const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+  const ownedHeaders = lowerCaseNames(threading.keys());
 
   for (const [key, value] of message.headers.entries()) {
     if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {

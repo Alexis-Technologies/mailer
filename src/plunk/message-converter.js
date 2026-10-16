@@ -5,6 +5,7 @@ const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
 const { toBase64 } = require('../internal/base64.js');
+const { lowerCaseNames } = require('../internal/headers.js');
 
 /**
  * Converts a Upyo message to Plunk API format.
@@ -22,6 +23,9 @@ const { toBase64 } = require('../internal/base64.js');
  * @throws {RangeError} If a calendar message carries so many attachments that
  *                      one would have to be dropped.
  */
+// The headers that have fields of their own in a Plunk request.
+const DEDICATED_HEADERS = new Set(['to', 'from', 'reply-to', 'subject', 'content-type']);
+
 const convertMessage = async (message, _config, signal) => {
   // Convert recipients - Plunk accepts either string or array
   const recipients = message.recipients.map((addr) => addr.address);
@@ -49,7 +53,7 @@ const convertMessage = async (message, _config, signal) => {
   // and from a custom header otherwise.  A field the message owns but left
   // empty writes nothing, which is how a caller drops an inherited header.
   const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = new Set([...threading.keys()].map((name) => name.toLowerCase()));
+  const ownedHeaders = lowerCaseNames(threading.keys());
 
   // Convert headers - merge custom headers but exclude standard ones
   const customHeaders = {};
@@ -57,10 +61,7 @@ const convertMessage = async (message, _config, signal) => {
     for (const [key, value] of message.headers.entries()) {
       // Skip headers that are handled by dedicated fields
       const lowerKey = key.toLowerCase();
-      if (
-        !['to', 'from', 'reply-to', 'subject', 'content-type'].includes(lowerKey) &&
-        !ownedHeaders.has(lowerKey)
-      ) {
+      if (!DEDICATED_HEADERS.has(lowerKey) && !ownedHeaders.has(lowerKey)) {
         customHeaders[lowerKey] = value;
       }
     }
