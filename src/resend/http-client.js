@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 
 /**
@@ -53,6 +54,7 @@ class ResendHttpClient {
 
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'resend' });
   }
 
   /**
@@ -126,6 +128,7 @@ class ResendHttpClient {
    */
   makeRequest(url, options, onRetry) {
     return requestWithRetry({
+      log: this.log,
       signal: options.signal,
       onRetry,
       retries: this.config.retries,

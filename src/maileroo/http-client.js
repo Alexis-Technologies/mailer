@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 
 const maxErrorMessageLength = 500;
@@ -73,6 +74,7 @@ class MailerooHttpClient {
    */
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'maileroo' });
   }
 
   /**
@@ -93,6 +95,7 @@ class MailerooHttpClient {
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(body);
     return requestWithRetry({
+      log: this.log,
       signal,
       onRetry,
       retries: this.config.retries,

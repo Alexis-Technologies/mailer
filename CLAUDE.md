@@ -42,7 +42,7 @@ pnpm run test:types                # tsd: tests/types/*.test-d.ts, one file per 
 pnpm run check:dts                 # tsc --noEmit --strict over the d.ts of every entry
 pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
-pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 8 KB min+gzip and each subpath
+pnpm size [--max-gzip <KB>]        # esbuild bundle sizes; CI gates the root at 8.5 KB min+gzip and each subpath
 pnpm bench [filter] [--json] [--save] [--compare]   # ops/sec harness, manual only; --save writes bench/baseline.json
 pnpm docs:comparison               # renders docs/comparison.json into docs/guide/comparison.md
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)

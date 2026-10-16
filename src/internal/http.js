@@ -6,6 +6,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
 const { abortReason, sleep } = require('./sleep.js');
+const { redactAddresses } = require('./redact-addresses.js');
 
 const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
 
@@ -102,8 +103,9 @@ const startDeadline = (timeoutMs, signal) => {
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `hasIdempotencyKey`,
- *   `isIdempotent`, `sleep`, and `onRetry(event)`, the `onRetry` of the
- *   caller's `TransportOptions`, told of each retry before its wait.
+ *   `isIdempotent`, `sleep`, `onRetry(event)`, the `onRetry` of the caller's
+ *   `TransportOptions`, told of each retry before its wait, and `log`, the
+ *   log of the transport, which hears the retry at `debug`.
  * The deadline of an attempt lasts until its response is read, body
  * included, so a body that never ends cannot hold a send.  Between attempts
  * it waits at least the failure's `retryAfterMilliseconds`, the server's
@@ -161,6 +163,16 @@ const requestWithRetry = async (request) => {
     const waitMs = Math.max(
       (request.retryDelayMs ?? jitteredDelayMs)(attempt, failure),
       retryAfterMs,
+    );
+    request.log?.write(
+      'debug',
+      () => ({
+        attempt: attempt + 1,
+        delayMilliseconds: waitMs,
+        statusCode: failure.statusCode,
+        error: redactAddresses(failure.message),
+      }),
+      'Retrying request',
     );
     request.onRetry?.({ attempt: attempt + 1, delayMilliseconds: waitMs, error: failure });
     await wait(waitMs, signal);

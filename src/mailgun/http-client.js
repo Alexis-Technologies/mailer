@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 const { Buffer } = require('node:buffer');
 
@@ -17,6 +18,7 @@ class MailgunHttpClient {
 
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'mailgun' });
   }
 
   /**
@@ -53,6 +55,7 @@ class MailgunHttpClient {
    */
   makeRequest(url, options, onRetry) {
     return requestWithRetry({
+      log: this.log,
       signal: options.signal,
       onRetry,
       retries: this.config.retries,

@@ -4,6 +4,7 @@
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
 const { isAbortError, requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readJson, readText } = require('../internal/body.js');
 const { Buffer } = require('node:buffer');
 
@@ -20,6 +21,7 @@ class JmapHttpClient {
    */
   constructor(config, replayableRequests = true) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'jmap' });
     this.replayableRequests = replayableRequests;
   }
 
@@ -32,6 +34,7 @@ class JmapHttpClient {
     signal?.throwIfAborted();
 
     return requestWithRetry({
+      log: this.log,
       signal,
       retries: 0,
       timeoutMs: this.config.timeout,
@@ -64,6 +67,7 @@ class JmapHttpClient {
     const json = JSON.stringify(request);
 
     return requestWithRetry({
+      log: this.log,
       signal,
       retries: this.replayableRequests ? this.config.retries : 0,
       timeoutMs: this.config.timeout,

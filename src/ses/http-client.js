@@ -4,6 +4,7 @@
 const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 
 class SesHttpClient {
@@ -12,6 +13,7 @@ class SesHttpClient {
 
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'ses' });
   }
 
   sendMessage(messageData, signal, onRetry) {
@@ -44,6 +46,7 @@ class SesHttpClient {
    */
   makeRequest(url, options, onRetry) {
     return requestWithRetry({
+      log: this.log,
       signal: options.signal,
       onRetry,
       retries: this.config.retries,

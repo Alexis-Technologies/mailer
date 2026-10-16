@@ -351,3 +351,28 @@ test('Delivery: generateId makes the idempotency keys and the synthetic message 
   });
   assert.strictEqual((await sendgrid.send(message())).messageId, 'sendgrid-01JKEY-receipt-id');
 });
+
+test('Delivery: the logger of an HTTP transport hears its retries, without addresses', async () => {
+  const records = [];
+  const logger = { debug: (properties, text) => records.push([properties, text]) };
+  let requests = 0;
+  const fetch = async () =>
+    ++requests === 1
+      ? new Response('{"message":"Mailbox of bob@example.com is busy"}', { status: 503 })
+      : new Response('{"MessageId":"m1"}', { status: 200 });
+  const ses = new SesTransport({
+    authentication: { type: 'credentials', accessKeyId: 'a', secretAccessKey: 'b' },
+    retries: 1,
+    fetch,
+    logger,
+  });
+  assert.strictEqual((await ses.send(message())).successful, true);
+  assert.strictEqual(records.length, 1);
+  const [properties, text] = records[0];
+  assert.strictEqual(text, 'Retrying request');
+  assert.strictEqual(properties.transport, 'ses');
+  assert.strictEqual(properties.attempt, 1);
+  assert.strictEqual(properties.statusCode, 503);
+  assert.ok(properties.delayMilliseconds > 0);
+  assert.ok(!JSON.stringify(records).includes('bob@example.com'), JSON.stringify(records));
+});

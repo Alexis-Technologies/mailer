@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 
 const maxErrorMessageLength = 500;
@@ -98,6 +99,7 @@ class MailtrapHttpClient {
    */
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'mailtrap' });
   }
 
   /**
@@ -137,6 +139,7 @@ class MailtrapHttpClient {
     // Serialized once rather than on every attempt.
     const json = JSON.stringify(body);
     return requestWithRetry({
+      log: this.log,
       signal,
       onRetry,
       retries: this.config.retries,

@@ -16,6 +16,7 @@ const createMailerooConfig = (config) => {
     timeout: config.timeout ?? 30000,
     fetch: config.fetch,
     generateId: config.generateId,
+    logger: config.logger,
     retries: config.retries ?? 3,
     headers: config.headers == null ? {} : { ...config.headers },
     tracking: config.tracking,

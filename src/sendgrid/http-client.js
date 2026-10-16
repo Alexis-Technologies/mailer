@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
 
 /**
@@ -16,6 +17,7 @@ class SendGridHttpClient {
 
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'sendgrid' });
   }
 
   /**
@@ -55,6 +57,7 @@ class SendGridHttpClient {
    */
   makeRequest(url, options, onRetry) {
     return requestWithRetry({
+      log: this.log,
       signal: options.signal,
       onRetry,
       retries: this.config.retries,

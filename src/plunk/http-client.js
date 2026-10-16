@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
 const { readJson, readText } = require('../internal/body.js');
 
 /**
@@ -57,6 +58,7 @@ class PlunkHttpClient {
    */
   constructor(config) {
     this.config = config;
+    this.log = createLog(config.logger, { transport: 'plunk' });
   }
 
   /**
@@ -76,6 +78,7 @@ class PlunkHttpClient {
     const json = JSON.stringify(emailData);
 
     return requestWithRetry({
+      log: this.log,
       signal,
       onRetry,
       retries: this.config.retries,

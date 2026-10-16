@@ -122,6 +122,13 @@ const transport = new ResendTransport({
 The JMAP transport streams its raw uploads, so its `fetch` must take a body
 stream with `duplex: 'half'`, as undici's does.
 
+Every transport also takes a pino-like `logger` for what happens inside it and
+its receipts do not tell: the retries of an HTTP request at `debug` (with the
+attempt, the wait and the status, never an address), and for SMTP its
+connections and protocol (see [diagnostics](/transports/smtp#diagnostics)).
+Without one a transport writes nothing, except a `console.warn` for mail sent
+without TLS or without the DKIM signature it was asked for.
+
 Every transport also takes `generateId`, which makes the identifiers otherwise
 drawn from `crypto.randomUUID()`: a generated Message-ID, an idempotency key,
 and the message ID of a receipt the provider gave none for. See
