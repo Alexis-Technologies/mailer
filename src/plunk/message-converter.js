@@ -2,10 +2,8 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { readAttachmentContent } = require('../core/attachment.js');
-const { resolveThreadingHeaders } = require('../core/message-id.js');
-const { createCalendarAttachment } = require('../core/calendar.js');
 const { toBase64 } = require('../internal/base64.js');
-const { lowerCaseNames } = require('../internal/headers.js');
+const { collectCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
 
 /**
  * Converts a Upyo message to Plunk API format.
@@ -25,11 +23,17 @@ const { lowerCaseNames } = require('../internal/headers.js');
  */
 // The headers that have fields of their own in a Plunk request.
 const DEDICATED_HEADERS = new Set(['to', 'from', 'reply-to', 'subject', 'content-type']);
+const isDedicatedHeader = (name) => DEDICATED_HEADERS.has(name.toLowerCase());
+
+const addressesOf = (message) => {
+  const addresses = [];
+  for (const recipient of message.recipients) addresses.push(recipient.address);
+  return addresses;
+};
 
 const convertMessage = async (message, _config, signal) => {
   // Convert recipients - Plunk accepts either string or array
-  const recipients = message.recipients.map((addr) => addr.address);
-  const to = recipients.length === 1 ? recipients[0] : recipients;
+  const to = message.recipients.length === 1 ? message.recipients[0].address : addressesOf(message);
 
   // Convert sender information
   const senderName = message.sender.name;
@@ -49,36 +53,15 @@ const convertMessage = async (message, _config, signal) => {
     body = '';
   }
 
-  // Reply threading comes from the typed fields when the message defines them,
-  // and from a custom header otherwise.  A field the message owns but left
-  // empty writes nothing, which is how a caller drops an inherited header.
-  const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = lowerCaseNames(threading.keys());
-
-  // Convert headers - merge custom headers but exclude standard ones
-  const customHeaders = {};
-  if (message.headers) {
-    for (const [key, value] of message.headers.entries()) {
-      // Skip headers that are handled by dedicated fields
-      const lowerKey = key.toLowerCase();
-      if (!DEDICATED_HEADERS.has(lowerKey) && !ownedHeaders.has(lowerKey)) {
-        customHeaders[lowerKey] = value;
-      }
-    }
-  }
-  for (const [name, value] of threading) {
-    if (value != null) customHeaders[name] = value;
-  }
+  // The names of the custom headers come lower-cased from Headers.
+  const customHeaders = collectCustomHeaders(message, isDedicatedHeader);
 
   // A transport that cannot compose a `text/calendar` alternative carries the
   // scheduling payload as an *invite.ics* part instead, ahead of the caller's
   // own files so that a client looking for the first calendar part finds it.
   // Built here rather than inside the loop below, whose error handling drops a
   // part it cannot convert: an invitation must not disappear that quietly.
-  const sourceAttachments =
-    message.calendar == null
-      ? message.attachments
-      : [createCalendarAttachment(message.calendar), ...message.attachments];
+  const sourceAttachments = withCalendarAttachment(message);
 
   // Plunk documents a limit of five attachments, and quietly sending the first
   // five is only acceptable while nothing important is at the end.  Once the
@@ -121,7 +104,7 @@ const convertMessage = async (message, _config, signal) => {
     plunkEmail.reply = replyTo;
   }
 
-  if (Object.keys(customHeaders).length > 0) {
+  if (customHeaders !== undefined) {
     plunkEmail.headers = customHeaders;
   }
 

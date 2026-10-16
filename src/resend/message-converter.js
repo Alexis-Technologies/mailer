@@ -3,12 +3,16 @@
 
 const { generateId } = require('../core/id.js');
 const { formatMailbox: formatAddress } = require('../core/address.js');
-const { createCalendarAttachment } = require('../core/calendar.js');
-const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
-const { lowerCaseNames } = require('../internal/headers.js');
+const {
+  convertAttachments,
+  formatAddresses,
+  visitCustomHeaders,
+  withCalendarAttachment,
+} = require('../internal/provider.js');
+
+const PRIORITIES = { high: '1', normal: '3', low: '5' };
 
 /**
  * Converts a Upyo Message to Resend API JSON format.
@@ -33,31 +37,25 @@ const { lowerCaseNames } = require('../internal/headers.js');
  * ```
  */
 const convertMessage = async (message, _config, options = {}) => {
-  // A transport that cannot compose a `text/calendar` alternative carries the
-  // scheduling payload as an *invite.ics* part instead, ahead of the caller's
-  // own files so that a client looking for the first calendar part finds it.
-  const attachments =
-    message.calendar == null
-      ? message.attachments
-      : [createCalendarAttachment(message.calendar), ...message.attachments];
+  const attachments = withCalendarAttachment(message);
 
   const emailData = {
     from: formatAddress(message.sender),
     to:
       message.recipients.length === 1
         ? formatAddress(message.recipients[0])
-        : message.recipients.map(formatAddress),
+        : formatAddresses(message.recipients, formatAddress),
     subject: message.subject,
   };
 
   // CC recipients
   if (message.ccRecipients.length > 0) {
-    emailData.cc = message.ccRecipients.map(formatAddress);
+    emailData.cc = formatAddresses(message.ccRecipients, formatAddress);
   }
 
   // BCC recipients
   if (message.bccRecipients.length > 0) {
-    emailData.bcc = message.bccRecipients.map(formatAddress);
+    emailData.bcc = formatAddresses(message.bccRecipients, formatAddress);
   }
 
   // Reply-to
@@ -78,59 +76,30 @@ const convertMessage = async (message, _config, options = {}) => {
 
   // Attachments
   if (attachments.length > 0) {
-    const cancellation = new AbortController();
-    const combined = combineSignals(cancellation.signal, options.signal);
-    try {
-      emailData.attachments = await Promise.all(
-        attachments.map((attachment) => convertAttachment(attachment, combined.signal)),
-      );
-    } finally {
-      cancellation.abort();
-      combined.cleanup();
-    }
+    emailData.attachments = await convertAttachments(
+      attachments,
+      convertAttachment,
+      options.signal,
+    );
   }
 
   // Tags - Resend uses different format than Upyo
   if (message.tags.length > 0) {
-    emailData.tags = message.tags.map((tag, index) => ({
-      name: `tag${index + 1}`, // Resend requires name-value pairs
-      value: tag,
-    }));
-  }
-
-  // Custom headers
-  const headers = {};
-
-  // Priority
-  if (message.priority !== 'normal') {
-    const priorityMap = {
-      high: '1',
-      normal: '3',
-      low: '5',
-    };
-    headers['X-Priority'] = priorityMap[message.priority];
-  }
-
-  // Custom headers from message
-  // Reply threading comes from the typed fields when the message defines them,
-  // and from a custom header otherwise.  A field the message owns but left
-  // empty writes nothing, which is how a caller drops an inherited header.
-  const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = lowerCaseNames(threading.keys());
-
-  for (const [key, value] of message.headers.entries()) {
-    // Skip standard headers that are handled separately
-    if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {
-      headers[key] = value;
+    // Resend requires name-value pairs.
+    const tags = [];
+    for (let index = 0; index < message.tags.length; index++) {
+      tags.push({ name: `tag${index + 1}`, value: message.tags[index] });
     }
-  }
-  for (const [name, value] of threading) {
-    if (value != null) headers[name] = value;
+    emailData.tags = tags;
   }
 
-  if (Object.keys(headers).length > 0) {
-    emailData.headers = headers;
-  }
+  let headers;
+  if (message.priority !== 'normal') headers = { 'X-Priority': PRIORITIES[message.priority] };
+  visitCustomHeaders(message, isStandardHeader, (name, value) => {
+    headers ??= {};
+    headers[name] = value;
+  });
+  if (headers !== undefined) emailData.headers = headers;
 
   // Scheduled sending
   if (options.scheduledAt) {
@@ -170,9 +139,9 @@ const convertMessagesBatch = async (messages, _config) => {
     }
   }
 
-  const batchData = await Promise.all(messages.map((message) => convertMessage(message, _config)));
-
-  return batchData;
+  const converting = [];
+  for (const message of messages) converting.push(convertMessage(message, _config));
+  return await Promise.all(converting);
 };
 
 /**

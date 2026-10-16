@@ -1,12 +1,14 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { createCalendarAttachment } = require('../core/calendar.js');
-const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
-const { lowerCaseNames } = require('../internal/headers.js');
+const {
+  collectCustomHeaders,
+  convertAttachments,
+  formatAddresses,
+  withCalendarAttachment,
+} = require('../internal/provider.js');
 
 /**
  * Converts a Upyo Message to SendGrid API JSON format.
@@ -26,163 +28,89 @@ const { lowerCaseNames } = require('../internal/headers.js');
  * ```
  */
 const convertMessage = async (message, config, signal) => {
-  // A transport that cannot compose a `text/calendar` alternative carries the
-  // scheduling payload as an *invite.ics* part instead, ahead of the caller's
-  // own files so that a client looking for the first calendar part finds it.
-  const attachments =
-    message.calendar == null
-      ? message.attachments
-      : [createCalendarAttachment(message.calendar), ...message.attachments];
-
+  const attachments = withCalendarAttachment(message);
+  const personalization = {
+    to: formatAddresses(message.recipients, formatAddress),
+    subject: message.subject,
+  };
+  if (message.ccRecipients.length > 0) {
+    personalization.cc = formatAddresses(message.ccRecipients, formatAddress);
+  }
+  if (message.bccRecipients.length > 0) {
+    personalization.bcc = formatAddresses(message.bccRecipients, formatAddress);
+  }
   const sendGridMail = {
-    personalizations: [],
+    personalizations: [personalization],
     from: formatAddress(message.sender),
   };
 
-  // Create personalization object
-  const personalization = {
-    to: message.recipients.map(formatAddress),
-    subject: message.subject,
-  };
-
-  // Add CC recipients if any
-  if (message.ccRecipients.length > 0) {
-    personalization.cc = message.ccRecipients.map(formatAddress);
+  if (message.replyRecipients.length === 1) {
+    sendGridMail.reply_to = formatAddress(message.replyRecipients[0]);
+  } else if (message.replyRecipients.length > 1) {
+    sendGridMail.reply_to_list = formatAddresses(message.replyRecipients, formatAddress);
   }
 
-  // Add BCC recipients if any
-  if (message.bccRecipients.length > 0) {
-    personalization.bcc = message.bccRecipients.map(formatAddress);
-  }
+  sendGridMail.content = contentOf(message);
 
-  sendGridMail.personalizations.push(personalization);
-
-  // Reply-to handling
-  if (message.replyRecipients.length > 0) {
-    if (message.replyRecipients.length === 1) {
-      sendGridMail.reply_to = formatAddress(message.replyRecipients[0]);
-    } else {
-      sendGridMail.reply_to_list = message.replyRecipients.map(formatAddress);
-    }
-  }
-
-  // Content
-  const content = [];
-
-  if ('html' in message.content) {
-    if (message.content.text) {
-      content.push({
-        type: 'text/plain',
-        value: message.content.text,
-      });
-    }
-    content.push({
-      type: 'text/html',
-      value: message.content.html,
-    });
-  } else {
-    content.push({
-      type: 'text/plain',
-      value: message.content.text,
-    });
-  }
-
-  sendGridMail.content = content;
-
-  // Priority handling (using custom headers)
+  // Priority goes in custom headers, then the caller's own.
   if (message.priority !== 'normal') {
-    const headers = {};
-
-    switch (message.priority) {
-      case 'high':
-        headers['X-Priority'] = '1';
-        headers['X-MSMail-Priority'] = 'High';
-        headers['Importance'] = 'High';
-        break;
-      case 'low':
-        headers['X-Priority'] = '5';
-        headers['X-MSMail-Priority'] = 'Low';
-        headers['Importance'] = 'Low';
-        break;
-    }
-
-    sendGridMail.headers = { ...sendGridMail.headers, ...headers };
+    sendGridMail.headers = { ...sendGridMail.headers, ...PRIORITY_HEADERS[message.priority] };
   }
-
-  // Tags (categories in SendGrid)
   if (message.tags.length > 0) {
+    // Categories in SendGrid.
     sendGridMail.categories = [...message.tags];
   }
-
-  // Custom headers
-  const customHeaders = {};
-  // Reply threading comes from the typed fields when the message defines them,
-  // and from a custom header otherwise.  A field the message owns but left
-  // empty writes nothing, which is how a caller drops an inherited header.
-  const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = lowerCaseNames(threading.keys());
-
-  for (const [key, value] of message.headers.entries()) {
-    // Skip standard headers that are handled separately
-    if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {
-      customHeaders[key] = value;
-    }
-  }
-  for (const [name, value] of threading) {
-    if (value != null) customHeaders[name] = value;
-  }
-
-  if (Object.keys(customHeaders).length > 0) {
+  const customHeaders = collectCustomHeaders(message, isStandardHeader);
+  if (customHeaders !== undefined) {
     sendGridMail.headers = { ...sendGridMail.headers, ...customHeaders };
   }
 
-  // Attachments
   if (attachments.length > 0) {
-    const cancellation = new AbortController();
-    const combined = combineSignals(cancellation.signal, signal);
-    try {
-      sendGridMail.attachments = await Promise.all(
-        attachments.map((attachment) => convertAttachment(attachment, combined.signal)),
-      );
-    } finally {
-      cancellation.abort();
-      combined.cleanup();
-    }
+    sendGridMail.attachments = await convertAttachments(attachments, convertAttachment, signal);
   }
 
-  // Tracking settings
-  const trackingSettings = {};
-
-  if (config.clickTracking !== undefined) {
-    trackingSettings.click_tracking = {
-      enable: config.clickTracking,
-      enable_text: config.clickTracking,
-    };
-  }
-
-  if (config.openTracking !== undefined) {
-    trackingSettings.open_tracking = {
-      enable: config.openTracking,
-    };
-  }
-
-  if (config.subscriptionTracking !== undefined) {
-    trackingSettings.subscription_tracking = {
-      enable: config.subscriptionTracking,
-    };
-  }
-
-  if (config.googleAnalytics !== undefined) {
-    trackingSettings.ganalytics = {
-      enable: config.googleAnalytics,
-    };
-  }
-
-  if (Object.keys(trackingSettings).length > 0) {
-    sendGridMail.tracking_settings = trackingSettings;
-  }
+  const trackingSettings = trackingSettingsOf(config);
+  if (trackingSettings !== undefined) sendGridMail.tracking_settings = trackingSettings;
 
   return sendGridMail;
+};
+
+const PRIORITY_HEADERS = {
+  high: { 'X-Priority': '1', 'X-MSMail-Priority': 'High', Importance: 'High' },
+  low: { 'X-Priority': '5', 'X-MSMail-Priority': 'Low', Importance: 'Low' },
+};
+
+// The plain text part, unless the message has only HTML, then the HTML part.
+const contentOf = (message) => {
+  if (!('html' in message.content)) {
+    return [{ type: 'text/plain', value: message.content.text }];
+  }
+  const content = [];
+  if (message.content.text) content.push({ type: 'text/plain', value: message.content.text });
+  content.push({ type: 'text/html', value: message.content.html });
+  return content;
+};
+
+// The tracking settings the configuration sets, or `undefined` for none.
+const trackingSettingsOf = (config) => {
+  let settings;
+  if (config.clickTracking !== undefined) {
+    settings ??= {};
+    settings.click_tracking = { enable: config.clickTracking, enable_text: config.clickTracking };
+  }
+  if (config.openTracking !== undefined) {
+    settings ??= {};
+    settings.open_tracking = { enable: config.openTracking };
+  }
+  if (config.subscriptionTracking !== undefined) {
+    settings ??= {};
+    settings.subscription_tracking = { enable: config.subscriptionTracking };
+  }
+  if (config.googleAnalytics !== undefined) {
+    settings ??= {};
+    settings.ganalytics = { enable: config.googleAnalytics };
+  }
+  return settings;
 };
 
 /**

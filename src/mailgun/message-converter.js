@@ -2,10 +2,10 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
-const { createCalendarAttachment } = require('../core/calendar.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { resolveThreadingHeaders } = require('../core/message-id.js');
-const { lowerCaseNames } = require('../internal/headers.js');
+const { visitCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
+
+const PRIORITIES = { high: '1', normal: '3', low: '5' };
 
 /**
  * Converts a Upyo Message to Mailgun API FormData format.
@@ -26,13 +26,7 @@ const { lowerCaseNames } = require('../internal/headers.js');
  */
 const convertMessage = async (message, config, signal) => {
   const formData = new FormData();
-  // A transport that cannot compose a `text/calendar` alternative carries the
-  // scheduling payload as an *invite.ics* part instead, ahead of the caller's
-  // own files so that a client looking for the first calendar part finds it.
-  const attachments =
-    message.calendar == null
-      ? message.attachments
-      : [createCalendarAttachment(message.calendar), ...message.attachments];
+  const attachments = withCalendarAttachment(message);
 
   // Required fields
   formData.append('from', formatAddress(message.sender));
@@ -54,7 +48,10 @@ const convertMessage = async (message, config, signal) => {
 
   // Reply-to
   if (message.replyRecipients.length > 0) {
-    const replyTo = message.replyRecipients.map(formatAddress).join(', ');
+    let replyTo = '';
+    for (const recipient of message.replyRecipients) {
+      replyTo += `${replyTo === '' ? '' : ', '}${formatAddress(recipient)}`;
+    }
     formData.append('h:Reply-To', replyTo);
   }
 
@@ -73,12 +70,7 @@ const convertMessage = async (message, config, signal) => {
 
   // Priority
   if (message.priority !== 'normal') {
-    const priorityMap = {
-      high: '1',
-      normal: '3',
-      low: '5',
-    };
-    formData.append('h:X-Priority', priorityMap[message.priority]);
+    formData.append('h:X-Priority', PRIORITIES[message.priority]);
   }
 
   // Tags
@@ -86,22 +78,9 @@ const convertMessage = async (message, config, signal) => {
     formData.append('o:tag', tag);
   }
 
-  // Reply threading comes from the typed fields when the message defines them,
-  // and from a custom header otherwise.  A field the message owns but left
-  // empty writes nothing, which is how a caller drops an inherited header.
-  const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = lowerCaseNames(threading.keys());
-
-  // Custom headers
-  for (const [key, value] of message.headers.entries()) {
-    // Skip standard headers that are handled separately
-    if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {
-      formData.append(`h:${key}`, value);
-    }
-  }
-  for (const [name, value] of threading) {
-    if (value != null) formData.append(`h:${name}`, value);
-  }
+  visitCustomHeaders(message, isStandardHeader, (name, value) => {
+    formData.append(`h:${name}`, value);
+  });
 
   // Attachments
   for (const attachment of attachments) {

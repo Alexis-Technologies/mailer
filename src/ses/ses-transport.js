@@ -201,9 +201,9 @@ class SesTransport {
   async sendConcurrent(messages, options) {
     options?.signal?.throwIfAborted();
 
-    const sendPromises = messages.map((message) => this.send(message, options));
-
-    return await Promise.all(sendPromises);
+    const sending = [];
+    for (const message of messages) sending.push(this.send(message, options));
+    return await Promise.all(sending);
   }
 
   extractMessageId(response) {

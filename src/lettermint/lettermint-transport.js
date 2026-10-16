@@ -130,7 +130,7 @@ class LettermintTransport {
   async *sendBatch(messages, options) {
     if (messages.length === 0) return;
 
-    if (messages.some(hasIdempotencyKey)) {
+    if (anyHasIdempotencyKey(messages)) {
       for (const message of messages) {
         yield await this.send(message, options);
       }
@@ -208,6 +208,13 @@ const normalizeIdempotencyKey = (idempotencyKey, generator) => {
 
 const hasIdempotencyKey = (message) => {
   return message.idempotencyKey != null && message.idempotencyKey !== '';
+};
+
+const anyHasIdempotencyKey = (messages) => {
+  for (const message of messages) {
+    if (hasIdempotencyKey(message)) return true;
+  }
+  return false;
 };
 
 const responseToReceipt = (response) => {

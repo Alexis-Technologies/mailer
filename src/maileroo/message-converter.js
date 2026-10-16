@@ -2,12 +2,14 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
-const { createCalendarAttachment } = require('../core/calendar.js');
-const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { toBase64 } = require('../internal/base64.js');
-const { lowerCaseNames } = require('../internal/headers.js');
+const {
+  convertAttachments,
+  formatAddresses,
+  visitCustomHeaders,
+  withCalendarAttachment,
+} = require('../internal/provider.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -37,13 +39,7 @@ const STANDARD_HEADERS = new Set([
 const convertMessage = async (message, config, signal) => {
   signal?.throwIfAborted();
 
-  // A transport that cannot compose a `text/calendar` alternative carries the
-  // scheduling payload as an *invite.ics* part instead, ahead of the caller's
-  // own files so that a client looking for the first calendar part finds it.
-  const attachments =
-    message.calendar == null
-      ? message.attachments
-      : [createCalendarAttachment(message.calendar), ...message.attachments];
+  const attachments = withCalendarAttachment(message);
 
   const emailData = {
     from: convertAddress(message.sender),
@@ -82,21 +78,10 @@ const convertMessage = async (message, config, signal) => {
   }
 
   const headers = convertHeaders(message);
-  if (Object.keys(headers).length > 0) {
-    emailData.headers = headers;
-  }
+  if (headers !== undefined) emailData.headers = headers;
 
   if (attachments.length > 0) {
-    const cancellation = new AbortController();
-    const combined = combineSignals(cancellation.signal, signal);
-    try {
-      emailData.attachments = await Promise.all(
-        attachments.map((attachment) => convertAttachment(attachment, combined.signal)),
-      );
-    } finally {
-      cancellation.abort();
-      combined.cleanup();
-    }
+    emailData.attachments = await convertAttachments(attachments, convertAttachment, signal);
   }
 
   signal?.throwIfAborted();
@@ -139,8 +124,9 @@ const convertAddress = (address) => {
 };
 
 const convertAddressList = (addresses) => {
-  const converted = addresses.map(convertAddress);
-  return converted.length === 1 ? converted[0] : converted;
+  return addresses.length === 1
+    ? convertAddress(addresses[0])
+    : formatAddresses(addresses, convertAddress);
 };
 
 const convertOptionalAddressList = (addresses) => {
@@ -150,42 +136,25 @@ const convertOptionalAddressList = (addresses) => {
 const convertTags = (message, config) => {
   const tags = config.tags == null ? {} : { ...config.tags };
 
-  for (const [index, tag] of message.tags.entries()) {
-    tags[`tag${index + 1}`] = tag;
+  for (let index = 0; index < message.tags.length; index++) {
+    tags[`tag${index + 1}`] = message.tags[index];
   }
 
   return tags;
 };
 
+// The priority and the custom headers, or `undefined` when there are none.
 const convertHeaders = (message) => {
-  const headers = {};
-
-  if (message.priority !== 'normal') {
-    const priorityMap = {
-      high: '1',
-      normal: '3',
-      low: '5',
-    };
-    headers['X-Priority'] = priorityMap[message.priority];
-  }
-
-  // Reply threading comes from the typed fields when the message defines them,
-  // and from a custom header otherwise.  A field the message owns but left
-  // empty writes nothing, which is how a caller drops an inherited header.
-  const threading = resolveThreadingHeaders(message);
-  const ownedHeaders = lowerCaseNames(threading.keys());
-
-  for (const [key, value] of message.headers.entries()) {
-    if (!isStandardHeader(key) && !ownedHeaders.has(key.toLowerCase())) {
-      headers[key] = value;
-    }
-  }
-  for (const [name, value] of threading) {
-    if (value != null) headers[name] = value;
-  }
-
+  let headers;
+  if (message.priority !== 'normal') headers = { 'X-Priority': PRIORITIES[message.priority] };
+  visitCustomHeaders(message, isStandardHeader, (name, value) => {
+    headers ??= {};
+    headers[name] = value;
+  });
   return headers;
 };
+
+const PRIORITIES = { high: '1', normal: '3', low: '5' };
 
 const convertAttachment = async (attachment, signal) => {
   signal?.throwIfAborted();

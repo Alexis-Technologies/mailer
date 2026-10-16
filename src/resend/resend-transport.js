@@ -317,16 +317,16 @@ class ResendTransport {
    * @returns True if all messages are suitable for batch API
    */
   canUseBatchApi(messages) {
-    return messages.every(
-      (message) =>
-        message.attachments.length === 0 &&
-        message.tags.length === 0 &&
-        // A calendar becomes an attachment during conversion, which the batch
-        // API forbids, and `sendBatch()` fails a whole chunk on one conversion
-        // error.  Sending these individually keeps the failure — or the success
-        // — confined to the message it belongs to.
-        message.calendar == null,
-    );
+    for (const message of messages) {
+      // A calendar becomes an attachment during conversion, which the batch
+      // API forbids, and `sendBatch()` fails a whole chunk on one conversion
+      // error.  Sending these individually keeps the failure — or the success
+      // — confined to the message it belongs to.
+      if (message.attachments.length > 0 || message.tags.length > 0 || message.calendar != null) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
