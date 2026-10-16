@@ -20,8 +20,10 @@ const { createRetryConfig } = require('./config.js');
 const PROGRAMMER_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
 
 const isProgrammerError = (error) => {
-  if (!PROGRAMMER_ERRORS.some((type) => error instanceof type)) return false;
-  return classifyReceiptError(error).category === 'unknown';
+  for (const type of PROGRAMMER_ERRORS) {
+    if (error instanceof type) return classifyReceiptError(error).category === 'unknown';
+  }
+  return false;
 };
 
 class RetryTransport {
@@ -350,7 +352,11 @@ class RetryTransport {
   }
 
   hasRetryableError(errors) {
-    return errors?.some((error) => error.retryable) ?? false;
+    if (errors == null) return false;
+    for (const error of errors) {
+      if (error.retryable) return true;
+    }
+    return false;
   }
 
   // A server that asks to wait longer than the longest delay is not asked
@@ -467,8 +473,11 @@ const createRetryTransport = (baseTransport, config = {}) => {
 const getRetryAfterMilliseconds = (failure) => {
   if (failure == null) return undefined;
   if (isReceiptError(failure)) return failure.retryAfterMilliseconds;
-  return failure.errors?.find((error) => error.retryAfterMilliseconds != null)
-    ?.retryAfterMilliseconds;
+  if (failure.errors == null) return undefined;
+  for (const error of failure.errors) {
+    if (error.retryAfterMilliseconds != null) return error.retryAfterMilliseconds;
+  }
+  return undefined;
 };
 
 const toAsyncIterator = (values) => {

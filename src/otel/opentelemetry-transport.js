@@ -261,9 +261,7 @@ class OpenTelemetryTransport {
           successCount++;
         } else {
           failureCount++;
-          for (const errorMessage of receipt.errorMessages) {
-            if (errorMessageCount++ < MAX_RECORDED_ERROR_MESSAGES) errorMessages.push(errorMessage);
-          }
+          errorMessageCount = keepErrorMessages(errorMessages, errorMessageCount, receipt);
         }
 
         yield receipt;
@@ -445,5 +443,15 @@ class OpenTelemetryTransport {
     return this.classifyError(syntheticError);
   }
 }
+
+// Keeps the messages of a failed receipt while fewer than the bound are kept,
+// and counts all of them.
+const keepErrorMessages = (kept, count, receipt) => {
+  let total = count;
+  for (const errorMessage of receipt.errorMessages) {
+    if (total++ < MAX_RECORDED_ERROR_MESSAGES) kept.push(errorMessage);
+  }
+  return total;
+};
 
 module.exports = { OpenTelemetryTransport };
