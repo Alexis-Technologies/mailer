@@ -188,9 +188,9 @@ class PoolTransport {
    * @returns An async iterable of receipts, one for each message.
    */
   async *sendMany(messages, options) {
-    // Reset strategy state for batch operations
-    this.strategy.reset();
-
+    // The strategy goes on from where the sends before left it: reset here,
+    // round-robin sent every batch of one message through the first
+    // transport, and concurrent batches reset each other.
     for await (const message of messages) {
       options?.signal?.throwIfAborted();
 

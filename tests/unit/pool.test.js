@@ -232,3 +232,20 @@ test('Pool: the logger hears a selector that throws and a failover', async () =>
   assert.deepStrictEqual(warns[0][1], { transport: 'pool', index: 0, error: 'Selector bug' });
   assert.ok(records.some(([level, , text]) => level === 'debug' && text === 'Pool failing over'));
 });
+
+test('Pool: round-robin goes on across sends and batches', async () => {
+  const first = new MockTransport();
+  const second = new MockTransport();
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [{ transport: first }, { transport: second }],
+  });
+  await pool.send(message());
+  for (let batch = 0; batch < 3; batch++) {
+    for await (const receipt of pool.sendMany([message()])) assert.ok(receipt.successful);
+  }
+  // Upstream reset the rotation for each batch, so a batch of one message
+  // always went through the first transport.
+  assert.strictEqual(first.getSentMessagesCount(), 2);
+  assert.strictEqual(second.getSentMessagesCount(), 2);
+});

@@ -334,6 +334,9 @@ fixed ones below.
   the whole input could be sent and its receipts held for the first. A freed slot is still
   refilled, but no more than `maxConcurrent` finished receipts wait for an earlier one, and a
   settled send wakes the loop instead of a `Promise.race` over all the sends in flight.
+- **`./pool` keeps the round-robin rotation across batches** (an upstream bug): `sendMany` reset
+  the strategy, so a batch of one message always went through the first transport, and two
+  batches at once reset each other's rotation.
 - **`./otel` streams `sendMany`** (an upstream bug): it read the whole input into an array before
   the first message went out, and kept every receipt to the end, so a long or endless batch
   held it all in memory. The messages now pass on as the wrapped transport reads them; the batch

@@ -382,6 +382,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     and the whole input could be sent with its receipts held for the first; it also raced all
     the sends in flight on every turn. No more than `maxConcurrent` finished receipts wait for
     an earlier one (`SendManyRun`), and a send that settles wakes the loop instead of a race.
+76. pool: `sendMany` reset the strategy, so round-robin sent every batch of one message
+    through the first transport, and concurrent batches reset each other's rotation. The
+    strategy goes on from where the sends before left it.
 
 ## Repository layout
 

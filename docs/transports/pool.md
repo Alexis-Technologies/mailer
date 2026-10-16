@@ -105,7 +105,9 @@ const pool = new PoolTransport({
 ```
 
 Round-robin is perfect when you want equal load distribution and have providers
-with similar capabilities and costs.
+with similar capabilities and costs.  The rotation goes on across `send()` and
+`sendMany()` calls: a batch starts with the transport after the last one used,
+so many small batches still spread over every transport.
 
 ### Weighted distribution
 
@@ -272,7 +274,9 @@ such a selector skips its transport, as before, but is no longer silent.
 
 For advanced use cases, you can implement custom routing strategies by
 creating a class that implements the `Strategy` interface. This allows
-you to build sophisticated routing logic based on any criteria:
+you to build sophisticated routing logic based on any criteria.  The pool
+calls `select()` for each attempt and never `reset()`, which is there for your
+own code to call:
 
 ```js
 class TimeBasedStrategy {
