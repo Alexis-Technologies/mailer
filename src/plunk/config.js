@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/plunk/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved Plunk configuration by applying default values to optional fields.
  *
@@ -13,7 +15,7 @@
  * @internal
  */
 const createPlunkConfig = (config) => {
-  return {
+  const resolved = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://next-api.useplunk.com',
     timeout: config.timeout ?? 30000,
@@ -21,6 +23,8 @@ const createPlunkConfig = (config) => {
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 module.exports = { createPlunkConfig };

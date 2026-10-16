@@ -27,6 +27,7 @@ test('Internal: a reset, a timeout or a failure without a cause may have been se
 
 const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
 const {
+  checkRequestOptions,
   exponentialDelayMs,
   jitteredDelayMs,
   requestWithRetry,
@@ -156,5 +157,15 @@ test('Internal: delays double from one second, and the jittered one stays in its
     const baseMs = Math.min(1000 * 2 ** attempt, 10_000);
     const delayMs = jitteredDelayMs(attempt);
     assert.ok(delayMs >= baseMs / 2 && delayMs <= baseMs, String(delayMs));
+  }
+});
+
+test('Internal: a timeout is a number of milliseconds or none, retries a whole number', () => {
+  for (const timeoutMs of [0, 1, 30_000, Infinity]) checkRequestOptions(timeoutMs, 0);
+  for (const timeoutMs of [-1, Number.NaN, '30000', undefined]) {
+    assert.throws(() => checkRequestOptions(timeoutMs, 3), RangeError);
+  }
+  for (const retries of [-1, 1.5, Infinity, '3']) {
+    assert.throws(() => checkRequestOptions(30_000, retries), RangeError);
   }
 });

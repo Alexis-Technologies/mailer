@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved Maileroo configuration by applying default values.
  *
@@ -8,7 +10,7 @@
  * @returns A resolved configuration with all defaults applied.
  */
 const createMailerooConfig = (config) => {
-  return {
+  const resolved = {
     apiKey: config.apiKey,
     baseUrl: normalizeBaseUrl(config.baseUrl ?? 'https://smtp.maileroo.com/api/v2'),
     timeout: config.timeout ?? 30000,
@@ -17,6 +19,8 @@ const createMailerooConfig = (config) => {
     tracking: config.tracking,
     tags: config.tags == null ? undefined : { ...config.tags },
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 const normalizeBaseUrl = (baseUrl) => {

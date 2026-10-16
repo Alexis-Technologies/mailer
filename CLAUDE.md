@@ -203,6 +203,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 27. ses, resend, sendgrid, mailgun, lettermint, plunk, jmap: the timeout was cleared once the
     headers arrived, so a body that never ended held a send forever. The deadline of
     `requestWithRetry` lasts until the response is read, as mailtrap and maileroo had it.
+28. every HTTP provider and jmap: `timeout: 0` aborted at once in five clients and meant none in
+    four, `Infinity` became 1 ms, and neither `timeout` nor `retries` was checked. 0 and
+    `Infinity` now mean none everywhere, and `checkRequestOptions` refuses anything else that is
+    not a non-negative number, or retries that are not a whole number, when the config is made.
 
 ## Repository layout
 

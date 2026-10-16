@@ -93,7 +93,6 @@ class MailerooHttpClient {
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
-      isZeroTimeoutDisabled: true,
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
       read: async (response) => parseResponse(await response.text()),
       reject: async (response, attempt) =>

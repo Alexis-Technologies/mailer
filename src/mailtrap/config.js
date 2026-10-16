@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 const DEFAULT_SEND_BASE_URL = 'https://send.api.mailtrap.io';
 const DEFAULT_SANDBOX_BASE_URL = 'https://sandbox.api.mailtrap.io';
 const DEFAULT_CATEGORY = 'transactional';
@@ -20,7 +22,7 @@ const createMailtrapConfig = (config) => {
     throw new RangeError('`inboxId` is required when Mailtrap sandbox mode is enabled.');
   }
 
-  return {
+  const resolved = {
     apiToken: config.apiToken,
     sandbox,
     inboxId: config.inboxId,
@@ -34,6 +36,8 @@ const createMailtrapConfig = (config) => {
     validateSsl: config.validateSsl ?? true,
     headers: config.headers == null ? {} : { ...config.headers },
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 const isValidInboxId = (inboxId) => {

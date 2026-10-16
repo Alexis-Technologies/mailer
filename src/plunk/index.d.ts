@@ -39,7 +39,8 @@ export interface PlunkConfig {
    */
   readonly baseUrl?: string;
   /**
-   * HTTP request timeout in milliseconds.
+   * HTTP request timeout in milliseconds, response body included; 0 or
+   * `Infinity` for none.
    *
    * @default 30000
    */

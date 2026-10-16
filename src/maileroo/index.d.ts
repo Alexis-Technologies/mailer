@@ -31,7 +31,7 @@ export interface MailerooConfig {
   /**
    * HTTP request timeout in milliseconds.
    *
-   * Set to `0` to disable request timeouts.
+   * Set to `0` or `Infinity` to disable request timeouts.
    *
    * @default 30000
    */

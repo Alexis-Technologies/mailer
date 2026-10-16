@@ -114,6 +114,11 @@ fixed ones below.
   when the headers arrived in `./ses`, `./resend`, `./sendgrid`, `./mailgun`, `./lettermint`,
   `./plunk` and `./jmap`, so a body that never ended held the send forever. A body cut short
   after a 2xx is of unknown delivery.
+- **`timeout: 0` and `timeout: Infinity` mean no timeout in every HTTP provider** (an upstream
+  bug): 0 aborted every request at once in `./ses`, `./resend`, `./sendgrid`, `./mailgun` and
+  `./jmap` while it meant none in the others, and `Infinity` became 1 ms. A negative or
+  non-numeric `timeout`, and `retries` that are not a non-negative whole number, are refused
+  with a `RangeError` when the transport is made.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

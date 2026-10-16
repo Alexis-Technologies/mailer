@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/lettermint/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved Lettermint configuration by applying default values.
  *
@@ -8,7 +10,7 @@
  * @returns A resolved configuration with all defaults applied.
  */
 const createLettermintConfig = (config) => {
-  return {
+  const resolved = {
     apiToken: config.apiToken,
     baseUrl: normalizeBaseUrl(config.baseUrl ?? 'https://api.lettermint.co'),
     timeout: config.timeout ?? 30000,
@@ -19,6 +21,8 @@ const createLettermintConfig = (config) => {
     metadata: config.metadata == null ? undefined : { ...config.metadata },
     settings: config.settings == null ? undefined : { ...config.settings },
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 const normalizeBaseUrl = (baseUrl) => {

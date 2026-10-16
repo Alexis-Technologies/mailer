@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved SendGrid configuration by applying default values to optional fields.
  *
@@ -13,7 +15,7 @@
  * @internal
  */
 const createSendGridConfig = (config) => {
-  return {
+  const resolved = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://api.sendgrid.com/v3',
     timeout: config.timeout ?? 30000,
@@ -25,6 +27,8 @@ const createSendGridConfig = (config) => {
     subscriptionTracking: config.subscriptionTracking ?? false,
     googleAnalytics: config.googleAnalytics ?? false,
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 module.exports = { createSendGridConfig };

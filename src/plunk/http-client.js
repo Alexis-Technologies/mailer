@@ -76,7 +76,6 @@ class PlunkHttpClient {
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
-      isZeroTimeoutDisabled: true,
       send: (attemptSignal) => this.makeRequest(url, emailData, attemptSignal),
       read: (response) => this.parseResponse(response),
       reject: async (response, attempt) => {

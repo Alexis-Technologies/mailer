@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/ses/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved SES configuration with default values applied.
  *
@@ -27,7 +29,7 @@
  * @returns A resolved configuration with all defaults applied.
  */
 const createSesConfig = (config) => {
-  return {
+  const resolved = {
     authentication: config.authentication,
     region: config.region ?? 'us-east-1',
     timeout: config.timeout ?? 30000,
@@ -38,6 +40,8 @@ const createSesConfig = (config) => {
     defaultTags: config.defaultTags ?? {},
     batchSize: config.batchSize ?? 50,
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 module.exports = { createSesConfig };

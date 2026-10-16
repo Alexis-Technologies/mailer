@@ -117,3 +117,19 @@ test(
     }
   },
 );
+
+test('Delivery: a timeout of 0 or Infinity sets none, a bad one is refused', async (t) => {
+  for (const [name, , create] of providers) {
+    for (const timeout of [0, Infinity]) {
+      t.mock.method(globalThis, 'fetch', async (_url, init) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return new Response(JSON.stringify({ aborted: init.signal.aborted }), { status: 400 });
+      });
+      const receipt = await create({ timeout, retries: 0 }).send(message());
+      t.mock.restoreAll();
+      assert.strictEqual(receipt.errors[0].statusCode, 400, `${name} ${timeout}`);
+    }
+    assert.throws(() => create({ timeout: -1 }), RangeError, name);
+    assert.throws(() => create({ retries: 1.5 }), RangeError, name);
+  }
+});

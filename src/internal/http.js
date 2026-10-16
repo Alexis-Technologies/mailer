@@ -64,13 +64,34 @@ const jitteredDelayMs = (attempt) => {
   return Math.round(baseMs / 2 + Math.random() * (baseMs / 2));
 };
 
-// The deadline of one attempt, combined with the caller's signal.
-const startDeadline = (timeoutMs, isZeroTimeoutDisabled, signal) => {
+/**
+ * Checks the timeout and the retries of a provider's configuration.
+ *
+ * @param timeoutMs The timeout of an attempt in milliseconds, 0 or `Infinity`
+ * for none.
+ * @param retries How many times a failed attempt is retried.
+ * @throws {RangeError} If either is not a number of that kind.
+ * @internal
+ */
+const checkRequestOptions = (timeoutMs, retries) => {
+  if (typeof timeoutMs !== 'number' || !(timeoutMs >= 0)) {
+    throw new RangeError(
+      '`timeout` must be a number of milliseconds, 0 or Infinity for none: ' + String(timeoutMs),
+    );
+  }
+  if (!Number.isInteger(retries) || retries < 0) {
+    throw new RangeError('`retries` must be a non-negative integer: ' + String(retries));
+  }
+};
+
+// The deadline of one attempt, combined with the caller's signal.  A timeout
+// of 0 or Infinity sets none: setTimeout() would fire at once for either.
+const startDeadline = (timeoutMs, signal) => {
   const controller = new AbortController();
   const timer =
-    isZeroTimeoutDisabled && !(timeoutMs > 0)
-      ? undefined
-      : setTimeout(() => controller.abort(), timeoutMs);
+    timeoutMs > 0 && Number.isFinite(timeoutMs)
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : undefined;
   const combined = combineSignals(controller.signal, signal);
   return {
     signal: combined.signal,
@@ -103,8 +124,7 @@ const startDeadline = (timeoutMs, isZeroTimeoutDisabled, signal) => {
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
- *   `sleep`, and until it is unified, `isZeroTimeoutDisabled` (a timeout of
- *   0 or less means none).
+ *   `sleep`.
  * The deadline of an attempt lasts until its response is read, body
  * included, so a body that never ends cannot hold a send.
  * @returns What `read` returns.
@@ -115,11 +135,7 @@ const requestWithRetry = async (request) => {
   const wait = request.sleep ?? sleep;
   for (let attempt = 0; ; attempt++) {
     signal?.throwIfAborted();
-    const deadline = startDeadline(
-      request.timeoutMs,
-      request.isZeroTimeoutDisabled === true,
-      signal,
-    );
+    const deadline = startDeadline(request.timeoutMs, signal);
     let isAccepted = false;
     let failure;
     try {
@@ -149,6 +165,7 @@ const requestWithRetry = async (request) => {
 
 module.exports = {
   abortReason,
+  checkRequestOptions,
   exponentialDelayMs,
   isAbortError,
   jitteredDelayMs,

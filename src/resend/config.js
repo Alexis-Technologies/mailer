@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/resend/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved Resend configuration by applying default values to optional fields.
  *
@@ -13,7 +15,7 @@
  * @internal
  */
 const createResendConfig = (config) => {
-  return {
+  const resolved = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://api.resend.com',
     timeout: config.timeout ?? 30000,
@@ -21,6 +23,8 @@ const createResendConfig = (config) => {
     validateSsl: config.validateSsl ?? true,
     headers: config.headers ?? {},
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 module.exports = { createResendConfig };

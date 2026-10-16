@@ -85,6 +85,7 @@ export interface SesConfig {
   readonly region?: string;
   /**
    * Request timeout in milliseconds.
+   * The response body is included; 0 or `Infinity` for none.
    * @default 30000
    */
   readonly timeout?: number;

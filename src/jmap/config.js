@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/jmap/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved JMAP configuration with default values applied.
  * @param config The user-provided configuration.
@@ -11,7 +13,7 @@ const createJmapConfig = (config) => {
   if (!config.bearerToken && !config.basicAuth) {
     throw new Error('Either bearerToken or basicAuth must be provided');
   }
-  return {
+  const resolved = {
     sessionUrl: config.sessionUrl,
     bearerToken: config.bearerToken ?? null,
     basicAuth: config.basicAuth ?? null,
@@ -23,6 +25,8 @@ const createJmapConfig = (config) => {
     sessionCacheTtl: config.sessionCacheTtl ?? 300000,
     baseUrl: config.baseUrl ?? null,
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 module.exports = { createJmapConfig };

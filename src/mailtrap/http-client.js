@@ -135,7 +135,6 @@ class MailtrapHttpClient {
       signal,
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
-      isZeroTimeoutDisabled: true,
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
       read: async (response) => {
         const text = await response.text();

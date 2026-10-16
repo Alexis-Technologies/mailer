@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/mailgun/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { checkRequestOptions } = require('../internal/http.js');
+
 /**
  * Creates a resolved Mailgun configuration by applying default values to optional fields.
  *
@@ -16,7 +18,7 @@ const createMailgunConfig = (config) => {
   const region = config.region ?? 'us';
   const baseUrl = config.baseUrl ?? getDefaultBaseUrl(region);
 
-  return {
+  const resolved = {
     apiKey: config.apiKey,
     domain: config.domain,
     region,
@@ -29,6 +31,8 @@ const createMailgunConfig = (config) => {
     clickTracking: config.clickTracking ?? true,
     openTracking: config.openTracking ?? true,
   };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  return resolved;
 };
 
 /**
