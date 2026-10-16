@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 /**
  * Creates a resolved SendGrid configuration by applying default values to optional fields.
@@ -15,6 +16,7 @@ const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../in
  * @internal
  */
 const createSendGridConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
   const resolved = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://api.sendgrid.com/v3',
@@ -24,7 +26,7 @@ const createSendGridConfig = (config) => {
     logger: config.logger,
     retries: config.retries ?? 3,
     concurrency: config.concurrency ?? 1,
-    validateSsl: config.validateSsl ?? true,
+    validateSsl: true,
     headers: config.headers ?? {},
     clickTracking: config.clickTracking ?? true,
     openTracking: config.openTracking ?? true,

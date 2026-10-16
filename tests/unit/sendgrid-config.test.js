@@ -31,7 +31,6 @@ describe('SendGridConfig', () => {
       baseUrl: 'https://custom.sendgrid.com/v3',
       timeout: 15000,
       retries: 5,
-      validateSsl: false,
       headers: { 'X-Custom': 'value' },
       clickTracking: false,
       openTracking: false,
@@ -45,7 +44,10 @@ describe('SendGridConfig', () => {
     assert.equal(resolved.baseUrl, 'https://custom.sendgrid.com/v3');
     assert.equal(resolved.timeout, 15000);
     assert.equal(resolved.retries, 5);
-    assert.equal(resolved.validateSsl, false);
+    // Changed after the port: fetch cannot skip the check of a certificate, so
+    // `validateSsl: false` is refused rather than accepted and ignored.
+    assert.equal(resolved.validateSsl, true);
+    assert.throws(() => createSendGridConfig({ ...config, validateSsl: false }), TypeError);
     assert.deepEqual(resolved.headers, { 'X-Custom': 'value' });
     assert.equal(resolved.clickTracking, false);
     assert.equal(resolved.openTracking, false);

@@ -133,7 +133,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
    `multipart/related`.
 2. (fixed, see 79) mailgun: an inline attachment was sent under its `filename`, not its
    `contentId` (`message-converter.js`), so a `cid:` in the HTML did not match it.
-3. `validateSsl` is accepted and never read (ses, resend, sendgrid, mailgun, mailtrap, plunk).
+3. (fixed, see 84) `validateSsl` was accepted and never read (ses, resend, sendgrid, mailgun,
+   mailtrap, plunk).
 4. (fixed, see 38) SMTP AUTH PLAIN and LOGIN encoded with `btoa`, which fails on non-Latin-1
    credentials; so did Basic auth in jmap and mailgun.
 5. (fixed, see 83) `cram-md5` was in the `SmtpAuth` type but not implemented.
@@ -420,6 +421,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     did any method the connection did not know. It is gone from the type (an obsolete mechanism
     whose server keeps a password equivalent, where AUTH goes over TLS anyway), and
     `SmtpTransport` refuses an unknown method when it is made (`checkAuthMethod`).
+84. ses, resend, sendgrid, mailgun, mailtrap, plunk (known bug 3): `validateSsl: false` was
+    accepted and ignored, so a caller believed certificates went unchecked. Node's fetch has no
+    switch for it without undici, so `false` throws a `TypeError` that points to a `fetch` of
+    the caller's own (`checkValidateSsl`); true or absent changes nothing.
 
 ## Repository layout
 
@@ -432,7 +437,7 @@ src/
   internal/         private modules shared by subpaths, not in the exports map (redact.js,
                     redact-addresses.js, unsent.js, delivery-unknown.js, http.js,
                     config.js, loopback.js, body.js, sleep.js, log.js, base64.js,
-                    headers.js, provider.js, batch.js)
+                    headers.js, provider.js, batch.js, validate-ssl.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

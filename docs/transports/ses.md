@@ -405,7 +405,21 @@ const testTransport = new SesTransport({
   region: process.env.SES_TEST_REGION ?? 'us-east-1',
   timeout: 10000,
   retries: 1, // Fewer retries for faster test execution
-  validateSsl: false, // For testing with local endpoints
+});
+```
+
+`validateSsl: false` throws a `TypeError`, as `fetch` checks every
+certificate.  To reach a local endpoint with a self-signed certificate, pass a
+`fetch` of your own whose undici dispatcher skips the check:
+
+```js
+// @noErrors
+const { Agent, fetch } = require('undici');
+
+const insecure = new Agent({ connect: { rejectUnauthorized: false } });
+const localTransport = new SesTransport({
+  authentication: { type: 'credentials', accessKeyId: 'test', secretAccessKey: 'test' },
+  fetch: (url, init) => fetch(url, { ...init, dispatcher: insecure }),
 });
 ```
 

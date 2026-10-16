@@ -6,7 +6,6 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 
 ## HTTP providers and JMAP
 
-- `validateSsl` is accepted and never read (SES, Resend, SendGrid, Mailgun, Mailtrap, Plunk).
 - JMAP on Node 24: an authentication rejection (401) during the upload of a raw message whose
   size is not known ahead becomes a retryable network error, as Node's `fetch` reports an early
   answer to a streamed body so. Requests, and raw messages of a known size up to 4 MiB, go from a

@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkRequestOptions } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 /**
  * Creates a resolved SES configuration with default values applied.
@@ -32,6 +33,7 @@ const { checkRequestOptions } = require('../internal/config.js');
 const AWS_REGION = /^[a-z]{2}(?:-[a-z]+)+-\d+$/;
 
 const createSesConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
   const resolved = {
     authentication: config.authentication,
     region: config.region ?? 'us-east-1',
@@ -40,7 +42,7 @@ const createSesConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
-    validateSsl: config.validateSsl ?? true,
+    validateSsl: true,
     headers: config.headers ?? {},
     configurationSetName: config.configurationSetName,
     defaultTags: config.defaultTags ?? {},

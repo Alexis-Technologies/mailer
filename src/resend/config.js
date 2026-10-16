@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 /**
  * Creates a resolved Resend configuration by applying default values to optional fields.
@@ -15,6 +16,7 @@ const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js')
  * @internal
  */
 const createResendConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
   const resolved = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl ?? 'https://api.resend.com',
@@ -23,7 +25,7 @@ const createResendConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
-    validateSsl: config.validateSsl ?? true,
+    validateSsl: true,
     headers: config.headers ?? {},
   };
   checkRequestOptions(resolved.timeout, resolved.retries);

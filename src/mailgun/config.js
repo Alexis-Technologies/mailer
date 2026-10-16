@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 /**
  * Creates a resolved Mailgun configuration by applying default values to optional fields.
@@ -15,6 +16,7 @@ const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../in
  * @internal
  */
 const createMailgunConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
   const region = config.region ?? 'us';
   const baseUrl = config.baseUrl ?? getDefaultBaseUrl(region);
 
@@ -29,7 +31,7 @@ const createMailgunConfig = (config) => {
     logger: config.logger,
     retries: config.retries ?? 3,
     concurrency: config.concurrency ?? 1,
-    validateSsl: config.validateSsl ?? true,
+    validateSsl: true,
     headers: config.headers ?? {},
     tracking: config.tracking ?? true,
     clickTracking: config.clickTracking ?? true,

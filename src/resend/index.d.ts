@@ -52,7 +52,9 @@ export interface ResendConfig extends TransportDependencies {
    */
   readonly retries?: number;
   /**
-   * Whether to validate SSL certificates.
+   * Must be true or left out: fetch checks every certificate, and `false`
+   * throws a `TypeError`.  For a test server with a self-signed certificate,
+   * pass a `fetch` whose undici dispatcher skips the check.
    *
    * @default true
    */

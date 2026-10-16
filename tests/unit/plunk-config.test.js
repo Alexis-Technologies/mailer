@@ -27,7 +27,6 @@ describe('createPlunkConfig', () => {
       baseUrl: 'https://plunk.example.com/api',
       timeout: 60000,
       retries: 5,
-      validateSsl: false,
       headers: { 'X-Custom-Header': 'value' },
     };
 
@@ -37,7 +36,10 @@ describe('createPlunkConfig', () => {
     assert.equal(resolved.baseUrl, 'https://plunk.example.com/api');
     assert.equal(resolved.timeout, 60000);
     assert.equal(resolved.retries, 5);
-    assert.equal(resolved.validateSsl, false);
+    // Changed after the port: fetch cannot skip the check of a certificate, so
+    // `validateSsl: false` is refused rather than accepted and ignored.
+    assert.equal(resolved.validateSsl, true);
+    assert.throws(() => createPlunkConfig({ ...config, validateSsl: false }), TypeError);
     assert.deepEqual(resolved.headers, { 'X-Custom-Header': 'value' });
   });
 

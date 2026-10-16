@@ -523,3 +523,25 @@ test('Internal: concurrency must be a positive integer', () => {
     assert.throws(() => checkConcurrency(concurrency), RangeError, String(concurrency));
   }
 });
+
+test('Internal: every provider that took validateSsl refuses false', () => {
+  const transports = [
+    [
+      require('../../src/ses/index.js').SesTransport,
+      { authentication: { type: 'credentials', accessKeyId: 'A', secretAccessKey: 'S' } },
+    ],
+    [require('../../src/resend/index.js').ResendTransport, { apiKey: 're_key' }],
+    [require('../../src/sendgrid/index.js').SendGridTransport, { apiKey: 'SG.key' }],
+    [
+      require('../../src/mailgun/index.js').MailgunTransport,
+      { apiKey: 'key', domain: 'mg.example.com' },
+    ],
+    [require('../../src/mailtrap/index.js').MailtrapTransport, { token: 'token' }],
+    [require('../../src/plunk/index.js').PlunkTransport, { apiKey: 'sk_key' }],
+  ];
+  for (const [Transport, config] of transports) {
+    assert.throws(() => new Transport({ ...config, validateSsl: false }), /fetch checks every/);
+    assert.ok(new Transport({ ...config, validateSsl: true }));
+    assert.ok(new Transport(config));
+  }
+});

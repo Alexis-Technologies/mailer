@@ -36,7 +36,6 @@ test('createSesConfig preserves provided values', () => {
     region: 'eu-west-1',
     timeout: 15000,
     retries: 5,
-    validateSsl: false,
     headers: { 'X-Custom': 'value' },
     configurationSetName: 'test-config-set',
     defaultTags: { environment: 'test' },
@@ -48,7 +47,10 @@ test('createSesConfig preserves provided values', () => {
   assert.equal(resolved.region, 'eu-west-1');
   assert.equal(resolved.timeout, 15000);
   assert.equal(resolved.retries, 5);
-  assert.equal(resolved.validateSsl, false);
+  // Changed after the port: fetch cannot skip the check of a certificate, so
+  // `validateSsl: false` is refused rather than accepted and ignored.
+  assert.equal(resolved.validateSsl, true);
+  assert.throws(() => createSesConfig({ ...config, validateSsl: false }), TypeError);
   assert.deepEqual(resolved.headers, { 'X-Custom': 'value' });
   assert.equal(resolved.configurationSetName, 'test-config-set');
   assert.deepEqual(resolved.defaultTags, { environment: 'test' });

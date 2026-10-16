@@ -331,6 +331,10 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`validateSsl: false` throws instead of being ignored** (an upstream bug, `./ses`, `./resend`,
+  `./sendgrid`, `./mailgun`, `./mailtrap`, `./plunk`): `fetch` checks every certificate, so the
+  option never did anything. `false` now throws a `TypeError` that suggests a `fetch` of your
+  own with an undici dispatcher for a test server.
 - **`./smtp` refuses an authentication method it does not have when it is made** (an upstream
   bug): `cram-md5` was in the type and failed at the first send. It is gone from the type, and an
   unknown `method` throws a `TypeError` from the constructor.

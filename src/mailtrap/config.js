@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 const DEFAULT_SEND_BASE_URL = 'https://send.api.mailtrap.io';
 const DEFAULT_SANDBOX_BASE_URL = 'https://sandbox.api.mailtrap.io';
@@ -16,6 +17,7 @@ const DEFAULT_USER_AGENT = '@alexify/mailer/mailtrap';
  * @throws {RangeError} If `sandbox` is `true` and `inboxId` is missing.
  */
 const createMailtrapConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
   const sandbox = config.sandbox ?? false;
 
   if (sandbox && !isValidInboxId(config.inboxId)) {
@@ -36,7 +38,7 @@ const createMailtrapConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
     retries: config.retries ?? 3,
-    validateSsl: config.validateSsl ?? true,
+    validateSsl: true,
     headers: config.headers == null ? {} : { ...config.headers },
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
