@@ -97,7 +97,13 @@ const escapeSaslName = (name) => {
  * @returns The selected mechanism, either `"xoauth2"` or `"oauthbearer"`.
  */
 const selectOAuth2Mechanism = (capabilities) => {
-  const authLine = capabilities.find((cap) => cap.toUpperCase().startsWith('AUTH'));
+  let authLine;
+  for (const capability of capabilities) {
+    if (capability.toUpperCase().startsWith('AUTH')) {
+      authLine = capability;
+      break;
+    }
+  }
   // Normalize "=" to whitespace so the older `AUTH=XOAUTH2 ...` form (where the
   // first mechanism is glued to the AUTH keyword) is parsed like `AUTH XOAUTH2`.
   const mechanisms =
@@ -138,7 +144,7 @@ const REFRESH_SAFETY_MARGIN_MS = 60_000;
  * The default access token lifetime (in seconds) assumed when the token
  * endpoint omits `expires_in`.
  */
-const DEFAULT_EXPIRES_IN = 3600;
+const DEFAULT_EXPIRES_IN_SECONDS = 3600;
 
 /**
  * How long to wait for the token endpoint before aborting the request, so a
@@ -272,11 +278,11 @@ class OAuth2TokenManager {
         // a duplicate refresh.  Refresh slightly before expiry; cap the safety
         // margin at half the lifetime so short-lived tokens are not treated as
         // already expired (which would refresh on every connection).
-        const lifetimeMs = result.expiresIn * 1000;
-        const safetyMargin = Math.min(REFRESH_SAFETY_MARGIN_MS, lifetimeMs / 2);
+        const lifetimeMs = result.expiresInSeconds * 1000;
+        const safetyMarginMs = Math.min(REFRESH_SAFETY_MARGIN_MS, lifetimeMs / 2);
         this.cached = {
           accessToken: result.accessToken,
-          expiresAt: Date.now() + lifetimeMs - safetyMargin,
+          expiresAt: Date.now() + lifetimeMs - safetyMarginMs,
         };
         return result;
       })
@@ -300,6 +306,13 @@ class OAuth2TokenManager {
    * @throws {SmtpAuthError} If the request fails or the response is invalid.
    */
   async refresh(auth) {
+    const { response, text } = await this.requestToken(auth);
+    return readTokenResponse(response, text);
+  }
+
+  // The token request and its body, bounded by an internal timeout so that a
+  // stalled endpoint cannot leave the shared `pending` promise unresolved.
+  async requestToken(auth) {
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       client_id: auth.clientId,
@@ -308,22 +321,17 @@ class OAuth2TokenManager {
     if (auth.clientSecret != null) body.set('client_secret', auth.clientSecret);
     if (auth.scope != null) body.set('scope', auth.scope);
 
-    // Bound the request with an internal timeout so a stalled endpoint cannot
-    // leave the shared `pending` promise unresolved forever.
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
+    const timer = setTimeout(() => {
       controller.abort(new Error('OAuth 2.0 token request timed out'));
     }, TOKEN_REQUEST_TIMEOUT_MS);
-
-    let response;
-    let text;
     // Call through a local variable so the global `fetch` is not invoked as a
     // method of this manager, which throws "Illegal invocation" in some
     // runtimes (the native `fetch` requires a `globalThis`/undefined receiver).
     // Read at each refresh, so that the global one may be replaced later.
     const fetchFn = this.fetchFn ?? globalThis.fetch;
     try {
-      response = await fetchFn(auth.tokenEndpoint, {
+      const response = await fetchFn(auth.tokenEndpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/x-www-form-urlencoded',
@@ -337,58 +345,58 @@ class OAuth2TokenManager {
       });
       // Read the body under the same timeout: an endpoint that returns headers
       // but stalls on the body must not leave `pending` unresolved forever.
-      text = await readText(response);
-    } catch (cause) {
+      return { response, text: await readText(response) };
+    } catch (error) {
       throw new SmtpAuthError(
         `Failed to request an OAuth 2.0 access token from ` +
           `${auth.tokenEndpoint}: ` +
-          `${cause instanceof Error ? cause.message : String(cause)}`,
+          `${error instanceof Error ? error.message : String(error)}`,
       );
     } finally {
-      clearTimeout(timeout);
+      clearTimeout(timer);
     }
-
-    const safeText = truncateErrorBody(text);
-    if (!response.ok) {
-      throw new SmtpAuthError(
-        `OAuth 2.0 token endpoint responded with HTTP ${response.status}: ${safeText}`,
-      );
-    }
-
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new SmtpAuthError(`OAuth 2.0 token endpoint returned a non-JSON response: ${safeText}`);
-    }
-
-    if (typeof json !== 'object' || json == null || typeof json.access_token !== 'string') {
-      throw new SmtpAuthError(
-        `OAuth 2.0 token endpoint response did not include an access_token: ${safeText}`,
-      );
-    }
-
-    const record = json;
-    // Accept `expires_in` only as a finite, non-negative number of seconds.
-    // Some providers send it as a numeric string; `Number()` (unlike
-    // `parseInt`) rejects partial parses like "100abc".  Negative, NaN, and
-    // Infinity values fall back to the default lifetime.
-    const rawExpiresIn = record.expires_in;
-    let parsedExpiresIn;
-    if (typeof rawExpiresIn === 'number') {
-      parsedExpiresIn = rawExpiresIn;
-    } else if (typeof rawExpiresIn === 'string' && rawExpiresIn.trim() !== '') {
-      parsedExpiresIn = Number(rawExpiresIn);
-    } else {
-      parsedExpiresIn = NaN;
-    }
-    const expiresIn =
-      Number.isFinite(parsedExpiresIn) && parsedExpiresIn >= 0
-        ? parsedExpiresIn
-        : DEFAULT_EXPIRES_IN;
-    return { accessToken: record.access_token, expiresIn };
   }
 }
+
+/**
+ * Reads the access token and its lifetime from the answer of a token endpoint.
+ *
+ * @param response The response of the token request.
+ * @param text Its body.
+ * @returns The access token and its lifetime in seconds.
+ * @throws {SmtpAuthError} If the endpoint failed or answered without a token.
+ */
+const readTokenResponse = (response, text) => {
+  const safeText = truncateErrorBody(text);
+  if (!response.ok) {
+    throw new SmtpAuthError(
+      `OAuth 2.0 token endpoint responded with HTTP ${response.status}: ${safeText}`,
+    );
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new SmtpAuthError(`OAuth 2.0 token endpoint returned a non-JSON response: ${safeText}`);
+  }
+  if (typeof json !== 'object' || json == null || typeof json.access_token !== 'string') {
+    throw new SmtpAuthError(
+      `OAuth 2.0 token endpoint response did not include an access_token: ${safeText}`,
+    );
+  }
+  return { accessToken: json.access_token, expiresInSeconds: readExpiresIn(json.expires_in) };
+};
+
+// Accepts `expires_in` only as a finite, non-negative number of seconds.  Some
+// providers send it as a numeric string; `Number()` (unlike `parseInt`)
+// rejects partial parses like "100abc".  Negative, NaN, and Infinity values
+// fall back to the default lifetime.
+const readExpiresIn = (value) => {
+  let seconds = NaN;
+  if (typeof value === 'number') seconds = value;
+  else if (typeof value === 'string' && value.trim() !== '') seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_EXPIRES_IN_SECONDS;
+};
 
 module.exports = {
   SmtpAuthError,

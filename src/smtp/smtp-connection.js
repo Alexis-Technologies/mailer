@@ -73,6 +73,111 @@ const createReplyReader = () => {
 };
 
 /**
+ * Gathers the lines of one reply at a time.
+ *
+ * @returns A collector whose `add()` gives the reply at its final line, `null`
+ * once a reply has more than {@link MAX_REPLY_LINES} lines, and `undefined`
+ * while the reply goes on.
+ */
+const createReplyCollector = () => {
+  let lines = [];
+  return {
+    add(line) {
+      lines.push(line);
+      if (!isFinalReplyLine(line)) return lines.length > MAX_REPLY_LINES ? null : undefined;
+      const reply = {
+        code: parseInt(line.substring(0, 3), 10),
+        message: line.substring(4),
+        raw: lines.join('\r\n'),
+      };
+      lines = [];
+      return reply;
+    },
+  };
+};
+
+/**
+ * Listens to the data, the errors and the close of a socket and to the abort
+ * of a signal.
+ *
+ * @returns The function that stops listening to all of them.
+ */
+const listenToSocket = (socket, signal, onData, onError, onClose, onAbort) => {
+  socket.on('data', onData);
+  socket.on('error', onError);
+  socket.on('close', onClose);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  return () => {
+    socket.off('data', onData);
+    socket.off('error', onError);
+    socket.off('close', onClose);
+    signal?.removeEventListener('abort', onAbort);
+  };
+};
+
+// Each command ended by CRLF, for one write.
+const joinCommands = (commands) => {
+  let text = '';
+  for (const command of commands) text += `${command}\r\n`;
+  return text;
+};
+
+/**
+ * Tells why a connection closed before every command had its reply: a reply
+ * that ended the pipeline (421, or a failure of the first command), or else
+ * the failures among the replies that came.
+ *
+ * @param commands The commands written.
+ * @param responses The replies read before the close.
+ * @returns The error to reject with.
+ */
+const closedBeforeReplies = (commands, responses) => {
+  let failures = '';
+  for (let index = 0; index < responses.length; index++) {
+    const response = responses[index];
+    if (response.code === 421 || (index === 0 && response.code >= 400)) {
+      return new SmtpPipelineTerminatedError(index, response);
+    }
+    if (response.code >= 400) {
+      failures += `${failures === '' ? '' : '; '}${commands[index]}: ${response.code} ${response.message}`;
+    }
+  }
+  const details = failures === '' ? '' : ` Completed failures: ${failures}.`;
+  return new Error(`Connection closed before all command responses.${details}`);
+};
+
+// A recipient the server refused, with whether a retry may take it.
+const describeRejection = (recipient, response) => {
+  const enhancedStatusCode = parseEnhancedSmtpStatusCode(response.code, response.message);
+  return {
+    recipient,
+    code: response.code,
+    response: response.message,
+    retryable: response.code >= 400 && response.code < 500,
+    ...(enhancedStatusCode == null ? {} : { enhancedStatusCode }),
+  };
+};
+
+// The error of an envelope whose every recipient was refused: its reply is the
+// first temporary refusal, or the first refusal when all are permanent.
+const everyRecipientRejected = (rejectedRecipients) => {
+  let rejection;
+  let details = '';
+  for (const item of rejectedRecipients) {
+    if (rejection === undefined && item.retryable) rejection = item;
+    details += `${details === '' ? '' : '; '}${item.recipient}: ${item.code} ${item.response}`;
+  }
+  rejection ??= rejectedRecipients[0];
+  return new SmtpResponseError(
+    `RCPT TO failed for every recipient: ${details}`,
+    rejection.code,
+    'RCPT TO',
+    rejection.response,
+    rejectedRecipients,
+  );
+};
+
+/**
  * Error thrown when a message exceeds the fixed limit advertised through the
  * SMTP SIZE extension.
  *
@@ -128,8 +233,7 @@ class SmtpUtf8UnsupportedError extends Error {
     super(
       missingCapability === 'SMTPUTF8'
         ? 'The SMTP server does not advertise SMTPUTF8.'
-        : // oxlint-disable-next-line no-useless-concat -- upstream
-          'The SMTP server advertises SMTPUTF8 without the required ' + '8BITMIME capability.',
+        : 'The SMTP server advertises SMTPUTF8 without the required 8BITMIME capability.',
     );
     this.name = 'SmtpUtf8UnsupportedError';
     this.missingCapability = missingCapability;
@@ -325,13 +429,13 @@ class SmtpConnection {
     const establishedEvent = this.config.secure ? 'secureConnect' : 'connect';
 
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const timer = setTimeout(() => {
         onError(new TypeError('Connection timeout.'));
         this.socket?.destroy();
       }, this.config.connectionTimeout);
 
       const cleanup = () => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         this.socket?.off(establishedEvent, onConnect);
         this.socket?.off('error', onError);
         this.socket?.off('close', onClose);
@@ -421,17 +525,24 @@ class SmtpConnection {
 
     return new Promise((resolve, reject) => {
       const reader = createReplyReader();
-      let responseLines = [];
+      const collector = createReplyCollector();
       const responses = [];
-      const startTimeout = () =>
+      const startTimer = () =>
         setTimeout(() => {
           cleanup();
           reject(new Error('Command timeout'));
         }, this.config.socketTimeout);
-      let timeout = startTimeout();
-      const resetTimeout = () => {
-        clearTimeout(timeout);
-        timeout = startTimeout();
+      let timer = startTimer();
+
+      const finish = (moreLines) => {
+        cleanup();
+        if (commands[0] === 'DATA' && (moreLines || reader.pending.length > 0)) {
+          this.socket?.destroy();
+          reject(new TypeError('Premature SMTP reply after DATA readiness.'));
+          return;
+        }
+        this.log.write('trace', () => ({ codes: replyCodes(responses) }), 'SMTP replies');
+        resolve(responses);
       };
 
       const onData = (data) => {
@@ -440,50 +551,25 @@ class SmtpConnection {
           failOnLimit();
           return;
         }
-
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-          const line = lines[lineIndex];
-          responseLines.push(line);
-          if (!isFinalReplyLine(line)) {
-            if (responseLines.length > MAX_REPLY_LINES) {
-              failOnLimit();
-              return;
-            }
-          } else {
-            const code = parseInt(line.substring(0, 3), 10);
-            const message = line.substring(4);
-            const response = {
-              code,
-              message,
-              raw: responseLines.join('\r\n'),
-            };
-            const responseIndex = responses.length;
-            responses.push(response);
-            responseLines = [];
-
-            if (responses.length === commands.length) {
-              cleanup();
-              if (
-                commands[0] === 'DATA' &&
-                (lineIndex + 1 < lines.length || reader.pending.length > 0)
-              ) {
-                this.socket?.destroy();
-                reject(new TypeError('Premature SMTP reply after DATA readiness.'));
-                return;
-              }
-              this.log.write('trace', () => ({ codes: replyCodes(responses) }), 'SMTP replies');
-              resolve(responses);
-              return;
-            }
-
-            if (response.code === 421) {
-              cleanup();
-              reject(new SmtpPipelineTerminatedError(responseIndex, response));
-              return;
-            }
-
-            resetTimeout();
+          const response = collector.add(lines[lineIndex]);
+          if (response === null) {
+            failOnLimit();
+            return;
           }
+          if (response === undefined) continue;
+          responses.push(response);
+          if (responses.length === commands.length) {
+            finish(lineIndex + 1 < lines.length);
+            return;
+          }
+          if (response.code === 421) {
+            cleanup();
+            reject(new SmtpPipelineTerminatedError(responses.length - 1, response));
+            return;
+          }
+          clearTimeout(timer);
+          timer = startTimer();
         }
       };
 
@@ -500,51 +586,30 @@ class SmtpConnection {
 
       const onClose = () => {
         cleanup();
-        const responseIndex = responses.findIndex(
-          (response, index) => response.code === 421 || (index === 0 && response.code >= 400),
-        );
-        if (responseIndex >= 0) {
-          reject(new SmtpPipelineTerminatedError(responseIndex, responses[responseIndex]));
-          return;
-        }
-        const completedFailures = responses.flatMap((response, index) =>
-          response.code >= 400 ? [`${commands[index]}: ${response.code} ${response.message}`] : [],
-        );
-        const failureDetails =
-          completedFailures.length > 0
-            ? ` Completed failures: ${completedFailures.join('; ')}.`
-            : '';
-        reject(new Error(`Connection closed before all command responses.${failureDetails}`));
+        reject(closedBeforeReplies(commands, responses));
       };
 
       const onAbort = () => {
         cleanup();
-        try {
-          signal?.throwIfAborted();
-        } catch (error) {
-          reject(error);
-        }
+        reject(signal.reason);
       };
 
+      const stopListening = listenToSocket(this.socket, signal, onData, onError, onClose, onAbort);
       const cleanup = () => {
-        clearTimeout(timeout);
-        this.socket?.off('data', onData);
-        this.socket?.off('error', onError);
-        this.socket?.off('close', onClose);
-        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(timer);
+        stopListening();
       };
-
-      this.socket.on('data', onData);
-      this.socket.on('error', onError);
-      this.socket.on('close', onClose);
-      signal?.addEventListener('abort', onAbort, { once: true });
-      this.socket.write(commands.map((command) => `${command}\r\n`).join(''));
-      this.log.write(
-        'trace',
-        () => ({ commands: describeCommands(commands, this.authenticating) }),
-        'SMTP commands',
-      );
+      this.socket.write(joinCommands(commands));
+      this.traceCommands(commands);
     });
+  }
+
+  traceCommands(commands) {
+    this.log.write(
+      'trace',
+      () => ({ commands: describeCommands(commands, this.authenticating) }),
+      'SMTP commands',
+    );
   }
 
   greeting(signal) {
@@ -556,8 +621,8 @@ class SmtpConnection {
 
     return new Promise((resolve, reject) => {
       const reader = createReplyReader();
-      const replyLines = [];
-      const timeout = setTimeout(() => {
+      const collector = createReplyCollector();
+      const timer = setTimeout(() => {
         onError(new Error('Greeting timeout.'));
       }, this.config.socketTimeout);
 
@@ -572,19 +637,15 @@ class SmtpConnection {
         }
 
         for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          replyLines.push(line);
-          if (isFinalReplyLine(line)) {
-            const code = parseInt(line.substring(0, 3), 10);
-            const message = line.substring(4);
-
-            cleanup();
-            resolve({ code, message, raw: replyLines.join('\r\n') });
-            return;
-          }
-          if (replyLines.length > MAX_REPLY_LINES) {
+          const reply = collector.add(lines[i]);
+          if (reply === null) {
             this.socket?.destroy();
             onError(createReplyLimitError());
+            return;
+          }
+          if (reply !== undefined) {
+            cleanup();
+            resolve(reply);
             return;
           }
         }
@@ -601,18 +662,11 @@ class SmtpConnection {
         this.socket?.destroy();
         reject(signal?.reason);
       };
+      const stopListening = listenToSocket(this.socket, signal, onData, onError, onClose, onAbort);
       const cleanup = () => {
-        clearTimeout(timeout);
-        this.socket?.off('data', onData);
-        this.socket?.off('error', onError);
-        this.socket?.off('close', onClose);
-        signal?.removeEventListener('abort', onAbort);
+        clearTimeout(timer);
+        stopListening();
       };
-
-      this.socket.on('data', onData);
-      this.socket.on('error', onError);
-      this.socket.on('close', onClose);
-      signal?.addEventListener('abort', onAbort, { once: true });
       if (signal?.aborted) onAbort();
     });
   }
@@ -718,12 +772,12 @@ class SmtpConnection {
     this.socket = tlsSocket;
     this.observeSocket(tlsSocket);
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(
+      const timer = setTimeout(
         () => fail(new Error('STARTTLS upgrade timeout.')),
         this.config.connectionTimeout,
       );
       const cleanup = () => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         tlsSocket.off('secureConnect', onSecureConnect);
         tlsSocket.off('error', fail);
         tlsSocket.off('close', onClose);
@@ -973,35 +1027,69 @@ class SmtpConnection {
     signal?.throwIfAborted();
     checkSmtpPath(message.envelope.from ?? '');
     for (const recipient of message.envelope.to) checkSmtpPath(recipient);
+    const mail = this.mailParameters(message);
+    if (!this.socket || !this.usable) {
+      throw new TypeError('SMTP connection is closed.');
+    }
+    const stream = await prepareOnSocket(
+      this.socket,
+      this.config.socketTimeout,
+      // oxlint-disable-next-line no-shadow -- upstream
+      (signal, progress) =>
+        'rawMessage' in message
+          ? prepareRawSmtpStream(
+              message.rawMessage,
+              mail.negotiate,
+              mail.checkSize,
+              progress,
+              signal,
+            )
+          : prepareMessageStream(message, mail.checkSize, progress, signal),
+      signal,
+    );
+    mail.negotiate(stream.encoding);
+    if (stream.size != null) mail.checkSize(stream.size);
+    const rejectedRecipients = await this.sendEnvelope(
+      message.envelope,
+      mail.command(stream.size),
+      signal,
+    );
+    const finalResponse = await this.sendData(stream, mail.checkSize, signal);
+    const messageId = this.extractMessageId(finalResponse.message);
+    return { messageId, rejectedRecipients };
+  }
 
-    let smtpUtf8Parameters = '';
+  /**
+   * Works out the parameters of MAIL FROM from the extensions of the server
+   * as the encoding and the size of a message become known.
+   *
+   * @param message The prepared message.
+   * @returns `negotiate(encoding)`, which asks for 8BITMIME and SMTPUTF8 as
+   * the encoding needs them, `checkSize(size, phase)` against SIZE, and
+   * `command(size)`, the MAIL FROM command.
+   * @throws {Error} If the server lacks an extension the message needs.
+   */
+  mailParameters(message) {
+    let bodyParameters = '';
     const negotiate = (encoding) => {
-      const supports = (name) => this.hasCapability(name);
       if (message.requiresSmtpUtf8 || encoding === 'utf8') {
-        if (!supports('SMTPUTF8')) {
-          throw new SmtpUtf8UnsupportedError('SMTPUTF8');
-        }
-        if (!supports('8BITMIME')) {
-          throw new SmtpUtf8UnsupportedError('8BITMIME');
-        }
-        smtpUtf8Parameters = ' BODY=8BITMIME SMTPUTF8';
+        if (!this.hasCapability('SMTPUTF8')) throw new SmtpUtf8UnsupportedError('SMTPUTF8');
+        if (!this.hasCapability('8BITMIME')) throw new SmtpUtf8UnsupportedError('8BITMIME');
+        bodyParameters = ' BODY=8BITMIME SMTPUTF8';
       } else if (encoding === '8bit') {
-        if (!supports('8BITMIME')) throw new Smtp8BitMimeUnsupportedError();
-        smtpUtf8Parameters = ' BODY=8BITMIME';
+        if (!this.hasCapability('8BITMIME')) throw new Smtp8BitMimeUnsupportedError();
+        bodyParameters = ' BODY=8BITMIME';
       }
     };
     negotiate('rawMessage' in message ? message.rawMessage.encoding : undefined);
 
     const sizeCapability = parseSizeCapability(this.capabilityLine('SIZE'));
-    let sizeParameter = '';
-
     const dsn = message.envelope.dsn;
     if (dsn != null && !/^DSN[ \t]*$/i.test(this.capabilityLine('DSN') ?? '')) {
       throw new SmtpDsnUnsupportedError();
     }
-    const mailDsnParameters =
+    const dsnParameters =
       dsn == null || dsn.mailParameters.length === 0 ? '' : ` ${dsn.mailParameters.join(' ')}`;
-
     const checkSize = (size, phase = 'preflight') => {
       if (!Number.isSafeInteger(size)) {
         throw new RangeError('Message size exceeds the safe integer range.');
@@ -1010,89 +1098,39 @@ class SmtpConnection {
         throw new SmtpMessageSizeError(size, sizeCapability.maximum, phase);
       }
     };
-    if (!this.socket || !this.usable) {
-      throw new TypeError('SMTP connection is closed.');
-    }
-    const stream =
-      'rawMessage' in message
-        ? await prepareOnSocket(
-            this.socket,
-            this.config.socketTimeout,
-            // oxlint-disable-next-line no-shadow -- upstream
-            (signal, progress) =>
-              prepareRawSmtpStream(message.rawMessage, negotiate, checkSize, progress, signal),
-            signal,
-          )
-        : 'raw' in message
-          ? {
-              size: Buffer.byteLength(message.raw) + 2,
-              // oxlint-disable-next-line no-shadow -- upstream
-              async *read(signal) {
-                signal?.throwIfAborted();
-                yield Buffer.from(message.raw + '\r\n');
-              },
-            }
-          : await prepareOnSocket(
-              this.socket,
-              this.config.socketTimeout,
-              // oxlint-disable-next-line no-shadow -- upstream
-              (signal, progress) => prepareMessageStream(message, checkSize, progress, signal),
-              signal,
-            );
-    negotiate(stream.encoding);
-    if (stream.size != null) {
-      checkSize(stream.size);
-      if (sizeCapability != null) sizeParameter = ` SIZE=${stream.size}`;
-    }
+    const command = (size) => {
+      const sizeParameter = size != null && sizeCapability != null ? ` SIZE=${size}` : '';
+      return (
+        `MAIL FROM:<${message.envelope.from ?? ''}>` +
+        `${sizeParameter}${bodyParameters}${dsnParameters}`
+      );
+    };
+    return { negotiate, checkSize, command };
+  }
 
-    const mailCommand =
-      `MAIL FROM:<${message.envelope.from ?? ''}>` +
-      `${sizeParameter}${smtpUtf8Parameters}${mailDsnParameters}`;
-    const recipientCommands = message.envelope.to.map((recipient, index) => {
-      const parameters = dsn?.recipientParameters[index] ?? [];
+  /**
+   * Sends MAIL FROM and a RCPT TO per recipient, pipelined when the server
+   * allows it.
+   *
+   * @param envelope The envelope, with its DSN parameters.
+   * @param mailCommand The MAIL FROM command.
+   * @param signal Cancellation signal.
+   * @returns The recipients the server refused while it took others.
+   * @throws {SmtpResponseError} If MAIL FROM fails, a reply is 421, or every
+   * recipient is refused.
+   */
+  async sendEnvelope(envelope, mailCommand, signal) {
+    const recipientCommands = [];
+    for (let index = 0; index < envelope.to.length; index++) {
+      const parameters = envelope.dsn?.recipientParameters[index] ?? [];
       const suffix = parameters.length === 0 ? '' : ` ${parameters.join(' ')}`;
-      return `RCPT TO:<${recipient}>${suffix}`;
-    });
-    const pipelining = this.hasCapability('PIPELINING');
-
-    let mailResponse;
-    let recipientResponses;
-    if (pipelining) {
-      try {
-        const envelopeResponses = await this.sendCommands(
-          [mailCommand, ...recipientCommands],
-          signal,
-        );
-        mailResponse = envelopeResponses[0];
-        recipientResponses = envelopeResponses.slice(1);
-      } catch (error) {
-        if (!(error instanceof SmtpPipelineTerminatedError)) {
-          throw error;
-        }
-
-        const { response, responseIndex } = error;
-        if (responseIndex === 0) {
-          throw new SmtpResponseError(
-            `MAIL FROM failed: ${response.message}`,
-            response.code,
-            'MAIL FROM',
-            response.message,
-          );
-        }
-
-        const recipient = message.envelope.to[responseIndex - 1];
-        throw new SmtpResponseError(
-          `RCPT TO failed for ${recipient}: ${response.message}`,
-          response.code,
-          'RCPT TO',
-          response.message,
-        );
-      }
-    } else {
-      mailResponse = await this.sendCommand(mailCommand, signal);
-      recipientResponses = [];
+      recipientCommands.push(`RCPT TO:<${envelope.to[index]}>${suffix}`);
     }
-
+    const pipelining = this.hasCapability('PIPELINING');
+    const replies = pipelining
+      ? await this.sendPipelinedEnvelope(envelope, mailCommand, recipientCommands, signal)
+      : [await this.sendCommand(mailCommand, signal)];
+    const mailResponse = replies[0];
     if (mailResponse.code !== 250) {
       throw new SmtpResponseError(
         `MAIL FROM failed: ${mailResponse.message}`,
@@ -1102,12 +1140,12 @@ class SmtpConnection {
       );
     }
 
-    // RCPT TO
     const rejectedRecipients = [];
-    for (const [index, recipient] of message.envelope.to.entries()) {
+    for (let index = 0; index < envelope.to.length; index++) {
       signal?.throwIfAborted();
+      const recipient = envelope.to[index];
       const rcptResponse = pipelining
-        ? recipientResponses[index]
+        ? replies[index + 1]
         : await this.sendCommand(recipientCommands[index], signal);
       if (rcptResponse.code === 421) {
         throw new SmtpResponseError(
@@ -1118,35 +1156,52 @@ class SmtpConnection {
         );
       }
       if (rcptResponse.code !== 250 && rcptResponse.code !== 251) {
-        const enhancedStatusCode = parseEnhancedSmtpStatusCode(
-          rcptResponse.code,
-          rcptResponse.message,
-        );
-        rejectedRecipients.push({
-          recipient,
-          code: rcptResponse.code,
-          response: rcptResponse.message,
-          retryable: rcptResponse.code >= 400 && rcptResponse.code < 500,
-          ...(enhancedStatusCode == null ? {} : { enhancedStatusCode }),
-        });
+        rejectedRecipients.push(describeRejection(recipient, rcptResponse));
       }
     }
+    if (rejectedRecipients.length > 0 && rejectedRecipients.length === envelope.to.length) {
+      throw everyRecipientRejected(rejectedRecipients);
+    }
+    return rejectedRecipients;
+  }
 
-    if (rejectedRecipients.length > 0 && rejectedRecipients.length === message.envelope.to.length) {
-      const rejection = rejectedRecipients.find((item) => item.retryable) ?? rejectedRecipients[0];
-      const details = rejectedRecipients
-        .map((item) => `${item.recipient}: ${item.code} ${item.response}`)
-        .join('; ');
+  // The replies to MAIL FROM and every RCPT TO, written at once (RFC 2920).
+  async sendPipelinedEnvelope(envelope, mailCommand, recipientCommands, signal) {
+    try {
+      return await this.sendCommands([mailCommand, ...recipientCommands], signal);
+    } catch (error) {
+      if (!(error instanceof SmtpPipelineTerminatedError)) {
+        throw error;
+      }
+      const { response, responseIndex } = error;
+      if (responseIndex === 0) {
+        throw new SmtpResponseError(
+          `MAIL FROM failed: ${response.message}`,
+          response.code,
+          'MAIL FROM',
+          response.message,
+        );
+      }
+      const recipient = envelope.to[responseIndex - 1];
       throw new SmtpResponseError(
-        `RCPT TO failed for every recipient: ${details}`,
-        rejection.code,
+        `RCPT TO failed for ${recipient}: ${response.message}`,
+        response.code,
         'RCPT TO',
-        rejection.response,
-        rejectedRecipients,
+        response.message,
       );
     }
+  }
 
-    // DATA
+  /**
+   * Sends DATA and the message, and reads the reply to its end.
+   *
+   * @param stream The prepared message stream.
+   * @param checkSize The SIZE check, for a source of unknown size.
+   * @param signal Cancellation signal.
+   * @returns The reply to the end of the data.
+   * @throws {SmtpResponseError} If the server refuses DATA or the message.
+   */
+  async sendData(stream, checkSize, signal) {
     const dataResponse = await this.sendCommand('DATA', signal);
     if (dataResponse.code !== 354) {
       throw new SmtpResponseError(
@@ -1156,8 +1211,6 @@ class SmtpConnection {
         dataResponse.message,
       );
     }
-
-    // Message content
     const finalResponse = await writeMessageData(
       this.socket,
       // oxlint-disable-next-line no-shadow -- upstream
@@ -1174,10 +1227,7 @@ class SmtpConnection {
         finalResponse.message,
       );
     }
-
-    // Extract message ID from response
-    const messageId = this.extractMessageId(finalResponse.message);
-    return { messageId, rejectedRecipients };
+    return finalResponse;
   }
 
   extractMessageId(response) {

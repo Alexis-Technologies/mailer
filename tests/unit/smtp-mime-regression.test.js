@@ -4,7 +4,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { createMessage } = require('../../src/core/message.js');
-const { convertMessage } = require('../../src/smtp/message-converter.js');
+// Changed after the port: convertMessage, which src/ no longer uses (it streams
+// a message), is a test helper now.
+const { convertMessage } = require('../helpers/smtp/convert-message.js');
 
 for (const text of ['first\r\nsecond', 'a'.repeat(150), ('x'.repeat(60) + '\n').repeat(20)]) {
   test(`quoted-printable physical lines: ${JSON.stringify(text.slice(0, 20))}`, async () => {

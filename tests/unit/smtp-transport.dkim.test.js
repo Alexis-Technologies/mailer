@@ -3,7 +3,9 @@
 
 const assert = require('node:assert/strict');
 const { describe, test } = require('node:test');
-const { convertMessage } = require('../../src/smtp/message-converter.js');
+// Changed after the port: convertMessage, which src/ no longer uses (it streams
+// a message), is a test helper now.
+const { convertMessage } = require('../helpers/smtp/convert-message.js');
 const {
   TEST_DKIM_DOMAIN,
   TEST_DKIM_PRIVATE_KEY,

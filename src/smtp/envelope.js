@@ -18,6 +18,15 @@ class SmtpEnvelopeValidationError extends TypeError {
   }
 }
 
+// The addresses of To, Cc and Bcc, in that order.
+const recipientAddresses = (message) => {
+  const addresses = [];
+  for (const recipient of message.recipients) addresses.push(recipient.address);
+  for (const recipient of message.ccRecipients) addresses.push(recipient.address);
+  for (const recipient of message.bccRecipients) addresses.push(recipient.address);
+  return addresses;
+};
+
 /**
  * Resolves and validates the SMTP envelope for a message.
  *
@@ -43,14 +52,7 @@ const resolveSmtpEnvelope = (message, override) => {
     );
   }
 
-  const recipients =
-    override?.to === undefined
-      ? [
-          ...message.recipients.map((recipient) => recipient.address),
-          ...message.ccRecipients.map((recipient) => recipient.address),
-          ...message.bccRecipients.map((recipient) => recipient.address),
-        ]
-      : override.to;
+  const recipients = override?.to === undefined ? recipientAddresses(message) : override.to;
   if (!Array.isArray(recipients)) {
     throw new SmtpEnvelopeValidationError('SMTP envelope recipients must be an array.');
   }

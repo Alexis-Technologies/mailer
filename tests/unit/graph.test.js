@@ -87,7 +87,6 @@ const SUBPATHS = Object.keys(pkg.exports)
 const SUBPATH_EDGES = [
   'smtp/config.js -> mime/dkim/types.js',
   'smtp/message-converter.js -> mime/message.js',
-  'smtp/message-converter.js -> mime/stream.js',
   'smtp/message-stream.js -> mime/stream.js',
   // The transport checks the DKIM keys when it is made.
   'smtp/smtp-transport.js -> mime/dkim/sign.js',

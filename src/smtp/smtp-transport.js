@@ -96,7 +96,9 @@ class SmtpTransport {
   /**
    * Callers waiting for a connection to become available, in arrival order.
    */
-  capacityWaiters = [];
+  // Callers waiting for a slot, oldest first: a Set keeps the order of
+  // insertion and drops an aborted waiter without a scan.
+  capacityWaiters = new Set();
 
   /** The current shutdown barrier; new callers wait until it completes. */
   closing;
@@ -241,12 +243,7 @@ class SmtpTransport {
       // Cleared so the catch below cannot hand the same connection back twice.
       connection = undefined;
 
-      return {
-        successful: true,
-        messageId: result.messageId,
-        provider: 'smtp',
-        rejectedRecipients: result.rejectedRecipients,
-      };
+      return sentReceipt(result);
     } catch (error) {
       if (connection != null) {
         if (connection.usable && isReusableLocalFailure(error)) {
@@ -259,7 +256,7 @@ class SmtpTransport {
       // Cancellation rejects rather than producing a receipt.
       options?.signal?.throwIfAborted();
 
-      return createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+      return failureOf(error);
     }
   }
 
@@ -288,12 +285,7 @@ class SmtpTransport {
       );
       await this.returnConnection(connection);
       connection = undefined;
-      return {
-        successful: true,
-        provider: 'smtp',
-        messageId: result.messageId,
-        rejectedRecipients: result.rejectedRecipients,
-      };
+      return sentReceipt(result);
     } catch (error) {
       if (connection != null) {
         if (connection.usable && isReusableLocalFailure(error)) {
@@ -303,7 +295,7 @@ class SmtpTransport {
         }
       }
       options?.signal?.throwIfAborted();
-      return createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+      return failureOf(error);
     }
   }
 
@@ -360,14 +352,12 @@ class SmtpTransport {
           smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope, this.config);
         } catch (error) {
           // A message that cannot be composed never reaches the connection.
-          yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+          yield failureOf(error);
           continue;
         }
 
         if (setupError !== undefined) {
-          const errorMessage =
-            setupError instanceof Error ? setupError.message : String(setupError);
-          yield createSmtpFailure(errorMessage, setupError);
+          yield failureOf(setupError);
           continue;
         }
 
@@ -383,7 +373,7 @@ class SmtpTransport {
             // Cancellation rejects rather than producing receipts.
             options?.signal?.throwIfAborted();
             setupError = error;
-            yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+            yield failureOf(error);
             continue;
           }
         }
@@ -392,12 +382,7 @@ class SmtpTransport {
           options?.signal?.throwIfAborted();
           const result = await connection.sendMessage(smtpMessage, options?.signal);
 
-          yield {
-            successful: true,
-            messageId: result.messageId,
-            provider: 'smtp',
-            rejectedRecipients: result.rejectedRecipients,
-          };
+          yield sentReceipt(result);
         } catch (error) {
           // Cancellation rejects rather than producing a receipt.
           options?.signal?.throwIfAborted();
@@ -406,7 +391,7 @@ class SmtpTransport {
             connectionValid = false;
           }
 
-          yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+          yield failureOf(error);
         }
       }
     } catch (error) {
@@ -577,8 +562,7 @@ class SmtpTransport {
       const onAbort = () => {
         // Dropping the waiter from the queue before rejecting keeps it from
         // consuming a wake-up meant for someone still waiting.
-        const index = waiters.indexOf(waiter);
-        if (index >= 0) waiters.splice(index, 1);
+        waiters.delete(waiter);
         waiter.reject(signal?.reason);
       };
       const waiter = {
@@ -592,13 +576,16 @@ class SmtpTransport {
         },
       };
       signal?.addEventListener('abort', onAbort, { once: true });
-      waiters.push(waiter);
+      waiters.add(waiter);
     });
   }
 
   /** Wakes the caller that has been waiting longest, if there is one. */
   wakeCapacityWaiter() {
-    this.capacityWaiters.shift()?.resolve();
+    const waiter = this.capacityWaiters.values().next().value;
+    if (waiter === undefined) return;
+    this.capacityWaiters.delete(waiter);
+    waiter.resolve();
   }
 
   /**
@@ -751,7 +738,9 @@ class SmtpTransport {
 
     // Slots remain reserved until their sockets close.  Previously admitted
     // capacity waiters may then send, but must discard their connections too.
-    await Promise.all(connections.map((connection) => this.discardConnection(connection)));
+    const discarding = [];
+    for (const connection of connections) discarding.push(this.discardConnection(connection));
+    await Promise.all(discarding);
     this.notifyDrained();
     await closing;
   }
@@ -777,6 +766,16 @@ class SmtpTransport {
   }
 }
 
+const sentReceipt = (result) => ({
+  successful: true,
+  messageId: result.messageId,
+  provider: 'smtp',
+  rejectedRecipients: result.rejectedRecipients,
+});
+
+const failureOf = (error) =>
+  createSmtpFailure(error instanceof Error ? error.message : String(error), error);
+
 const createSmtpFailure = (message, error) => {
   if (error instanceof SmtpDeliveryUnknownError) {
     return createFailedReceipt(message, {
@@ -796,105 +795,78 @@ const createSmtpFailure = (message, error) => {
       code: error.field === 'envelope' ? 'smtp.envelope-invalid' : 'smtp.raw-message-invalid',
     });
   }
-  if (error instanceof Smtp8BitMimeUnsupportedError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      category: 'configuration',
-      retryable: false,
-      attempts: 1,
-      code: 'smtp.8bitmime-unsupported',
-      providerDetails: { missingCapability: '8BITMIME' },
-    });
+  for (const failure of LOCAL_FAILURES) {
+    if (error instanceof failure.type) {
+      return createFailedReceipt(message, {
+        provider: 'smtp',
+        code: failure.code,
+        category: failure.category,
+        retryable: false,
+        attempts: 1,
+        providerDetails: failure.details?.(error),
+      });
+    }
   }
-  if (error instanceof SmtpEnvelopeValidationError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.envelope-invalid',
-      category: 'validation',
-      retryable: false,
-      attempts: 1,
-    });
-  }
-
-  if (error instanceof SmtpDsnValidationError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.dsn-invalid',
-      category: 'validation',
-      retryable: false,
-      attempts: 1,
-    });
-  }
-
-  if (error instanceof SmtpDsnUnsupportedError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.dsn-unsupported',
-      category: 'configuration',
-      retryable: false,
-      attempts: 1,
-    });
-  }
-
-  if (error instanceof SmtpAttachmentReplayError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.attachment-replay-mismatch',
-      category: 'validation',
-      retryable: false,
-      attempts: 1,
-    });
-  }
-
-  if (error instanceof SmtpMessageSizeError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.message-size-exceeded',
-      category: 'rejected',
-      retryable: false,
-      attempts: 1,
-      providerDetails: {
-        actualSize: error.actualSize,
-        maximumSize: error.maximumSize.toString(),
-      },
-    });
-  }
-
-  if (error instanceof SmtpUtf8UnsupportedError) {
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: 'smtp.smtputf8-unsupported',
-      category: 'configuration',
-      retryable: false,
-      attempts: 1,
-      providerDetails: {
-        missingCapability: error.missingCapability,
-      },
-    });
-  }
-
   if (error instanceof SmtpResponseError || error instanceof SmtpAuthResponseError) {
-    const enhancedStatusCode = parseEnhancedSmtpStatusCode(error.code, error.response);
-    const classification = classifySmtpReply(error.code, enhancedStatusCode);
-    return createFailedReceipt(message, {
-      provider: 'smtp',
-      code: `smtp.${error.code}`,
-      category: classification.category,
-      retryable: classification.retryable,
-      attempts: 1,
-      providerDetails: {
-        command: error.command,
-        response: error.response,
-        rejectedRecipients:
-          error instanceof SmtpResponseError ? error.rejectedRecipients : undefined,
-        ...(enhancedStatusCode == null ? {} : { enhancedStatusCode }),
-      },
-    });
+    return createReplyFailure(message, error);
   }
-
   return createFailedReceipt(message, {
     provider: 'smtp',
     attempts: 1,
+  });
+};
+
+// Failures found before or without a reply of the server, which no retry
+// fixes: the code and category of each, and what the receipt tells of it.
+const LOCAL_FAILURES = [
+  {
+    type: Smtp8BitMimeUnsupportedError,
+    code: 'smtp.8bitmime-unsupported',
+    category: 'configuration',
+    details: () => ({ missingCapability: '8BITMIME' }),
+  },
+  { type: SmtpEnvelopeValidationError, code: 'smtp.envelope-invalid', category: 'validation' },
+  { type: SmtpDsnValidationError, code: 'smtp.dsn-invalid', category: 'validation' },
+  { type: SmtpDsnUnsupportedError, code: 'smtp.dsn-unsupported', category: 'configuration' },
+  {
+    type: SmtpAttachmentReplayError,
+    code: 'smtp.attachment-replay-mismatch',
+    category: 'validation',
+  },
+  {
+    type: SmtpMessageSizeError,
+    code: 'smtp.message-size-exceeded',
+    category: 'rejected',
+    details: (error) => ({
+      actualSize: error.actualSize,
+      maximumSize: error.maximumSize.toString(),
+    }),
+  },
+  {
+    type: SmtpUtf8UnsupportedError,
+    code: 'smtp.smtputf8-unsupported',
+    category: 'configuration',
+    details: (error) => ({ missingCapability: error.missingCapability }),
+  },
+];
+
+// A failure the server replied with, classified by its reply code and the
+// enhanced status code in its text.
+const createReplyFailure = (message, error) => {
+  const enhancedStatusCode = parseEnhancedSmtpStatusCode(error.code, error.response);
+  const classification = classifySmtpReply(error.code, enhancedStatusCode);
+  return createFailedReceipt(message, {
+    provider: 'smtp',
+    code: `smtp.${error.code}`,
+    category: classification.category,
+    retryable: classification.retryable,
+    attempts: 1,
+    providerDetails: {
+      command: error.command,
+      response: error.response,
+      rejectedRecipients: error instanceof SmtpResponseError ? error.rejectedRecipients : undefined,
+      ...(enhancedStatusCode == null ? {} : { enhancedStatusCode }),
+    },
   });
 };
 

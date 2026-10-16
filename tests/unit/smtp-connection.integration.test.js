@@ -12,6 +12,9 @@ const {
 } = require('../../src/smtp/smtp-connection.js');
 const { SmtpAuthError } = require('../../src/smtp/oauth2.js');
 const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
+// Changed after the port: a message from a raw string goes through sendRaw()'s
+// path, as src/ no longer takes the string form.
+const { rawSmtpMessage } = require('../helpers/smtp/raw-smtp-message.js');
 
 describe('SMTP Connection Integration Tests', () => {
   const setupTest = async (configOverrides = {}, signal) => {
@@ -610,14 +613,16 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        await connection.sendMessage({
-          envelope: {
-            from: 'josé@example.com',
-            to: ['用户@example.com'],
-          },
-          raw: 'From: josé@example.com\r\n\r\nMessage',
-          requiresSmtpUtf8: true,
-        });
+        await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'josé@example.com',
+              to: ['用户@example.com'],
+            },
+            raw: 'From: josé@example.com\r\n\r\nMessage',
+            requiresSmtpUtf8: true,
+          }),
+        );
 
         assert.ok(
           server
@@ -638,14 +643,16 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'josé@example.com',
-              to: ['recipient@example.com'],
-            },
-            raw: 'Internationalized message',
-            requiresSmtpUtf8: true,
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'josé@example.com',
+                to: ['recipient@example.com'],
+              },
+              raw: 'Internationalized message',
+              requiresSmtpUtf8: true,
+            }),
+          ),
           SmtpUtf8UnsupportedError,
         );
         assert.ok(
@@ -665,14 +672,16 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'sender@example.com',
-              to: ['用户@example.com'],
-            },
-            raw: 'Internationalized message',
-            requiresSmtpUtf8: true,
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'sender@example.com',
+                to: ['用户@example.com'],
+              },
+              raw: 'Internationalized message',
+              requiresSmtpUtf8: true,
+            }),
+          ),
           /8BITMIME/,
         );
         assert.ok(
@@ -688,23 +697,27 @@ describe('SMTP Connection Integration Tests', () => {
       const raw = 'Subject: SIZE test\r\n\r\n.안녕하세요';
       const messageSize = new TextEncoder().encode(`${raw}\r\n`).byteLength;
       try {
-        server.setCapabilities([`sIzE ${messageSize}`]);
+        // Changed after the port: the raw path negotiates the UTF-8 text it
+        // finds, which the string form sent without asking for.
+        server.setCapabilities([`sIzE ${messageSize}`, '8BITMIME', 'SMTPUTF8']);
         await connection.connect();
         await connection.greeting();
         await connection.ehlo();
 
-        await connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['recipient@example.com'],
-          },
-          raw,
-        });
+        await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['recipient@example.com'],
+            },
+            raw,
+          }),
+        );
 
         assert.ok(
           server
             .getReceivedCommands()
-            .includes(`MAIL FROM:<sender@example.com> SIZE=${messageSize}`),
+            .includes(`MAIL FROM:<sender@example.com> SIZE=${messageSize} BODY=8BITMIME SMTPUTF8`),
         );
       } finally {
         await teardownTest(server, connection);
@@ -722,13 +735,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'sender@example.com',
-              to: ['recipient@example.com'],
-            },
-            raw,
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'sender@example.com',
+                to: ['recipient@example.com'],
+              },
+              raw,
+            }),
+          ),
           new SmtpMessageSizeError(messageSize, BigInt(messageSize - 1)),
         );
         assert.ok(
@@ -749,13 +764,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        await connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['recipient@example.com'],
-          },
-          raw,
-        });
+        await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['recipient@example.com'],
+            },
+            raw,
+          }),
+        );
 
         assert.ok(
           server
@@ -777,13 +794,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        await connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['recipient@example.com'],
-          },
-          raw,
-        });
+        await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['recipient@example.com'],
+            },
+            raw,
+          }),
+        );
 
         assert.ok(
           server
@@ -803,13 +822,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        await connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['recipient@example.com'],
-          },
-          raw: 'Message for a server without SIZE',
-        });
+        await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['recipient@example.com'],
+            },
+            raw: 'Message for a server without SIZE',
+          }),
+        );
 
         assert.ok(server.getReceivedCommands().includes('MAIL FROM:<sender@example.com>'));
       } finally {
@@ -826,13 +847,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const sending = connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['first@example.com', 'second@example.com'],
-          },
-          raw: 'Pipelined message',
-        });
+        const sending = connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['first@example.com', 'second@example.com'],
+            },
+            raw: 'Pipelined message',
+          }),
+        );
         // oxlint-disable-next-line no-void -- upstream
         void sending.catch(() => undefined);
 
@@ -863,13 +886,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const sending = connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['first@example.com', 'second@example.com'],
-          },
-          raw: 'Sequential message',
-        });
+        const sending = connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['first@example.com', 'second@example.com'],
+            },
+            raw: 'Sequential message',
+          }),
+        );
         await waitForCommandCount(server, 2);
         assert.deepStrictEqual(server.getReceivedCommands().slice(-1), [
           'MAIL FROM:<sender@example.com>',
@@ -900,13 +925,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const result = await connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['first@example.com', 'rejected@example.com', 'forwarded@example.com'],
-          },
-          raw: 'Mixed recipient message',
-        });
+        const result = await connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['first@example.com', 'rejected@example.com', 'forwarded@example.com'],
+            },
+            raw: 'Mixed recipient message',
+          }),
+        );
 
         assert.deepStrictEqual(result.rejectedRecipients, [
           {
@@ -944,13 +971,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'sender@example.com',
-              to: ['first@example.com', 'second@example.com'],
-            },
-            raw: 'Connection failure message',
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'sender@example.com',
+                to: ['first@example.com', 'second@example.com'],
+              },
+              raw: 'Connection failure message',
+            }),
+          ),
           (error) => {
             assert.ok(error instanceof SmtpResponseError);
             assert.strictEqual(error.code, 421);
@@ -978,13 +1007,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'sender@example.com',
-              to: ['first@example.com', 'second@example.com'],
-            },
-            raw: 'Connection failure message',
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'sender@example.com',
+                to: ['first@example.com', 'second@example.com'],
+              },
+              raw: 'Connection failure message',
+            }),
+          ),
           (error) => {
             assert.ok(error instanceof SmtpResponseError);
             assert.strictEqual(error.code, 421);
@@ -1012,13 +1043,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'blocked@example.com',
-              to: ['first@example.com', 'second@example.com'],
-            },
-            raw: 'Blocked sender message',
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'blocked@example.com',
+                to: ['first@example.com', 'second@example.com'],
+              },
+              raw: 'Blocked sender message',
+            }),
+          ),
           (error) => {
             assert.ok(error instanceof SmtpResponseError);
             assert.strictEqual(error.code, 550);
@@ -1050,13 +1083,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         await assert.rejects(
-          connection.sendMessage({
-            envelope: {
-              from: 'sender@example.com',
-              to: ['first@example.com', 'second@example.com', 'third@example.com'],
-            },
-            raw: 'Connection failure message',
-          }),
+          connection.sendMessage(
+            rawSmtpMessage({
+              envelope: {
+                from: 'sender@example.com',
+                to: ['first@example.com', 'second@example.com', 'third@example.com'],
+              },
+              raw: 'Connection failure message',
+            }),
+          ),
           (error) => {
             assert.ok(error instanceof SmtpResponseError);
             assert.strictEqual(error.code, 421);
@@ -1080,13 +1115,15 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const sending = connection.sendMessage({
-          envelope: {
-            from: 'sender@example.com',
-            to: ['first@example.com', 'second@example.com'],
-          },
-          raw: 'Slow replies message',
-        });
+        const sending = connection.sendMessage(
+          rawSmtpMessage({
+            envelope: {
+              from: 'sender@example.com',
+              to: ['first@example.com', 'second@example.com'],
+            },
+            raw: 'Slow replies message',
+          }),
+        );
         // oxlint-disable-next-line no-void -- upstream
         void sending.catch(() => undefined);
 
@@ -1111,13 +1148,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nHello World!',
-        };
+        });
 
         const result = await connection.sendMessage(testMessage);
 
@@ -1146,13 +1183,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['forwarded@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: forwarded@example.com\r\nSubject: Forwarded\r\n\r\nTest message',
-        };
+        });
 
         const result = await connection.sendMessage(testMessage);
 
@@ -1170,13 +1207,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient1@example.com', 'recipient2@example.com', 'recipient3@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: recipient1@example.com\r\nSubject: Multi-recipient\r\n\r\nMultiple recipients test',
-        };
+        });
 
         const result = await connection.sendMessage(testMessage);
         assert.ok(result.messageId.length > 0);
@@ -1201,13 +1238,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'blocked@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'From: blocked@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nTest message',
-        };
+        });
 
         await assert.rejects(
           connection.sendMessage(testMessage),
@@ -1230,13 +1267,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['invalid@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: invalid@example.com\r\nSubject: Test\r\n\r\nTest message',
-        };
+        });
 
         await assert.rejects(
           connection.sendMessage(testMessage),
@@ -1256,13 +1293,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Rejected\r\n\r\nThis will be rejected',
-        };
+        });
 
         await assert.rejects(connection.sendMessage(testMessage), /DATA failed.*Message rejected/);
       } finally {
@@ -1284,13 +1321,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nTest message',
-        };
+        });
 
         const result = await connection.sendMessage(testMessage);
         assert.strictEqual(result.messageId, 'abc123def456@mail.example.com');
@@ -1311,13 +1348,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'Simple message',
-        };
+        });
 
         const result = await connection.sendMessage(testMessage);
 
@@ -1338,13 +1375,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.ehlo();
 
         // Send a message first
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'Test message',
-        };
+        });
 
         await connection.sendMessage(testMessage);
 
@@ -1447,13 +1484,13 @@ describe('SMTP Connection Integration Tests', () => {
         await connection.greeting();
         await connection.ehlo();
 
-        const testMessage = {
+        const testMessage = rawSmtpMessage({
           envelope: {
             from: 'sender@example.com',
             to: ['recipient@example.com'],
           },
           raw: 'From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Dot Test\r\n\r\nLine 1\r\n.Hidden line\r\nLine 3',
-        };
+        });
 
         await connection.sendMessage(testMessage);
 

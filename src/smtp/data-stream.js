@@ -103,6 +103,138 @@ const abortable = (promise, signal) => {
   });
 };
 
+/**
+ * Writes bytes to the socket and waits until it has taken them and drained,
+ * under the signal of the DATA phase.
+ *
+ * @param socket The connected socket.
+ * @param bytes The bytes to write.
+ * @param owned The signal of the DATA phase.
+ * @param progress Restarts the timeout of the phase.
+ * @returns A promise that settles once the write is done and drained.
+ */
+const writeToSocket = (socket, bytes, owned, progress) => {
+  owned.throwIfAborted();
+  return abortable(
+    new Promise((resolve, reject) => {
+      let written = false;
+      let drained = false;
+      let returned = false;
+      const cleanup = () => {
+        socket.off('drain', drain);
+        owned.removeEventListener('abort', cleanup);
+      };
+      const finish = () => {
+        if (returned && written && drained) {
+          cleanup();
+          progress();
+          resolve();
+        }
+      };
+      const drain = () => {
+        drained = true;
+        finish();
+      };
+      socket.once('drain', drain);
+      owned.addEventListener('abort', cleanup, { once: true });
+      try {
+        const accepted = socket.write(bytes, (error) => {
+          if (error != null) {
+            cleanup();
+            reject(error);
+            return;
+          }
+          written = true;
+          finish();
+        });
+        drained = accepted || drained;
+        returned = true;
+        finish();
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    }),
+    owned,
+  );
+};
+
+const DATA_WINDOW_BYTES = 32768;
+
+/**
+ * Writes the message from its source, dot-stuffed (RFC 5321 §4.5.2), in
+ * windows of at most 32 KiB, checking the size as it grows.
+ *
+ * @param iterator The iterator of the message bytes.
+ * @param write Writes bytes to the socket.
+ * @param owned The signal of the DATA phase.
+ * @param checkSize Throws when the size passes the limit of the server.
+ * @param progress Restarts the timeout of the phase.
+ */
+const writeBody = async (iterator, write, owned, checkSize, progress) => {
+  let lineStart = true;
+  let size = 0;
+  while (true) {
+    owned.throwIfAborted();
+    const item = await abortable(Promise.resolve(iterator.next()), owned);
+    if (item.done) return;
+    const chunk = item.value;
+    for (let offset = 0; offset < chunk.length; offset += DATA_WINDOW_BYTES) {
+      const window = chunk.subarray(offset, offset + DATA_WINDOW_BYTES);
+      size += window.length;
+      checkSize(size);
+      progress();
+      const output = stuffDots(window, lineStart);
+      lineStart = window[window.length - 1] === 0x0a;
+      await write(output);
+    }
+  }
+};
+
+const MAX_DATA_REPLY_BYTES = 65536;
+
+/**
+ * Reads the reply to the end of DATA as its bytes arrive, bounded to 64 KiB.
+ *
+ * @param isTerminated Whether the terminating dot has been written: a reply
+ * before it is premature.
+ * @param onReply Takes the reply at its final line.
+ * @param fail Takes the error of a premature or oversized reply.
+ * @returns The listener of the socket's data.
+ */
+const createDataReplyReader = (isTerminated, onReply, fail) => {
+  let replyBytes = 0;
+  let buffer = '';
+  const lines = [];
+  return (chunk) => {
+    replyBytes += chunk.length;
+    if (replyBytes > MAX_DATA_REPLY_BYTES) {
+      fail(new RangeError('SMTP DATA reply exceeds 64 KiB.'));
+      return;
+    }
+    buffer += Buffer.from(chunk).toString('utf8');
+    let end;
+    while ((end = buffer.indexOf('\r\n')) >= 0) {
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      lines.push(line);
+      // RFC 5321 §4.2: a final line is the code alone or with a space.
+      if (/^\d{3}(?: |$)/.test(line)) {
+        if (!isTerminated()) {
+          fail(new TypeError(`Premature SMTP DATA reply: ${line}`));
+        } else {
+          onReply({
+            code: Number(line.slice(0, 3)),
+            message: line.slice(4),
+            raw: lines.join('\r\n'),
+          });
+        }
+        return;
+      }
+    }
+  };
+};
+
 /** Writes one DATA body with bounded transparency buffers and backpressure. */
 const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) => {
   const controller = new AbortController();
@@ -110,9 +242,6 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
   const owned = combined.signal;
   let terminated = false;
   let complete = false;
-  let replyBytes = 0;
-  let buffer = '';
-  const lines = [];
   let resolveReply;
   const reply = new Promise((resolve) => (resolveReply = resolve));
   // Once the terminating dot is on its way, a failure of the connection can
@@ -130,104 +259,22 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
     clearTimeout(timer);
     timer = setTimeout(() => fail(new TypeError('SMTP DATA timeout.')), timeoutMs);
   };
-  const data = (chunk) => {
-    replyBytes += chunk.length;
-    if (replyBytes > 65536) {
-      fail(new RangeError('SMTP DATA reply exceeds 64 KiB.'));
-      return;
-    }
-    buffer += Buffer.from(chunk).toString('utf8');
-    let end;
-    while ((end = buffer.indexOf('\r\n')) >= 0) {
-      const line = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      lines.push(line);
-      // RFC 5321 §4.2: a final line is the code alone or with a space.
-      if (/^\d{3}(?: |$)/.test(line)) {
-        if (!terminated) {
-          fail(new TypeError(`Premature SMTP DATA reply: ${line}`));
-        } else {
-          resolveReply({
-            code: Number(line.slice(0, 3)),
-            message: line.slice(4),
-            raw: lines.join('\r\n'),
-          });
-        }
-        return;
-      }
-    }
-  };
+  const data = createDataReplyReader(
+    () => terminated,
+    (finalReply) => resolveReply(finalReply),
+    fail,
+  );
   socket.on('error', fail);
   socket.on('close', close);
   socket.on('data', data);
   owned.addEventListener('abort', onAbort, { once: true });
   progress();
   let iterator;
-  const write = async (bytes) => {
-    owned.throwIfAborted();
-    await abortable(
-      new Promise((resolve, reject) => {
-        let written = false;
-        let drained = false;
-        let returned = false;
-        const cleanup = () => {
-          socket.off('drain', drain);
-          owned.removeEventListener('abort', cleanup);
-        };
-        const finish = () => {
-          if (returned && written && drained) {
-            cleanup();
-            progress();
-            resolve();
-          }
-        };
-        const drain = () => {
-          drained = true;
-          finish();
-        };
-        socket.once('drain', drain);
-        owned.addEventListener('abort', cleanup, { once: true });
-        try {
-          const accepted = socket.write(bytes, (error) => {
-            if (error != null) {
-              cleanup();
-              reject(error);
-              return;
-            }
-            written = true;
-            finish();
-          });
-          drained = accepted || drained;
-          returned = true;
-          finish();
-        } catch (error) {
-          cleanup();
-          reject(error);
-        }
-      }),
-      owned,
-    );
-  };
+  const write = (bytes) => writeToSocket(socket, bytes, owned, progress);
   try {
     iterator = source(owned, progress)[Symbol.asyncIterator]();
     if (socket.destroyed || !socket.writable) close();
-    let lineStart = true;
-    let size = 0;
-    while (true) {
-      owned.throwIfAborted();
-      const item = await abortable(Promise.resolve(iterator.next()), owned);
-      if (item.done) break;
-      const chunk = item.value;
-      for (let offset = 0; offset < chunk.length; offset += 32768) {
-        const window = chunk.subarray(offset, offset + 32768);
-        size += window.length;
-        checkSize(size);
-        progress();
-        const output = stuffDots(window, lineStart);
-        lineStart = window[window.length - 1] === 0x0a;
-        await write(output);
-      }
-    }
+    await writeBody(iterator, write, owned, checkSize, progress);
     owned.throwIfAborted();
     terminated = true;
     await write(Buffer.from('.\r\n'));

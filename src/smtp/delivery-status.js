@@ -48,27 +48,7 @@ const resolveSmtpDsn = (envelope, dsn) => {
   if (typeof dsn !== 'object' || Array.isArray(dsn)) {
     throw new SmtpDsnValidationError('DSN options must be an object.');
   }
-
-  const mailParameters = [];
-  if (dsn.return != null) {
-    if (dsn.return !== 'full' && dsn.return !== 'headers') {
-      throw new SmtpDsnValidationError(`Unsupported DSN return value: ${String(dsn.return)}`);
-    }
-    mailParameters.push(`RET=${dsn.return === 'full' ? 'FULL' : 'HDRS'}`);
-  }
-
-  if (dsn.envelopeId != null) {
-    if (dsn.envelopeId === '') {
-      throw new SmtpDsnValidationError('DSN envelope ID must not be empty.');
-    }
-    const encoded = encodeXtext(dsn.envelopeId, 'DSN envelope ID');
-    const parameter = `ENVID=${encoded}`;
-    assertParameterLength(parameter, 100, 'ENVID');
-    mailParameters.push(parameter);
-  }
-
-  const envelopeRecipients = envelope.to;
-  const envelopeRecipientSet = new Set(envelopeRecipients);
+  const mailParameters = dsnMailParameters(dsn);
   const configuredRecipients = dsn.recipients;
   if (
     configuredRecipients != null &&
@@ -77,62 +57,92 @@ const resolveSmtpDsn = (envelope, dsn) => {
     throw new SmtpDsnValidationError('DSN recipient options must be an object.');
   }
 
+  const envelopeRecipients = new Set(envelope.to);
   const serializedByAddress = new Map();
-  for (const [address, options] of Object.entries(configuredRecipients ?? {})) {
-    if (!envelopeRecipientSet.has(address)) {
+  for (const address in configuredRecipients) {
+    if (!Object.hasOwn(configuredRecipients, address)) continue;
+    if (!envelopeRecipients.has(address)) {
       throw new SmtpDsnValidationError(`DSN recipient ${address} is not an envelope recipient.`);
     }
-    if (options == null || typeof options !== 'object' || Array.isArray(options)) {
-      throw new SmtpDsnValidationError(`DSN options for ${address} must be an object.`);
-    }
-
-    const parameters = [];
-    if (options.notify != null) {
-      const notify = options.notify;
-      if (!Array.isArray(notify) || notify.length === 0) {
-        throw new SmtpDsnValidationError(
-          `DSN notification conditions for ${address} must be a non-empty array.`,
-        );
-      }
-      for (const condition of notify) {
-        if (typeof condition !== 'string' || !NOTIFICATION_CONDITIONS.has(condition)) {
-          throw new SmtpDsnValidationError(
-            `Unsupported DSN notification condition: ${String(condition)}`,
-          );
-        }
-      }
-      if (notify.includes('never') && notify.length !== 1) {
-        throw new SmtpDsnValidationError(
-          'The DSN notification condition NEVER must appear by itself.',
-        );
-      }
-      parameters.push(`NOTIFY=${notify.map((condition) => condition.toUpperCase()).join(',')}`);
-    }
-
-    if (options.originalRecipient != null) {
-      const encoded = encodeXtext(
-        options.originalRecipient,
-        `DSN original recipient for ${address}`,
-      );
-      if (options.originalRecipient !== address) {
-        throw new SmtpDsnValidationError(
-          // oxlint-disable-next-line no-useless-concat -- upstream
-          `DSN original recipient for ${address} must match the envelope ` + 'recipient address.',
-        );
-      }
-      const parameter = `ORCPT=rfc822;${encoded}`;
-      assertParameterLength(parameter, 500, 'ORCPT');
-      parameters.push(parameter);
-    }
-    serializedByAddress.set(address, parameters);
+    serializedByAddress.set(
+      address,
+      dsnRecipientParameters(address, configuredRecipients[address]),
+    );
   }
 
-  const recipientParameters = envelopeRecipients.map(
-    (address) => serializedByAddress.get(address) ?? [],
-  );
-  const requested =
-    mailParameters.length > 0 || recipientParameters.some((parameters) => parameters.length > 0);
+  const recipientParameters = [];
+  let requested = mailParameters.length > 0;
+  for (const address of envelope.to) {
+    const parameters = serializedByAddress.get(address) ?? [];
+    if (parameters.length > 0) requested = true;
+    recipientParameters.push(parameters);
+  }
   return requested ? { mailParameters, recipientParameters } : undefined;
+};
+
+// RET and ENVID, the parameters of MAIL FROM (RFC 3461 §4.3 and §4.4).
+const dsnMailParameters = (dsn) => {
+  const parameters = [];
+  if (dsn.return != null) {
+    if (dsn.return !== 'full' && dsn.return !== 'headers') {
+      throw new SmtpDsnValidationError(`Unsupported DSN return value: ${String(dsn.return)}`);
+    }
+    parameters.push(`RET=${dsn.return === 'full' ? 'FULL' : 'HDRS'}`);
+  }
+  if (dsn.envelopeId != null) {
+    if (dsn.envelopeId === '') {
+      throw new SmtpDsnValidationError('DSN envelope ID must not be empty.');
+    }
+    const parameter = `ENVID=${encodeXtext(dsn.envelopeId, 'DSN envelope ID')}`;
+    assertParameterLength(parameter, 100, 'ENVID');
+    parameters.push(parameter);
+  }
+  return parameters;
+};
+
+// NOTIFY and ORCPT, the parameters of a RCPT TO (RFC 3461 §4.1 and §4.2).
+const dsnRecipientParameters = (address, options) => {
+  if (options == null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new SmtpDsnValidationError(`DSN options for ${address} must be an object.`);
+  }
+  const parameters = [];
+  if (options.notify != null) parameters.push(notifyParameter(address, options.notify));
+  if (options.originalRecipient != null) {
+    const encoded = encodeXtext(options.originalRecipient, `DSN original recipient for ${address}`);
+    if (options.originalRecipient !== address) {
+      throw new SmtpDsnValidationError(
+        `DSN original recipient for ${address} must match the envelope recipient address.`,
+      );
+    }
+    const parameter = `ORCPT=rfc822;${encoded}`;
+    assertParameterLength(parameter, 500, 'ORCPT');
+    parameters.push(parameter);
+  }
+  return parameters;
+};
+
+// The conditions of NOTIFY, checked and upper-cased in one pass.
+const notifyParameter = (address, notify) => {
+  if (!Array.isArray(notify) || notify.length === 0) {
+    throw new SmtpDsnValidationError(
+      `DSN notification conditions for ${address} must be a non-empty array.`,
+    );
+  }
+  let conditions = '';
+  let never = false;
+  for (const condition of notify) {
+    if (typeof condition !== 'string' || !NOTIFICATION_CONDITIONS.has(condition)) {
+      throw new SmtpDsnValidationError(
+        `Unsupported DSN notification condition: ${String(condition)}`,
+      );
+    }
+    if (condition === 'never') never = true;
+    conditions += `${conditions === '' ? '' : ','}${condition.toUpperCase()}`;
+  }
+  if (never && notify.length !== 1) {
+    throw new SmtpDsnValidationError('The DSN notification condition NEVER must appear by itself.');
+  }
+  return `NOTIFY=${conditions}`;
 };
 
 const encodeXtext = (value, name) => {
