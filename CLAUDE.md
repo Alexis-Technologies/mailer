@@ -117,8 +117,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   over lines in a test goes through a variable (`no-unexpected-multiline`).
 - **Coverage keeps the gates of the package.** Paths that upstream reached only end to end get flat
   suites against fakes (`tests/unit/<subpath>.test.js`); `/* c8 ignore */` marks only code that is
-  dead upstream (`convertMessagesToBulk`) or unreachable on Node, each with its
-  reason. Upstream tests of a runtime without `AbortSignal.any` are left out with a comment.
+  unreachable on Node, each with its reason; code that is dead upstream is removed. Upstream tests of a runtime without `AbortSignal.any` are left out with a comment.
 - Ported test suites keep upstream's `describe`/`it`, so they can be compared with upyo's; new
   suites use the flat style of "Testing notes". Tests for paths that upstream's suites leave out go
   into a new flat suite (`tests/unit/core.test.js` for `src/core/`).
@@ -141,7 +140,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
    as a substring.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
-10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
+10. ses: custom and threading headers are not sent. (`convertMessagesToBulk`, which nothing
+    called, is removed.)
 11. (fixed, see 71) resend: the `Idempotency-Key` came from `Math.random`.
 12. (fixed, see 72 and 73) `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of
     an injected logger.
