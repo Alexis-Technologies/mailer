@@ -10,7 +10,7 @@ const {
   TEST_DKIM_PUBLIC_KEY,
   TEST_DKIM_SELECTOR,
 } = require('../helpers/mime/dkim-test-keys.js');
-const { signMessage } = require('../../src/mime/dkim/sign.js');
+const { signMessage } = require('../helpers/mime/dkim-reference.js');
 
 const config = (extra) => ({
   signingDomain: TEST_DKIM_DOMAIN,

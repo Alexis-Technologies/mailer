@@ -3,12 +3,16 @@
 
 const assert = require('node:assert/strict');
 const { describe, it } = require('node:test');
+// Changed after the port: the body canonicalization and signMessage, which src/
+// no longer uses (it hashes a body as it streams), are test references now.
 const {
-  canonicalizeBodyRelaxed,
-  canonicalizeBodySimple,
   canonicalizeHeaderRelaxed,
   canonicalizeHeaderSimple,
 } = require('../../src/mime/dkim/canonicalize.js');
+const {
+  canonicalizeBodyRelaxed,
+  canonicalizeBodySimple,
+} = require('../helpers/mime/dkim-reference.js');
 
 describe('DKIM Canonicalization', () => {
   describe('canonicalizeHeaderSimple', () => {

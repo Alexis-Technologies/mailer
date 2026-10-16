@@ -5,10 +5,12 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { createHash } = require('node:crypto');
 const { BodyHasher } = require('../../src/mime/dkim/body-hash.js');
+// Changed after the port: the body canonicalization and signMessage, which src/
+// no longer uses (it hashes a body as it streams), are test references now.
 const {
   canonicalizeBodyRelaxed,
   canonicalizeBodySimple,
-} = require('../../src/mime/dkim/canonicalize.js');
+} = require('../helpers/mime/dkim-reference.js');
 
 test('incremental body hashes match canonicalization at every split', () => {
   const bodies = [

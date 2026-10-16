@@ -10,7 +10,9 @@ const {
   prepareMessageStream,
   SmtpAttachmentReplayError,
 } = require('../../src/smtp/message-stream.js');
-const { signMessage } = require('../../src/mime/dkim/sign.js');
+// Changed after the port: the body canonicalization and signMessage, which src/
+// no longer uses (it hashes a body as it streams), are test references now.
+const { signMessage } = require('../helpers/mime/dkim-reference.js');
 const {
   TEST_DKIM_ED25519_PRIVATE_KEY,
   TEST_DKIM_PRIVATE_KEY,

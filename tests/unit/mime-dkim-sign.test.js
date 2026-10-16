@@ -13,7 +13,9 @@ const {
   TEST_DKIM_PUBLIC_KEY,
   TEST_DKIM_SELECTOR,
 } = require('../helpers/mime/dkim-test-keys.js');
-const { signMessage } = require('../../src/mime/dkim/sign.js');
+// Changed after the port: the body canonicalization and signMessage, which src/
+// no longer uses (it hashes a body as it streams), are test references now.
+const { signMessage } = require('../helpers/mime/dkim-reference.js');
 
 describe('DKIM Signing', () => {
   const simpleMessage =

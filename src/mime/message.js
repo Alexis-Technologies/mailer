@@ -39,15 +39,7 @@ const prepareMimeMessage = (message, dkimConfig, options = {}) => {
   const dkim =
     dkimConfig == null
       ? undefined
-      : {
-          ...dkimConfig,
-          signatures: dkimConfig.signatures.map((signature) => ({
-            ...signature,
-            // Imported once per signature configuration of the caller.
-            privateKey: resolvePrivateKey(signature),
-            headerFields: signature.headerFields == null ? undefined : [...signature.headerFields],
-          })),
-        };
+      : { ...dkimConfig, signatures: resolveSignatures(dkimConfig.signatures) };
   const parts = buildMimeParts(message, options.generateId);
   const first = parts[0];
   if (typeof first !== 'string') throw new TypeError('Missing MIME headers.');
@@ -103,25 +95,72 @@ const prepareMimeMessage = (message, dkimConfig, options = {}) => {
   };
 };
 
+// The signatures of a DKIM configuration with their keys imported, once per
+// signature configuration of the caller, and their field lists copied.
+const resolveSignatures = (signatures) => {
+  const resolved = [];
+  for (const signature of signatures) {
+    resolved.push({
+      ...signature,
+      privateKey: resolvePrivateKey(signature),
+      headerFields: signature.headerFields == null ? undefined : [...signature.headerFields],
+    });
+  }
+  return resolved;
+};
+
+// Names written by pushHeaderFields, plus Cc and Reply-To even when the
+// message carries no such recipients: a custom header there would list
+// addresses the envelope never receives.  The identity and threading names are
+// here unconditionally too, even when nothing was written: each of them has had
+// its one chance to be emitted, from the typed field or from the very custom
+// header that would otherwise be written again.
+const COMPOSED_HEADERS = new Set([
+  'from',
+  'to',
+  'cc',
+  'reply-to',
+  'subject',
+  'date',
+  'message-id',
+  'in-reply-to',
+  'references',
+]);
+const PRIORITY_HEADERS = new Set(['x-priority', 'x-msmail-priority']);
+const THREADING_FIELDS = ['In-Reply-To', 'References'];
+
 const buildMimeParts = (message, generateId) => {
   const lines = [];
-  const boundary = generateBoundary();
-  const hasAttachments = message.attachments.length > 0;
   const alternatives = buildAlternatives(message);
-  const isMultipart = hasAttachments || alternatives.length > 1;
+  pushHeaderFields(lines, message, generateId);
+  lines.push('MIME-Version: 1.0');
+  if (message.attachments.length > 0 || alternatives.length > 1) {
+    const boundary = generateBoundary();
+    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    lines.push('');
+    lines.push('This is a multi-part message in MIME format.');
+    lines.push('');
+    lines.push(`--${boundary}`);
+    if (alternatives.length > 1) pushAlternatives(lines, alternatives);
+    else pushSinglePart(lines, alternatives[0]);
+    for (const attachment of message.attachments) pushAttachment(lines, attachment, boundary);
+    lines.push('');
+    lines.push(`--${boundary}--`);
+  } else {
+    pushSinglePart(lines, alternatives[0]);
+  }
+  return joinLines(lines);
+};
 
-  // Standard headers
+const pushHeaderFields = (lines, message, generateId) => {
   lines.push(foldHeader('From', encodeAddress(message.sender)));
-  lines.push(foldHeader('To', message.recipients.map(encodeAddress).join(', ')));
-
+  lines.push(foldHeader('To', encodeAddressList(message.recipients)));
   if (message.ccRecipients.length > 0) {
-    lines.push(foldHeader('Cc', message.ccRecipients.map(encodeAddress).join(', ')));
+    lines.push(foldHeader('Cc', encodeAddressList(message.ccRecipients)));
   }
-
   if (message.replyRecipients.length > 0) {
-    lines.push(foldHeader('Reply-To', message.replyRecipients.map(encodeAddress).join(', ')));
+    lines.push(foldHeader('Reply-To', encodeAddressList(message.replyRecipients)));
   }
-
   lines.push(foldHeader('Subject', encodeHeaderValue(message.subject, true)));
 
   // The identity and threading fields all carry structured values, so they are
@@ -129,7 +168,7 @@ const buildMimeParts = (message, generateId) => {
   lines.push(foldHeader('Date', resolveDate(message)));
   lines.push(foldHeader('Message-ID', resolveMessageId(message, generateId)));
   const threading = resolveThreadingHeaders(message);
-  for (const name of ['In-Reply-To', 'References']) {
+  for (const name of THREADING_FIELDS) {
     // A field the message does not own falls back to a custom header, one it
     // owns but left empty writes nothing at all.
     const owned = threading.get(name);
@@ -137,120 +176,76 @@ const buildMimeParts = (message, generateId) => {
     if (value != null) lines.push(foldHeader(name, value));
   }
 
-  // Names already written above, plus Cc and Reply-To even when the message
-  // carries no such recipients: a custom header there would list addresses the
-  // envelope never receives.  The identity and threading names are here
-  // unconditionally too, even when nothing was written: each of them has had
-  // its one chance to be emitted above, from the typed field or from the very
-  // custom header this loop would otherwise write again.
-  const composed = new Set([
-    'from',
-    'to',
-    'cc',
-    'reply-to',
-    'subject',
-    'date',
-    'message-id',
-    'in-reply-to',
-    'references',
-  ]);
-
-  // Priority header
-  if (message.priority !== 'normal') {
-    const priorityValue = message.priority === 'high' ? '1' : '5';
-    lines.push(`X-Priority: ${priorityValue}`);
-    lines.push(`X-MSMail-Priority: ${message.priority === 'high' ? 'High' : 'Low'}`);
-    composed.add('x-priority');
-    composed.add('x-msmail-priority');
+  const hasPriority = message.priority !== 'normal';
+  if (hasPriority) {
+    const high = message.priority === 'high';
+    lines.push(`X-Priority: ${high ? '1' : '5'}`);
+    lines.push(`X-MSMail-Priority: ${high ? 'High' : 'Low'}`);
   }
 
-  // Custom headers
   for (const [key, value] of message.headers) {
     const name = key.toLowerCase();
-    if (composed.has(name) || reservedHeaders.has(name)) continue;
+    if (COMPOSED_HEADERS.has(name) || reservedHeaders.has(name)) continue;
+    if (hasPriority && PRIORITY_HEADERS.has(name)) continue;
     lines.push(foldHeader(key, encodeHeaderValue(value)));
   }
+};
 
-  // MIME headers
-  lines.push('MIME-Version: 1.0');
-
-  if (isMultipart) {
-    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
-    lines.push('');
-    lines.push('This is a multi-part message in MIME format.');
-    lines.push('');
-
-    // Content part
-    lines.push(`--${boundary}`);
-
-    if (alternatives.length > 1) {
-      const contentBoundary = generateBoundary();
-      lines.push(`Content-Type: multipart/alternative; boundary="${contentBoundary}"`);
-      lines.push('');
-
-      for (const alternative of alternatives) {
-        lines.push(`--${contentBoundary}`);
-        lines.push(`Content-Type: ${alternative.contentType}`);
-        lines.push(`Content-Transfer-Encoding: ${alternative.encoding}`);
-        lines.push('');
-        lines.push(alternative.body);
-        lines.push('');
-      }
-
-      lines.push(`--${contentBoundary}--`);
-    } else {
-      lines.push(`Content-Type: ${alternatives[0].contentType}`);
-      lines.push(`Content-Transfer-Encoding: ${alternatives[0].encoding}`);
-      lines.push('');
-      lines.push(alternatives[0].body);
-    }
-
-    // Attachments.  A message is structural input, not only one built by
-    // createMessage(), so the fields written into part headers as given are
-    // checked again here, as the addresses and the custom headers are.
-    for (const attachment of message.attachments) {
-      checkAttachment(attachment);
-      lines.push('');
-      lines.push(`--${boundary}`);
-      lines.push(
-        foldHeader(
-          'Content-Type',
-          `${attachment.contentType}; ${encodeMimeParameter('name', attachment.filename)}`,
-        ),
-      );
-      lines.push('Content-Transfer-Encoding: base64');
-
-      if (attachment.inline) {
-        lines.push(
-          foldHeader(
-            'Content-Disposition',
-            `inline; ${encodeMimeParameter('filename', attachment.filename)}`,
-          ),
-        );
-        lines.push(foldHeader('Content-ID', `<${attachment.contentId}>`));
-      } else {
-        lines.push(
-          foldHeader(
-            'Content-Disposition',
-            `attachment; ${encodeMimeParameter('filename', attachment.filename)}`,
-          ),
-        );
-      }
-
-      lines.push('');
-      lines.push({ content: attachment.content });
-    }
-
-    lines.push('');
-    lines.push(`--${boundary}--`);
-  } else {
-    // Single part message
-    lines.push(`Content-Type: ${alternatives[0].contentType}`);
-    lines.push(`Content-Transfer-Encoding: ${alternatives[0].encoding}`);
-    lines.push('');
-    lines.push(alternatives[0].body);
+const encodeAddressList = (addresses) => {
+  let list = '';
+  for (let i = 0; i < addresses.length; i++) {
+    list += i === 0 ? encodeAddress(addresses[i]) : `, ${encodeAddress(addresses[i])}`;
   }
+  return list;
+};
 
+const pushSinglePart = (lines, alternative) => {
+  lines.push(`Content-Type: ${alternative.contentType}`);
+  lines.push(`Content-Transfer-Encoding: ${alternative.encoding}`);
+  lines.push('');
+  lines.push(alternative.body);
+};
+
+const pushAlternatives = (lines, alternatives) => {
+  const boundary = generateBoundary();
+  lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  lines.push('');
+  for (const alternative of alternatives) {
+    lines.push(`--${boundary}`);
+    pushSinglePart(lines, alternative);
+    lines.push('');
+  }
+  lines.push(`--${boundary}--`);
+};
+
+// A message is structural input, not only one built by createMessage(), so the
+// fields written into part headers as given are checked again here, as the
+// addresses and the custom headers are.
+const pushAttachment = (lines, attachment, boundary) => {
+  checkAttachment(attachment);
+  lines.push('');
+  lines.push(`--${boundary}`);
+  lines.push(
+    foldHeader(
+      'Content-Type',
+      `${attachment.contentType}; ${encodeMimeParameter('name', attachment.filename)}`,
+    ),
+  );
+  lines.push('Content-Transfer-Encoding: base64');
+  const disposition = attachment.inline ? 'inline' : 'attachment';
+  lines.push(
+    foldHeader(
+      'Content-Disposition',
+      `${disposition}; ${encodeMimeParameter('filename', attachment.filename)}`,
+    ),
+  );
+  if (attachment.inline) lines.push(foldHeader('Content-ID', `<${attachment.contentId}>`));
+  lines.push('');
+  lines.push({ content: attachment.content });
+};
+
+// The lines as text, each ended by CRLF, split around the attachment contents.
+const joinLines = (lines) => {
   const parts = [];
   let text = '';
   for (const line of lines) {
@@ -540,8 +535,7 @@ const encodeHeaderValue = (value, encodeLongAsciiWords = false) => {
   for (let i = 0; i < value.length;) {
     const codePoint = value.codePointAt(i);
     const characterLength = codePoint > 0xffff ? 2 : 1;
-    const characterBytes =
-      codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
+    const characterBytes = utf8Length(codePoint);
     if (wordBytes + characterBytes > MAX_ENCODED_WORD_BYTES) {
       words.push(encodeWord(value.slice(wordStart, i)));
       wordStart = i;
@@ -552,6 +546,12 @@ const encodeHeaderValue = (value, encodeLongAsciiWords = false) => {
   }
   if (wordStart < value.length) words.push(encodeWord(value.slice(wordStart)));
   return words.join(' ');
+};
+
+const utf8Length = (codePoint) => {
+  if (codePoint < 0x80) return 1;
+  if (codePoint < 0x800) return 2;
+  return codePoint < 0x10000 ? 3 : 4;
 };
 
 // Each byte as an RFC 2231 extended value carries it: an attribute-char as it

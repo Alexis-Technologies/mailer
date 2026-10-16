@@ -9,37 +9,14 @@
  * @see https://www.rfc-editor.org/rfc/rfc6376
  */
 
+const { Buffer } = require('node:buffer');
 const { createPrivateKey } = require('node:crypto');
-const {
-  canonicalizeBodyRelaxed,
-  canonicalizeBodySimple,
-  canonicalizeHeaderRelaxed,
-  canonicalizeHeaderSimple,
-} = require('./canonicalize.js');
+const { canonicalizeHeaderRelaxed, canonicalizeHeaderSimple } = require('./canonicalize.js');
 const {
   DEFAULT_ALGORITHM,
   DEFAULT_CANONICALIZATION,
   DEFAULT_SIGNED_HEADERS,
 } = require('./types.js');
-
-/**
- * Signs a raw email message with DKIM.
- *
- * @param rawMessage - The complete raw email message (headers + body)
- * @param config - DKIM signature configuration
- * @param signal Optional cancellation signal.
- * @returns The DKIM-Signature header result
- * @throws Error if signing fails (e.g., invalid private key)
- */
-const signMessage = async (rawMessage, config, signal) => {
-  signal?.throwIfAborted();
-  const { body } = parseMessage(rawMessage);
-  const bodyCanon = (config.canonicalization ?? DEFAULT_CANONICALIZATION).endsWith('/simple')
-    ? 'simple'
-    : 'relaxed';
-  const bodyHash = await computeBodyHash(body, bodyCanon);
-  return await signWithBodyHash(rawMessage, config, bodyHash, signal);
-};
 
 /**
  * Signs frozen headers using a body hash computed by the MIME reader.
@@ -56,8 +33,7 @@ const signWithBodyHash = async (rawHeaders, config, bodyHash, signal) => {
   const canonicalization = config.canonicalization ?? DEFAULT_CANONICALIZATION;
   const headerFields = config.headerFields ?? DEFAULT_SIGNED_HEADERS;
 
-  // Parse the raw message into headers and body
-  const { headers } = parseMessage(rawHeaders);
+  const headers = parseHeaders(headerSectionOf(rawHeaders));
 
   // Determine canonicalization methods
   const [headerCanon] = canonicalization.split('/');
@@ -90,27 +66,11 @@ const signWithBodyHash = async (rawHeaders, config, bodyHash, signal) => {
   };
 };
 
-/**
- * Parses a raw email message into headers and body.
- */
-const parseMessage = (rawMessage) => {
-  // Find the separator between headers and body (empty line)
-  const separatorIndex = rawMessage.indexOf('\r\n\r\n');
-  if (separatorIndex === -1) {
-    // No body, all headers
-    return {
-      headers: parseHeaders(rawMessage),
-      body: '',
-    };
-  }
-
-  const headerSection = rawMessage.substring(0, separatorIndex);
-  const body = rawMessage.substring(separatorIndex + 4); // Skip \r\n\r\n
-
-  return {
-    headers: parseHeaders(headerSection),
-    body,
-  };
+// The header section of a message, or the whole of a header block without
+// the empty line that ends it.
+const headerSectionOf = (raw) => {
+  const end = raw.indexOf('\r\n\r\n');
+  return end === -1 ? raw : raw.substring(0, end);
 };
 
 /**
@@ -245,23 +205,6 @@ const importPrivateKey = async (pem, algorithm) => {
 };
 
 /**
- * Computes the body hash (bh= tag value).
- */
-const computeBodyHash = async (body, canonMethod) => {
-  // Canonicalize the body
-  const canonicalBody =
-    canonMethod === 'relaxed' ? canonicalizeBodyRelaxed(body) : canonicalizeBodySimple(body);
-
-  // Hash with SHA-256
-  const encoder = new TextEncoder();
-  const data = encoder.encode(canonicalBody);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-
-  // Base64 encode
-  return arrayBufferToBase64(hashBuffer);
-};
-
-/**
  * Builds the DKIM-Signature header value without the b= signature.
  */
 const buildDkimHeaderValue = (params) => {
@@ -336,16 +279,6 @@ const signData = async (data, privateKey, algorithm) => {
   return arrayBufferToBase64(signature);
 };
 
-/**
- * Converts an ArrayBuffer to a Base64 string.
- */
-const arrayBufferToBase64 = (buffer) => {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-};
+const arrayBufferToBase64 = (buffer) => Buffer.from(buffer).toString('base64');
 
-module.exports = { checkDkimKeys, resolvePrivateKey, signMessage, signWithBodyHash };
+module.exports = { checkDkimKeys, resolvePrivateKey, signWithBodyHash };
