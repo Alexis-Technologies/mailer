@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 /**
  * HTTP client wrapper for Mailgun API requests.
@@ -50,7 +51,7 @@ class MailgunHttpClient {
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),
       read: async (response) => {
-        const text = await response.text();
+        const text = await readText(response);
         try {
           return JSON.parse(text);
         } catch (jsonError) {
@@ -63,7 +64,7 @@ class MailgunHttpClient {
         }
       },
       reject: async (response, attempt) => {
-        const text = await response.text();
+        const text = await readText(response);
         let errorMessage;
         try {
           // Try to parse the error message from the JSON body

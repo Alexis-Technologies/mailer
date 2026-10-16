@@ -1,6 +1,8 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/oauth2.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { readText } = require('../internal/body.js');
+
 /**
  * An error thrown when SMTP authentication fails, including OAuth 2.0 token
  * acquisition and SASL exchange failures.
@@ -345,7 +347,7 @@ class OAuth2TokenManager {
       });
       // Read the body under the same timeout: an endpoint that returns headers
       // but stalls on the body must not leave `pending` unresolved forever.
-      text = await response.text();
+      text = await readText(response);
     } catch (cause) {
       throw new SmtpAuthError(
         `Failed to request an OAuth 2.0 access token from ` +

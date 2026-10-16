@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readJson, readText } = require('../internal/body.js');
 
 /**
  * Error thrown when a Plunk API request fails.
@@ -81,7 +82,7 @@ class PlunkHttpClient {
       reject: async (response, attempt) => {
         let errorBody;
         try {
-          errorBody = await response.text();
+          errorBody = await readText(response);
         } catch {
           errorBody = 'Failed to read error response';
         }
@@ -143,7 +144,7 @@ class PlunkHttpClient {
    */
   async parseResponse(response) {
     try {
-      const data = await response.json();
+      const data = await readJson(response);
 
       // Validate response structure
       if (typeof data !== 'object' || data === null) {

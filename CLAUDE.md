@@ -224,6 +224,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 33. every HTTP provider and jmap: no URL of a config had to be HTTPS, so `http://` sent the key
     in clear. `checkSecureUrl` (`src/internal/http.js`, with `src/internal/loopback.js`) refuses
     anything but HTTPS or plain HTTP to a loopback host when the config is made.
+34. every HTTP provider, jmap and the OAuth2 token request: a response body was read whole,
+    however long, before anything looked at it. `readText`/`readJson` (`src/internal/body.js`)
+    read it from its stream and refuse one over 4 MiB, by its `Content-Length` or as it comes.
 
 ## Repository layout
 
@@ -234,7 +237,8 @@ src/
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map (redact.js,
-                    redact-addresses.js, unsent.js, delivery-unknown.js)
+                    redact-addresses.js, unsent.js, delivery-unknown.js, http.js,
+                    config.js, loopback.js, body.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

@@ -52,13 +52,15 @@ const providers = [
 ];
 
 // A 2xx whose body cannot be read: the connection broke after the headers.
-const unreadable = (status) => {
-  const response = new Response(null, { status });
-  const broken = () => Promise.reject(new Error('Connection reset while reading the body.'));
-  Object.defineProperty(response, 'text', { value: broken });
-  Object.defineProperty(response, 'json', { value: broken });
-  return response;
-};
+const unreadable = (status) =>
+  new Response(
+    new ReadableStream({
+      pull(controller) {
+        controller.error(new Error('Connection reset while reading the body.'));
+      },
+    }),
+    { status },
+  );
 
 test('Delivery: a 2xx with an unreadable body is sent once, of unknown delivery', async (t) => {
   for (const [name, status, create] of providers) {
@@ -90,17 +92,17 @@ test('Delivery: Plunk refusing in a 200 is sent once, a definite failure', async
   assert.match(receipt.errorMessages[0], /Sender not verified/);
 });
 
-// A 2xx whose body never ends, until the signal of the request aborts.
-const stalled = (status, signal) => {
-  const response = new Response(null, { status });
-  const hang = () =>
-    new Promise((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  Object.defineProperty(response, 'text', { value: hang });
-  Object.defineProperty(response, 'json', { value: hang });
-  return response;
-};
+// A 2xx whose body never ends, until the signal of the request aborts, as
+// fetch errors the body of an aborted request.
+const stalled = (status, signal) =>
+  new Response(
+    new ReadableStream({
+      start(controller) {
+        signal.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+      },
+    }),
+    { status },
+  );
 
 test(
   'Delivery: the timeout covers a body that never ends, of unknown delivery',
@@ -183,4 +185,24 @@ test('Delivery: a provider refuses to send its credentials over plain HTTP', () 
   for (const create of configs) assert.throws(create, TypeError);
   const local = new ResendTransport({ apiKey: 'key', baseUrl: 'http://localhost:8080' });
   assert.strictEqual(local.config.baseUrl, 'http://localhost:8080');
+});
+
+test('Delivery: a 2xx body longer than 4 MiB is refused, of unknown delivery', async (t) => {
+  for (const [name, status, create] of providers) {
+    t.mock.method(globalThis, 'fetch', async () => {
+      let sentBytes = 0;
+      const body = new ReadableStream({
+        pull(controller) {
+          if (sentBytes > 5 * 1024 * 1024) controller.close();
+          else controller.enqueue(new Uint8Array(65536).fill(0x20));
+          sentBytes += 65536;
+        },
+      });
+      return new Response(body, { status });
+    });
+    const receipt = await create().send(message());
+    t.mock.restoreAll();
+    assert.strictEqual(receipt.deliveryUnknown, true, name);
+    assert.match(receipt.errorMessages[0], /exceeds 4194304 bytes/, name);
+  }
 });

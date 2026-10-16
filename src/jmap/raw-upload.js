@@ -5,6 +5,7 @@ const { analyzeRawMessage, iterateRawMessage } = require('../core/raw-message.js
 const { combineSignals } = require('../core/abort-signal.js');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
+const { readJson, readText } = require('../internal/body.js');
 
 /** Runs a raw operation with a progress-resettable deadline through response parsing. @internal */
 const rawOperation = async (timeout, operation, signal) => {
@@ -163,7 +164,7 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
           throw new JmapApiError(
             `Raw upload failed: ${response.status}`,
             response.status,
-            await response.text(),
+            await readText(response),
             undefined,
             parseRetryAfter(response.headers.get('Retry-After')),
           );
@@ -171,7 +172,7 @@ const uploadRawMessage = async (config, uploadUrl, accountId, plan, signal) => {
         if (!eof) {
           throw new JmapApiError('Raw upload responded before validated EOF.');
         }
-        const result = await response.json();
+        const result = await readJson(response);
         outerSignal.throwIfAborted();
         if (
           !isRecord(result) ||

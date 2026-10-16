@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 /**
  * HTTP client wrapper for SendGrid API requests.
@@ -54,7 +55,7 @@ class SendGridHttpClient {
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),
       read: async (response, attempt) => {
-        const text = await response.text();
+        const text = await readText(response);
         // SendGrid returns 202 for successful sends
         if (response.status !== 202) throw createSendGridApiError(response, text, attempt);
         return {
@@ -64,7 +65,7 @@ class SendGridHttpClient {
         };
       },
       reject: async (response, attempt) =>
-        createSendGridApiError(response, await response.text(), attempt),
+        createSendGridApiError(response, await readText(response), attempt),
       createTimeoutError: () =>
         new Error(`SendGrid API request timed out after ${this.config.timeout} ms.`),
       finalError: (error, attempts) =>

@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 /**
  * Error thrown when a Resend API request fails.
@@ -119,7 +120,7 @@ class ResendHttpClient {
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),
       read: async (response) => {
-        const text = await response.text();
+        const text = await readText(response);
         try {
           return JSON.parse(text);
         } catch (parseError) {
@@ -132,7 +133,7 @@ class ResendHttpClient {
         }
       },
       reject: async (response, attempt) => {
-        const text = await response.text();
+        const text = await readText(response);
         let errorMessage;
         try {
           errorMessage = JSON.parse(text).message;

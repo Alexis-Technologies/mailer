@@ -240,19 +240,16 @@ test('caller cancellation clears the retry backoff', async () => {
   const controller = new AbortController();
   let calls = 0;
   let abortedAt = 0;
+  // Changed after the port: the body is read from its stream rather than
+  // through response.text(), so the abort is scheduled from fetch, to land
+  // in the backoff that follows the 503.
   globalThis.fetch = () => {
     calls++;
-    const response = new Response('Unavailable.', { status: 503 });
-    const text = response.text.bind(response);
-    response.text = async () => {
-      const body = await text();
-      setTimeout(() => {
-        abortedAt = Date.now();
-        controller.abort('stop retry');
-      }, 0);
-      return body;
-    };
-    return Promise.resolve(response);
+    setTimeout(() => {
+      abortedAt = Date.now();
+      controller.abort('stop retry');
+    }, 20);
+    return Promise.resolve(new Response('Unavailable.', { status: 503 }));
   };
   try {
     const client = new JmapHttpClient(

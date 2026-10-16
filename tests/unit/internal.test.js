@@ -224,3 +224,41 @@ test('Internal: a provider URL is HTTPS, or plain HTTP only to a loopback host',
     assert.throws(() => checkSecureUrl(url, 'baseUrl'), TypeError, url);
   }
 });
+
+const { readJson, readText } = require('../../src/internal/body.js');
+
+// A body of `chunks` chunks of `size` bytes, counting how many were pulled.
+const counted = (chunks, size) => {
+  let pulled = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      if (pulled === chunks) {
+        controller.close();
+        return;
+      }
+      pulled++;
+      controller.enqueue(new Uint8Array(size).fill(0x61));
+    },
+  });
+  return { stream, pulled: () => pulled };
+};
+
+test('Internal: a body is read within its bound, as text or JSON', async () => {
+  const split = new TextEncoder().encode('{"name":"Дуже"}');
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(split.subarray(0, 11));
+      controller.enqueue(split.subarray(11));
+      controller.close();
+    },
+  });
+  assert.deepStrictEqual(await readJson(new Response(body)), { name: 'Дуже' });
+  assert.strictEqual(await readText(new Response(null)), '');
+
+  const long = counted(100, 1024);
+  await assert.rejects(readText(new Response(long.stream), 10 * 1024), RangeError);
+  assert.ok(long.pulled() < 20, String(long.pulled()));
+
+  const declared = new Response('small', { headers: { 'Content-Length': '999999999' } });
+  await assert.rejects(readText(declared), RangeError);
+});

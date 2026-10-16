@@ -4,6 +4,7 @@
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
 const { isAbortError, requestWithRetry } = require('../internal/http.js');
+const { readJson, readText } = require('../internal/body.js');
 
 /**
  * HTTP client for JMAP API requests.
@@ -36,12 +37,12 @@ class JmapHttpClient {
       isIdempotent: true,
       send: (attemptSignal) =>
         this.fetchWithAuth(this.config.sessionUrl, { method: 'GET' }, attemptSignal),
-      read: (response) => response.json(),
+      read: (response) => readJson(response),
       reject: async (response) =>
         new JmapApiError(
           `Session fetch failed: ${response.status}`,
           response.status,
-          await response.text(),
+          await readText(response),
           undefined,
           parseRetryAfter(response.headers.get('Retry-After')),
           1,
@@ -86,12 +87,12 @@ class JmapHttpClient {
           },
           attemptSignal,
         ),
-      read: (response) => response.json(),
+      read: (response) => readJson(response),
       reject: async (response, attempt) =>
         new JmapApiError(
           `JMAP request failed: ${response.status}`,
           response.status,
-          await response.text(),
+          await readText(response),
           undefined,
           parseRetryAfter(response.headers.get('Retry-After')),
           attempt + 1,

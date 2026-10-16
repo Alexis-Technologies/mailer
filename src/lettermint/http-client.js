@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 /**
  * Lettermint API error class for API-specific failures.
@@ -105,7 +106,7 @@ class LettermintHttpClient {
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal, idempotencyKey),
       read: async (response) => {
-        const text = await response.text();
+        const text = await readText(response);
         try {
           return JSON.parse(text);
         } catch (error) {
@@ -118,7 +119,7 @@ class LettermintHttpClient {
       },
       reject: async (response, attempt) =>
         new LettermintApiError(
-          parseErrorMessage(await response.text(), response.status),
+          parseErrorMessage(await readText(response), response.status),
           response.status,
           parseRetryAfter(response.headers.get('Retry-After')),
           attempt + 1,

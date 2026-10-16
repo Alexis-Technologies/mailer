@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 const maxErrorMessageLength = 500;
 
@@ -94,10 +95,10 @@ class MailerooHttpClient {
       retries: this.config.retries,
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
-      read: async (response) => parseResponse(await response.text()),
+      read: async (response) => parseResponse(await readText(response)),
       reject: async (response, attempt) =>
         new MailerooApiError(
-          parseErrorMessage(await response.text(), response.status),
+          parseErrorMessage(await readText(response), response.status),
           response.status,
           parseRetryAfter(response.headers.get('Retry-After')),
           attempt + 1,

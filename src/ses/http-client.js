@@ -4,6 +4,7 @@
 const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 class SesHttpClient {
   config;
@@ -44,7 +45,7 @@ class SesHttpClient {
       timeoutMs: this.config.timeout,
       send: (signal) => this.fetchWithAuth(url, options, signal),
       read: async (response, attempt) => {
-        const text = await response.text();
+        const text = await readText(response);
         if (response.status !== 200) throw createSesApiError(response, text, attempt);
         return {
           statusCode: response.status,
@@ -53,7 +54,7 @@ class SesHttpClient {
         };
       },
       reject: async (response, attempt) =>
-        createSesApiError(response, await response.text(), attempt),
+        createSesApiError(response, await readText(response), attempt),
       createTimeoutError: () =>
         new Error(`SES API request timed out after ${this.config.timeout} ms.`),
       finalError: (error, attempts) =>

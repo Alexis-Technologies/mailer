@@ -385,26 +385,25 @@ describe('MailerooTransport - send', { concurrency: false }, () => {
   it('keeps request timeouts active while reading response bodies', async () => {
     await withMockedFetch(
       (_url, init) => {
-        const response = new Response(null, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
+        // Changed after the port: the body is read from its stream rather
+        // than through response.text(), so the stream is what stalls.
+        const body = new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener(
+              'abort',
+              () => {
+                controller.error(new DOMException('The operation was aborted.', 'AbortError'));
+              },
+              { once: true },
+            );
+            setTimeout(() => {
+              controller.error(new Error('Body read was not aborted.'));
+            }, 50);
+          },
         });
-        Object.defineProperty(response, 'text', {
-          value: () =>
-            new Promise((_resolve, reject) => {
-              init?.signal?.addEventListener(
-                'abort',
-                () => {
-                  reject(new DOMException('The operation was aborted.', 'AbortError'));
-                },
-                { once: true },
-              );
-              setTimeout(() => {
-                reject(new Error('Body read was not aborted.'));
-              }, 50);
-            }),
-        });
-        return Promise.resolve(response);
+        return Promise.resolve(
+          new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
       },
       async () => {
         const transport = new MailerooTransport({

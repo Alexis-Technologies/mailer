@@ -135,6 +135,10 @@ fixed ones below.
   a Mailtrap base URL or a JMAP `sessionUrl` starting with `http://` sent the API key or token in
   clear. They must use HTTPS, or plain HTTP only to a loopback host such as a local fake server;
   anything else is refused with a `TypeError` when the transport is made.
+- **A response body is read within 4 MiB** (an upstream bug): every HTTP provider, `./jmap` and
+  the OAuth2 token request of `./smtp` read a response whole, however long, so a broken or
+  hostile endpoint could fill the memory of the sender. A longer body is refused, by its
+  `Content-Length` or as it streams; after a 2xx, that is an unknown delivery.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

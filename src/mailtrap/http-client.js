@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { requestWithRetry } = require('../internal/http.js');
+const { readText } = require('../internal/body.js');
 
 const maxErrorMessageLength = 500;
 const sandboxRateLimitWindowMilliseconds = 10_000;
@@ -137,7 +138,7 @@ class MailtrapHttpClient {
       timeoutMs: this.config.timeout,
       send: (attemptSignal) => this.fetchWithAuth(url, body, attemptSignal),
       read: async (response) => {
-        const text = await response.text();
+        const text = await readText(response);
         try {
           return JSON.parse(text);
         } catch (error) {
@@ -149,7 +150,7 @@ class MailtrapHttpClient {
         }
       },
       reject: async (response, attempt) => {
-        const message = parseErrorMessage(await response.text(), response.status);
+        const message = parseErrorMessage(await readText(response), response.status);
         return new MailtrapApiError(
           message,
           response.status,

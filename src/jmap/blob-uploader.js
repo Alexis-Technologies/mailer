@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { JmapApiError } = require('./errors.js');
+const { readJson, readText } = require('../internal/body.js');
 
 /**
  * Upload a blob to the JMAP server.
@@ -57,7 +58,7 @@ const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
     });
 
     if (!response.ok) {
-      const body = await response.text();
+      const body = await readText(response);
       throw new JmapApiError(
         `Blob upload failed: ${response.status} ${response.statusText}`,
         response.status,
@@ -65,7 +66,7 @@ const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
       );
     }
 
-    const result = await response.json();
+    const result = await readJson(response);
     return result;
   } finally {
     combinedSignal.cleanup();
