@@ -1,7 +1,13 @@
 // Types ported from upyo v0.7.0 (packages/mime/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { IdGenerator, Message, RawMessage, RawMessageValidationError } from '../../index.js';
+import type {
+  IdGenerator,
+  Logger,
+  Message,
+  RawMessage,
+  RawMessageValidationError,
+} from '../../index.js';
 
 /** Composition and lifetime options. @since 0.6.0 */
 export interface ComposeMessageOptions {
@@ -14,6 +20,11 @@ export interface ComposeMessageOptions {
    * @default () => crypto.randomUUID()
    */
   readonly generateId?: IdGenerator;
+  /**
+   * Where a DKIM signature that failed under `onSigningFailure: 'send-unsigned'`
+   * is told (`warn`, code `MAILER_DKIM_UNSIGNED`); `console.warn` without one.
+   */
+  readonly logger?: Logger;
 }
 /** Stable, replayable MIME bytes with a separate delivery envelope. @since 0.6.0 */
 export interface ComposedMessage extends RawMessage {

@@ -35,7 +35,7 @@ const envelopeRecipients = (message) => {
 const composeMessage = async (message, options = {}) => {
   const { signal } = options;
   // The neutral plan observes promised sources even when envelope validation fails.
-  const plan = prepareMimeMessage(message, options.dkim, options.generateId);
+  const plan = prepareMimeMessage(message, options.dkim, options);
   const { envelope } = createRawMessagePlan({
     envelope: {
       from: message.sender.address,

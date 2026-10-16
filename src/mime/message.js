@@ -11,6 +11,7 @@ const {
   resolveThreadingHeaders,
 } = require('../core/message-id.js');
 const { resolveCalendarContent } = require('../core/calendar.js');
+const { createLog } = require('../internal/log.js');
 const { checkDkimConfig } = require('./dkim/types.js');
 const { resolvePrivateKey } = require('./dkim/sign.js');
 const { attachmentEncodedSize, encodeAttachment } = require('./mime-stream.js');
@@ -26,7 +27,7 @@ const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
  * date, an address or identity header containing a carriage return or line
  * feed, or an invalid custom header field name.
  */
-const prepareMimeMessage = (message, dkimConfig, generateId) => {
+const prepareMimeMessage = (message, dkimConfig, options = {}) => {
   // Observe every promise before validation can throw or an earlier reader stalls.
   for (const attachment of message.attachments) {
     if (attachment.content instanceof Promise) {
@@ -47,7 +48,7 @@ const prepareMimeMessage = (message, dkimConfig, generateId) => {
             headerFields: signature.headerFields == null ? undefined : [...signature.headerFields],
           })),
         };
-  const parts = buildMimeParts(message, generateId);
+  const parts = buildMimeParts(message, options.generateId);
   const first = parts[0];
   if (typeof first !== 'string') throw new TypeError('Missing MIME headers.');
   const separator = first.indexOf('\r\n\r\n') + 4;
@@ -58,6 +59,8 @@ const prepareMimeMessage = (message, dkimConfig, generateId) => {
   return {
     encoding,
     dkim,
+    // Where a signing failure under send-unsigned is told.
+    log: createLog(options.logger, { component: 'dkim' }),
     headers,
     async *body(signal, progress) {
       for (const part of parts) {

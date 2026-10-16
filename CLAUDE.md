@@ -142,8 +142,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
 11. (fixed, see 71) resend: the `Idempotency-Key` came from `Math.random`.
-12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
-    an injected logger.
+12. (partly fixed, see 72) `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of an
+    injected logger. Plunk still warns of a dropped attachment this way.
 13. mime: the first encoded word of a header shares its line with the field name
     (`Subject: =?UTF-8?B?…?=`, 84 characters), past the 76 that RFC 2047 allows a line with
     encoded words.
@@ -364,6 +364,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     strings, which two sends could share, and Resend answers a repeated key with its first
     answer, so one of them would not go. It is `crypto.randomUUID()`.
 
+72. mime (known bug 12): a DKIM signature that failed under `send-unsigned` was told with
+    `console.warn`, whatever the application logged with. It goes to the `logger` of
+    `composeMessage` or of the SMTP transport (`warn`, code `MAILER_DKIM_UNSIGNED`), and to
+    `console.warn` only without one (`warnDegradation` of `internal/log.js`).
 ## Repository layout
 
 ```

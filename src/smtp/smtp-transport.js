@@ -222,13 +222,7 @@ class SmtpTransport {
       const dsn = resolveSmtpDsn(envelope, options?.dsn);
       // Composed before a connection is taken: a message that cannot be
       // composed costs no connection, and fails no connection either.
-      const smtpMessage = prepareMessage(
-        message,
-        this.config.dkim,
-        dsn,
-        envelope,
-        this.config.generateId,
-      );
+      const smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope, this.config);
 
       // Establishing the connection—including authentication, e.g. acquiring an
       // OAuth 2.0 access token—is part of delivery, so setup failures are
@@ -361,13 +355,7 @@ class SmtpTransport {
         try {
           const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
           const dsn = resolveSmtpDsn(envelope, options?.dsn);
-          smtpMessage = prepareMessage(
-            message,
-            this.config.dkim,
-            dsn,
-            envelope,
-            this.config.generateId,
-          );
+          smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope, this.config);
         } catch (error) {
           // A message that cannot be composed never reaches the connection.
           yield createSmtpFailure(error instanceof Error ? error.message : String(error), error);

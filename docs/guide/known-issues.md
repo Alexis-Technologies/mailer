@@ -10,7 +10,6 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
   clients show them as attachments.
 - The first encoded word of a header shares its line with the field name
   (`Subject: =?UTF-8?B?…?=`), past the 76 characters that RFC 2047 allows such a line.
-- DKIM: when signing fails and `send-unsigned` is set, the warning goes to `console.warn`.
 
 ## SMTP
 

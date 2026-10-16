@@ -172,8 +172,19 @@ test('MIME: a DKIM failure throws, or sends unsigned when asked to', async (t) =
   t.mock.method(console, 'warn', (...args) => warnings.push(args));
   const text = await wire(message, { dkim: { signatures, onSigningFailure: 'send-unsigned' } });
   assert.doesNotMatch(headerBlock(text), /^DKIM-Signature:/m);
+  // Without a logger, the one warning a transport writes goes to console.warn.
   assert.strictEqual(warnings.length, 1);
-  assert.strictEqual(warnings[0][0], 'DKIM signing failed, sending unsigned:');
+  assert.match(warnings[0][0], /^MAILER_DKIM_UNSIGNED: DKIM signing failed/);
+
+  // With one, the warning goes to it, with the error and no console output.
+  const records = [];
+  const logger = { warn: (properties, line) => records.push([properties, line]) };
+  await wire(message, { dkim: { signatures, onSigningFailure: 'send-unsigned' }, logger });
+  assert.strictEqual(warnings.length, 1);
+  assert.strictEqual(records.length, 1);
+  assert.strictEqual(records[0][0].code, 'MAILER_DKIM_UNSIGNED');
+  assert.strictEqual(records[0][0].component, 'dkim');
+  assert.match(records[0][0].error, /Failed to import private key/);
 
   await assert.rejects(composeMessage(message, { dkim: { signatures, bodyMode: 'eager' } }), {
     name: 'TypeError',

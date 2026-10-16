@@ -6,6 +6,7 @@ const { RawMessageValidationError } = require('../core/raw-message.js');
 const { Buffer } = require('node:buffer');
 const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
 const { BodyHasher } = require('./dkim/body-hash.js');
+const { createLog, warnDegradation } = require('../internal/log.js');
 const { signWithBodyHash } = require('./dkim/sign.js');
 
 /**
@@ -77,8 +78,12 @@ const prepareMimeStream = async (plan, options = {}) => {
   } catch (error) {
     signal?.throwIfAborted();
     if (plan.dkim?.onSigningFailure !== 'send-unsigned') throw error;
-    // oxlint-disable-next-line no-console -- upstream
-    console.warn('DKIM signing failed, sending unsigned:', error);
+    warnDegradation(
+      plan.log ?? createLog(),
+      'MAILER_DKIM_UNSIGNED',
+      'DKIM signing failed; the message is sent unsigned, as onSigningFailure asks.',
+      { error: error instanceof Error ? error.message : String(error) },
+    );
   }
   signal?.throwIfAborted();
   if (hasLineLongerThan(headers, 998)) {

@@ -273,6 +273,10 @@ fixed ones below.
   the delay at once, and the send rejects with the reason of the signal.
 - **`./pool` rejects an aborted send with the reason of the signal** (an upstream bug), not with
   a new `AbortError`, like the other transports.
+- **A DKIM signature skipped under `send-unsigned` is told to the logger** (known upstream bug 12):
+  it went to `console.warn` whatever the application logged with. It now goes to the `logger`
+  of `composeMessage` or of the SMTP transport, as a `warn` with the code
+  `MAILER_DKIM_UNSIGNED`, and to `console.warn` only when there is no logger.
 - **`./resend` draws its idempotency key from `crypto.randomUUID()`** (known upstream bug 11): it
   came from the clock and `Math.random()`, and two sends that shared a key by chance would get
   the first one's answer, the second never going out.
