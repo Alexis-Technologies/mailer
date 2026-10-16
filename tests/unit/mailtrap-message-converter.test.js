@@ -27,63 +27,8 @@ const createBaseMessage = (overrides = {}) => {
 };
 
 describe('convertMessage', () => {
-  it('bounds fallback Base64 calls while preserving attachment bytes', async () => {
-    const nativeDescriptor = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'toBase64');
-    const bufferDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Buffer');
-    const fromCharCode = String.fromCharCode;
-    const bytes = Uint8Array.from({ length: 1024 * 1024 + 1 }, (_, i) => i % 256);
-    const message = createBaseMessage({
-      attachments: [
-        {
-          filename: 'bytes.bin',
-          contentType: 'application/octet-stream',
-          contentId: 'bytes',
-          content: bytes,
-          inline: false,
-        },
-      ],
-    });
-    let largestCall = 0;
-
-    try {
-      // oxlint-disable-next-line no-extend-native -- upstream
-      Object.defineProperty(Uint8Array.prototype, 'toBase64', {
-        configurable: true,
-        value: undefined,
-      });
-      Object.defineProperty(globalThis, 'Buffer', {
-        configurable: true,
-        value: undefined,
-      });
-      String.fromCharCode = (...codes) => {
-        largestCall = Math.max(largestCall, codes.length);
-        assert.ok(codes.length <= 4096, 'Fallback calls must stay within 4096 arguments.');
-        return fromCharCode(...codes);
-      };
-
-      const result = await convertMessage(message, baseConfig);
-      assert.ok(largestCall > 0);
-      assert.ok(result.attachments);
-      const decoded = Uint8Array.from(atob(result.attachments[0].content), (character) =>
-        character.charCodeAt(0),
-      );
-      assert.deepEqual(decoded, bytes);
-    } finally {
-      String.fromCharCode = fromCharCode;
-      if (nativeDescriptor == null) {
-        Reflect.deleteProperty(Uint8Array.prototype, 'toBase64');
-      } else {
-        // oxlint-disable-next-line no-extend-native -- upstream
-        Object.defineProperty(Uint8Array.prototype, 'toBase64', nativeDescriptor);
-      }
-      if (bufferDescriptor == null) {
-        Reflect.deleteProperty(globalThis, 'Buffer');
-      } else {
-        Object.defineProperty(globalThis, 'Buffer', bufferDescriptor);
-      }
-    }
-  });
-
+  // Left out: upstream's tests of base64 without Buffer or with Uint8Array#toBase64,
+  // fallbacks for other runtimes; on Node, Buffer is always there (CLAUDE.md, Platform).
   it('converts a basic text message', async () => {
     const result = await convertMessage(createBaseMessage(), baseConfig);
 

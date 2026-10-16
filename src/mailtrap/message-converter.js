@@ -5,6 +5,7 @@ const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
+const { toBase64 } = require('../internal/base64.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -159,7 +160,7 @@ const convertAttachment = async (attachment, signal) => {
   const contentBytes = await readAttachmentContent(attachment.content, signal);
   signal?.throwIfAborted();
   const converted = {
-    content: uint8ArrayToBase64(contentBytes),
+    content: toBase64(contentBytes),
     filename: attachment.filename,
   };
 
@@ -175,50 +176,6 @@ const convertAttachment = async (attachment, signal) => {
   }
 
   return converted;
-};
-
-const uint8ArrayToBase64 = (bytes) => {
-  const nativeToBase64 = getNativeToBase64(bytes);
-  if (nativeToBase64 != null) {
-    return nativeToBase64();
-  }
-
-  const bufferBase64 = getBufferBase64(bytes);
-  if (bufferBase64 != null) {
-    return bufferBase64;
-  }
-
-  const chunkSize = 0x1000;
-  const chunks = [];
-
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
-  }
-
-  return btoa(chunks.join(''));
-};
-
-const getNativeToBase64 = (bytes) => {
-  const candidate = bytes;
-  const toBase64 = candidate.toBase64;
-  if (typeof toBase64 !== 'function') return undefined;
-  return () => toBase64.call(bytes);
-};
-
-const getBufferBase64 = (bytes) => {
-  const candidate = globalThis.Buffer;
-  if (typeof candidate?.from !== 'function') return undefined;
-
-  try {
-    const buffer = candidate.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    if (buffer == null || typeof buffer.toString !== 'function') {
-      return undefined;
-    }
-    const base64 = buffer.toString('base64');
-    return typeof base64 === 'string' ? base64 : undefined;
-  } catch {
-    return undefined;
-  }
 };
 
 const isStandardHeader = (headerName) => {

@@ -4,6 +4,7 @@
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
+const { toBase64 } = require('../internal/base64.js');
 
 /**
  * Converts a Upyo message to Plunk API format.
@@ -144,7 +145,7 @@ const convertAttachment = async (attachment, signal) => {
     const content = await readAttachmentContent(attachment.content, signal);
 
     // Convert to base64
-    const base64Content = arrayBufferToBase64(content);
+    const base64Content = toBase64(content);
 
     return {
       filename: attachment.filename,
@@ -158,17 +159,6 @@ const convertAttachment = async (attachment, signal) => {
     console.warn(`Failed to convert attachment ${attachment.filename}:`, error);
     return null;
   }
-};
-
-/**
- * Converts an ArrayBuffer or Uint8Array to base64 string.
- *
- * @param buffer - The buffer to convert
- * @returns Base64 encoded string
- */
-const arrayBufferToBase64 = (buffer) => {
-  const binaryString = Array.from(buffer, (byte) => String.fromCharCode(byte)).join('');
-  return btoa(binaryString);
 };
 
 module.exports = { convertMessage };

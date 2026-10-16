@@ -5,6 +5,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { createCalendarAttachment } = require('../core/calendar.js');
+const { toBase64 } = require('../internal/base64.js');
 
 const convertMessage = async (message, config, signal) => {
   const destination = {};
@@ -103,11 +104,7 @@ const createSimpleContent = async (message, signal) => {
       content.Attachments = await Promise.all(
         attachments.map(async (attachment) => {
           const contentBytes = await readAttachmentContent(attachment.content, combined.signal);
-          const parts = [];
-          for (let offset = 0; offset < contentBytes.length; offset += 8192) {
-            parts.push(String.fromCharCode(...contentBytes.subarray(offset, offset + 8192)));
-          }
-          const base64Content = btoa(parts.join(''));
+          const base64Content = toBase64(contentBytes);
 
           const converted = {
             FileName: attachment.filename,

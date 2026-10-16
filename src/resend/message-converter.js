@@ -6,6 +6,7 @@ const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
+const { toBase64 } = require('../internal/base64.js');
 
 /**
  * Converts a Upyo Message to Resend API JSON format.
@@ -182,7 +183,7 @@ const convertAttachment = async (attachment, signal) => {
   const content = await readAttachmentContent(attachment.content, signal);
   const resendAttachment = {
     filename: attachment.filename,
-    content: await uint8ArrayToBase64(content),
+    content: toBase64(content),
   };
 
   if (attachment.contentType) {
@@ -190,42 +191,6 @@ const convertAttachment = async (attachment, signal) => {
   }
 
   return resendAttachment;
-};
-
-/**
- * Converts a Uint8Array to base64 string using pure JavaScript implementation.
- * This avoids deprecated APIs like btoa() and Node.js-specific Buffer.
- *
- * @param bytes - The Uint8Array to convert
- * @returns Base64 encoded string
- */
-const uint8ArrayToBase64 = (bytes) => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
-  let i = 0;
-
-  while (i < bytes.length) {
-    const a = bytes[i++];
-    const b = i < bytes.length ? bytes[i++] : 0;
-    const c = i < bytes.length ? bytes[i++] : 0;
-
-    const bitmap = (a << 16) | (b << 8) | c;
-
-    result +=
-      chars.charAt((bitmap >> 18) & 63) +
-      chars.charAt((bitmap >> 12) & 63) +
-      chars.charAt((bitmap >> 6) & 63) +
-      chars.charAt(bitmap & 63);
-  }
-
-  // Add padding
-  const remainder = bytes.length % 3;
-  if (remainder !== 0) {
-    const padding = 3 - remainder;
-    result = result.slice(0, -padding) + '='.repeat(padding);
-  }
-
-  return result;
 };
 
 /**

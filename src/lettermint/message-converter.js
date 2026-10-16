@@ -5,6 +5,7 @@ const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
+const { toBase64 } = require('../internal/base64.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -162,7 +163,7 @@ const convertAttachment = async (attachment, signal) => {
   const content = await readAttachmentContent(attachment.content, signal);
   const converted = {
     filename: attachment.filename,
-    content: uint8ArrayToBase64(content),
+    content: toBase64(content),
     content_type: attachment.contentType,
   };
 
@@ -171,29 +172,6 @@ const convertAttachment = async (attachment, signal) => {
   }
 
   return converted;
-};
-
-const uint8ArrayToBase64 = (bytes) => {
-  const nativeToBase64 = getNativeToBase64(bytes);
-  if (nativeToBase64 != null) {
-    return nativeToBase64();
-  }
-
-  const chunkSize = 0x8000;
-  const chunks = [];
-
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
-  }
-
-  return btoa(chunks.join(''));
-};
-
-const getNativeToBase64 = (bytes) => {
-  const candidate = bytes;
-  const toBase64 = candidate.toBase64;
-  if (typeof toBase64 !== 'function') return undefined;
-  return () => toBase64.call(bytes);
 };
 
 const isStandardHeader = (headerName) => {

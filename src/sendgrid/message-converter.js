@@ -5,6 +5,7 @@ const { createCalendarAttachment } = require('../core/calendar.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { resolveThreadingHeaders } = require('../core/message-id.js');
+const { toBase64 } = require('../internal/base64.js');
 
 /**
  * Converts a Upyo Message to SendGrid API JSON format.
@@ -211,12 +212,7 @@ const convertAttachment = async (attachment, signal) => {
   // Get the content as Uint8Array then convert to base64
   const contentBytes = await readAttachmentContent(attachment.content, signal);
 
-  // Convert to base64
-  const parts = [];
-  for (let offset = 0; offset < contentBytes.length; offset += 8192) {
-    parts.push(String.fromCharCode(...contentBytes.subarray(offset, offset + 8192)));
-  }
-  const base64Content = btoa(parts.join(''));
+  const base64Content = toBase64(contentBytes);
 
   const sendGridAttachment = {
     content: base64Content,
