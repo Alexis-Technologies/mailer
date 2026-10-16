@@ -237,3 +237,41 @@ test('SES: sendMany reads a batch at a time, not its whole input first', async (
   }
   assert.strictEqual(input.read, 2);
 });
+
+test('SES: custom and threading header fields go in Headers, those SES sets left out', async () => {
+  const config = createSesConfig({ authentication });
+  const converted = await convertMessage(
+    message({
+      headers: {
+        'X-Campaign': 'spring',
+        'X-Label': 'Café crème',
+        'Return-Path': 'bounce@example.com',
+        'X-Empty': '',
+      },
+      inReplyTo: '<parent@example.com>',
+    }),
+    config,
+  );
+  assert.deepStrictEqual(converted.Content.Simple.Headers, [
+    { Name: 'x-campaign', Value: 'spring' },
+    { Name: 'x-label', Value: `=?UTF-8?B?${Buffer.from('Café crème').toString('base64')}?=` },
+    { Name: 'In-Reply-To', Value: '<parent@example.com>' },
+  ]);
+  const plain = await convertMessage(message(), config);
+  assert.strictEqual(plain.Content.Simple.Headers, undefined);
+});
+
+test('SES: more header fields than SES takes fail the send before any request', async (t) => {
+  let requests = 0;
+  await withFetch(t, async () => {
+    requests++;
+    return new Response('{"MessageId":"m1"}', { status: 200 });
+  });
+  const headers = {};
+  for (let index = 0; index < 16; index++) headers[`X-Field-${index}`] = 'value';
+  const transport = new SesTransport({ authentication, retries: 0 });
+  const receipt = await transport.send(message({ headers }));
+  assert.strictEqual(receipt.successful, false);
+  assert.match(receipt.errorMessages[0], /at most 15 custom header fields/);
+  assert.strictEqual(requests, 0);
+});

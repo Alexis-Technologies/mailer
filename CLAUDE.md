@@ -146,8 +146,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
    as a substring.
 9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
    ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
-10. ses: custom and threading headers are not sent. (`convertMessagesToBulk`, which nothing
-    called, is removed.)
+10. (fixed, see 82) ses: custom and threading headers were not sent. (`convertMessagesToBulk`,
+    which nothing called, is removed.)
 11. (fixed, see 71) resend: the `Idempotency-Key` came from `Math.random`.
 12. (fixed, see 72 and 73) `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of
     an injected logger.
@@ -412,6 +412,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     Requests go as a buffer (upstream streamed them against a replay seen in Deno; Node's fetch
     does not replay a POST), and a raw message of a known size up to 4 MiB is read into one
     buffer after validation (`bufferRawUpload`). A raw message of unknown size still streams.
+82. ses (known bug 10): custom header fields and the threading ones were not sent, so a reply
+    lost its place in the thread. They go in the `Headers` of Simple content (SES v2, up to 15
+    fields of 996 characters, the ones SES sets left out, values beyond ASCII as encoded words);
+    more fail the send before any request.
 
 ## Repository layout
 

@@ -331,6 +331,9 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./ses` sends custom and threading header fields** (an upstream bug): they were dropped, so a
+  reply lost its place in the thread. They go in the `Headers` of the message, up to the 15 SES
+  takes; the fields SES sets itself are left out.
 - **`./mailgun` sends an inline part under its Content-ID** (an upstream bug): Mailgun makes the
   file name of an inline part its Content-ID, and the file name was sent, so a `cid:` in the
   HTML matched nothing.

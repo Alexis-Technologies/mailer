@@ -230,6 +230,13 @@ Tags are particularly powerful in SES as they enable detailed tracking and
 analytics through CloudWatch metrics. You can set default tags at the transport
 level and additional tags per message for comprehensive categorization.
 
+Custom header fields and the threading fields (`inReplyTo`, `references`) go in
+the `Headers` of the message, which SES takes for up to 15 fields of up to 996
+characters each; a message with more fails before any request.  The fields SES
+sets itself (From, To, Cc, Bcc, Reply-To, Subject, Date, Message-ID,
+MIME-Version, Content-Type, Content-Disposition and Return-Path) are left out,
+and SES gives the message a Message-ID of its own.
+
 ## Bulk email sending
 
 For sending newsletters, notifications, or other bulk emails, the SES transport
