@@ -96,8 +96,10 @@ const startDeadline = (timeoutMs, isZeroTimeoutDisabled, signal) => {
  * - `reject(response, attempt)`: the error of any other response;
  * - `isRetryable(error)`, `retryDelayMs(attempt, error)`;
  * - `retries`, `timeoutMs`, `signal`;
- * - `createTimeoutError(error)`: the error of an expired deadline;
- * - `finalError(error, attempts)`: the error thrown once retries are spent;
+ * - `createTimeoutError(error)`: the error of an expired deadline, by default
+ *   the `AbortError` itself;
+ * - `finalError(error, attempts)`: the error thrown once retries are spent,
+ *   by default the last failure;
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
@@ -128,7 +130,7 @@ const requestWithRetry = async (request) => {
       failure = await request.reject(response, attempt);
     } catch (error) {
       const isTimeout = deadline.isExpired && !signal?.aborted && isAbortError(error);
-      failure = isTimeout ? request.createTimeoutError(error) : error;
+      failure = isTimeout ? (request.createTimeoutError?.(error) ?? error) : error;
     } finally {
       deadline.stop();
     }
@@ -141,7 +143,7 @@ const requestWithRetry = async (request) => {
       throw markDeliveryUnknown(accepted);
     }
     if (!request.isRetryable(failure)) throw failure;
-    if (attempt >= request.retries) throw request.finalError(failure, attempt + 1);
+    if (attempt >= request.retries) throw request.finalError?.(failure, attempt + 1) ?? failure;
     await wait(request.retryDelayMs(attempt, failure), signal);
   }
 };

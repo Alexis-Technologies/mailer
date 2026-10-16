@@ -3,6 +3,7 @@
 
 const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
+const { exponentialDelayMs, isAbortError, requestWithRetry } = require('../internal/http.js');
 
 /**
  * HTTP client for JMAP API requests.
@@ -25,24 +26,29 @@ class JmapHttpClient {
    * @param signal Optional abort signal.
    * @returns The JMAP session response.
    */
-  async fetchSession(signal) {
+  fetchSession(signal) {
     signal?.throwIfAborted();
 
-    const response = await this.fetchWithAuth(this.config.sessionUrl, { method: 'GET' }, signal);
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new JmapApiError(
-        `Session fetch failed: ${response.status}`,
-        response.status,
-        text,
-        undefined,
-        parseRetryAfter(response.headers.get('Retry-After')),
-        1,
-      );
-    }
-
-    return await response.json();
+    return requestWithRetry({
+      signal,
+      retries: 0,
+      timeoutMs: this.config.timeout,
+      isIdempotent: true,
+      send: (attemptSignal) =>
+        this.fetchWithAuth(this.config.sessionUrl, { method: 'GET' }, attemptSignal),
+      read: (response) => response.json(),
+      reject: async (response) =>
+        new JmapApiError(
+          `Session fetch failed: ${response.status}`,
+          response.status,
+          await response.text(),
+          undefined,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          1,
+        ),
+      isRetryable: () => true,
+      retryDelayMs: exponentialDelayMs,
+    });
   }
 
   /**
@@ -52,17 +58,18 @@ class JmapHttpClient {
    * @param signal Optional abort signal.
    * @returns The JMAP response.
    */
-  async executeRequest(apiUrl, request, signal) {
+  executeRequest(apiUrl, request, signal) {
     signal?.throwIfAborted();
 
-    let lastError = null;
-
-    const retries = this.replayableRequests ? this.config.retries : 0;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      signal?.throwIfAborted();
-
-      try {
-        const response = await this.fetchWithAuth(
+    return requestWithRetry({
+      signal,
+      retries: this.replayableRequests ? this.config.retries : 0,
+      timeoutMs: this.config.timeout,
+      // A JMAP request is retried after a 2xx it could not read, as upstream
+      // did; the submission of an email has no retries (`submissionClient`).
+      isIdempotent: true,
+      send: (attemptSignal) =>
+        this.fetchWithAuth(
           apiUrl,
           {
             method: 'POST',
@@ -79,107 +86,42 @@ class JmapHttpClient {
                 }),
             ...(this.replayableRequests ? {} : { duplex: 'half', redirect: 'error' }),
           },
-          signal,
-        );
-
-        if (!response.ok) {
-          const text = await response.text();
-          const error = new JmapApiError(
-            `JMAP request failed: ${response.status}`,
-            response.status,
-            text,
-            undefined,
-            parseRetryAfter(response.headers.get('Retry-After')),
-            attempt + 1,
-          );
-
-          // Don't retry on 4xx errors (client errors)
-          if (response.status >= 400 && response.status < 500) {
-            throw error;
-          }
-
-          throw error;
-        }
-
-        return await response.json();
-      } catch (error) {
-        // Don't retry if aborted
-        if (isCallerAbort(error, signal)) {
-          throw error;
-        }
-
-        // Don't retry on 4xx errors
-        if (error instanceof JmapApiError && error.statusCode !== undefined) {
-          if (error.statusCode >= 400 && error.statusCode < 500) {
-            throw error;
-          }
-        }
-
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        if (attempt === retries) {
-          if (error instanceof JmapApiError) {
-            throw error;
-          }
-          // The cause tells a request that never left (a refused connection)
-          // from one that may have reached the server.
-          if (isAbortError(error)) {
-            throw new JmapApiError(
-              'JMAP request timed out.',
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              attempt + 1,
-              { cause: error },
-            );
-          }
-          throw new JmapApiError(
-            lastError.message,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            attempt + 1,
-            { cause: error },
-          );
-        }
-
-        // Exponential backoff
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((resolve, reject) => {
-          const cleanup = () => {
-            clearTimeout(timer);
-            signal?.removeEventListener('abort', onAbort);
-          };
-          const onAbort = () => {
-            cleanup();
-            reject(signal?.reason);
-          };
-          const timer = setTimeout(() => {
-            cleanup();
-            resolve();
-          }, delay);
-          signal?.addEventListener('abort', onAbort, { once: true });
-          if (signal?.aborted) onAbort();
+          attemptSignal,
+        ),
+      read: (response) => response.json(),
+      reject: async (response, attempt) =>
+        new JmapApiError(
+          `JMAP request failed: ${response.status}`,
+          response.status,
+          await response.text(),
+          undefined,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        ),
+      // Don't retry on 4xx errors (client errors)
+      isRetryable: (error) =>
+        !(error instanceof JmapApiError && error.statusCode >= 400 && error.statusCode < 500),
+      retryDelayMs: exponentialDelayMs,
+      // The cause tells a request that never left (a refused connection) from
+      // one that may have reached the server.
+      finalError: (error, attempts) => {
+        if (error instanceof JmapApiError) return error;
+        const message = isAbortError(error) ? 'JMAP request timed out.' : error.message;
+        return new JmapApiError(message, undefined, undefined, undefined, undefined, attempts, {
+          cause: error,
         });
-      }
-    }
-
-    if (lastError != null) {
-      throw lastError;
-    }
-    throw new Error('Request failed after all retries');
+      },
+    });
   }
 
   /**
    * Makes an authenticated fetch request.
    * @param url The URL to fetch.
    * @param options Fetch options.
-   * @param signal Optional abort signal.
+   * @param signal The signal of the attempt, with its deadline.
    * @returns The fetch response.
    */
-  async fetchWithAuth(url, options, signal) {
+  fetchWithAuth(url, options, signal) {
     const headers = new Headers(options.headers);
     if (this.config.bearerToken) {
       headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
@@ -195,34 +137,8 @@ class JmapHttpClient {
       headers.set(key, value);
     }
 
-    // Setup timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
-
-    // Combine with external signal if provided
-    let combinedSignal = controller.signal;
-    if (signal) {
-      combinedSignal = AbortSignal.any([signal, controller.signal]);
-    }
-
-    try {
-      return await globalThis.fetch(url, {
-        ...options,
-        headers,
-        signal: combinedSignal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return globalThis.fetch(url, { ...options, headers, signal });
   }
 }
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
 
 module.exports = { JmapHttpClient };
