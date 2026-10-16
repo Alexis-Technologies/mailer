@@ -343,7 +343,6 @@ const transport = createOpenTelemetryTransport(
     metrics: {
       enabled: true,
       prefix: 'marketing',
-      samplingRate: 1.0,
       durationBuckets: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
     },
     tracing: {
@@ -353,6 +352,11 @@ const transport = createOpenTelemetryTransport(
   },
 );
 ```
+
+Metrics are recorded for every operation; `tracing.samplingRate` samples
+only the spans. A sampled counter would undercount by the sampling rate, and a
+sampled count of active sends would drift, so the metrics configuration has no
+sampling rate, and setting `metrics.samplingRate` throws a `TypeError`.
 
 The transport collects the following key metrics:
 
@@ -499,10 +503,7 @@ const transport = createOpenTelemetryTransport(
     tracerProvider,
     meterProvider,
     serviceName: 'newsletter-service',
-    metrics: {
-      enabled: true,
-      samplingRate: 1.0, // Monitor all bulk operations
-    },
+    metrics: { enabled: true },
     tracing: {
       enabled: true,
       samplingRate: 0.01, // Sample 1% of individual messages
@@ -580,7 +581,6 @@ const transport = createOpenTelemetryTransport(
     serviceName: 'production-email',
     metrics: {
       enabled: true,
-      samplingRate: 1.0, // Always collect metrics
       prefix: 'prod',
     },
     tracing: {
@@ -642,10 +642,7 @@ const devTransport = createOpenTelemetryTransport(
     meterProvider,
     serviceName: 'email-service-dev',
     serviceVersion: 'dev',
-    metrics: {
-      enabled: true,
-      samplingRate: 1.0,
-    },
+    metrics: { enabled: true },
     tracing: {
       enabled: true,
       samplingRate: 1.0,

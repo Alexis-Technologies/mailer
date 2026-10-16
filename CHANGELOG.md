@@ -182,6 +182,10 @@ fixed ones below.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.
+- **`./otel` metrics no longer undercount** (an upstream bug): each counter and histogram was
+  sampled with `metrics.samplingRate` and recorded unscaled, so all of them came out low by the
+  rate, and the count of active sends drifted. Metrics are now recorded for every operation and
+  only spans are sampled (`tracing.samplingRate`); `metrics.samplingRate` throws a `TypeError`.
 
 ### Changed
 

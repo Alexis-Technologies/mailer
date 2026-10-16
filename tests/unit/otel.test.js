@@ -33,7 +33,7 @@ test('OTel: nothing is recorded when sampled out', async () => {
     tracerProvider,
     meterProvider,
     tracing: { samplingRate: 0 },
-    metrics: { samplingRate: 0 },
+    metrics: { enabled: false },
     attributeExtractor: () => ({ 'app.custom': true }),
   };
   const ok = new OpenTelemetryTransport(plain({}), options);
@@ -135,4 +135,27 @@ test('OTel: without sensitive data, error text in spans names no address', async
     assert.strictEqual(recorded.includes('bob@example.com'), recordSensitiveData, recorded);
     if (!recordSensitiveData) assert.match(recorded, /RCPT TO failed for \[REDACTED\]: 550/);
   }
+});
+
+test('OTel: metrics are recorded for every operation, and only spans are sampled', async () => {
+  const { tracerProvider, meterProvider } = providers();
+  const transport = new OpenTelemetryTransport(plain({}), {
+    tracerProvider,
+    meterProvider,
+    tracing: { samplingRate: 0 },
+  });
+  for (let i = 0; i < 20; i++) await transport.send(createTestMessage());
+  assert.deepStrictEqual(tracerProvider.getAllSpans(), []);
+  const attempts = meterProvider.getAllRecords().find((metric) => metric.instrument === 'counter');
+  assert.strictEqual(attempts.records.length, 20);
+
+  assert.throws(
+    () =>
+      new OpenTelemetryTransport(plain({}), {
+        tracerProvider,
+        meterProvider,
+        metrics: { samplingRate: 0.5 },
+      }),
+    { name: 'TypeError', message: /metrics\.samplingRate is not supported/ },
+  );
 });

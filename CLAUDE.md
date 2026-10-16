@@ -262,6 +262,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     (`foo@evil.example/` sent the signed request to `evil.example`), and the Mailgun `domain`,
     the Mailtrap `inboxId` and the JMAP `accountId` of a blob upload into the path unencoded.
     The region must look like one (`us-east-1`), and the others are encoded as one segment.
+44. otel: every counter and histogram was sampled with `metrics.samplingRate` and recorded
+    unscaled, so each undercounted by the rate, and the UpDownCounter of active sends drifted.
+    Metrics are recorded for every operation, only spans are sampled, and
+    `metrics.samplingRate` throws a `TypeError`.
 
 ## Repository layout
 

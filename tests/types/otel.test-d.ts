@@ -39,3 +39,5 @@ expectAssignable<(error: unknown) => string>(createErrorClassifier({ patterns: {
 expectAssignable<OpenTelemetryConfig>({ tracing: { enabled: false }, metrics: { enabled: false } });
 expectAssignable<Function>(createEmailAttributeExtractor);
 expectError(new OpenTelemetryTransport(new MockTransport(), { tracerProvider: 'global' }));
+// Metrics are recorded for every operation; only tracing has a sampling rate.
+expectError(new OpenTelemetryTransport(new MockTransport(), { metrics: { samplingRate: 0.5 } }));

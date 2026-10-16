@@ -18,7 +18,8 @@ describe('config', () => {
       });
 
       assert.equal(config.metrics.enabled, true);
-      assert.equal(config.metrics.samplingRate, 1.0);
+      // Changed after the port: metrics have no sampling rate.
+      assert.equal(config.metrics.samplingRate, undefined);
       assert.equal(config.metrics.prefix, 'mailer');
       assert.deepEqual(
         config.metrics.durationBuckets,
@@ -38,10 +39,10 @@ describe('config', () => {
       const config = createOpenTelemetryConfig({
         tracerProvider,
         meterProvider,
+        // Changed after the port: metrics.samplingRate is refused.
         metrics: {
           enabled: true,
           prefix: 'custom',
-          samplingRate: 0.5,
         },
         tracing: {
           enabled: true,
@@ -51,7 +52,6 @@ describe('config', () => {
       });
 
       assert.equal(config.metrics.prefix, 'custom');
-      assert.equal(config.metrics.samplingRate, 0.5);
       assert.equal(config.tracing.recordSensitiveData, true);
       assert.equal(config.tracing.spanPrefix, 'custom_email');
     });

@@ -72,18 +72,15 @@ export interface MeterProvider {
  */
 export interface ObservabilityConfig {
   /**
-   * Whether tracing is enabled.
+   * Whether the feature is enabled.
    * @default true
    */
   readonly enabled?: boolean;
-  /**
-   * Custom sampling rate for this feature (0.0 to 1.0).
-   * @default 1.0 (sample all)
-   */
-  readonly samplingRate?: number;
 }
 /**
- * Configuration options for metrics collection.
+ * Configuration options for metrics collection.  Metrics are recorded for
+ * every operation: sampled counters would undercount, and a sampled count of
+ * active sends would drift.
  */
 export interface MetricsConfig extends ObservabilityConfig {
   /**
@@ -101,6 +98,11 @@ export interface MetricsConfig extends ObservabilityConfig {
  * Configuration options for tracing.
  */
 export interface TracingConfig extends ObservabilityConfig {
+  /**
+   * The share of operations that get a span (0.0 to 1.0).
+   * @default 1.0 (sample all)
+   */
+  readonly samplingRate?: number;
   /**
    * Whether to record sensitive information in spans.
    * When false, email addresses and subjects are redacted.
@@ -307,6 +309,8 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
    *
    * @param transport The base transport to wrap with observability.
    * @param config OpenTelemetry configuration options.
+   * @throws {Error} When an enabled feature has no provider.
+   * @throws {TypeError} When `metrics.samplingRate` is set.
    */
   constructor(transport: Transport<TProviderId>, config?: OpenTelemetryConfig);
   /**

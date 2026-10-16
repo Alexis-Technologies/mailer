@@ -7,7 +7,6 @@
 const DEFAULT_CONFIG = {
   metrics: {
     enabled: true,
-    samplingRate: 1.0,
     prefix: 'mailer',
     durationBuckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0],
   },
@@ -26,8 +25,18 @@ const DEFAULT_CONFIG = {
  * @returns A resolved configuration with all defaults applied.
  * @throws {Error} When tracing is enabled but no TracerProvider is provided.
  * @throws {Error} When metrics are enabled but no MeterProvider is provided.
+ * @throws {TypeError} When `metrics.samplingRate` is set.
  */
 const createOpenTelemetryConfig = (config = {}) => {
+  // Sampled counters and histograms undercount by the sampling rate, and a
+  // sampled UpDownCounter drifts, so metrics are recorded for every operation
+  // and only spans are sampled.
+  if (config.metrics?.samplingRate !== undefined) {
+    throw new TypeError(
+      'metrics.samplingRate is not supported: metrics are recorded for every ' +
+        'operation, and only spans are sampled (tracing.samplingRate).',
+    );
+  }
   const resolvedConfig = {
     tracerProvider: config.tracerProvider,
     meterProvider: config.meterProvider,

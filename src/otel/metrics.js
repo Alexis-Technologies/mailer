@@ -71,10 +71,6 @@ class MetricsCollector {
    * Records the start of an email send operation.
    */
   recordSendStart(transport, messageCount = 1) {
-    if (!this.shouldSample()) {
-      return;
-    }
-
     const labels = {
       transport,
     };
@@ -90,10 +86,6 @@ class MetricsCollector {
    * Records the completion of an email send operation.
    */
   recordSendComplete(transport, duration, success, errorType) {
-    if (!this.shouldSample()) {
-      return;
-    }
-
     const labels = {
       transport,
       status: success ? 'success' : 'failure',
@@ -109,10 +101,6 @@ class MetricsCollector {
    * Records metrics for individual messages.
    */
   recordMessage(message, transport) {
-    if (!this.shouldSample()) {
-      return;
-    }
-
     const labels = {
       transport,
       priority: message.priority,
@@ -128,10 +116,6 @@ class MetricsCollector {
    * Records metrics for batch operations.
    */
   recordBatch(messages, transport, duration, successCount, failureCount) {
-    if (!this.shouldSample()) {
-      return;
-    }
-
     // oxlint-disable-next-line no-underscore-dangle, no-unused-vars -- upstream
     const _totalMessages = messages.length;
     const labels = { transport };
@@ -173,20 +157,12 @@ class MetricsCollector {
    * Records an error for metrics classification.
    */
   recordError(transport, errorType, operation = 'send') {
-    if (!this.shouldSample()) {
-      return;
-    }
-
     this.attemptCounter.add(1, {
       transport,
       status: 'failure',
       error_type: errorType,
       operation,
     });
-  }
-
-  shouldSample() {
-    return Math.random() < this.config.samplingRate;
   }
 
   getContentType(message) {
