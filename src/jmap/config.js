@@ -24,10 +24,12 @@ const createJmapConfig = (config) => {
     headers: config.headers ?? {},
     sessionCacheTtl: config.sessionCacheTtl ?? 300000,
     baseUrl: config.baseUrl ?? null,
+    trustedOrigins: config.trustedOrigins ?? [],
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
   checkSecureUrl(resolved.sessionUrl, 'sessionUrl');
   if (resolved.baseUrl != null) checkSecureUrl(resolved.baseUrl, 'baseUrl');
+  for (const origin of resolved.trustedOrigins) checkSecureUrl(origin, 'trustedOrigins');
   return resolved;
 };
 

@@ -117,7 +117,8 @@ test(
       const started = performance.now();
       const receipt = await transport.send(message());
       t.mock.restoreAll();
-      assert.ok(performance.now() - started < 1000, name);
+      // Resend and Lettermint retry once with their key, after up to a second.
+      assert.ok(performance.now() - started < 3000, name);
       assert.strictEqual(receipt.successful, false, name);
       assert.strictEqual(receipt.deliveryUnknown, true, name);
     }

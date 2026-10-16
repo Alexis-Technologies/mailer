@@ -75,6 +75,14 @@ export interface JmapConfig {
    * baseUrl is `http://localhost:8080`, URLs will be rewritten to use localhost.
    */
   readonly baseUrl?: string;
+  /**
+   * Origins besides that of `sessionUrl` (or of `baseUrl`, when set) that
+   * the URLs of the Session may point to, such as
+   * `https://api.mail.example.com`.  The transport sends its credentials to
+   * those URLs, so a Session naming any other origin is refused.
+   * @default []
+   */
+  readonly trustedOrigins?: readonly string[];
 }
 /**
  * Resolved JMAP configuration with all fields populated.
@@ -93,6 +101,7 @@ export type ResolvedJmapConfig = {
   readonly headers: Record<string, string>;
   readonly sessionCacheTtl: number;
   readonly baseUrl: string | null;
+  readonly trustedOrigins: readonly string[];
 };
 /**
  * Creates a resolved JMAP configuration with default values applied.

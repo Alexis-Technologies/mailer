@@ -88,6 +88,7 @@ class JmapTransport {
       validateVerificationSession(session);
       if (this.config.baseUrl) session = this.rewriteSessionUrls(session);
       validateVerificationApiUrl(session.apiUrl);
+      checkSessionUrls(session, this.config);
       if (!Object.values(JMAP_CAPABILITIES).every((cap) => cap in session.capabilities)) {
         throw new JmapApiError('JMAP session lacks core, mail, or submission capability.');
       }
@@ -247,6 +248,7 @@ class JmapTransport {
       // Parse response
       return this.parseResponse(response);
     } catch (error) {
+      this.forgetSessionAfter(error);
       if (signal?.aborted) {
         throw getAbortReason(signal, error);
       }
@@ -328,6 +330,7 @@ class JmapTransport {
         signal,
       );
     } catch (error) {
+      this.forgetSessionAfter(error);
       signal?.throwIfAborted();
       return createJmapFailure(
         error instanceof Error ? error.message : String(error),
@@ -472,6 +475,7 @@ class JmapTransport {
         yield this.parseBatchResponseForIndex(response, i);
       }
     } catch (error) {
+      this.forgetSessionAfter(error);
       if (signal?.aborted) {
         throw getAbortReason(signal, error);
       }
@@ -529,6 +533,10 @@ class JmapTransport {
       session = this.rewriteSessionUrls(session);
     }
 
+    // Checked before it is cached: a Session that names another origin would
+    // receive the credentials for as long as it stays cached.
+    checkSessionUrls(session, this.config);
+
     // Cache it
     this.cachedSession = {
       session,
@@ -536,6 +544,14 @@ class JmapTransport {
     };
 
     return session;
+  }
+
+  // A rejected authentication or a URL that is gone may come from a Session
+  // that changed since it was cached: the next send fetches it again.
+  forgetSessionAfter(error) {
+    if (error instanceof JmapApiError && (error.statusCode === 401 || error.statusCode === 404)) {
+      this.cachedSession = null;
+    }
   }
 
   /**
@@ -976,6 +992,28 @@ const verificationOperation = async (timeout, operation, signal) => {
     if (onAbort) combined.signal.removeEventListener('abort', onAbort);
     controller.abort();
     combined.cleanup();
+  }
+};
+
+// The URLs of a Session the transport sends its credentials to must be on the
+// origin it fetched the Session from (that of baseUrl when URLs are rewritten)
+// or on one of trustedOrigins.
+const checkSessionUrls = (session, config) => {
+  if (!isRecord(session)) throw new JmapApiError('Invalid JMAP Session response.');
+  const trusted = new Set([new URL(config.baseUrl ?? config.sessionUrl).origin]);
+  for (const origin of config.trustedOrigins) trusted.add(new URL(origin).origin);
+  for (const name of ['apiUrl', 'uploadUrl', 'downloadUrl']) {
+    const value = session[name];
+    // Only apiUrl serves every send; the others are checked when given.
+    if (value == null && name !== 'apiUrl') continue;
+    const origin = typeof value === 'string' && URL.canParse(value) ? new URL(value).origin : null;
+    if (origin == null) throw new JmapApiError(`Invalid JMAP Session field: ${name}`);
+    if (!trusted.has(origin)) {
+      throw new JmapApiError(
+        `JMAP Session ${name} is on ${origin}, which is not trusted; ` +
+          'list it in trustedOrigins if it is meant to receive the credentials.',
+      );
+    }
   }
 };
 

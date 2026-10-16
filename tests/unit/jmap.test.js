@@ -271,3 +271,39 @@ test('JMAP: attachments that share a content ID keep their own blobs', async (t)
     ],
   );
 });
+
+test('JMAP: a Session naming another origin is refused, unless that origin is trusted', async (t) => {
+  const evil = 'https://evil.example';
+  const calls = serve(t, { session: session({ apiUrl: `${evil}/api` }) });
+  const refused = await transport().send(message());
+  assert.strictEqual(refused.successful, false);
+  assert.match(refused.errorMessages[0], /evil\.example, which is not trusted/);
+  assert.ok(
+    calls.every((call) => !call.startsWith(evil)),
+    calls.join(' '),
+  );
+
+  const trusted = await transport({ trustedOrigins: [evil] }).send(message());
+  assert.strictEqual(trusted.successful, true, trusted.errorMessages?.join(' | '));
+  assert.ok(calls.some((call) => call.startsWith(evil)));
+});
+
+test('JMAP: a 401 makes the next send fetch the Session again', async (t) => {
+  let sessionFetches = 0;
+  let rejected = false;
+  serve(t);
+  const served = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (input, init) => {
+    const url = String(input);
+    if (url.endsWith('/.well-known/jmap')) sessionFetches++;
+    if (url.endsWith('/api') && !rejected) {
+      rejected = true;
+      return Promise.resolve(new Response('', { status: 401 }));
+    }
+    return served(input, init);
+  });
+  const jmap = transport();
+  assert.strictEqual((await jmap.send(message())).successful, false);
+  assert.strictEqual((await jmap.send(message())).successful, true);
+  assert.strictEqual(sessionFetches, 2);
+});

@@ -286,6 +286,25 @@ const transport = new JmapTransport({
 This is useful when connecting to containerized servers or when the server
 returns hostnames that differ from the external access URL.
 
+### Trusted origins
+
+The transport sends its credentials to the URLs the Session names, so it
+accepts only URLs on the origin it fetched the Session from (that of `baseUrl`
+when URLs are rewritten). A Session that names another origin is refused
+before it is cached. If your server really serves its API from another host,
+list that origin:
+
+```js
+const transport = new JmapTransport({
+  sessionUrl: 'https://mail.example.com/.well-known/jmap',
+  bearerToken: 'your-bearer-token',
+  trustedOrigins: ['https://api.mail.example.com'],
+});
+```
+
+A cached Session is fetched again after a 401 or a 404, which may mean that it
+changed.
+
 ## Request cancellation
 
 The JMAP transport supports request cancellation using the standard

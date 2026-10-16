@@ -249,6 +249,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 40. jmap: uploaded blobs were keyed by `contentId`, which repeats and is empty for every
     attachment that is not inline, so attachments overwrote each other's blob and every part
     pointed at the last one. They are keyed by the attachment object.
+41. jmap: `apiUrl`, `uploadUrl` and `downloadUrl` of the Session were used as given, so a
+    Session naming another host received the credentials, and it stayed cached for
+    `sessionCacheTtl` whatever happened. They must be on the Session's origin (that of
+    `baseUrl` when rewritten) or in the new `trustedOrigins`, checked before caching, and a
+    401 or a 404 forgets the cached Session.
 
 ## Repository layout
 
