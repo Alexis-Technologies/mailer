@@ -339,6 +339,9 @@ class OAuth2TokenManager {
         },
         body,
         signal: controller.signal,
+        // A redirect is not followed: it would send the client secret and the
+        // refresh token in the body to wherever it points.
+        redirect: 'manual',
       });
       // Read the body under the same timeout: an endpoint that returns headers
       // but stalls on the body must not leave `pending` unresolved forever.

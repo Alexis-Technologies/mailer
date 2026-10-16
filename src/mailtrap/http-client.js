@@ -176,11 +176,14 @@ class MailtrapHttpClient {
       headers.set(key, value);
     }
 
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
     return globalThis.fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal,
+      redirect: 'manual',
     });
   }
 }

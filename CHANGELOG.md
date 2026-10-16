@@ -126,6 +126,11 @@ fixed ones below.
   and retried after their own backoff anyway, while `./mailtrap` and `./maileroo` waited for it
   however long it was. A longer one is no longer waited for within the send: the failure is
   returned at once with its `retryAfterMilliseconds`.
+- **No request follows a redirect** (an upstream bug): `fetch` followed them and strips only
+  `Authorization` on a cross-origin one, so Maileroo's `X-API-Key`, Mailtrap's `Api-Token`,
+  Lettermint's token, custom `headers` and the body of the OAuth2 token request (client secret,
+  refresh token) went wherever a redirect pointed. Every request of the HTTP providers, `./jmap`
+  and the OAuth2 refresh of `./smtp` now gets a 3xx back as a failure, which is not retried.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

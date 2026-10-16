@@ -124,11 +124,14 @@ class PlunkHttpClient {
       ...this.config.headers,
     };
 
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
     return fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(emailData),
       signal,
+      redirect: 'manual',
     });
   }
 

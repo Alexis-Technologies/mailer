@@ -88,10 +88,13 @@ class SesHttpClient {
       signedHeaders.set(key, value);
     }
 
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
     return await globalThis.fetch(url, {
       ...options,
       headers: this.headersToRecord(signedHeaders),
       signal,
+      redirect: 'manual',
     });
   }
 

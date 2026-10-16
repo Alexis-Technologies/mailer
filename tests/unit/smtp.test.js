@@ -9,6 +9,7 @@ const { createMessage } = require('../../index.js');
 const { SmtpTransport } = require('../../src/smtp/index.js');
 const { prepareOnSocket, writeMessageData } = require('../../src/smtp/data-stream.js');
 const { checkSmtpPath } = require('../../src/smtp/envelope.js');
+const { OAuth2TokenManager } = require('../../src/smtp/oauth2.js');
 const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
 
 const message = () =>
@@ -382,4 +383,24 @@ test('SMTP: a connection reset in the middle of the envelope fails the send', as
   } finally {
     await stop(server);
   }
+});
+
+test('SMTP: the OAuth2 token request does not follow a redirect', async () => {
+  const redirects = [];
+  const fetchFn = async (_url, init) => {
+    redirects.push(init.redirect);
+    return Response.json({ access_token: 'token', expires_in: 3600 });
+  };
+  const manager = new OAuth2TokenManager(
+    {
+      user: 'alex@example.com',
+      clientId: 'client',
+      clientSecret: 'secret',
+      refreshToken: 'refresh',
+      tokenEndpoint: 'https://auth.example.com/token',
+    },
+    fetchFn,
+  );
+  assert.strictEqual(await manager.getAccessToken(), 'token');
+  assert.deepStrictEqual(redirects, ['manual']);
 });

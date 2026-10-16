@@ -151,3 +151,18 @@ test(
     }
   },
 );
+
+test('Delivery: a redirect is not followed, nor retried', async (t) => {
+  for (const [name, , create] of providers) {
+    const redirects = [];
+    t.mock.method(globalThis, 'fetch', async (_url, init) => {
+      redirects.push(init.redirect);
+      return new Response(null, { status: 307, headers: { Location: 'https://evil.example/' } });
+    });
+    const receipt = await create().send(message());
+    t.mock.restoreAll();
+    assert.deepStrictEqual(redirects, ['manual'], name);
+    assert.strictEqual(receipt.successful, false, name);
+    assert.strictEqual(receipt.errors[0].statusCode, 307, name);
+  }
+});

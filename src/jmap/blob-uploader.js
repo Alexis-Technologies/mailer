@@ -46,11 +46,14 @@ const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
   const combinedSignal = combineSignals(controller.signal, signal);
 
   try {
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
     const response = await fetch(url, {
       method: 'POST',
       headers,
       body: blob,
       signal: combinedSignal.signal,
+      redirect: 'manual',
     });
 
     if (!response.ok) {

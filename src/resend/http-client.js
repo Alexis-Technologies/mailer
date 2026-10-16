@@ -179,7 +179,9 @@ class ResendHttpClient {
       headers.set(key, value);
     }
 
-    return fetch(url, { ...options, headers, signal });
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
+    return fetch(url, { ...options, headers, signal, redirect: 'manual' });
   }
 }
 

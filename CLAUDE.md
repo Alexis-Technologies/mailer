@@ -216,6 +216,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 31. retry: a `Retry-After` longer than `maxDelayMilliseconds` was cut to it, so the retry came
     sooner than the server asked and most likely met the same 429. The receipt is returned at
     once instead.
+32. every HTTP provider, jmap and the OAuth2 token request of smtp: `fetch` followed redirects,
+    and undici strips only `Authorization` on a cross-origin one, so `X-API-Key`, `Api-Token`,
+    `x-lettermint-token`, custom headers and the token request's body went wherever a redirect
+    pointed. Every request is sent with `redirect: 'manual'` (or `'error'`), and a 3xx is a
+    failure that is not retried.
 
 ## Repository layout
 

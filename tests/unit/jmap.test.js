@@ -6,6 +6,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
 const { JmapTransport } = require('../../src/jmap/index.js');
+const { uploadBlob } = require('../../src/jmap/blob-uploader.js');
+const { createJmapConfig } = require('../../src/jmap/config.js');
 
 const CORE = 'urn:ietf:params:jmap:core';
 const MAIL = 'urn:ietf:params:jmap:mail';
@@ -184,4 +186,29 @@ test('JMAP: a submission is sent once; it stays retryable only if it never left'
     assert.strictEqual(receipt.retryable, !isUnknown, code);
     t.mock.restoreAll();
   }
+});
+
+test('JMAP: no request follows a redirect', async (t) => {
+  const redirects = new Set();
+  const calls = serve(t);
+  const original = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (input, init) => {
+    redirects.add(init.redirect);
+    return original(input, init);
+  });
+  const receipt = await transport().send(message());
+  assert.ok(calls.length > 0);
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join(' | '));
+  assert.deepStrictEqual([...redirects], ['manual']);
+});
+
+test('JMAP: a blob upload does not follow a redirect', async (t) => {
+  const redirects = [];
+  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    redirects.push(init.redirect);
+    return Response.json({ blobId: 'b1' });
+  });
+  const config = createJmapConfig({ sessionUrl: 'https://jmap.example.com/s', bearerToken: 't' });
+  await uploadBlob(config, 'https://jmap.example.com/upload/{accountId}', 'a1', new Blob(['a']));
+  assert.deepStrictEqual(redirects, ['manual']);
 });
