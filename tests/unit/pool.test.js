@@ -161,3 +161,16 @@ test('Pool: every transport of a failover sends the same Message-ID', async () =
   assert.ok(sent[0].messageId);
   assert.strictEqual(sent[0].messageId, sent[1].messageId);
 });
+
+test('Pool: an abort rejects with the reason of the signal', async () => {
+  const controller = new AbortController();
+  const reason = new Error('Stop.');
+  controller.abort(reason);
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [{ transport: failing({ successful: true, messageId: 'x' }) }],
+  });
+  await assert.rejects(pool.send(message(), { signal: controller.signal }), (e) => e === reason);
+  const batch = pool.sendMany([message()], { signal: controller.signal });
+  await assert.rejects(batch[Symbol.asyncIterator]().next(), (e) => e === reason);
+});

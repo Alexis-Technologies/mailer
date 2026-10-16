@@ -108,9 +108,7 @@ class PoolTransport {
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       // Check for cancellation
-      if (options?.signal?.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError');
-      }
+      options?.signal?.throwIfAborted();
 
       // Select a transport
       const selection = this.strategy.select(pinned, this.config.transports, attemptedIndices);
@@ -223,9 +221,7 @@ class PoolTransport {
     this.strategy.reset();
 
     for await (const message of messages) {
-      if (options?.signal?.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError');
-      }
+      options?.signal?.throwIfAborted();
 
       yield await this.send(message, options);
     }

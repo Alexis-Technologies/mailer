@@ -252,6 +252,8 @@ fixed ones below.
 - **`./mock` honors an abort during its delay** (an upstream bug): the simulated delay ran to its
   end whatever the signal said, and an abort rejected with a new `AbortError`. An abort now ends
   the delay at once, and the send rejects with the reason of the signal.
+- **`./pool` rejects an aborted send with the reason of the signal** (an upstream bug), not with
+  a new `AbortError`, like the other transports.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

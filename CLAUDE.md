@@ -355,6 +355,8 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 68. mock: the simulated delay ignored the `AbortSignal`, and an abort rejected with a new
     `AbortError` instead of the reason of the signal. The delay is the abortable sleep of
     `internal/sleep.js`, and every abort rejects with the reason.
+69. pool: a send or a batch aborted by the caller rejected with a new `AbortError` rather than
+    the reason of the signal. It rejects with the reason.
 
 ## Repository layout
 
