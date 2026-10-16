@@ -218,15 +218,17 @@ const hasNonAscii = (value) => {
  */
 const resolveThreadingHeaders = (message) => {
   const resolved = new Map();
-  const fields = [
-    ['In-Reply-To', message.inReplyTo],
-    ['References', message.references],
-  ];
-  for (const [name, ids] of fields) {
-    if (ids == null) continue;
-    resolved.set(name, ids.length < 1 ? null : ids.map(formatMessageId).join(' '));
-  }
+  if (message.inReplyTo != null) resolved.set('In-Reply-To', joinMessageIds(message.inReplyTo));
+  if (message.references != null) resolved.set('References', joinMessageIds(message.references));
   return resolved;
+};
+
+// The identifiers of a field, or `null` for an empty list, which suppresses it.
+const joinMessageIds = (ids) => {
+  if (ids.length < 1) return null;
+  let joined = formatMessageId(ids[0]);
+  for (let i = 1; i < ids.length; i++) joined += ` ${formatMessageId(ids[i])}`;
+  return joined;
 };
 
 /**

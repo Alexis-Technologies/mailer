@@ -42,31 +42,11 @@ const createMessage = (constructor, options) => {
   const sender = checkAddress('sender', constructor.from);
   return {
     sender,
-    recipients: ensureArray(constructor.to).map((to) => checkAddress('recipient', to)),
-    ccRecipients: ensureArray(constructor.cc).map((cc) => checkAddress('CC', cc)),
-    bccRecipients: ensureArray(constructor.bcc).map((bcc) => checkAddress('BCC', bcc)),
-    replyRecipients: ensureArray(constructor.replyTo).map((replyTo) =>
-      checkAddress('reply-to', replyTo),
-    ),
-    // oxlint-disable-next-line array-callback-return -- upstream: the last branch throws
-    attachments: ensureArray(constructor.attachments).map((attachment) => {
-      if (attachment instanceof File) {
-        return checkAttachment({
-          inline: false,
-          filename: attachment.name,
-          content: attachment,
-          contentType:
-            attachment.type == null || attachment.type === ''
-              ? 'application/octet-stream'
-              : attachment.type,
-          contentId: `${generateId('content-id', options?.generateId)}@${sender.address.replace(/^[^@]*@/, '')}`,
-        });
-      } else if (isAttachment(attachment)) {
-        return checkAttachment(attachment);
-      } else {
-        throwTypeError(`Invalid attachment: ${JSON.stringify(attachment)}`);
-      }
-    }),
+    recipients: checkAddresses('recipient', constructor.to),
+    ccRecipients: checkAddresses('CC', constructor.cc),
+    bccRecipients: checkAddresses('BCC', constructor.bcc),
+    replyRecipients: checkAddresses('reply-to', constructor.replyTo),
+    attachments: checkAttachments(constructor.attachments, sender, options),
     subject: constructor.subject,
     content: constructor.content,
     priority: constructor.priority ?? 'normal',
@@ -115,6 +95,45 @@ const checkAddress = (label, address) => {
     throwTypeError(`Invalid ${label} display name: it contains a carriage return or line feed.`);
   }
   return parsed;
+};
+
+// One address or several, none for `null` or `undefined`, each checked.
+const checkAddresses = (label, value) => {
+  const addresses = [];
+  if (value == null) return addresses;
+  if (!Array.isArray(value)) {
+    addresses.push(checkAddress(label, value));
+    return addresses;
+  }
+  for (const address of value) addresses.push(checkAddress(label, address));
+  return addresses;
+};
+
+// One attachment or several, each a `File` (given a Content-ID on the domain
+// of the sender) or an attachment object, each checked.
+const checkAttachments = (value, sender, options) => {
+  const attachments = [];
+  for (const attachment of ensureArray(value)) {
+    if (attachment instanceof File) {
+      attachments.push(
+        checkAttachment({
+          inline: false,
+          filename: attachment.name,
+          content: attachment,
+          contentType:
+            attachment.type == null || attachment.type === ''
+              ? 'application/octet-stream'
+              : attachment.type,
+          contentId: `${generateId('content-id', options?.generateId)}@${sender.address.replace(/^[^@]*@/, '')}`,
+        }),
+      );
+    } else if (isAttachment(attachment)) {
+      attachments.push(checkAttachment(attachment));
+    } else {
+      throwTypeError(`Invalid attachment: ${JSON.stringify(attachment)}`);
+    }
+  }
+  return attachments;
 };
 
 /**
@@ -172,7 +191,10 @@ const checkMessageId = (label, id) => {
  */
 const checkMessageIds = (label, ids) => {
   if (ids == null) return undefined;
-  return (typeof ids === 'string' ? [ids] : ids).map((id) => checkMessageId(label, id));
+  if (typeof ids === 'string') return [checkMessageId(label, ids)];
+  const checked = [];
+  for (const id of ids) checked.push(checkMessageId(label, id));
+  return checked;
 };
 
 /**
@@ -194,7 +216,8 @@ const checkDate = (date) => {
 };
 
 const ensureArray = (value) => {
-  return Array.isArray(value) ? value : value == null ? [] : [value];
+  if (Array.isArray(value)) return value;
+  return value == null ? [] : [value];
 };
 
 module.exports = { checkAttachment, createMessage };

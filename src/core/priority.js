@@ -19,7 +19,10 @@
  *         if `a` is greater than `b`, and zero if they are equal.
  */
 const comparePriority = (a, b) => {
-  return a === b ? 0 : a === 'high' ? -1 : b === 'high' ? 1 : a === 'low' ? 1 : -1;
+  if (a === b) return 0;
+  if (a === 'high') return -1;
+  if (b === 'high') return 1;
+  return a === 'low' ? 1 : -1;
 };
 
 module.exports = { comparePriority };

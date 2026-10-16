@@ -47,14 +47,73 @@ const NETWORK_CODES = new Set([
   'UND_ERR_SOCKET',
 ]);
 
-// Status codes in a message count as whole numbers only: "4013 octets" holds
-// no 401, nor "5000 ms" a 500.
-const hasNumber = (text, pattern) => pattern.test(text);
-const AUTH_STATUS = /\b(?:401|403)\b/;
-const RATE_LIMIT_STATUS = /\b429\b/;
-const VALIDATION_STATUS = /\b(?:400|422)\b/;
-const UNAVAILABLE_STATUS = /\b503\b/;
-const SERVER_ERROR_STATUS = /\b(?:500|502)\b/;
+// The categories the words of a message point to, tried in this order: a
+// message that names both a timeout and a host is a timeout.  Status codes in
+// a message count as whole numbers only: "4013 octets" holds no 401, nor
+// "5000 ms" a 500.
+const WORD_RULES = [
+  { category: 'timeout', retryable: true, words: ['timeout', 'timed out'] },
+  {
+    category: 'network',
+    retryable: true,
+    words: ['network', 'connect', 'fetch failed', 'dns', 'econnreset', 'econnrefused', 'enotfound'],
+    name: 'NetworkError',
+  },
+  {
+    category: 'auth',
+    retryable: false,
+    words: [
+      'authentication',
+      'authenticate',
+      'authorization',
+      'authorize',
+      'unauthorized',
+      'not authorized',
+      'forbidden',
+      'invalid api key',
+      'invalid token',
+    ],
+    pattern: /\bauth\b|\b(?:401|403)\b/,
+  },
+  {
+    category: 'rate-limit',
+    retryable: true,
+    words: ['rate limit', 'rate-limit', 'too many requests', 'quota', 'throttle'],
+    pattern: /\b429\b/,
+  },
+  {
+    category: 'validation',
+    retryable: false,
+    words: ['invalid', 'malformed', 'validation', 'bad request'],
+    pattern: /\b(?:400|422)\b/,
+  },
+  {
+    category: 'rejected',
+    retryable: false,
+    words: ['rejected', 'bounce', 'complaint', 'suppressed', 'unsubscribed'],
+  },
+  {
+    category: 'service-unavailable',
+    retryable: true,
+    words: ['service unavailable', 'temporarily unavailable'],
+    pattern: /\b503\b/,
+  },
+  {
+    category: 'server-error',
+    retryable: true,
+    words: ['internal server error', 'bad gateway'],
+    pattern: /\b(?:500|502)\b/,
+  },
+  { category: 'configuration', retryable: false, words: ['config', 'unsupported'] },
+];
+
+const matchesWordRule = (rule, text, name) => {
+  for (const word of rule.words) {
+    if (text.includes(word)) return true;
+  }
+  if (rule.pattern !== undefined && rule.pattern.test(text)) return true;
+  return rule.name !== undefined && rule.name === name;
+};
 
 // The first `code` along the chain of causes, as `fetch failed` keeps the
 // socket error behind it.
@@ -94,97 +153,10 @@ const classifyReceiptError = (error) => {
   const message = getStringProperty(error, 'message') ?? String(error);
   const name = getStringProperty(error, 'name') ?? '';
   const text = `${name} ${message}`.toLowerCase();
-
-  if (text.includes('timeout') || text.includes('timed out')) {
-    return { category: 'timeout', retryable: true, code: 'timeout' };
-  }
-  if (
-    text.includes('network') ||
-    text.includes('connect') ||
-    text.includes('fetch failed') ||
-    text.includes('dns') ||
-    text.includes('econnreset') ||
-    text.includes('econnrefused') ||
-    text.includes('enotfound') ||
-    name === 'NetworkError'
-  ) {
-    return { category: 'network', retryable: true, code: 'network' };
-  }
-  if (
-    text.includes('authentication') ||
-    text.includes('authenticate') ||
-    text.includes('authorization') ||
-    text.includes('authorize') ||
-    /\bauth\b/.test(text) ||
-    text.includes('unauthorized') ||
-    text.includes('not authorized') ||
-    text.includes('forbidden') ||
-    text.includes('invalid api key') ||
-    text.includes('invalid token') ||
-    hasNumber(text, AUTH_STATUS)
-  ) {
-    return { category: 'auth', retryable: false, code: 'auth' };
-  }
-  if (
-    text.includes('rate limit') ||
-    text.includes('rate-limit') ||
-    text.includes('too many requests') ||
-    text.includes('quota') ||
-    text.includes('throttle') ||
-    hasNumber(text, RATE_LIMIT_STATUS)
-  ) {
-    return {
-      category: 'rate-limit',
-      retryable: true,
-      code: 'rate-limit',
-    };
-  }
-  if (
-    text.includes('invalid') ||
-    text.includes('malformed') ||
-    text.includes('validation') ||
-    text.includes('bad request') ||
-    hasNumber(text, VALIDATION_STATUS)
-  ) {
-    return { category: 'validation', retryable: false, code: 'validation' };
-  }
-  if (
-    text.includes('rejected') ||
-    text.includes('bounce') ||
-    text.includes('complaint') ||
-    text.includes('suppressed') ||
-    text.includes('unsubscribed')
-  ) {
-    return { category: 'rejected', retryable: false, code: 'rejected' };
-  }
-  if (
-    text.includes('service unavailable') ||
-    text.includes('temporarily unavailable') ||
-    hasNumber(text, UNAVAILABLE_STATUS)
-  ) {
-    return {
-      category: 'service-unavailable',
-      retryable: true,
-      code: 'service-unavailable',
-    };
-  }
-  if (
-    text.includes('internal server error') ||
-    text.includes('bad gateway') ||
-    hasNumber(text, SERVER_ERROR_STATUS)
-  ) {
-    return {
-      category: 'server-error',
-      retryable: true,
-      code: 'server-error',
-    };
-  }
-  if (text.includes('config') || text.includes('unsupported')) {
-    return {
-      category: 'configuration',
-      retryable: false,
-      code: 'configuration',
-    };
+  for (const rule of WORD_RULES) {
+    if (matchesWordRule(rule, text, name)) {
+      return { category: rule.category, retryable: rule.retryable, code: rule.category };
+    }
   }
   return { category: 'unknown', retryable: false, code: 'unknown' };
 };
@@ -203,13 +175,12 @@ const createReceiptError = (message, options = {}) => {
       : classifyHttpStatus(options.statusCode);
   const category = options.category ?? classification.category;
   const retryable = options.retryable ?? classification.retryable;
-  const code =
-    options.code ??
-    (options.statusCode == null
-      ? options.category != null
-        ? category
-        : (classification.code ?? category)
-      : `http.${options.statusCode}`);
+  let code = options.code;
+  if (code == null) {
+    if (options.statusCode != null) code = `http.${options.statusCode}`;
+    else if (options.category != null) code = category;
+    else code = classification.code ?? category;
+  }
 
   return omitUndefined({
     message,
@@ -221,6 +192,42 @@ const createReceiptError = (message, options = {}) => {
     retryAfterMilliseconds: options.retryAfterMilliseconds,
     providerDetails: options.providerDetails,
   });
+};
+
+/**
+ * Gives the structured errors of a failure and its messages, in one pass over
+ * a list that mixes strings and structured errors.
+ *
+ * @param error A message, a structured error, or a list of either.
+ * @param given Structured errors given in place of those of `error`.
+ * @param errorOptions The options of the errors made from strings.
+ * @returns The structured errors and the messages.
+ */
+const describeFailure = (error, given, errorOptions) => {
+  if (typeof error === 'string') {
+    return { errors: given ?? [createReceiptError(error, errorOptions)], errorMessages: [error] };
+  }
+  if (!Array.isArray(error)) {
+    const errors = given ?? [error];
+    const errorMessages = [];
+    for (const receiptError of errors) errorMessages.push(receiptError.message);
+    return { errors, errorMessages };
+  }
+  const built = [];
+  const errorMessages = [];
+  for (const item of error) {
+    const isText = typeof item === 'string';
+    errorMessages.push(isText ? item : item.message);
+    if (given == null) built.push(isText ? createReceiptError(item, errorOptions) : item);
+  }
+  return { errors: given ?? built, errorMessages };
+};
+
+const isAnyRetryable = (errors) => {
+  for (const receiptError of errors) {
+    if (receiptError.retryable) return true;
+  }
+  return false;
 };
 
 /**
@@ -236,25 +243,9 @@ const createFailedReceipt = (error, options = {}) => {
   // it are retryable, whatever their classification says.
   const deliveryUnknown = options.deliveryUnknown === true ? true : undefined;
   const errorOptions = deliveryUnknown === true ? { ...options, retryable: false } : options;
-  const errors =
-    options.errors ??
-    (typeof error === 'string'
-      ? [createReceiptError(error, errorOptions)]
-      : Array.isArray(error)
-        ? error.map((item) =>
-            typeof item === 'string' ? createReceiptError(item, errorOptions) : item,
-          )
-        : [error]);
-  const errorMessages =
-    typeof error === 'string'
-      ? [error]
-      : Array.isArray(error)
-        ? error.map((item) => (typeof item === 'string' ? item : item.message))
-        : errors.map((receiptError) => receiptError.message);
+  const { errors, errorMessages } = describeFailure(error, options.errors, errorOptions);
   const retryable =
-    deliveryUnknown === true
-      ? false
-      : (options.retryable ?? errors.some((receiptError) => receiptError.retryable));
+    deliveryUnknown === true ? false : (options.retryable ?? isAnyRetryable(errors));
   const provider = options.provider ?? errors[0]?.provider;
 
   return omitUndefined({

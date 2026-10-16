@@ -72,16 +72,14 @@ const createRawMessagePlan = (message) => {
   ) {
     throw new RawMessageValidationError('Expected replayable raw message bytes.', 'content');
   }
+  let size;
+  if (content instanceof Uint8Array) size = content.byteLength;
+  else if (content instanceof Blob) size = content.size;
   return {
     envelope: { from: envelope.from, to: [...envelope.to] },
     content,
     encoding: message.encoding,
-    size:
-      content instanceof Uint8Array
-        ? content.byteLength
-        : content instanceof Blob
-          ? content.size
-          : undefined,
+    size,
   };
 };
 
@@ -97,64 +95,26 @@ const createRawMessagePlan = (message) => {
  * @internal
  */
 const iterateRawMessage = async function* (plan, options = {}) {
-  let offset = 0;
-  let line = 1;
-  let column = 0;
-  let pendingCr = false;
-  let headers = true;
-  let nonAscii = false;
-  let sinceYield = 0;
   const encoding = options.encoding ?? plan.encoding;
-  const fail = (message, field = 'content') => {
-    throw new RawMessageValidationError(message, field, offset, line);
-  };
+  const scan = { offset: 0, line: 1, column: 0, pendingCr: false, headers: true, nonAscii: false };
+  let sinceYield = 0;
   for await (const chunk of iterateAttachmentContent(plan.content, options.signal)) {
-    for (let start = 0; start < chunk.length; start += 32768) {
+    for (let start = 0; start < chunk.length; start += RAW_WINDOW_BYTES) {
       options.signal?.throwIfAborted();
-      const window = chunk.subarray(start, start + 32768);
-      // An index loop: the iterator protocol of for...of costs more than the
-      // checks on each byte.
-      for (let index = 0; index < window.length; index++) {
-        const byte = window[index];
-        if (pendingCr) {
-          if (byte !== 10) fail('Expected LF after CR.');
-          if (line === 1 && column === 0) {
-            fail('Raw message headers must not be empty.');
-          }
-          if (column === 0) headers = false;
-          pendingCr = false;
-          column = 0;
-          line++;
-        } else if (byte === 13) {
-          pendingCr = true;
-        } else if (byte === 10) {
-          fail('Raw messages must use CRLF line endings.');
-        } else {
-          if (byte === 0) fail('Raw messages must not contain NUL.');
-          if (++column > 998) {
-            fail('Raw message lines must not exceed 998 octets.');
-          }
-          if (byte > 127) {
-            nonAscii = true;
-            if (encoding === '7bit' || (encoding === '8bit' && headers)) {
-              fail('Raw message bytes exceed the declared encoding.', 'encoding');
-            }
-          }
-        }
-        offset++;
-      }
-      if (options.expectedSize !== undefined && offset > options.expectedSize) {
-        fail('Raw message size changed between reads.');
+      const window = chunk.subarray(start, start + RAW_WINDOW_BYTES);
+      scanRawWindow(scan, window, encoding);
+      if (options.expectedSize !== undefined && scan.offset > options.expectedSize) {
+        throw rawError('Raw message size changed between reads.', scan.offset, scan.line);
       }
       options.onProgress?.({
-        size: offset,
-        encoding: encoding ?? (nonAscii ? 'utf8' : '7bit'),
+        size: scan.offset,
+        encoding: encoding ?? (scan.nonAscii ? 'utf8' : '7bit'),
       });
       options.signal?.throwIfAborted();
       yield window;
       options.signal?.throwIfAborted();
       sinceYield += window.length;
-      if (sinceYield >= 1024 * 1024) {
+      if (sinceYield >= RAW_YIELD_BYTES) {
         await new Promise((resolve) => setTimeout(resolve, 0));
         options.signal?.throwIfAborted();
         sinceYield = 0;
@@ -162,11 +122,79 @@ const iterateRawMessage = async function* (plan, options = {}) {
     }
   }
   options.signal?.throwIfAborted();
-  if (offset === 0) fail('Raw message headers must not be empty.');
-  if (pendingCr || column !== 0) fail('Raw messages must end with CRLF.');
-  if (options.expectedSize !== undefined && offset !== options.expectedSize) {
-    fail('Raw message size changed between reads.');
+  if (scan.offset === 0) {
+    throw rawError('Raw message headers must not be empty.', scan.offset, scan.line);
   }
+  if (scan.pendingCr || scan.column !== 0) {
+    throw rawError('Raw messages must end with CRLF.', scan.offset, scan.line);
+  }
+  if (options.expectedSize !== undefined && scan.offset !== options.expectedSize) {
+    throw rawError('Raw message size changed between reads.', scan.offset, scan.line);
+  }
+};
+
+const RAW_WINDOW_BYTES = 32768;
+// Bytes after which the traversal lets the event loop run.
+const RAW_YIELD_BYTES = 1024 * 1024;
+
+const rawError = (message, offset, line, field = 'content') =>
+  new RawMessageValidationError(message, field, offset, line);
+
+/**
+ * Checks the bytes of one window against the wire rules and the declared
+ * encoding, carrying the position over from the window before.  The state is
+ * read into locals and written back once, so that the loop over each byte
+ * touches no object.
+ *
+ * @param scan The position and what has been seen so far, updated in place.
+ * @param window The bytes to check.
+ * @param encoding The declared encoding, if any.
+ * @throws {RawMessageValidationError} If a byte breaks a rule.
+ */
+const scanRawWindow = (scan, window, encoding) => {
+  let { offset, line, column, pendingCr, headers, nonAscii } = scan;
+  // An index loop: the iterator protocol of for...of costs more than the
+  // checks on each byte.
+  for (let index = 0; index < window.length; index++) {
+    const byte = window[index];
+    if (pendingCr) {
+      if (byte !== 10) throw rawError('Expected LF after CR.', offset, line);
+      if (line === 1 && column === 0) {
+        throw rawError('Raw message headers must not be empty.', offset, line);
+      }
+      if (column === 0) headers = false;
+      pendingCr = false;
+      column = 0;
+      line++;
+    } else if (byte === 13) {
+      pendingCr = true;
+    } else if (byte === 10) {
+      throw rawError('Raw messages must use CRLF line endings.', offset, line);
+    } else {
+      if (byte === 0) throw rawError('Raw messages must not contain NUL.', offset, line);
+      if (++column > 998) {
+        throw rawError('Raw message lines must not exceed 998 octets.', offset, line);
+      }
+      if (byte > 127) {
+        nonAscii = true;
+        if (encoding === '7bit' || (encoding === '8bit' && headers)) {
+          throw rawError(
+            'Raw message bytes exceed the declared encoding.',
+            offset,
+            line,
+            'encoding',
+          );
+        }
+      }
+    }
+    offset++;
+  }
+  scan.offset = offset;
+  scan.line = line;
+  scan.column = column;
+  scan.pendingCr = pendingCr;
+  scan.headers = headers;
+  scan.nonAscii = nonAscii;
 };
 
 /**

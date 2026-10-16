@@ -176,12 +176,7 @@ const normalizeLineEndings = (content) => {
 const readMethod = (content) => {
   // Check the transmitted text before unfolding: a fold between two lone
   // surrogates must not rescue them into a pair only in the parsed view.
-  for (const character of content) {
-    const code = character.codePointAt(0);
-    if (code >= 0xd800 && code <= 0xdfff) {
-      throw new TypeError('The calendar content contains an unpaired UTF-16 surrogate.');
-    }
-  }
+  checkSurrogates(content);
   const stack = [];
   let closed = false;
   let method;
@@ -202,36 +197,7 @@ const readMethod = (content) => {
     }
 
     if (name === 'BEGIN') {
-      if (closed) {
-        throw new TypeError(
-          'The calendar content holds more than one VCALENDAR object, but a ' +
-            'message carries one.',
-        );
-      }
-      if (stack.length < 1 && value !== 'VCALENDAR') {
-        throw new TypeError(
-          `The calendar content begins with ${JSON.stringify(
-            value,
-          )} rather than a VCALENDAR object.`,
-        );
-      }
-      // RFC 5545 §3.4 has no VCALENDAR inside a VCALENDAR.  A nested one
-      // balances, so nothing else in this scan would notice it, and the object
-      // would be sent as though it were the single one this API accepts.
-      if (stack.length > 0 && value === 'VCALENDAR') {
-        throw new TypeError('The calendar content nests a VCALENDAR object inside another.');
-      }
-      // A component name is an `iana-token` or an `x-name`, both of which are
-      // one or more of ALPHA, DIGIT and "-".  A malformed name balances with
-      // its END the same way a well-formed one does, so it has to be checked
-      // here or not at all.
-      if (!componentNamePattern.test(value)) {
-        throw new TypeError(
-          `The calendar content opens a component named ${JSON.stringify(
-            value,
-          )}, which is not a component name.`,
-        );
-      }
+      checkComponentStart(stack, value, closed);
       stack.push(value);
       continue;
     }
@@ -262,6 +228,53 @@ const readMethod = (content) => {
     throw new TypeError('The calendar content holds no VCALENDAR object.');
   }
   return methods === 1 ? method : undefined;
+};
+
+const checkSurrogates = (content) => {
+  for (const character of content) {
+    const code = character.codePointAt(0);
+    if (code >= 0xd800 && code <= 0xdfff) {
+      throw new TypeError('The calendar content contains an unpaired UTF-16 surrogate.');
+    }
+  }
+};
+
+/**
+ * Checks a BEGIN line against the components open so far.
+ *
+ * @param stack The names of the open components, outermost first.
+ * @param value The name of the component the line opens.
+ * @param closed Whether a VCALENDAR object has already been closed.
+ * @throws {TypeError} If the component cannot open here.
+ */
+const checkComponentStart = (stack, value, closed) => {
+  if (closed) {
+    throw new TypeError(
+      'The calendar content holds more than one VCALENDAR object, but a message carries one.',
+    );
+  }
+  if (stack.length < 1 && value !== 'VCALENDAR') {
+    throw new TypeError(
+      `The calendar content begins with ${JSON.stringify(value)} rather than a VCALENDAR object.`,
+    );
+  }
+  // RFC 5545 §3.4 has no VCALENDAR inside a VCALENDAR.  A nested one
+  // balances, so nothing else in this scan would notice it, and the object
+  // would be sent as though it were the single one this API accepts.
+  if (stack.length > 0 && value === 'VCALENDAR') {
+    throw new TypeError('The calendar content nests a VCALENDAR object inside another.');
+  }
+  // A component name is an `iana-token` or an `x-name`, both of which are
+  // one or more of ALPHA, DIGIT and "-".  A malformed name balances with
+  // its END the same way a well-formed one does, so it has to be checked
+  // here or not at all.
+  if (!componentNamePattern.test(value)) {
+    throw new TypeError(
+      `The calendar content opens a component named ${JSON.stringify(
+        value,
+      )}, which is not a component name.`,
+    );
+  }
 };
 
 /**
@@ -325,34 +338,42 @@ const parseContentLine = (line) => {
 
     // Both paramtext and quoted-string may be empty.  A comma therefore
     // always starts another value, even immediately before ';' or ':'.
-    while (true) {
-      if (line[cursor] === '"') {
-        cursor++;
-        while (cursor < line.length && line[cursor] !== '"') cursor++;
-        if (cursor === line.length) fail('an unterminated quoted parameter');
-        cursor++;
-      } else {
-        while (
-          cursor < line.length &&
-          line[cursor] !== ',' &&
-          line[cursor] !== ';' &&
-          line[cursor] !== ':'
-        ) {
-          if (line[cursor] === '"') {
-            fail('a quote inside an unquoted parameter');
-          }
-          cursor++;
-        }
-      }
-      if (line[cursor] !== ',') break;
-      cursor++;
-    }
+    cursor = skipParameterValue(line, cursor, fail);
+    while (line[cursor] === ',') cursor = skipParameterValue(line, cursor + 1, fail);
     if (line[cursor] !== ';' && line[cursor] !== ':') {
       fail('an invalid delimiter after a parameter value');
     }
   }
   if (line[cursor] !== ':') fail('a missing content line value separator');
   return { name, value: line.slice(cursor + 1), hasParameters };
+};
+
+/**
+ * Skips one parameter value, quoted or not, from a cursor.
+ *
+ * @param line The content line.
+ * @param start Where the value starts.
+ * @param fail Throws the error of the line with a reason.
+ * @returns The cursor after the value.
+ */
+const skipParameterValue = (line, start, fail) => {
+  let cursor = start;
+  if (line[cursor] === '"') {
+    cursor++;
+    while (cursor < line.length && line[cursor] !== '"') cursor++;
+    if (cursor === line.length) fail('an unterminated quoted parameter');
+    return cursor + 1;
+  }
+  while (
+    cursor < line.length &&
+    line[cursor] !== ',' &&
+    line[cursor] !== ';' &&
+    line[cursor] !== ':'
+  ) {
+    if (line[cursor] === '"') fail('a quote inside an unquoted parameter');
+    cursor++;
+  }
+  return cursor;
 };
 
 /** Whether a code unit belongs to the iana-token / x-name character set. */
