@@ -688,3 +688,44 @@ test('SMTP: an idle pooled connection does not keep the process alive', async ()
     await server.stop();
   }
 });
+
+test('SMTP: generateId makes the Message-ID, and fetch refreshes the OAuth 2.0 token', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  const requests = [];
+  const fetch = async (url, init) => {
+    requests.push([String(url), init.method]);
+    return Response.json({ access_token: 'token', expires_in: 3600 });
+  };
+  try {
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port,
+      generateId: (kind) => `01JTEST.${kind}`,
+      fetch,
+      auth: {
+        type: 'oauth2',
+        user: 'alex@example.com',
+        clientId: 'id',
+        clientSecret: 'secret',
+        refreshToken: 'refresh',
+        tokenEndpoint: 'http://localhost/token',
+      },
+    });
+    const receipt = await transport.send(message());
+    await transport.closeAllConnections();
+    assert.strictEqual(receipt.successful, true);
+    assert.match(
+      server.getReceivedMessages()[0].data,
+      /\r\nMessage-ID: <01JTEST\.message-id@example\.com>\r\n/,
+    );
+    assert.deepStrictEqual(requests, [['http://localhost/token', 'POST']]);
+
+    const broken = new SmtpTransport({ host: 'localhost', port, generateId: () => 'a>b' });
+    const failed = await broken.send(message());
+    assert.strictEqual(failed.successful, false);
+    assert.match(failed.errorMessages[0], /Invalid message-id from generateId/);
+  } finally {
+    await server.stop();
+  }
+});

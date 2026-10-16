@@ -6,6 +6,7 @@ const { Buffer } = require('node:buffer');
 const { isIP, Socket } = require('node:net');
 const { StringDecoder } = require('node:string_decoder');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
+const { generateId } = require('../core/id.js');
 const { createSmtpConfig } = require('./config.js');
 const { SmtpDsnUnsupportedError } = require('./delivery-status.js');
 const { checkSmtpPath } = require('./envelope.js');
@@ -815,7 +816,7 @@ class SmtpConnection {
    * creating a standalone manager from the auth config if none was injected.
    */
   async getOAuth2Token(auth, signal) {
-    this.tokenManager ??= new OAuth2TokenManager(auth);
+    this.tokenManager ??= new OAuth2TokenManager(auth, this.config.fetch);
     return await this.tokenManager.getAccessToken(signal);
   }
 
@@ -1131,7 +1132,7 @@ class SmtpConnection {
 
   extractMessageId(response) {
     const match = response.match(/(?:Message-ID:|id=)[\s<]*([^>\s]+)/i);
-    return match ? match[1] : `smtp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return match ? match[1] : `smtp-${generateId('receipt-id', this.config.generateId)}`;
   }
 
   async quit(signal) {

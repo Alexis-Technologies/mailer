@@ -26,7 +26,7 @@ const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
  * date, an address or identity header containing a carriage return or line
  * feed, or an invalid custom header field name.
  */
-const prepareMimeMessage = (message, dkimConfig) => {
+const prepareMimeMessage = (message, dkimConfig, generateId) => {
   // Observe every promise before validation can throw or an earlier reader stalls.
   for (const attachment of message.attachments) {
     if (attachment.content instanceof Promise) {
@@ -47,7 +47,7 @@ const prepareMimeMessage = (message, dkimConfig) => {
             headerFields: signature.headerFields == null ? undefined : [...signature.headerFields],
           })),
         };
-  const parts = buildMimeParts(message);
+  const parts = buildMimeParts(message, generateId);
   const first = parts[0];
   if (typeof first !== 'string') throw new TypeError('Missing MIME headers.');
   const separator = first.indexOf('\r\n\r\n') + 4;
@@ -100,7 +100,7 @@ const prepareMimeMessage = (message, dkimConfig) => {
   };
 };
 
-const buildMimeParts = (message) => {
+const buildMimeParts = (message, generateId) => {
   const lines = [];
   const boundary = generateBoundary();
   const hasAttachments = message.attachments.length > 0;
@@ -124,7 +124,7 @@ const buildMimeParts = (message) => {
   // The identity and threading fields all carry structured values, so they are
   // written verbatim rather than RFC 2047 encoded.
   lines.push(foldHeader('Date', resolveDate(message)));
-  lines.push(foldHeader('Message-ID', resolveMessageId(message)));
+  lines.push(foldHeader('Message-ID', resolveMessageId(message, generateId)));
   const threading = resolveThreadingHeaders(message);
   for (const name of ['In-Reply-To', 'References']) {
     // A field the message does not own falls back to a custom header, one it
@@ -434,13 +434,13 @@ const resolveDate = (message) => {
  * @throws {TypeError} If the message carries an invalid identifier, or a custom
  * `Message-ID` header containing a carriage return or line feed.
  */
-const resolveMessageId = (message) => {
+const resolveMessageId = (message, generateId) => {
   if (message.messageId !== undefined) {
     return formatMessageId(message.messageId);
   }
   const custom = overridden(message, 'Message-ID');
   if (custom != null) return custom;
-  return formatMessageId(generateSenderMessageId(message.sender.address));
+  return formatMessageId(generateSenderMessageId(message.sender.address, generateId));
 };
 
 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

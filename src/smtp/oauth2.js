@@ -224,12 +224,12 @@ class OAuth2TokenManager {
    *
    * @param auth The OAuth 2.0 authentication configuration.
    * @param fetchFn The `fetch` implementation to use for the refresh-token
-   *                exchange.  Defaults to the global `fetch`; primarily
-   *                overridden in tests.
+   *                exchange, the `fetch` of the transport configuration.
+   *                Defaults to the global `fetch`, read at each refresh.
    * @throws {TypeError} If a refresh-token configuration has an insecure
    *                     (non-HTTPS) token endpoint.
    */
-  constructor(auth, fetchFn = fetch) {
+  constructor(auth, fetchFn) {
     if ('refreshToken' in auth) {
       assertSecureTokenEndpoint(auth.tokenEndpoint);
     }
@@ -320,7 +320,8 @@ class OAuth2TokenManager {
     // Call through a local variable so the global `fetch` is not invoked as a
     // method of this manager, which throws "Illegal invocation" in some
     // runtimes (the native `fetch` requires a `globalThis`/undefined receiver).
-    const fetchFn = this.fetchFn;
+    // Read at each refresh, so that the global one may be replaced later.
+    const fetchFn = this.fetchFn ?? globalThis.fetch;
     try {
       response = await fetchFn(auth.tokenEndpoint, {
         method: 'POST',

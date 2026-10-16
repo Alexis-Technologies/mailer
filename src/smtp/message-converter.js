@@ -12,8 +12,9 @@ const prepareMessage = (
   dkimConfig,
   dsn,
   resolvedEnvelope = resolveSmtpEnvelope(message),
+  generateId = undefined,
 ) => {
-  const plan = prepareMimeMessage(message, dkimConfig);
+  const plan = prepareMimeMessage(message, dkimConfig, generateId);
   const envelope = { ...resolvedEnvelope, dsn };
   return {
     ...plan,

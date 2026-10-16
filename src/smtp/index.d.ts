@@ -9,6 +9,7 @@ import type {
   RawMessage,
   RawTransport,
   Receipt,
+  TransportDependencies,
   TransportOptions,
   VerifiableTransport,
 } from '../../index.js';
@@ -45,7 +46,7 @@ export type {
  * };
  * ```
  */
-export interface SmtpConfig {
+export interface SmtpConfig extends TransportDependencies {
   /**
    * The SMTP server hostname or IP address.
    */

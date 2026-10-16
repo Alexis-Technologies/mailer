@@ -31,6 +31,8 @@ const createSmtpConfig = (config) => {
     pool: config.pool ?? true,
     poolSize: config.poolSize ?? 5,
     dkim: config.dkim,
+    fetch: config.fetch,
+    generateId: config.generateId,
   };
 };
 

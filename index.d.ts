@@ -728,6 +728,22 @@ export type IdKind = 'message-id' | 'content-id' | 'idempotency-key' | 'receipt-
  */
 export type IdGenerator = (kind: IdKind) => string;
 /**
+ * What a transport may be given in place of a global of the runtime: the
+ * generator of its identifiers and, for one that makes HTTP requests, the
+ * `fetch` it makes them with.
+ */
+export interface TransportDependencies extends IdOptions {
+  /**
+   * The `fetch` of the requests, such as one bound to an undici `Agent` with
+   * keep-alive and connection limits, a `ProxyAgent` or mTLS:
+   * `(url, init) => undiciFetch(url, { ...init, dispatcher })`.  It is read at
+   * each request, so a later replacement of the global one is seen too.  It
+   * must take a streamed body with `duplex: 'half'` for the raw uploads of JMAP.
+   * @default globalThis.fetch
+   */
+  readonly fetch?: typeof globalThis.fetch;
+}
+/**
  * Options of the functions and transports that generate identifiers.
  */
 export interface IdOptions {

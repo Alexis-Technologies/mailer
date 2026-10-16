@@ -1,7 +1,7 @@
 // Types ported from upyo v0.7.0 (packages/mime/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, RawMessage, RawMessageValidationError } from '../../index.js';
+import type { IdGenerator, Message, RawMessage, RawMessageValidationError } from '../../index.js';
 
 /** Composition and lifetime options. @since 0.6.0 */
 export interface ComposeMessageOptions {
@@ -9,6 +9,11 @@ export interface ComposeMessageOptions {
   readonly dkim?: DkimConfig;
   /** Cancels preparation and every future content reader. */
   readonly signal?: AbortSignal;
+  /**
+   * Makes the left half of a generated Message-ID instead of a UUID.
+   * @default () => crypto.randomUUID()
+   */
+  readonly generateId?: IdGenerator;
 }
 /** Stable, replayable MIME bytes with a separate delivery envelope. @since 0.6.0 */
 export interface ComposedMessage extends RawMessage {
@@ -27,7 +32,8 @@ export interface ComposedMessage extends RawMessage {
  * @param options Signing and cancellation options.
  * @returns Replayable bytes accepted by raw-message transports.
  * @throws {RawMessageValidationError} If the derived envelope is invalid.
- * @throws {TypeError} If message metadata or signing configuration is invalid.
+ * @throws {TypeError} If message metadata or signing configuration is invalid,
+ *                     or `generateId` returns no dot-atom-text.
  * @throws {RangeError} If a MIME header exceeds the hard line-length limit.
  * @throws {Error} If signing, attachment reading, or cancellation fails.
  * Attachment errors can also occur during later content reads, after partial

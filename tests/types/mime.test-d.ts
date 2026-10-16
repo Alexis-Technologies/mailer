@@ -27,3 +27,5 @@ expectAssignable<RawMessageValidationError>(new MimeAttachmentReplayError());
 
 expectError(composeMessage({ subject: 'not a message' }));
 expectError<DkimConfig>({ signatures: [{ signingDomain: 'example.com', algorithm: 'rsa-sha1' }] });
+
+expectType<Promise<ComposedMessage>>(composeMessage(message, { generateId: () => '01JMIME' }));

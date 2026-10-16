@@ -309,6 +309,34 @@ instead of throwing, which is convenient for values arriving from elsewhere.
 It parses one identifier, so an `In-Reply-To` field carrying several has to be
 split first.
 
+### Identifiers of your own
+
+The identifiers the library generates are random UUIDs: the left half of a
+Message-ID, the Content-ID of a `File` attachment, an idempotency key, and the
+message ID of a receipt a provider gave none for. Pass `generateId` to make them
+the way your records do, such as a ULID, a cuid2 or a nanoid, or to make them
+deterministic in tests. It is told the kind of identifier it makes
+(`message-id`, `content-id`, `idempotency-key` or `receipt-id`), returns the
+left half only of a Message-ID or a Content-ID, and what it returns is checked:
+dot-atom-text for those two kinds, and printable ASCII without spaces, at most
+256 characters, for every kind.
+
+```js
+const { ulid } = require('ulid');
+const { createMessage, generateMessageId } = require('@alexify/mailer');
+const { SmtpTransport } = require('@alexify/mailer/smtp');
+
+const generateId = () => ulid();
+
+const messageId = generateMessageId('example.com', { generateId });
+// "01JA7Y9Q3V2N8K4T6W0X1C5B2M@example.com"
+const message = createMessage({ ...fields, messageId }, { generateId });
+const transport = new SmtpTransport({ host: 'smtp.example.com', generateId });
+```
+
+`composeMessage()` of `./mime` takes `generateId` in its options too, and every
+transport in its configuration.
+
 ### Dropping an inherited header
 
 `inReplyTo` and `references` distinguish three states, which matters when a

@@ -43,3 +43,11 @@ expectType<boolean>(isSmtpResponseProviderDetails(undefined));
 
 expectError(new SmtpTransport({ port: 25 }));
 expectError(new SmtpTransport({ host: 'smtp.example.com', port: '25' }));
+
+// The generator of the identifiers and the fetch of the OAuth 2.0 refresh.
+expectAssignable<SmtpConfig>({
+  host: 'smtp.example.com',
+  generateId: (kind: string) => `01J-${kind}`,
+  fetch: globalThis.fetch,
+});
+expectError(new SmtpTransport({ host: 'smtp.example.com', generateId: 'ulid' }));

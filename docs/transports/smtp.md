@@ -171,6 +171,14 @@ with QUIT.
 > finish.  Raise `SmtpConfig.poolSize`, or use separate transports, when you
 > need more bulk streams at once.
 
+### Identifiers and `fetch`
+
+`generateId` makes the left half of the Message-ID the transport gives a message
+without one, and the message ID of a receipt the server named none for (see
+[Identifiers of your own](/messages/compose#identifiers-of-your-own)). `fetch`
+is used for the token refresh of OAuth 2.0, in place of the global one, such as
+one bound to an undici `Agent` or a proxy.
+
 ## Command pipelining
 
 When a server advertises the `PIPELINING` extension defined by [RFC 2920], @alexify/mailer

@@ -198,3 +198,10 @@ test('MIME: a boundary is random, not derived from the clock and Math.random', a
   }
   assert.strictEqual(boundaries.size, 2);
 });
+
+test('MIME: generateId makes the left half of a generated Message-ID', async () => {
+  const text = await wire(createMessage({ ...base, subject: 'Hi' }), {
+    generateId: (kind) => `01JMIME.${kind}`,
+  });
+  assert.match(headerBlock(text), /\r\nMessage-ID: <01JMIME\.message-id@example\.com>/);
+});
