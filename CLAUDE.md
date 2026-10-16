@@ -231,6 +231,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     retries were spent, or for a body that was not JSON, dropped their cause, so `fetch failed`
     lost the ECONNREFUSED or certificate error behind it. Each keeps it as `cause`; the provider
     errors take an `options` argument for it.
+36. core: `classifyReceiptError` read status codes as substrings of the message ("4013 octets"
+    was `auth`, "5000 ms" a server error) and ignored the `statusCode` and the system `code` of
+    the error. It classifies by `statusCode`, then by the code along the causes (a rejected
+    certificate is a non-retryable configuration error), then by words, numbers as whole words.
 
 ## Repository layout
 

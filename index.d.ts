@@ -975,7 +975,10 @@ export interface CreateFailedReceiptOptions<
  */
 export declare function classifyHttpStatus(statusCode: number): ReceiptErrorClassification;
 /**
- * Classifies an arbitrary delivery failure.
+ * Classifies an arbitrary delivery failure: by the HTTP `statusCode` it
+ * carries, then by the system `code` along its causes (a refused connection,
+ * a timeout, a rejected certificate), and only then by the words of its
+ * message, where a status code counts as a whole number only.
  *
  * @param error The error to classify.
  * @returns The receipt error category, retryability, and default code.

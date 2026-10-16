@@ -144,6 +144,12 @@ fixed ones below.
   failure without it, so `fetch failed` lost the refused connection or the certificate error
   behind it, and so did the errors for a body that was not JSON. They keep it as `cause`, and
   their constructors take an `options` argument with it.
+- **`classifyReceiptError` classifies by structure before words** (an upstream bug): it looked
+  for status codes anywhere in the message, so `Message size 4013 octets exceeds` was an
+  authentication error, and it ignored the `statusCode` of an HTTP error and the system code
+  behind `fetch failed`. It now classifies by `statusCode`, then by the code along the causes
+  (a refused connection or a timeout retryable, a rejected TLS certificate a configuration
+  error that is not), and only then by the words of the message, status codes as whole numbers.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

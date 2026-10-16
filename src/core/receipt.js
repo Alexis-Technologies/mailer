@@ -29,13 +29,68 @@ const classifyHttpStatus = (statusCode) => {
   return { category: 'unknown', retryable: false };
 };
 
+// System and undici codes of a failure without a response.
+const TIMEOUT_CODES = new Set([
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+const NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'UND_ERR_SOCKET',
+]);
+
+// Status codes in a message count as whole numbers only: "4013 octets" holds
+// no 401, nor "5000 ms" a 500.
+const hasNumber = (text, pattern) => pattern.test(text);
+const AUTH_STATUS = /\b(?:401|403)\b/;
+const RATE_LIMIT_STATUS = /\b429\b/;
+const VALIDATION_STATUS = /\b(?:400|422)\b/;
+const UNAVAILABLE_STATUS = /\b503\b/;
+const SERVER_ERROR_STATUS = /\b(?:500|502)\b/;
+
+// The first `code` along the chain of causes, as `fetch failed` keeps the
+// socket error behind it.
+const findErrorCode = (error) => {
+  let current = error;
+  for (let depth = 0; depth < 4 && current != null && typeof current === 'object'; depth++) {
+    if (typeof current.code === 'string') return current.code;
+    current = current.cause;
+  }
+  return undefined;
+};
+
 /**
- * Classifies an arbitrary delivery failure.
+ * Classifies a failure: by the HTTP status it carries, then by the system
+ * code along its causes, and only then by the words of its message.
  *
  * @param error The error to classify.
- * @returns The receipt error category, retryability, and default code.
+ * @returns The category, retryability and default code.
  */
 const classifyReceiptError = (error) => {
+  const statusCode = error != null && typeof error === 'object' ? error.statusCode : undefined;
+  if (Number.isInteger(statusCode)) {
+    return { ...classifyHttpStatus(statusCode), code: `http.${statusCode}` };
+  }
+  const errorCode = findErrorCode(error);
+  if (TIMEOUT_CODES.has(errorCode)) {
+    return { category: 'timeout', retryable: true, code: 'timeout' };
+  }
+  if (NETWORK_CODES.has(errorCode)) {
+    return { category: 'network', retryable: true, code: 'network' };
+  }
+  // A certificate refused during the TLS handshake will not pass on a retry.
+  if (typeof errorCode === 'string' && errorCode.includes('CERT')) {
+    return { category: 'configuration', retryable: false, code: 'configuration' };
+  }
+
   const message = getStringProperty(error, 'message') ?? String(error);
   const name = getStringProperty(error, 'name') ?? '';
   const text = `${name} ${message}`.toLowerCase();
@@ -66,8 +121,7 @@ const classifyReceiptError = (error) => {
     text.includes('forbidden') ||
     text.includes('invalid api key') ||
     text.includes('invalid token') ||
-    text.includes('401') ||
-    text.includes('403')
+    hasNumber(text, AUTH_STATUS)
   ) {
     return { category: 'auth', retryable: false, code: 'auth' };
   }
@@ -77,7 +131,7 @@ const classifyReceiptError = (error) => {
     text.includes('too many requests') ||
     text.includes('quota') ||
     text.includes('throttle') ||
-    text.includes('429')
+    hasNumber(text, RATE_LIMIT_STATUS)
   ) {
     return {
       category: 'rate-limit',
@@ -90,8 +144,7 @@ const classifyReceiptError = (error) => {
     text.includes('malformed') ||
     text.includes('validation') ||
     text.includes('bad request') ||
-    text.includes('400') ||
-    text.includes('422')
+    hasNumber(text, VALIDATION_STATUS)
   ) {
     return { category: 'validation', retryable: false, code: 'validation' };
   }
@@ -107,7 +160,7 @@ const classifyReceiptError = (error) => {
   if (
     text.includes('service unavailable') ||
     text.includes('temporarily unavailable') ||
-    text.includes('503')
+    hasNumber(text, UNAVAILABLE_STATUS)
   ) {
     return {
       category: 'service-unavailable',
@@ -118,8 +171,7 @@ const classifyReceiptError = (error) => {
   if (
     text.includes('internal server error') ||
     text.includes('bad gateway') ||
-    text.includes('500') ||
-    text.includes('502')
+    hasNumber(text, SERVER_ERROR_STATUS)
   ) {
     return {
       category: 'server-error',

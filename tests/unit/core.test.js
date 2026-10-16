@@ -290,3 +290,25 @@ test('Receipt: a Retry-After longer than a day is read as a day', () => {
   assert.strictEqual(parseRetryAfter('Wed, 21 Oct 2099 07:28:00 GMT', now), dayMs);
   assert.strictEqual(parseRetryAfter('Fri, 16 Oct 2026 00:01:00 GMT', now), 60_000);
 });
+
+test('Receipt: a failure is classified by its status, then its code, then its words', () => {
+  const classify = (error) => classifyReceiptError(error).category;
+  assert.strictEqual(classify(new Error('Message size 4013 octets exceeds the limit')), 'unknown');
+  assert.strictEqual(classify(new Error('Server answered 401')), 'auth');
+  assert.strictEqual(classify(new Error('Waited 5000 ms')), 'unknown');
+  const limited = Object.assign(new Error('Something went wrong'), { statusCode: 429 });
+  assert.deepStrictEqual(classifyReceiptError(limited), {
+    category: 'rate-limit',
+    retryable: true,
+    code: 'http.429',
+  });
+  const caused = (code) =>
+    new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
+  assert.strictEqual(classify(caused('ECONNREFUSED')), 'network');
+  assert.strictEqual(classify(caused('ETIMEDOUT')), 'timeout');
+  assert.deepStrictEqual(classifyReceiptError(caused('CERT_HAS_EXPIRED')), {
+    category: 'configuration',
+    retryable: false,
+    code: 'configuration',
+  });
+});
