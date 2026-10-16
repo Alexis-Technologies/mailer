@@ -206,6 +206,11 @@ fixed ones below.
   the connection, failing every later message of a `sendMany` with "Connection is no longer
   valid". It is now composed first and fails alone; `sendMany` connects for its first composed
   message, and an empty batch opens no connection.
+- **`./smtp` resets a pooled connection when it is next used** (an upstream bug): RSET ran before
+  `send` returned its receipt, a round trip added to every send that ignored the caller's
+  signal, and a connection the server had closed while idle failed the next send. The reset
+  now runs when the connection is taken again, under that call's signal, and a connection that
+  fails it is closed and replaced by another.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.

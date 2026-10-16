@@ -155,6 +155,12 @@ simultaneous-connection limit your provider enforces.  A waiting call still
 honours its `AbortSignal`, so cancelling it rejects without sending the message.
 Setting `SmtpConfig.poolSize` to `Infinity` opts out of the limit entirely.
 
+A connection handed back to the pool is reset (`RSET`) when it is next taken,
+under the signal of the call that takes it, rather than before the previous
+send returns its receipt. The reset also tells whether the server kept the
+connection while it sat idle: one that fails its reset is closed, and the call
+takes another connection or opens a new one.
+
 > [!NOTE]
 > Because a `SmtpTransport.sendMany()` call holds its connection until the
 > iteration ends, running more concurrent `SmtpTransport.sendMany()` calls than

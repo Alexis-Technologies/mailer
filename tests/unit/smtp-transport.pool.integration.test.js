@@ -263,9 +263,11 @@ describe('SmtpTransport connection limit', () => {
             }
             assert.strictEqual(receipts, stopEarly ? 1 : 2);
             assert.strictEqual(server.getReceivedMessages().length, receipts);
+            // Changed after the port: a pooled connection is reset when it is
+            // next taken, not when it is returned, so the batch sends no RSET.
             assert.strictEqual(
               server.getReceivedCommands().filter((command) => command === 'RSET').length,
-              pool ? 1 : 0,
+              0,
             );
 
             await transport.closeAllConnections();
@@ -318,6 +320,9 @@ describe('SmtpTransport connection limit', () => {
     for (const pool of command === 'RSET' ? [true] : [true, false]) {
       test(`shutdown drains sends during ${command}, pool=${pool}`, async () => {
         const { server, transport } = await setupTest({ pool, poolSize: 1 });
+        // Changed after the port: RSET runs when a pooled connection is taken
+        // again, so a first send puts one in the pool for the second to reset.
+        if (command === 'RSET') assert.ok((await transport.send(createTestMessage())).successful);
         server.setResponseDelay(command === 'DATA' ? 'DATA_END' : command, 100);
         const sending = transport.send(createTestMessage());
         try {

@@ -312,6 +312,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     connection; in `sendMany` every later message then failed with "Connection is no longer
     valid". A message is composed first, a failure to compose takes and fails no connection,
     and `sendMany` connects for its first composed message (none for an empty batch).
+58. smtp: a pooled connection was reset (RSET) before `send` returned its receipt, adding a
+    round trip to every send, without the caller's signal, and a connection the server dropped
+    while idle then failed the next send. RSET runs when the connection is next taken
+    (`takePooledConnection`), under that caller's signal; one that fails it is closed and
+    replaced.
 
 ## Repository layout
 

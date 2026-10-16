@@ -259,6 +259,8 @@ class SmtpConnection {
   capabilities = [];
   tokenManager;
   active = false;
+  /** Whether the connection sits in a pool and must be reset before reuse. */
+  needsReset = false;
 
   get usable() {
     return this.socket != null && !this.socket.destroyed && this.socket.writable;

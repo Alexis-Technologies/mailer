@@ -481,12 +481,9 @@ class SmtpTransport {
       }
       // Reuse an idle connection when the pool has one.  It already holds a
       // slot, so nothing else needs to be reserved.
-      let pooled = fresh ? undefined : this.connectionPool.pop();
-      while (pooled != null) {
-        if (pooled.usable) return pooled;
-        // Dropping a connection that went stale in the pool frees its slot.
-        await this.discardConnection(pooled);
-        pooled = this.connectionPool.pop();
+      if (!fresh) {
+        const pooled = await this.takePooledConnection(signal);
+        if (pooled != null) return pooled;
       }
 
       if (this.openConnectionCount < this.poolSize) {
@@ -507,6 +504,38 @@ class SmtpTransport {
         throw error;
       }
     }
+  }
+
+  /**
+   * Takes an idle connection from the pool, reset and ready to send, or gives
+   * `undefined` when none is left.  One that went stale while idle, or fails
+   * its reset, is closed and gives its slot back.
+   *
+   * @param signal Signal that cancels the reset.
+   * @returns A connection ready to send, or `undefined`.
+   * @throws The reason of `signal` if it aborts during a reset.
+   */
+  async takePooledConnection(signal) {
+    let pooled = this.connectionPool.pop();
+    while (pooled != null) {
+      if (pooled.usable) {
+        if (!pooled.needsReset) return pooled;
+        try {
+          await pooled.reset(signal);
+          pooled.needsReset = false;
+          return pooled;
+        } catch {
+          // Its state is unknown after a failed or aborted RSET.
+          await this.discardConnection(pooled);
+          signal?.throwIfAborted();
+        }
+      } else {
+        // Dropping a connection that went stale in the pool frees its slot.
+        await this.discardConnection(pooled);
+      }
+      pooled = this.connectionPool.pop();
+    }
+    return undefined;
   }
 
   /** Establishes a connection using a slot already owned by this acquisition. */
@@ -631,19 +660,10 @@ class SmtpTransport {
       return;
     }
 
-    try {
-      await connection.reset();
-    } catch {
-      // A connection that cannot be reset is not safe to reuse.
-      await this.discardConnection(connection);
-      return;
-    }
-
-    // Shutdown may have started while RSET was awaiting its reply.
-    if (this.closing != null) {
-      await this.discardConnection(connection);
-      return;
-    }
+    // The RSET that clears its state runs when the connection is next taken
+    // (takePooledConnection), with that caller's signal: the receipt does not
+    // wait for it, and it finds a connection the server dropped while idle.
+    connection.needsReset = true;
 
     // The connection keeps its slot while it sits idle, so no separate check
     // against `poolSize` is needed here: at most `poolSize` connections can be

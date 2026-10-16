@@ -607,3 +607,54 @@ test('SMTP: a message that cannot be composed takes no connection and fails no o
     await server.stop();
   }
 });
+
+test('SMTP: a pooled connection is reset when it is next taken, not before the receipt', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  server.setResponseDelay('RSET', 300);
+  try {
+    const transport = new SmtpTransport({ host: 'localhost', port, poolSize: 1 });
+    const started = performance.now();
+    assert.strictEqual((await transport.send(message())).successful, true);
+    assert.ok(performance.now() - started < 300, 'the receipt waited for RSET');
+    assert.ok(!server.getReceivedCommands().includes('RSET'));
+
+    assert.strictEqual((await transport.send(message())).successful, true);
+    const commands = server.getReceivedCommands();
+    const reset = commands.indexOf('RSET');
+    assert.ok(reset > 0 && commands.slice(reset).some((command) => command.startsWith('MAIL')));
+    assert.strictEqual(server.getConnectionCount(), 1);
+    await transport.closeAllConnections();
+  } finally {
+    await server.stop();
+  }
+});
+
+test('SMTP: a pooled connection whose reset fails is replaced, and an abort rejects', async () => {
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  try {
+    const transport = new SmtpTransport({ host: 'localhost', port, poolSize: 1 });
+    assert.strictEqual((await transport.send(message())).successful, true);
+    server.setResponse('RSET', { code: 421, message: 'Closing idle connection' });
+    assert.strictEqual((await transport.send(message())).successful, true);
+    assert.strictEqual(server.getConnectionCount(), 2);
+
+    server.setResponse('RSET', { code: 250, message: 'OK' });
+    server.setResponseDelay('RSET', 2000);
+    const controller = new AbortController();
+    const reason = new Error('Stop.');
+    const sending = transport.send(message(), { signal: controller.signal });
+    while (!server.getReceivedCommands().includes('RSET')) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    controller.abort(reason);
+    await assert.rejects(sending, (error) => error === reason);
+    server.setResponseDelay('RSET', 0);
+    assert.strictEqual((await transport.send(message())).successful, true);
+    assert.strictEqual(server.getConnectionCount(), 3);
+    await transport.closeAllConnections();
+  } finally {
+    await server.stop();
+  }
+});
