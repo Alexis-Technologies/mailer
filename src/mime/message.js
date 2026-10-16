@@ -13,7 +13,7 @@ const {
 const { resolveCalendarContent } = require('../core/calendar.js');
 const { validateDkimBodyMode } = require('./dkim/types.js');
 const { attachmentEncodedSize, encodeAttachment } = require('./mime-stream.js');
-const { base64, utf8 } = require('./bytes.js');
+const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
 
 /**
  * Freezes message metadata without reading attachment content.
@@ -50,9 +50,7 @@ const prepareMimeMessage = (message, dkimConfig) => {
   const headers = first.slice(0, separator);
   parts[0] = first.slice(separator);
 
-  const encoding = [headers, ...parts.filter((part) => typeof part === 'string')].some(hasNonAscii)
-    ? 'utf8'
-    : '7bit';
+  const encoding = hasNonAsciiText(headers, parts) ? 'utf8' : '7bit';
   return {
     encoding,
     dkim,
@@ -72,11 +70,11 @@ const prepareMimeMessage = (message, dkimConfig) => {
       }
     },
     async size(signal, checkSize) {
-      let size = utf8(headers).length;
+      let size = Buffer.byteLength(headers);
       let unknown = false;
       for (const part of parts) {
         signal?.throwIfAborted();
-        if (typeof part === 'string') size += utf8(part).length;
+        if (typeof part === 'string') size += Buffer.byteLength(part);
         else {
           if (part.content instanceof Promise) {
             part.content = await readAttachmentContent(part.content, signal);
@@ -387,8 +385,17 @@ const reservedHeaders = new Set([
  * @returns Whether the value contains a character outside ASCII.
  */
 const hasNonAscii = (value) => {
-  for (const character of value) {
-    if ((character.codePointAt(0) ?? 0) > 0x7f) return true;
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 0x7f) return true;
+  }
+  return false;
+};
+
+const hasNonAsciiText = (headers, parts) => {
+  if (hasNonAscii(headers)) return true;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (typeof part === 'string' && hasNonAscii(part)) return true;
   }
   return false;
 };
@@ -627,10 +634,11 @@ const foldHeader = (name, value) => {
   }
 
   lines.push(prefix + remaining);
-  if (lines.some((line) => Buffer.byteLength(line) > 998)) {
+  const folded = lines.join('\r\n');
+  if (hasLineLongerThan(folded, 998)) {
     throw new RangeError(`Header field ${name} contains a token too long to fold.`);
   }
-  return lines.join('\r\n');
+  return folded;
 };
 
 // The digits of an escaped byte, as character codes.

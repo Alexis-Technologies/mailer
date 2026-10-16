@@ -19,4 +19,22 @@ const base64 = (bytes) => {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
 };
 
-module.exports = { utf8, base64 };
+/**
+ * Tells whether a text of CRLF-separated lines has one longer than `limit`
+ * bytes in UTF-8, without splitting it into an array of lines.
+ * @internal
+ */
+const hasLineLongerThan = (text, limit) => {
+  for (let start = 0; start <= text.length;) {
+    let end = text.indexOf('\r\n', start);
+    if (end === -1) end = text.length;
+    // A UTF-16 code unit takes at most three bytes in UTF-8.
+    if ((end - start) * 3 > limit && Buffer.byteLength(text.slice(start, end)) > limit) {
+      return true;
+    }
+    start = end + 2;
+  }
+  return false;
+};
+
+module.exports = { utf8, base64, hasLineLongerThan };

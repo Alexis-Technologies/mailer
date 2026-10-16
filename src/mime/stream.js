@@ -4,7 +4,7 @@
 const { createHash } = require('node:crypto');
 const { RawMessageValidationError } = require('../core/raw-message.js');
 const { Buffer } = require('node:buffer');
-const { base64, utf8 } = require('./bytes.js');
+const { base64, hasLineLongerThan, utf8 } = require('./bytes.js');
 const { BodyHasher } = require('./dkim/body-hash.js');
 const { signWithBodyHash } = require('./dkim/sign.js');
 
@@ -51,19 +51,22 @@ const prepareMimeStream = async (plan, options = {}) => {
     const mode = sig.canonicalization?.endsWith('/simple') ? 'simple' : 'relaxed';
     if (!hashes.has(mode)) hashes.set(mode, new BodyHasher(mode));
   }
-  const rawHash = createHash('sha256');
+  // The digest that a streamed replay is checked against; a buffered body is
+  // replayed from its own chunks and needs none.
+  const rawHash = buffered ? undefined : createHash('sha256');
   let length = 0;
-  const headerLength = utf8(plan.headers).length;
+  const headerLength = Buffer.byteLength(plan.headers);
   for await (const chunk of plan.body(signal, progress)) {
     length += chunk.length;
     checkSize(headerLength + length);
     if (chunk.length > 0) progress();
     if (buffered) chunks.push(chunk.slice());
-    rawHash.update(chunk);
+    rawHash?.update(chunk);
     for (const hash of hashes.values()) hash.update(chunk);
   }
-  const expectedDigest = base64(rawHash.digest());
-  const bodyHashes = new Map(Array.from(hashes, ([mode, hash]) => [mode, hash.digest()]));
+  const expectedDigest = rawHash == null ? undefined : base64(rawHash.digest());
+  const bodyHashes = new Map();
+  for (const [mode, hash] of hashes) bodyHashes.set(mode, hash.digest());
   let headers = plan.headers;
   try {
     for (const sig of signatures) {
@@ -78,10 +81,10 @@ const prepareMimeStream = async (plan, options = {}) => {
     console.warn('DKIM signing failed, sending unsigned:', error);
   }
   signal?.throwIfAborted();
-  if (headers.split('\r\n').some((line) => Buffer.byteLength(line) > 998)) {
+  if (hasLineLongerThan(headers, 998)) {
     throw new RangeError('Signed MIME header exceeds the RFC 5322 line limit.');
   }
-  const size = utf8(headers).length + length;
+  const size = Buffer.byteLength(headers) + length;
   checkSize(size);
   return {
     size,
