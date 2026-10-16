@@ -24,6 +24,42 @@ class SmtpDeliveryUnknownError extends Error {
   }
 }
 
+/**
+ * Copies a window of message data with a dot doubled at the start of every
+ * line (RFC 5321 §4.5.2), finding the line feeds with indexOf rather than
+ * looking at every byte.  The copy keeps the producer's bytes out of the
+ * socket's queue.
+ *
+ * @param bytes The bytes to send.
+ * @param isLineStart Whether the window starts a line.
+ * @returns The bytes to write.
+ */
+const stuffDots = (bytes, isLineStart) => {
+  const window = Buffer.isBuffer(bytes)
+    ? bytes
+    : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let dots = isLineStart && window[0] === 0x2e ? 1 : 0;
+  for (let end = window.indexOf(0x0a); end !== -1; end = window.indexOf(0x0a, end + 1)) {
+    if (window[end + 1] === 0x2e) dots++;
+  }
+  const output = Buffer.allocUnsafe(window.length + dots);
+  if (dots === 0) {
+    window.copy(output);
+    return output;
+  }
+  let written = 0;
+  let start = 0;
+  if (isLineStart && window[0] === 0x2e) output[written++] = 0x2e;
+  for (let end = window.indexOf(0x0a); end !== -1; end = window.indexOf(0x0a, end + 1)) {
+    if (window[end + 1] !== 0x2e) continue;
+    written += window.copy(output, written, start, end + 1);
+    output[written++] = 0x2e;
+    start = end + 1;
+  }
+  window.copy(output, written, start);
+  return output;
+};
+
 const prepareOnSocket = async (socket, timeoutMs, prepare, signal) => {
   const controller = new AbortController();
   const combined = combineSignals(controller.signal, signal);
@@ -187,14 +223,9 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
         size += window.length;
         checkSize(size);
         progress();
-        const output = Buffer.allocUnsafe(window.length * 2);
-        let length = 0;
-        for (const byte of window) {
-          if (lineStart && byte === 46) output[length++] = 46;
-          output[length++] = byte;
-          lineStart = byte === 10;
-        }
-        await write(output.subarray(0, length));
+        const output = stuffDots(window, lineStart);
+        lineStart = window[window.length - 1] === 0x0a;
+        await write(output);
       }
     }
     owned.throwIfAborted();
