@@ -249,3 +249,12 @@ test('Pool: round-robin goes on across sends and batches', async () => {
   assert.strictEqual(first.getSentMessagesCount(), 2);
   assert.strictEqual(second.getSentMessagesCount(), 2);
 });
+
+test('Pool: continueOnSuccess, which would deliver a message twice, is refused', () => {
+  const transports = [{ transport: new MockTransport() }];
+  assert.throws(
+    () => new PoolTransport({ strategy: 'priority', transports, continueOnSuccess: true }),
+    { name: 'TypeError', message: /deliver a sent message again/ },
+  );
+  assert.ok(new PoolTransport({ strategy: 'priority', transports, continueOnSuccess: false }));
+});

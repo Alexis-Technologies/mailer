@@ -331,6 +331,9 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./pool` refuses `continueOnSuccess`** (an upstream bug): the option was accepted and never
+  read, and honored it would deliver a sent message again through the other transports. It is
+  gone from the type, and `true` throws a `TypeError`.
 - **`validateSsl: false` throws instead of being ignored** (an upstream bug, `./ses`, `./resend`,
   `./sendgrid`, `./mailgun`, `./mailtrap`, `./plunk`): `fetch` checks every certificate, so the
   option never did anything. `false` now throws a `TypeError` that suggests a `fetch` of your

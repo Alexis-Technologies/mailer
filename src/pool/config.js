@@ -9,6 +9,14 @@
  * @throws {Error} If the configuration is invalid.
  */
 const createPoolConfig = (config) => {
+  // Upstream accepted it and never read it; honored, it would send a message
+  // that went out through one transport again through the others.
+  if (config.continueOnSuccess) {
+    throw new TypeError(
+      '`continueOnSuccess` is not supported: it would deliver a sent message again through ' +
+        'the other transports.',
+    );
+  }
   if (!config.transports || config.transports.length === 0) {
     throw new Error('Pool must have at least one transport');
   }
@@ -45,7 +53,6 @@ const createPoolConfig = (config) => {
     transports: resolvedTransports,
     maxRetries: config.maxRetries ?? enabledCount - 1,
     timeout: config.timeout,
-    continueOnSuccess: config.continueOnSuccess ?? false,
     random: config.random,
     generateId: config.generateId,
     logger: config.logger,

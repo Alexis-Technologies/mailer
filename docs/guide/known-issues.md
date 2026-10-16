@@ -10,7 +10,3 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
   size is not known ahead becomes a retryable network error, as Node's `fetch` reports an early
   answer to a streamed body so. Requests, and raw messages of a known size up to 4 MiB, go from a
   buffer and are not affected.
-
-## Decorators
-
-- `./pool`: `continueOnSuccess` is never read.

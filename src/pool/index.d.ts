@@ -106,11 +106,6 @@ export interface PoolConfig<TProviderId extends string = string> extends IdOptio
    */
   readonly timeout?: number;
   /**
-   * Whether to continue trying other transports after a successful send
-   * when using selector-based strategy. Defaults to false.
-   */
-  readonly continueOnSuccess?: boolean;
-  /**
    * The source of the random choices, a function like `Math.random` (for
    * tests, a deterministic one).
    * @default Math.random, read at each choice
@@ -130,7 +125,6 @@ export interface ResolvedPoolConfig<TProviderId extends string = string> {
   readonly transports: readonly ResolvedTransportEntry<TProviderId>[];
   readonly maxRetries: number;
   readonly timeout?: number;
-  readonly continueOnSuccess: boolean;
   readonly random?: () => number;
   readonly generateId?: IdOptions['generateId'];
 }

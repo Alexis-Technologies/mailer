@@ -43,3 +43,11 @@ for (const strategy of [
 }
 expectAssignable<PoolConfig>({ strategy: new RoundRobinStrategy(), transports: [] });
 expectError(new PoolTransport({ strategy: 'random', transports: [] }));
+// continueOnSuccess was never read, and honored would deliver a message twice.
+expectError(
+  new PoolTransport({
+    strategy: 'priority',
+    transports: [{ transport: new MockTransport() }],
+    continueOnSuccess: true,
+  }),
+);

@@ -140,7 +140,7 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 5. (fixed, see 83) `cram-md5` was in the `SmtpAuth` type but not implemented.
 6. (fixed, see 63) DKIM: a PKCS#1 PEM (`BEGIN RSA PRIVATE KEY`) was imported as PKCS#8 and
    failed.
-7. pool: `continueOnSuccess` is never read.
+7. (fixed, see 85) pool: `continueOnSuccess` was never read.
 8. (fixed, see 44, 45 and 48 to 52) otel: `_active_sends` was not decremented after `sendMany`
    and drifted under sampling; `durationBuckets` and `auto` were ignored; `recordRetry` was
    never called; `sendMany` buffered its whole input; `defaultErrorClassifier` matched `"auth"`
@@ -425,6 +425,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     accepted and ignored, so a caller believed certificates went unchecked. Node's fetch has no
     switch for it without undici, so `false` throws a `TypeError` that points to a `fetch` of
     the caller's own (`checkValidateSsl`); true or absent changes nothing.
+85. pool (known bug 7): `continueOnSuccess` was accepted and never read; honored, it would send
+    a message that went out through one transport again through the others. It is gone from
+    the type, and `continueOnSuccess: true` throws a `TypeError` when the pool is made.
 
 ## Repository layout
 
