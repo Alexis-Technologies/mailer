@@ -4,29 +4,32 @@
  * Run: pnpm bench [filter] [--json] [--save] [--compare]
  *
  * An optional filter runs only the scenarios whose name contains it, e.g.
- * `pnpm bench base64`. `--json` prints the results as JSON, `--save` writes
+ * `pnpm bench MIME`. `--json` prints the results as JSON, `--save` writes
  * them to bench/baseline.json, and `--compare` prints the change against
  * that baseline (numbers are machine-specific: compare on one machine, before
  * and after a change). Manual only, not part of CI.
  *
- * Until the MIME builder and the reliability layer are implemented, the
- * scenarios are the reference points their hot paths are made of: encoding
- * an attachment, a Message-ID, a DKIM signature, the hashes of the audit log
- * and the JSON of an outbox record.
+ * The scenarios run the library itself: composing a message with and
+ * without an attachment or a DKIM signature, writing message data through
+ * the SMTP dot-stuffing, and the checks that run once per message or per
+ * address.
  */
 
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { bench, benchAsync, ATTACHMENT_1M, ADDRESS } = require('./helpers.js');
 const {
-  bench,
-  ATTACHMENT_100K,
-  ATTACHMENT_1M,
-  ADDRESS,
-  OUTBOX_RECORD,
-  DKIM_HEADERS,
-} = require('./helpers.js');
+  classifyReceiptError,
+  createMessage,
+  isEmailAddress,
+  readAttachmentContent,
+} = require('../index.js');
+const { composeMessage } = require('../src/mime/index.js');
+const { writeMessageData } = require('../src/smtp/data-stream.js');
+const { PriorityStrategy } = require('../src/pool/strategies/priority-strategy.js');
 
 const BASELINE = path.join(__dirname, 'baseline.json');
 
@@ -57,46 +60,124 @@ const compare = (results) => {
   }
 };
 
-// RFC 2045: base64 body lines are at most 76 characters, CRLF-separated.
-const LINE = 76;
-const base64Lines = (buffer) => {
-  const text = buffer.toString('base64');
-  const lines = [];
-  for (let i = 0; i < text.length; i += LINE) lines.push(text.slice(i, i + LINE));
-  return lines.join('\r\n');
+const textMessage = createMessage({
+  from: 'Acme <no-reply@acme.example>',
+  to: 'Алекс <alex@example.com>',
+  subject: 'Скидання пароля: перейдіть за посиланням, щоб задати новий',
+  content: {
+    text: 'Перейдіть за посиланням, щоб скинути пароль: https://acme.example/reset/abc123\n'.repeat(
+      20,
+    ),
+    html: '<p>Перейдіть за <a href="https://acme.example/reset/abc123">посиланням</a>.</p>'.repeat(
+      20,
+    ),
+  },
+});
+
+const attachmentMessage = createMessage({
+  from: 'no-reply@acme.example',
+  to: 'alex@example.com',
+  subject: 'Your invoice',
+  content: { text: 'The invoice is attached.' },
+  attachments: [
+    {
+      inline: false,
+      filename: 'рахунок за жовтень.pdf',
+      content: ATTACHMENT_1M,
+      contentType: 'application/pdf',
+      contentId: '',
+    },
+  ],
+});
+
+const composeAndRead = async (message, options) => {
+  const composed = await composeMessage(message, options);
+  return readAttachmentContent(composed.content);
 };
 
-const main = () => {
+// A socket that takes every write at once and answers the end of DATA.
+const fakeSocket = () => {
+  const socket = Object.assign(new EventEmitter(), { destroyed: false, writable: true });
+  socket.destroy = () => {};
+  socket.write = (chunk, callback) => {
+    callback?.();
+    if (chunk.length === 3 && chunk[0] === 0x2e) {
+      queueMicrotask(() => socket.emit('data', Buffer.from('250 ok\r\n')));
+    }
+    return true;
+  };
+  return socket;
+};
+
+// One megabyte of text lines, a third of them starting with a dot.
+const dottedBody = Buffer.from(
+  Array.from({ length: 16384 }, (_, i) => (i % 3 === 0 ? '.' : 'x').repeat(62)).join('\r\n') +
+    '\r\n',
+);
+
+const main = async () => {
   if (!json) console.log(`Node ${process.version} | ${new Date().toISOString()}\n`);
   const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const hmacKey = crypto.randomBytes(32);
-  const recordJson = JSON.stringify(OUTBOX_RECORD);
-  const slow = { warmup: 50 };
+  const dkim = {
+    signatures: [
+      {
+        signingDomain: 'acme.example',
+        selector: 'mail',
+        privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      },
+    ],
+  };
+  const strategy = new PriorityStrategy();
+  const transports = Array.from({ length: 10 }, (_, i) => ({
+    transport: { id: `t${i}` },
+    enabled: true,
+    priority: i % 3,
+    weight: 1,
+  }));
+  const failure = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
+  });
+  const slow = { warmup: 20 };
 
   const scenarios = [
-    ['base64, 76-column lines — 100 KB attachment', () => base64Lines(ATTACHMENT_100K), slow],
-    ['base64, 76-column lines — 1 MB attachment', () => base64Lines(ATTACHMENT_1M), slow],
-    ['Message-ID — crypto.randomUUID()', () => `<${crypto.randomUUID()}@acme.example>`],
+    ['MIME — compose a text and HTML message', () => composeAndRead(textMessage), slow],
     [
-      'DKIM — RSA-SHA256 signature, 2048-bit key',
-      () => crypto.sign('sha256', Buffer.from(DKIM_HEADERS), privateKey),
+      'MIME — compose a message with a 1 MiB attachment',
+      () => composeAndRead(attachmentMessage),
       slow,
     ],
     [
-      'Audit log — SHA-256 of an outbox record',
-      () => crypto.createHash('sha256').update(recordJson).digest('hex'),
+      'DKIM — compose and sign a text message (RSA-2048)',
+      () => composeAndRead(textMessage, { dkim }),
+      slow,
     ],
     [
-      'Audit log — HMAC-SHA256 of an address',
-      () => crypto.createHmac('sha256', hmacKey).update(ADDRESS).digest('hex'),
+      'SMTP — dot-stuff and write 1 MiB of message data',
+      () =>
+        writeMessageData(
+          fakeSocket(),
+          async function* () {
+            yield dottedBody;
+          },
+          60_000,
+          () => {},
+        ),
+      slow,
     ],
-    ['Outbox — JSON.stringify of a record', () => JSON.stringify(OUTBOX_RECORD)],
-    ['Outbox — JSON.parse of a record', () => JSON.parse(recordJson)],
+    ['Address — isEmailAddress', () => isEmailAddress(ADDRESS)],
+    ['Receipt — classifyReceiptError of a reset', () => classifyReceiptError(failure)],
+    [
+      'Pool — select by priority among 10 transports',
+      () => strategy.select(textMessage, transports, new Set()),
+    ],
   ];
 
   const results = [];
   for (const [name, fn, options] of scenarios) {
-    if (name.includes(filter)) results.push(bench(name, fn, { ...options, quiet: json }));
+    if (!name.includes(filter)) continue;
+    const isAsync = fn() instanceof Promise;
+    const run = isAsync ? benchAsync : bench;
+    results.push(await run(name, fn, { ...options, quiet: json }));
   }
   if (json) console.log(JSON.stringify(results, null, 2));
   if (flags.has('--save')) {

@@ -1,38 +1,34 @@
 {
   "node": "v24.14.1",
-  "date": "2026-10-14T15:35:28.049Z",
+  "date": "2026-10-16T14:05:15.910Z",
   "results": [
     {
-      "name": "base64, 76-column lines — 100 KB attachment",
-      "opsPerSec": 9490
+      "name": "MIME — compose a text and HTML message",
+      "opsPerSec": 2796
     },
     {
-      "name": "base64, 76-column lines — 1 MB attachment",
-      "opsPerSec": 1158
+      "name": "MIME — compose a message with a 1 MiB attachment",
+      "opsPerSec": 40
     },
     {
-      "name": "Message-ID — crypto.randomUUID()",
-      "opsPerSec": 7218410
+      "name": "DKIM — compose and sign a text message (RSA-2048)",
+      "opsPerSec": 755
     },
     {
-      "name": "DKIM — RSA-SHA256 signature, 2048-bit key",
-      "opsPerSec": 1835
+      "name": "SMTP — dot-stuff and write 1 MiB of message data",
+      "opsPerSec": 301
     },
     {
-      "name": "Audit log — SHA-256 of an outbox record",
-      "opsPerSec": 1174212
+      "name": "Address — isEmailAddress",
+      "opsPerSec": 1687799
     },
     {
-      "name": "Audit log — HMAC-SHA256 of an address",
-      "opsPerSec": 767227
+      "name": "Receipt — classifyReceiptError of a reset",
+      "opsPerSec": 31384578
     },
     {
-      "name": "Outbox — JSON.stringify of a record",
-      "opsPerSec": 1314416
-    },
-    {
-      "name": "Outbox — JSON.parse of a record",
-      "opsPerSec": 892982
+      "name": "Pool — select by priority among 10 transports",
+      "opsPerSec": 2263836
     }
   ]
 }
