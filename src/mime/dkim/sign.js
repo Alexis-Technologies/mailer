@@ -113,8 +113,8 @@ const parseMessage = (rawMessage) => {
 };
 
 /**
- * Parses header section into a map of header name to value.
- * Handles folded headers (continuation lines).
+ * Parses header section into a map from the lower-case name of a field to
+ * its instances, top to bottom.  Handles folded headers (continuation lines).
  */
 const parseHeaders = (headerSection) => {
   const headers = new Map();
@@ -122,6 +122,13 @@ const parseHeaders = (headerSection) => {
 
   let currentName = '';
   let currentValue = '';
+  const save = () => {
+    const key = currentName.toLowerCase();
+    const instances = headers.get(key);
+    const field = { name: currentName, value: currentValue };
+    if (instances === undefined) headers.set(key, [field]);
+    else instances.push(field);
+  };
 
   for (const line of lines) {
     if (line.startsWith(' ') || line.startsWith('\t')) {
@@ -129,12 +136,7 @@ const parseHeaders = (headerSection) => {
       currentValue += '\r\n' + line;
     } else {
       // New header - save previous if exists
-      if (currentName) {
-        headers.set(currentName.toLowerCase(), {
-          name: currentName,
-          value: currentValue,
-        });
-      }
+      if (currentName) save();
 
       const colonIndex = line.indexOf(':');
       if (colonIndex > 0) {
@@ -145,12 +147,7 @@ const parseHeaders = (headerSection) => {
   }
 
   // Save the last header
-  if (currentName) {
-    headers.set(currentName.toLowerCase(), {
-      name: currentName,
-      value: currentValue,
-    });
-  }
+  if (currentName) save();
 
   return headers;
 };
@@ -239,9 +236,16 @@ const buildDkimHeaderValue = (params) => {
 const buildSignatureData = (headers, headerFields, canonMethod, dkimHeaderValue) => {
   const lines = [];
 
-  // Canonicalize each header specified in h= tag
+  // RFC 6376 §5.4.2: each name in h= signs the next instance of that field
+  // from the bottom up, and one with no instance left signs nothing, which
+  // keeps another instance from being added (over-signing).
+  const nextInstance = new Map();
   for (const field of headerFields) {
-    const header = headers.get(field.toLowerCase());
+    const key = field.toLowerCase();
+    const instances = headers.get(key);
+    const index = nextInstance.get(key) ?? (instances === undefined ? -1 : instances.length - 1);
+    nextInstance.set(key, index - 1);
+    const header = index >= 0 ? instances[index] : undefined;
     if (header !== undefined) {
       const canonicalized =
         canonMethod === 'relaxed'

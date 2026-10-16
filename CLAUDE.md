@@ -320,6 +320,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 59. smtp: an idle pooled socket kept the event loop alive until its socket timeout, so a
     script that sent a message did not exit without `closeAllConnections()`. A pooled socket
     is unref'd while idle and ref'd again when taken.
+60. DKIM: the header fields were kept one per name, the last, so a name listed twice in `h=`
+    signed that instance twice, against RFC 6376 §5.4.2, and over-signing (`h=from:from`) made
+    a signature no verifier accepts. Each name in `h=` signs the next instance from the bottom
+    up, and one with none left signs nothing.
 
 ## Repository layout
 

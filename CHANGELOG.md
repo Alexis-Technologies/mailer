@@ -214,6 +214,11 @@ fixed ones below.
 - **An idle `./smtp` connection no longer keeps the process alive** (an upstream bug): a pooled
   socket held the event loop until its socket timeout, so a script that sent a message hung
   unless it called `closeAllConnections()`. Idle sockets are now unref'd.
+- **DKIM signs repeated and over-signed fields as RFC 6376 says** (an upstream bug): the signer kept
+  one instance of each field, the last, so a name listed twice in `headerFields` signed that
+  instance twice, and over-signing such as `['from', 'from']` produced a signature that failed
+  verification. Each name now signs the next instance from the bottom up (§5.4.2), and one with
+  no instance left signs nothing, which keeps another from being added.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.
