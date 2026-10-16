@@ -320,6 +320,11 @@ fixed ones below.
   error and `timeout after 5000ms` a `server-error`. It now gives the category of
   `classifyReceiptError`, which reads them as whole words (a timeout is `timeout`), and
   `aborted` for an `AbortError`, which upstream counted as `network`.
+- **`./ses`, `./resend` and `./jmap` stream `sendMany`** (an upstream bug): each read its whole
+  input into an array before the first message went out, so a long or endless iterable was held
+  in memory, or never sent. SES now reads `batchSize` messages at a time, Resend 100 (the batch
+  API is chosen per chunk, where it used to be all or nothing for the whole input) and JMAP a
+  batch of `maxObjectsInSet`, after one discovery.
 - **`./otel` streams `sendMany`** (an upstream bug): it read the whole input into an array before
   the first message went out, and kept every receipt to the end, so a long or endless batch
   held it all in memory. The messages now pass on as the wrapped transport reads them; the batch

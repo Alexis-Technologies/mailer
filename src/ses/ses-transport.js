@@ -8,6 +8,7 @@ const { SesApiError, SesHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { chunks } = require('../internal/batch.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -171,30 +172,11 @@ class SesTransport {
   async *sendMany(messages, options) {
     options?.signal?.throwIfAborted();
 
-    const isAsyncIterable = Symbol.asyncIterator in messages;
-    const messageArray = [];
-
-    if (isAsyncIterable) {
-      for await (const message of messages) {
-        messageArray.push(message);
-      }
-    } else {
-      for (const message of messages) {
-        messageArray.push(message);
-      }
-    }
-
-    const batchSize = this.config.batchSize;
-
-    for (let i = 0; i < messageArray.length; i += batchSize) {
+    // A batch is read when the one before it is sent, not the whole input
+    // first.
+    for await (const batch of chunks(messages, this.config.batchSize)) {
       options?.signal?.throwIfAborted();
-
-      const batch = messageArray.slice(i, i + batchSize);
-
-      const receipts = await this.sendConcurrent(batch, options);
-      for (const receipt of receipts) {
-        yield receipt;
-      }
+      yield* await this.sendConcurrent(batch, options);
     }
   }
 

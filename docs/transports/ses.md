@@ -284,6 +284,9 @@ The `SesTransport.sendMany()` method processes messages concurrently using
 individual `SendEmail` API calls rather than SES's `SendBulkEmail` API.
 This approach provides maximum flexibility for different message content
 while still achieving excellent throughput through concurrent processing.
+It reads `batchSize` messages (50 by default) at a time and sends them
+together before it reads more, so an endless or very long iterable costs one
+batch of memory.
 
 ## Configuration sets and tracking
 

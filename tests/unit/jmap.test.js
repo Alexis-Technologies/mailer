@@ -357,3 +357,43 @@ test('JMAP: an account ID cannot climb the path of a blob upload', async (t) => 
   );
   assert.deepStrictEqual(paths, ['/upload/a%2F..%2F..%2Fx/']);
 });
+
+test('JMAP: sendMany reads a batch at a time, after one discovery', async (t) => {
+  const createdOf = (args) => {
+    const created = {};
+    for (const key in args.create) created[key] = { id: key, blobId: 'b', threadId: 't' };
+    return { created };
+  };
+  const calls = serve(t, {
+    session: session({
+      capabilities: { [CORE]: { maxObjectsInSet: 2 }, [MAIL]: {}, [SUBMISSION]: {} },
+    }),
+    'Email/set': createdOf,
+    'EmailSubmission/set': createdOf,
+  });
+  let read = 0;
+  const messages = (async function* () {
+    for (let index = 0; index < 1000; index++) {
+      read++;
+      yield message();
+    }
+  })();
+  const receipts = [];
+  for await (const receipt of transport().sendMany(messages)) {
+    receipts.push(receipt);
+    if (receipts.length === 3) break;
+  }
+  assert.deepStrictEqual(
+    receipts.map((receipt) => receipt.successful),
+    [true, true, true],
+  );
+  // Two batches of two: the third receipt is the first of the second batch.
+  assert.strictEqual(read, 4);
+  assert.strictEqual(calls.filter((call) => call === 'Mailbox/get').length, 1);
+});
+
+test('JMAP: sendMany of nothing discovers nothing', async (t) => {
+  const calls = serve(t);
+  for await (const receipt of transport().sendMany([])) assert.fail(receipt);
+  assert.deepStrictEqual(calls, []);
+});

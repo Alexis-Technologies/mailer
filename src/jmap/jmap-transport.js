@@ -16,6 +16,7 @@ const { isUnsentRequestError } = require('../internal/unsent.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { chunks } = require('../internal/batch.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -329,76 +330,70 @@ class JmapTransport {
    */
   async *sendMany(messages, options) {
     const signal = options?.signal;
-
-    // Collect all messages into an array first
-    const messageArray = [];
-    for await (const message of messages) {
-      messageArray.push(message);
-    }
-
-    // If no messages, return early
-    if (messageArray.length === 0) {
-      return;
-    }
-
-    // What every batch shares is discovered once; if it fails, every message
-    // fails with it.
-    let processingStage = 'initialization';
-    let discovered;
-    try {
-      signal?.throwIfAborted();
-
-      // Get or refresh session (once)
-      processingStage = 'session fetch';
-      const session = await this.getSession(signal);
-      signal?.throwIfAborted();
-
-      // Get account ID (once)
-      processingStage = 'account discovery';
-      const accountId = this.config.accountId ?? findMailAccount(session);
-      if (!accountId) {
-        for (let i = 0; i < messageArray.length; i++) {
-          yield createJmapFailure('No mail-capable account found in JMAP session', undefined, {
-            category: 'configuration',
-            code: 'jmap.no_mail_account',
-            retryable: false,
-          });
-        }
-        return;
-      }
-
-      // Get drafts mailbox ID (once)
-      processingStage = 'mailbox discovery';
-      const draftsMailboxId = await this.getDraftsMailboxId(session, accountId, signal);
-      signal?.throwIfAborted();
-
-      // Get identities (once) and build a map
-      processingStage = 'identity resolution';
-      const identityMap = await this.getIdentityMap(session, accountId, signal);
-      signal?.throwIfAborted();
-
-      discovered = { session, accountId, draftsMailboxId, identityMap };
-    } catch (error) {
-      for (const failure of this.failBatch(
-        error,
-        processingStage,
-        messageArray.length,
-        0,
-        signal,
-      )) {
-        yield failure;
-      }
+    // The input is read as its batches are sent, not all at once.  What every
+    // batch shares is discovered once, when there is a first message; if it
+    // fails, every message fails with it.
+    const input = readItems(messages);
+    const first = await input.next();
+    if (first.done) return;
+    const discovery = await this.discoverForBatch(signal);
+    if (discovery.failure !== undefined) {
+      yield discovery.failure();
+      while (!(await input.next()).done) yield discovery.failure();
       return;
     }
 
     // RFC 8620 §2: a server may limit the objects one /set method creates;
     // a batch over it would be refused as a whole.
-    const limit = getMaxObjectsInSet(discovered.session);
-    for (let start = 0; start < messageArray.length; start += limit) {
-      const batch = messageArray.slice(start, start + limit);
-      for await (const receipt of this.sendBatch(discovered, batch, signal)) {
-        yield receipt;
+    const limit = getMaxObjectsInSet(discovery.discovered.session);
+    for await (const batch of chunks(prepend(first.value, input), limit)) {
+      yield* this.sendBatch(discovery.discovered, batch, signal);
+    }
+  }
+
+  /**
+   * Discovers what every batch of a sendMany() shares: the session, the
+   * account, its drafts mailbox and its identities.
+   *
+   * @param signal Cancellation signal.
+   * @returns The `discovered` values, or the `failure` that makes the receipt
+   * of each message when discovery fails.
+   * @throws The caller's abort reason if cancelled.
+   */
+  async discoverForBatch(signal) {
+    let processingStage = 'initialization';
+    try {
+      signal?.throwIfAborted();
+      processingStage = 'session fetch';
+      const session = await this.getSession(signal);
+      signal?.throwIfAborted();
+
+      processingStage = 'account discovery';
+      const accountId = this.config.accountId ?? findMailAccount(session);
+      if (!accountId) {
+        return {
+          failure: () =>
+            createJmapFailure('No mail-capable account found in JMAP session', undefined, {
+              category: 'configuration',
+              code: 'jmap.no_mail_account',
+              retryable: false,
+            }),
+        };
       }
+
+      processingStage = 'mailbox discovery';
+      const draftsMailboxId = await this.getDraftsMailboxId(session, accountId, signal);
+      signal?.throwIfAborted();
+
+      processingStage = 'identity resolution';
+      const identityMap = await this.getIdentityMap(session, accountId, signal);
+      signal?.throwIfAborted();
+
+      return { discovered: { session, accountId, draftsMailboxId, identityMap } };
+    } catch (error) {
+      // A caller's abort rejects at the first of these, before any receipt.
+      const stage = processingStage;
+      return { failure: () => this.failBatch(error, stage, 1, 0, signal).next().value };
     }
   }
 
@@ -829,6 +824,17 @@ class JmapTransport {
     });
   }
 }
+
+// The items of an iterable, synchronous or not, through one async iterator
+// that can be read from by hand and then iterated for the rest.
+const readItems = async function* (iterable) {
+  for await (const item of iterable) yield item;
+};
+
+const prepend = async function* (first, rest) {
+  yield first;
+  yield* rest;
+};
 
 const REQUIRED_CAPABILITIES = [
   JMAP_CAPABILITIES.core,

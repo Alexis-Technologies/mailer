@@ -214,3 +214,26 @@ test('SES: a rate limit (429) is retried, a refusal (400) is not', async (t) => 
   assert.strictEqual(requests, 2);
   assert.strictEqual(receipt.errors[0].statusCode, 400);
 });
+
+// A generator of many messages that counts how many were read.
+const counted = (count, make) => {
+  const state = { read: 0 };
+  state.messages = (function* () {
+    for (let index = 0; index < count; index++) {
+      state.read++;
+      yield make(index);
+    }
+  })();
+  return state;
+};
+
+test('SES: sendMany reads a batch at a time, not its whole input first', async (t) => {
+  await withFetch(t, async () => new Response('{"MessageId":"m1"}', { status: 200 }));
+  const transport = new SesTransport({ authentication, retries: 0, batchSize: 2 });
+  const input = counted(1000, () => message());
+  for await (const receipt of transport.sendMany(input.messages)) {
+    assert.strictEqual(receipt.successful, true);
+    break;
+  }
+  assert.strictEqual(input.read, 2);
+});

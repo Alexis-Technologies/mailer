@@ -125,3 +125,26 @@ test('Resend: an idempotency key is random, not derived from the clock and Math.
   assert.notStrictEqual(first, generateIdempotencyKey());
   assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+
+test('Resend: sendMany reads a batch request at a time, not its whole input first', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    const body = JSON.parse(init.body);
+    const data = [];
+    for (let index = 0; index < body.length; index++) data.push({ id: `r${index}` });
+    return json({ data });
+  });
+  let read = 0;
+  const messages = (function* () {
+    for (let index = 0; index < 1000; index++) {
+      read++;
+      yield message(index);
+    }
+  })();
+  const transport = new ResendTransport({ apiKey: 're_key', retries: 0 });
+  for await (const receipt of transport.sendMany(messages)) {
+    assert.strictEqual(receipt.successful, true);
+    break;
+  }
+  // The most a batch request takes.
+  assert.strictEqual(read, 100);
+});

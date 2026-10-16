@@ -372,6 +372,12 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 73. plunk (known bug 12): an attachment that could not be read was left out with a
     `console.warn`, and the message went without it, reported as sent. It fails the send, as
     on the other providers, before any request.
+74. ses, resend, jmap: `sendMany` read its whole input into an array before the first message
+    went out, so a long or endless iterable was held in memory, or never sent. Each reads a
+    batch at a time (`chunks` of `internal/batch.js`): SES `batchSize` messages, Resend 100,
+    each chunk choosing between the batch API and single requests, and JMAP `maxObjectsInSet`
+    after one discovery, made only when there is a first message.
+
 ## Repository layout
 
 ```
@@ -382,7 +388,8 @@ src/
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map (redact.js,
                     redact-addresses.js, unsent.js, delivery-unknown.js, http.js,
-                    config.js, loopback.js, body.js)
+                    config.js, loopback.js, body.js, sleep.js, log.js, base64.js,
+                    headers.js, provider.js, batch.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)

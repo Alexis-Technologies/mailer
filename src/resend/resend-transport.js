@@ -11,6 +11,7 @@ const {
 } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { chunks } = require('../internal/batch.js');
 
 /**
  * Resend transport implementation for sending emails via Resend API.
@@ -37,6 +38,9 @@ const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
  * }
  * ```
  */
+// The most messages a request of the batch API takes.
+const MAX_BATCH_SIZE = 100;
+
 class ResendTransport {
   id = 'resend';
 
@@ -148,11 +152,10 @@ class ResendTransport {
   /**
    * Sends multiple email messages efficiently via Resend API.
    *
-   * This method intelligently chooses between single requests and batch API
-   * based on message count and features used. For optimal performance:
-   * - Uses batch API for ≤100 messages without attachments or tags
-   * - Falls back to individual requests for messages with unsupported features
-   * - Chunks large batches (>100) into multiple batch requests
+   * The messages are read 100 at a time, the most a batch request takes, so
+   * that memory holds one chunk rather than the whole input.  A chunk whose
+   * messages carry no attachments, tags or calendar goes in one batch request;
+   * another is sent one message at a time.
    *
    * @example
    * ```typescript
@@ -202,31 +205,19 @@ class ResendTransport {
   async *sendMany(messages, options) {
     options?.signal?.throwIfAborted();
 
-    const isAsyncIterable = Symbol.asyncIterator in messages;
-
-    // Convert to array for batch processing optimization
-    const messageArray = [];
-
-    if (isAsyncIterable) {
-      for await (const message of messages) {
-        options?.signal?.throwIfAborted();
-        messageArray.push(message);
-      }
-    } else {
-      for (const message of messages) {
-        options?.signal?.throwIfAborted();
-        messageArray.push(message);
-      }
+    // Read as many messages as a batch request takes, and no more, before
+    // sending them; each chunk goes through the batch API when all of its
+    // messages can.
+    for await (const chunk of chunks(messages, MAX_BATCH_SIZE)) {
+      options?.signal?.throwIfAborted();
+      yield* this.sendManyOptimized(chunk, options);
     }
-
-    // Optimize sending strategy based on message characteristics
-    yield* this.sendManyOptimized(messageArray, options);
   }
 
   /**
    * Optimized batch sending that chooses the best strategy based on message features.
    *
-   * @param messages Array of messages to send
+   * @param messages At most 100 messages to send
    * @param options Transport options
    * @returns Async iterable of receipts
    */
@@ -238,16 +229,8 @@ class ResendTransport {
     // Check if messages are suitable for batch API
     const canUseBatch = this.canUseBatchApi(messages);
 
-    if (canUseBatch && messages.length <= 100) {
-      // Use batch API for optimal performance
+    if (canUseBatch) {
       yield* this.sendBatch(messages, options);
-    } else if (canUseBatch && messages.length > 100) {
-      // Chunk large batches into multiple batch requests
-      const chunks = this.chunkArray(messages, 100);
-      for (const chunk of chunks) {
-        options?.signal?.throwIfAborted();
-        yield* this.sendBatch(chunk, options);
-      }
     } else {
       // Fall back to individual requests for messages with unsupported features
       for (const message of messages) {
@@ -327,21 +310,6 @@ class ResendTransport {
       }
     }
     return true;
-  }
-
-  /**
-   * Splits an array into chunks of specified size.
-   *
-   * @param array Array to chunk
-   * @param size Chunk size
-   * @returns Array of chunks
-   */
-  chunkArray(array, size) {
-    const chunks = [];
-    for (let i = 0; i < array.length; i += size) {
-      chunks.push(array.slice(i, i + size));
-    }
-    return chunks;
   }
 }
 

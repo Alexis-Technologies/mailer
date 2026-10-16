@@ -102,14 +102,13 @@ for await (const receipt of transport.sendMany(messages)) {
 }
 ```
 
-The transport automatically determines the optimal sending strategy:
+The transport reads the messages 100 at a time, the most a batch request
+takes, so an endless or very long iterable costs one chunk of memory, and
+chooses for each chunk:
 
- -  **≤100 messages without attachments/tags**: Uses Resend's batch API for
-    fastest delivery
- -  **>100 messages**: Automatically chunks into multiple batch requests
- -  **Messages with attachments or tags**: Falls back to individual requests
- -  **Mixed scenarios**: Intelligently separates batch-compatible from
-    individual messages
+ -  **No attachments, tags or calendar in the chunk**: one request of
+    Resend's batch API for the whole chunk
+ -  **Any of them in the chunk**: a request per message of that chunk
 
 This optimization happens transparently, ensuring maximum performance while
 maintaining full feature compatibility.
