@@ -307,3 +307,37 @@ test('JMAP: a 401 makes the next send fetch the Session again', async (t) => {
   assert.strictEqual((await jmap.send(message())).successful, true);
   assert.strictEqual(sessionFetches, 2);
 });
+
+test('JMAP: sendMany splits its batch by the maxObjectsInSet of the Session', async (t) => {
+  // Each /set answers its creations, except in the second batch, refused whole.
+  const answer = (prefix) => {
+    let sets = 0;
+    return (args) => {
+      sets++;
+      const keys = Object.keys(args.create);
+      const entries = keys.map((key) => [
+        key,
+        sets === 2 ? { type: 'tooLarge' } : { id: prefix + key },
+      ]);
+      return sets === 2
+        ? { notCreated: Object.fromEntries(entries) }
+        : { created: Object.fromEntries(entries) };
+    };
+  };
+  const calls = serve(t, {
+    session: session({
+      capabilities: { [CORE]: { maxObjectsInSet: 2 }, [MAIL]: {}, [SUBMISSION]: {} },
+    }),
+    'Email/set': answer('e-'),
+    'EmailSubmission/set': answer('s-'),
+  });
+  const receipts = [];
+  for await (const receipt of transport().sendMany([1, 2, 3, 4, 5].map(() => message()))) {
+    receipts.push(receipt);
+  }
+  assert.strictEqual(calls.filter((call) => call === 'Email/set').length, 3);
+  assert.deepStrictEqual(
+    receipts.map((receipt) => receipt.successful),
+    [true, true, false, false, true],
+  );
+});

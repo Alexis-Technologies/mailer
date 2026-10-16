@@ -254,6 +254,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `sessionCacheTtl` whatever happened. They must be on the Session's origin (that of
     `baseUrl` when rewritten) or in the new `trustedOrigins`, checked before caching, and a
     401 or a 404 forgets the cached Session.
+42. jmap: `sendMany` put every message into one Email/set and EmailSubmission/set, whatever
+    the `maxObjectsInSet` of the Session, so a server with a limit refused the whole batch,
+    and any failure failed every message. It sends batches of at most that many (`sendBatch`),
+    each failing on its own; discovery still runs once. `maxSizeRequest` is not yet followed.
 
 ## Repository layout
 

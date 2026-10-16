@@ -368,10 +368,10 @@ class JmapTransport {
       return;
     }
 
-    // Track processing stage for better error messages
+    // What every batch shares is discovered once; if it fails, every message
+    // fails with it.
     let processingStage = 'initialization';
-    let attachmentsUploadedCount = 0;
-
+    let discovered;
     try {
       signal?.throwIfAborted();
 
@@ -404,15 +404,47 @@ class JmapTransport {
       const identityMap = await this.getIdentityMap(session, accountId, signal);
       signal?.throwIfAborted();
 
+      discovered = { session, accountId, draftsMailboxId, identityMap };
+    } catch (error) {
+      for (const failure of this.failBatch(
+        error,
+        processingStage,
+        messageArray.length,
+        0,
+        signal,
+      )) {
+        yield failure;
+      }
+      return;
+    }
+
+    // RFC 8620 §2: a server may limit the objects one /set method creates;
+    // a batch over it would be refused as a whole.
+    const limit = getMaxObjectsInSet(discovered.session);
+    for (let start = 0; start < messageArray.length; start += limit) {
+      const batch = messageArray.slice(start, start + limit);
+      for await (const receipt of this.sendBatch(discovered, batch, signal)) {
+        yield receipt;
+      }
+    }
+  }
+
+  /**
+   * Submits one batch of messages in a single Email/set and EmailSubmission/set
+   * request, yielding a receipt per message; a failure fails the batch only.
+   */
+  async *sendBatch(discovered, batch, signal) {
+    const { session, accountId, draftsMailboxId, identityMap } = discovered;
+    let processingStage = 'attachment upload';
+    let attachmentsUploadedCount = 0;
+    try {
       // Upload all attachments for all messages
-      processingStage = 'attachment upload';
       const allUploadedBlobs = new Map();
-      for (let i = 0; i < messageArray.length; i++) {
-        const message = messageArray[i];
+      for (let i = 0; i < batch.length; i++) {
         const uploadedBlobs = await this.uploadAttachments(
           session,
           accountId,
-          message.attachments,
+          batch[i].attachments,
           signal,
         );
         allUploadedBlobs.set(i, uploadedBlobs);
@@ -425,10 +457,9 @@ class JmapTransport {
       const emailCreates = {};
       const submissionCreates = {};
 
-      for (let i = 0; i < messageArray.length; i++) {
-        const message = messageArray[i];
-        const uploadedBlobs = allUploadedBlobs.get(i);
-        const emailCreate = convertMessage(message, draftsMailboxId, uploadedBlobs);
+      for (let i = 0; i < batch.length; i++) {
+        const message = batch[i];
+        const emailCreate = convertMessage(message, draftsMailboxId, allUploadedBlobs.get(i));
 
         // Find identity for this sender
         const senderEmail = message.sender.address.toLowerCase();
@@ -471,44 +502,60 @@ class JmapTransport {
       );
 
       // Parse batch response and yield individual receipts
-      for (let i = 0; i < messageArray.length; i++) {
+      for (let i = 0; i < batch.length; i++) {
         yield this.parseBatchResponseForIndex(response, i);
       }
     } catch (error) {
-      this.forgetSessionAfter(error);
-      if (signal?.aborted) {
-        throw getAbortReason(signal, error);
+      for (const failure of this.failBatch(
+        error,
+        processingStage,
+        batch.length,
+        attachmentsUploadedCount,
+        signal,
+      )) {
+        yield failure;
       }
+    }
+  }
 
-      const timeoutOverride =
-        error instanceof Error && error.name === 'AbortError'
-          ? {
-              category: 'timeout',
-              code: 'abort',
-              retryable: true,
-            }
-          : undefined;
+  /**
+   * The receipts of a batch that failed at `processingStage`, one per message,
+   * after the abort of the caller, which is thrown instead.
+   */
+  *failBatch(error, processingStage, count, attachmentsUploadedCount, signal) {
+    this.forgetSessionAfter(error);
+    if (signal?.aborted) {
+      throw getAbortReason(signal, error);
+    }
 
-      // For any error during batch processing, yield failure for all messages
-      // with detailed stage information
-      const baseMessage =
-        error instanceof Error && error.name === 'AbortError'
-          ? `Request aborted: ${error.message}`
-          : error instanceof JmapApiError
+    const timeoutOverride =
+      error instanceof Error && error.name === 'AbortError'
+        ? {
+            category: 'timeout',
+            code: 'abort',
+            retryable: true,
+          }
+        : undefined;
+
+    // For any error during batch processing, yield failure for all messages
+    // with detailed stage information
+    const baseMessage =
+      error instanceof Error && error.name === 'AbortError'
+        ? `Request aborted: ${error.message}`
+        : error instanceof JmapApiError
+          ? error.message
+          : error instanceof Error
             ? error.message
-            : error instanceof Error
-              ? error.message
-              : String(error);
+            : String(error);
 
-      // Build detailed error message with stage and progress info
-      let detailedMessage = `Failed during ${processingStage}: ${baseMessage}`;
-      if (processingStage === 'attachment upload' && attachmentsUploadedCount > 0) {
-        detailedMessage += ` (${attachmentsUploadedCount}/${messageArray.length} messages had attachments uploaded before failure)`;
-      }
+    // Build detailed error message with stage and progress info
+    let detailedMessage = `Failed during ${processingStage}: ${baseMessage}`;
+    if (processingStage === 'attachment upload' && attachmentsUploadedCount > 0) {
+      detailedMessage += ` (${attachmentsUploadedCount}/${count} messages had attachments uploaded before failure)`;
+    }
 
-      for (let i = 0; i < messageArray.length; i++) {
-        yield createJmapFailure(detailedMessage, error, timeoutOverride);
-      }
+    for (let i = 0; i < count; i++) {
+      yield createJmapFailure(detailedMessage, error, timeoutOverride);
     }
   }
 
@@ -993,6 +1040,11 @@ const verificationOperation = async (timeout, operation, signal) => {
     controller.abort();
     combined.cleanup();
   }
+};
+
+const getMaxObjectsInSet = (session) => {
+  const limit = session.capabilities?.[JMAP_CAPABILITIES.core]?.maxObjectsInSet;
+  return Number.isInteger(limit) && limit > 0 ? limit : Infinity;
 };
 
 // The URLs of a Session the transport sends its credentials to must be on the

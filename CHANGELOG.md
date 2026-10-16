@@ -171,6 +171,9 @@ fixed ones below.
   token or password, and it stayed cached for five minutes. They must be on the origin of
   `sessionUrl` (or `baseUrl`), or in the new `trustedOrigins` option; a 401 or a 404 makes the
   next send fetch the Session again.
+- **`./jmap` respects the `maxObjectsInSet` of the server in `sendMany`** (an upstream bug): it
+  sent every message in one request, which a server with a lower limit refuses whole. It sends
+  batches of at most that many messages, and a batch that fails fails only its own messages.
 - **`./retry` no longer retries sooner than a server asks** (an upstream bug): a `Retry-After`
   longer than `maxDelayMilliseconds` was cut to it, so the retry most likely met the same rate
   limit. The failed receipt is returned at once, with its delay.
