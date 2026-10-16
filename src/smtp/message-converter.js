@@ -4,7 +4,7 @@
 const { readAttachmentContent } = require('../core/attachment.js');
 const { prepareMimeMessage } = require('../mime/message.js');
 const { prepareMimeStream } = require('../mime/stream.js');
-const { resolveSmtpEnvelope } = require('./envelope.js');
+const { hasNonAsciiAddress, resolveSmtpEnvelope } = require('./envelope.js');
 
 /** Snapshots MIME metadata and preserves the effective SMTP envelope. */
 const prepareMessage = (
@@ -18,9 +18,7 @@ const prepareMessage = (
   return {
     ...plan,
     envelope,
-    requiresSmtpUtf8:
-      plan.encoding === 'utf8' ||
-      [envelope.from ?? '', ...envelope.to].some((address) => /[\u0080-\uffff]/.test(address)),
+    requiresSmtpUtf8: plan.encoding === 'utf8' || hasNonAsciiAddress(envelope),
   };
 };
 /** Collects the shared stream using the historical internal trailing-CRLF convention. */

@@ -1343,9 +1343,8 @@ class SmtpResponseError extends Error {
  */
 const decodeOAuth2Challenge = (message) => {
   try {
-    const binary = atob(message.trim());
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
+    // atob refuses text that is not Base64, which Buffer would skip.
+    return Buffer.from(atob(message.trim()), 'latin1').toString('utf8');
   } catch {
     return message;
   }

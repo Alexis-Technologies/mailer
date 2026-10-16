@@ -3,6 +3,7 @@
 
 const { analyzeRawMessage, iterateRawMessage } = require('../core/raw-message.js');
 const { readAttachmentContent } = require('../core/attachment.js');
+const { hasNonAsciiAddress } = require('./envelope.js');
 
 /** Missing support for explicitly declared 8-bit MIME bodies. @since 0.6.0 */
 class Smtp8BitMimeUnsupportedError extends TypeError {
@@ -18,10 +19,7 @@ const prepareRawSmtpMessage = (plan, dsn) => {
   return {
     rawMessage: plan,
     envelope: { ...plan.envelope, dsn },
-    requiresSmtpUtf8:
-      [plan.envelope.from ?? '', ...plan.envelope.to].some((address) =>
-        Array.from(address).some((character) => character.charCodeAt(0) > 127),
-      ) || plan.encoding === 'utf8',
+    requiresSmtpUtf8: plan.encoding === 'utf8' || hasNonAsciiAddress(plan.envelope),
   };
 };
 

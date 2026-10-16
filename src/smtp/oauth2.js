@@ -28,14 +28,7 @@ class SmtpAuthError extends Error {
  * @param input The string to encode.
  * @returns The Base64-encoded representation of the UTF-8 bytes of `input`.
  */
-const toBase64 = (input) => {
-  const bytes = new TextEncoder().encode(input);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-};
+const toBase64 = (input) => Buffer.from(input, 'utf8').toString('base64');
 
 /**
  * Builds the SASL `XOAUTH2` initial client response for SMTP authentication.

@@ -98,4 +98,30 @@ const checkSmtpPath = (path) => {
   }
 };
 
-module.exports = { SmtpEnvelopeValidationError, checkSmtpPath, resolveSmtpEnvelope };
+const hasNonAscii = (text) => {
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) > 0x7f) return true;
+  }
+  return false;
+};
+
+/**
+ * Tells whether an envelope carries an address beyond ASCII, which needs the
+ * SMTPUTF8 extension (RFC 6531).
+ *
+ * @internal
+ */
+const hasNonAsciiAddress = (envelope) => {
+  if (envelope.from != null && hasNonAscii(envelope.from)) return true;
+  for (let i = 0; i < envelope.to.length; i++) {
+    if (hasNonAscii(envelope.to[i])) return true;
+  }
+  return false;
+};
+
+module.exports = {
+  SmtpEnvelopeValidationError,
+  checkSmtpPath,
+  hasNonAsciiAddress,
+  resolveSmtpEnvelope,
+};
