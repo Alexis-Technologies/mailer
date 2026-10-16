@@ -11,7 +11,8 @@ const LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
  * @param options User-provided transport options.
  * @returns Fully resolved transport options.
  * @throws {TypeError} If the logger is missing, a level is not one of pino's,
- *                     or the logger has no method for a configured level.
+ *                     or the logger has no method for a configured level (that
+ *                     of the retries only when a transport is wrapped).
  */
 const resolveLoggerTransportOptions = (options) => {
   const { logger } = options;
@@ -24,8 +25,12 @@ const resolveLoggerTransportOptions = (options) => {
     sending: options.levels?.sending ?? 'debug',
     sent: options.levels?.sent ?? 'info',
     failed: options.levels?.failed ?? 'error',
+    retrying: options.levels?.retrying ?? 'warn',
   };
   for (const [event, level] of Object.entries(levels)) {
+    // Only a wrapped transport retries, so a log-only transport needs no
+    // method for the retries.
+    if (event === 'retrying' && options.transport == null) continue;
     if (!LEVELS.includes(level)) {
       throw new TypeError(
         `Expected levels.${event} to be one of ${LEVELS.join(', ')}: ${JSON.stringify(level)}`,

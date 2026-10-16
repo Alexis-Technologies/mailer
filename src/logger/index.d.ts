@@ -20,7 +20,8 @@ export type LogMethod = (properties: object, message: string) => unknown;
 /**
  * The logger the transport writes to: a pino logger, a child of one
  * (`logger.child({ component: 'mail' })`), or anything with the methods of the
- * levels in use. `debug`, `info` and `error` are the default levels.
+ * levels in use. `debug`, `info` and `error` are the default levels, and `warn`
+ * when a transport is wrapped.
  */
 export interface Logger {
   readonly trace?: LogMethod;
@@ -53,6 +54,13 @@ export interface LoggerTransportLevels {
    * @default "error"
    */
   readonly failed?: LoggerLevel;
+  /**
+   * Level used when the wrapped transport, or a `./retry` inside it, is about
+   * to retry, as `onRetry` of `TransportOptions` tells.
+   *
+   * @default "warn"
+   */
+  readonly retrying?: LoggerLevel;
 }
 
 /**
@@ -123,8 +131,10 @@ type LoggerTransportConstructorArguments<TProviderId extends string> = [TProvide
  * Transport that records email delivery lifecycle events through a logger the
  * application passes in: any pino-like logger whose methods take the
  * properties first and the message second (`logger.info(properties, message)`).
- * The events are `email.sending`, `email.sent` and `email.failed`; a thrown
- * error is logged under `err`, the key pino serializes.
+ * The events are `email.sending`, `email.sent`, `email.retrying` and
+ * `email.failed`; a thrown error is logged under `err`, the key pino
+ * serializes.  A retry is logged with its attempt, its wait and the text of its
+ * error, without the addresses in it unless the message is recorded.
  *
  * With no wrapped transport, this class acts as a log-only transport and
  * returns synthetic successful receipts.  When a transport is supplied, it

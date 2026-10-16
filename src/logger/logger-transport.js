@@ -95,7 +95,8 @@ class LoggerTransport {
     );
 
     try {
-      for await (const receipt of this.wrappedTransport.sendMany(observedMessages, options)) {
+      const sendOptions = this.withRetryLogging(options, undefined, 'sendMany');
+      for await (const receipt of this.wrappedTransport.sendMany(observedMessages, sendOptions)) {
         const current = pending.dequeue();
         completedCount++;
         this.logReceipt(receipt, current, 'sendMany');
@@ -134,7 +135,10 @@ class LoggerTransport {
       const receipt =
         this.wrappedTransport == null
           ? this.createSyntheticReceipt()
-          : await this.wrappedTransport.send(message, options);
+          : await this.wrappedTransport.send(
+              message,
+              this.withRetryLogging(options, message, operation),
+            );
       this.logReceipt(receipt, { message, startedAt }, operation);
       return receipt;
     } catch (error) {
@@ -151,6 +155,37 @@ class LoggerTransport {
       onConsume();
       yield message;
     }
+  }
+
+  /**
+   * The options passed on to the wrapped transport: its retries are logged,
+   * and still reach the caller's `onRetry`.
+   */
+  withRetryLogging(options, message, operation) {
+    const onRetry = options?.onRetry;
+    return {
+      ...options,
+      onRetry: (event) => {
+        this.logRetry(event, message, operation);
+        onRetry?.(event);
+      },
+    };
+  }
+
+  logRetry(event, message, operation) {
+    const errorMessage = describe(event.error);
+    const statusCode = event.error?.statusCode;
+    this.log(this.config.levels.retrying, 'Retrying email.', {
+      ...(message == null ? {} : this.getMessageProperties(message)),
+      event: 'email.retrying',
+      operation,
+      transportId: this.id,
+      attempt: event.attempt,
+      delayMilliseconds: event.delayMilliseconds,
+      errorMessage:
+        this.config.recordMessage === false ? redactAddresses(errorMessage) : errorMessage,
+      ...(statusCode == null ? {} : { statusCode }),
+    });
   }
 
   createSyntheticReceipt() {

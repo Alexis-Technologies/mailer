@@ -35,6 +35,9 @@ fixed ones below.
 - **`onRetry` in the options of a send:** the HTTP providers and `./retry` call it before each
   retry with the attempt, the wait and the error, and the decorators pass it on, so one callback
   hears every level (not yet from `./jmap`).
+- **`./logger` logs retries** as `email.retrying` events, at the new level `levels.retrying`
+  (`warn` by default), with the attempt, the wait, the redacted error text and its status code.
+  With a wrapped transport, the logger needs a method for that level.
 - **Documentation** for every subpath, adapted from upyo's guides.
 - **Package scaffold** set up like the other Alexis libraries: plain CommonJS with no build step,
   a hand-written `index.d.ts`, a closed `exports` map, Node.js 22 or newer, and zero runtime

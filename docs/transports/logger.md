@@ -89,6 +89,13 @@ to disposable wrapped transports. Completion logs are emitted as callers consume
 receipts. If a caller stops reading a batch early, the wrapped iterator is closed
 without being drained so the logging layer does not start additional delivery work.
 
+The retries of the wrapped transport, those an HTTP provider makes on its own and
+those of a `./retry` inside the logger transport, are logged as `email.retrying`
+events, with the attempt that failed, the wait in milliseconds, the text of the
+error (its addresses replaced by `[REDACTED]` unless the message is recorded)
+and its `statusCode` when it has one. They come from `onRetry` of the send
+options, which still reaches a callback of your own.
+
 The logger transport can be nested with retry, pool, and OpenTelemetry transports.
 The outer decorator observes the complete operation performed by the inner
 transport, so choose the order according to which retries or failovers should
@@ -115,9 +122,11 @@ const transport = new LoggerTransport({
 - `sending`: Level for `email.sending` events. Defaults to `"debug"`.
 - `sent`: Level for `email.sent` events. Defaults to `"info"`.
 - `failed`: Level for failed receipts and thrown errors. Defaults to `"error"`.
+- `retrying`: Level for `email.retrying` events. Defaults to `"warn"`.
 
-The transport checks when it is made that the logger has a method for each of the
-three levels, and throws a `TypeError` otherwise.
+The transport checks when it is made that the logger has a method for each of these
+levels, that of `retrying` only when it wraps a transport, and throws a
+`TypeError` otherwise.
 
 Every event includes the operation, transport id, recipient counts, attachment
 count, and priority. Completion events additionally include duration and receipt or

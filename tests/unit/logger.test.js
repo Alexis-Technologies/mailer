@@ -85,6 +85,7 @@ test('Logger: unless the message is recorded, a failure is logged without addres
     const logger = {
       debug: () => {},
       info: () => {},
+      warn: () => {},
       error: (properties) => calls.push(properties),
     };
     await new LoggerTransport({ logger, transport, recordMessage }).send(message());
@@ -98,4 +99,54 @@ test('Logger: unless the message is recorded, a failure is logged without addres
       assert.strictEqual(calls[0].errors[0].category, 'rejected');
     }
   }
+});
+
+test('Logger: a retry of the wrapped transport is logged, and still reaches onRetry', async () => {
+  const calls = [];
+  const logger = {};
+  for (const level of ['debug', 'info', 'warn', 'error']) {
+    logger[level] = (properties, text) => calls.push({ level, text, properties });
+  }
+  const busy = Object.assign(new Error('Mailbox of bob@example.com is busy'), { statusCode: 503 });
+  const base = {
+    id: 'base',
+    send: async (_message, options) => {
+      options.onRetry({ attempt: 1, delayMilliseconds: 250, error: busy });
+      return { successful: true, messageId: 'm1' };
+    },
+    async *sendMany(messages, options) {
+      for await (const sent of messages) yield await base.send(sent, options);
+    },
+  };
+  const heard = [];
+  const transport = new LoggerTransport({ transport: base, logger });
+  await transport.send(message(), { onRetry: (event) => heard.push(event.attempt) });
+  for await (const receipt of transport.sendMany([message()])) {
+    assert.strictEqual(receipt.successful, true);
+  }
+
+  assert.deepStrictEqual(heard, [1]);
+  const retries = calls.filter((call) => call.properties.event === 'email.retrying');
+  assert.strictEqual(retries.length, 2);
+  assert.strictEqual(retries[0].level, 'warn');
+  assert.strictEqual(retries[0].text, 'Retrying email.');
+  assert.strictEqual(retries[0].properties.operation, 'send');
+  assert.strictEqual(retries[0].properties.recipientCount, 1);
+  assert.strictEqual(retries[1].properties.operation, 'sendMany');
+  assert.strictEqual(retries[1].properties.recipientCount, undefined);
+  for (const retry of retries) {
+    assert.strictEqual(retry.properties.attempt, 1);
+    assert.strictEqual(retry.properties.delayMilliseconds, 250);
+    assert.strictEqual(retry.properties.statusCode, 503);
+    assert.strictEqual(retry.properties.errorMessage, 'Error: Mailbox of [REDACTED] is busy');
+  }
+
+  const minimal = methods('debug', 'info', 'error');
+  assert.throws(() => new LoggerTransport({ transport: base, logger: minimal }), {
+    message: 'Expected the logger to have a warn() method for levels.retrying.',
+  });
+  assert.strictEqual(
+    new LoggerTransport({ transport: base, logger: minimal, levels: { retrying: 'info' } }).id,
+    'base',
+  );
 });
