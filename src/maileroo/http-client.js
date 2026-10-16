@@ -104,7 +104,7 @@ class MailerooHttpClient {
         ),
       createTimeoutError: () => new MailerooTimeoutError(this.config.timeout),
       isRetryable: (error) => !(error instanceof MailerooApiError) || isRetryable(error),
-      retryDelayMs: calculateRetryDelay,
+      retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
     });
   }
@@ -140,14 +140,6 @@ const withAttempts = (error, attempts) => {
 
 const isRetryable = (error) => {
   return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
-};
-
-const calculateRetryDelay = (attempt, error) => {
-  const backoffDelay = jitteredDelayMs(attempt);
-  if (error instanceof MailerooApiError) {
-    return Math.max(backoffDelay, error.retryAfterMilliseconds ?? 0);
-  }
-  return backoffDelay;
 };
 
 const parseErrorMessage = (text, statusCode) => {

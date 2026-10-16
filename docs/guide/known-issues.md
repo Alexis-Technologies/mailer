@@ -25,7 +25,6 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
 - Basic authentication in JMAP and Mailgun fails on credentials outside Latin-1.
 - Mailgun sends an inline attachment under its file name rather than its `contentId`, so a
   `cid:` in the HTML does not match it.
-- SES, Resend, SendGrid, Mailgun and Plunk parse `Retry-After` but do not wait for it.
 - Resend's `Idempotency-Key` comes from `Math.random`.
 - SES: custom and threading headers are not sent.
 - Plunk: an attachment that cannot be read is left out with a `console.warn`.

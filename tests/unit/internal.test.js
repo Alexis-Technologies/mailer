@@ -169,3 +169,16 @@ test('Internal: a timeout is a number of milliseconds or none, retries a whole n
     assert.throws(() => checkRequestOptions(30_000, retries), RangeError);
   }
 });
+
+test('Internal: a Retry-After is waited for, and not when it is longer than half a minute', async () => {
+  const busy = (retryAfterMilliseconds) =>
+    Object.assign(new Error('Busy'), { retryAfterMilliseconds });
+  const soon = scripted([busy(1500), new Response('ok')]);
+  assert.strictEqual(await requestWithRetry(soon.request), 'ok');
+  assert.deepStrictEqual(soon.delays, [1500]);
+
+  const later = scripted([busy(60_000), new Response('ok')]);
+  await assert.rejects(requestWithRetry(later.request), { message: 'Busy', attempts: 1 });
+  assert.strictEqual(later.sends(), 1);
+  assert.deepStrictEqual(later.delays, []);
+});

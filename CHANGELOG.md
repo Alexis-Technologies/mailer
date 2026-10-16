@@ -121,6 +121,11 @@ fixed ones below.
   with a `RangeError` when the transport is made.
 - **`parseRetryAfter` reads a delay longer than a day as a day** (an upstream bug): a value such as
   `99999999999` meant about 3,170 years.
+- **Every HTTP provider waits for `Retry-After`, up to 30 seconds** (known upstream bug 9):
+  `./ses`, `./resend`, `./sendgrid`, `./mailgun`, `./plunk`, `./lettermint` and `./jmap` parsed it
+  and retried after their own backoff anyway, while `./mailtrap` and `./maileroo` waited for it
+  however long it was. A longer one is no longer waited for within the send: the failure is
+  returned at once with its `retryAfterMilliseconds`.
 
 - **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
   (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at

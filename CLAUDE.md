@@ -136,8 +136,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
 8. otel: `_active_sends` is not decremented after `sendMany` and drifts under sampling;
    `durationBuckets` and `auto` are ignored; `recordRetry` is never called; `sendMany` buffers
    its whole input; `defaultErrorClassifier` matches `"auth"` as a substring.
-9. ses, resend, sendgrid, mailgun and plunk parse `Retry-After` but do not wait for it (the
-   sleep of resend and plunk that ignored the `AbortSignal` is fixed, see 25).
+9. (fixed, see 25 and 30) resend and plunk slept between retries without the `AbortSignal`;
+   ses, resend, sendgrid, mailgun and plunk parsed `Retry-After` but did not wait for it.
 10. ses: custom and threading headers are not sent; `convertMessagesToBulk` is dead code.
 11. resend: the `Idempotency-Key` comes from `Math.random`.
 12. `console.warn` in mime (DKIM `send-unsigned`) and plunk instead of `process.emitWarning` or
@@ -209,6 +209,10 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     not a non-negative number, or retries that are not a whole number, when the config is made.
 29. core: `parseRetryAfter` had no upper bound (`99999999999` gave about 3,170 years); a delay
     longer than a day is read as a day.
+30. every HTTP provider and jmap (known bug 9): `Retry-After` was parsed and ignored by seven
+    clients, and waited for without a bound by mailtrap and maileroo. `requestWithRetry` waits
+    at least `retryAfterMilliseconds` between attempts, and when it is over 30 seconds throws
+    the failure with it instead, for the caller or a queue to schedule.
 
 ## Repository layout
 

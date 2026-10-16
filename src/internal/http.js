@@ -84,6 +84,10 @@ const checkRequestOptions = (timeoutMs, retries) => {
   }
 };
 
+// The longest Retry-After a send waits for between two attempts; beyond it the
+// failure is thrown with its delay, for the caller or a queue to schedule.
+const MAX_RETRY_AFTER_WAIT_MS = 30_000;
+
 // The deadline of one attempt, combined with the caller's signal.  A timeout
 // of 0 or Infinity sets none: setTimeout() would fire at once for either.
 const startDeadline = (timeoutMs, signal) => {
@@ -126,7 +130,9 @@ const startDeadline = (timeoutMs, signal) => {
  *   thrown as it is rather than as of unknown delivery), `isIdempotent`,
  *   `sleep`.
  * The deadline of an attempt lasts until its response is read, body
- * included, so a body that never ends cannot hold a send.
+ * included, so a body that never ends cannot hold a send.  Between attempts
+ * it waits at least the failure's `retryAfterMilliseconds`, the server's
+ * `Retry-After`, and does not retry when that is longer than 30 seconds.
  * @returns What `read` returns.
  * @internal
  */
@@ -158,8 +164,13 @@ const requestWithRetry = async (request) => {
       throw markDeliveryUnknown(accepted);
     }
     if (!request.isRetryable(failure)) throw failure;
-    if (attempt >= request.retries) throw request.finalError?.(failure, attempt + 1) ?? failure;
-    await wait(request.retryDelayMs(attempt, failure), signal);
+    const retryAfterMs = Number.isFinite(failure.retryAfterMilliseconds)
+      ? failure.retryAfterMilliseconds
+      : 0;
+    if (attempt >= request.retries || retryAfterMs > MAX_RETRY_AFTER_WAIT_MS) {
+      throw request.finalError?.(failure, attempt + 1) ?? failure;
+    }
+    await wait(Math.max(request.retryDelayMs(attempt, failure), retryAfterMs), signal);
   }
 };
 

@@ -162,7 +162,7 @@ class MailtrapHttpClient {
       // A 2xx response means Mailtrap may already have sent the message.
       wrapAccepted: (error, attempts) => new MailtrapResponseError(error, attempts),
       isRetryable: (error) => !(error instanceof MailtrapApiError) || isRetryable(error),
-      retryDelayMs: calculateRetryDelay,
+      retryDelayMs: jitteredDelayMs,
       finalError: withAttempts,
     });
   }
@@ -189,14 +189,6 @@ class MailtrapHttpClient {
 
 const isRetryable = (error) => {
   return error.statusCode === 408 || error.statusCode === 429 || error.statusCode >= 500;
-};
-
-const calculateRetryDelay = (attempt, error) => {
-  const backoffDelay = jitteredDelayMs(attempt);
-  if (error instanceof MailtrapApiError) {
-    return Math.max(backoffDelay, error.retryAfterMilliseconds ?? 0);
-  }
-  return backoffDelay;
 };
 
 const withAttempts = (error, attempts) => {

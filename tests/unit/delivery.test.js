@@ -133,3 +133,21 @@ test('Delivery: a timeout of 0 or Infinity sets none, a bad one is refused', asy
     assert.throws(() => create({ retries: 1.5 }), RangeError, name);
   }
 });
+
+test(
+  'Delivery: a Retry-After of two minutes is not waited for but returned',
+  { timeout: 5000 },
+  async (t) => {
+    for (const [name, , create] of providers) {
+      let requests = 0;
+      t.mock.method(globalThis, 'fetch', async () => {
+        requests++;
+        return new Response('busy', { status: 503, headers: { 'Retry-After': '120' } });
+      });
+      const receipt = await create().send(message());
+      t.mock.restoreAll();
+      assert.strictEqual(requests, 1, name);
+      assert.strictEqual(receipt.errors[0].retryAfterMilliseconds, 120_000, name);
+    }
+  },
+);
