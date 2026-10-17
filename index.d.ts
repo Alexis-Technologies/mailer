@@ -1346,7 +1346,18 @@ export interface DeliveryEvent<TProviderId extends string = string> {
    * event finds the send it belongs to.
    */
   readonly messageId?: string;
-  /** The recipient, when the event names one. */
+  /**
+   * The Message-ID of the message as it was sent, when the event carries it
+   * (SES, SendGrid, Mailgun, and the providers whose events carry the header
+   * fields of the email).  A receipt of unknown delivery has no `messageId`
+   * of the provider: give the message a `messageId`, or pass it through
+   * `./pool` or `./retry`, which pin one, and find its events by this.
+   */
+  readonly rfcMessageId?: string;
+  /**
+   * The recipient, when the event names one, its domain in lower case so
+   * that an address reads the same in the events of every provider.
+   */
   readonly recipient?: string;
   /** When it happened, as the provider tells it. */
   readonly occurredAt?: Date;

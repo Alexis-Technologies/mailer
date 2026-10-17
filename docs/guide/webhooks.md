@@ -70,7 +70,8 @@ as many events.
 | `type` | `accepted`, `delivered`, `deferred`, `bounced`, `rejected`, `complained`, `unsubscribed`, `opened`, `clicked` or `unknown`. |
 | `id` | The id of the event, the same each time the provider sends it again. |
 | `messageId` | The provider's id of the message, the `messageId` of its receipt. |
-| `recipient` | The recipient, when the event names one. |
+| `rfcMessageId` | The Message-ID the message was sent with, when the event carries it (SES, SendGrid, Mailgun, and the providers whose events carry the header fields of the email). |
+| `recipient` | The recipient, when the event names one, its domain in lower case. |
 | `occurredAt` | When it happened. |
 | `bounce` | For a bounce: `kind` (`hard`, `soft` or `undetermined`), `code` and `diagnostic`. |
 | `reason` | Why, for a rejection, a deferral or a bounce. |
@@ -81,6 +82,11 @@ as many events.
 `rejected` is a message the provider never attempted, such as one to a
 suppressed address; `deferred` one it keeps trying; `unknown` an event the model
 has no name for, kept with its `raw` record.
+
+A receipt of unknown delivery (`deliveryUnknown`) has no `messageId` of the
+provider to find its events by. Give the message a `messageId` of its own, or
+send it through `./pool` or `./retry`, which pin one, and find its events by
+`rfcMessageId`, where the provider tells it.
 
 ## Time and replays
 

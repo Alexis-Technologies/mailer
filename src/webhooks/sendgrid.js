@@ -124,6 +124,8 @@ const eventOf = (record, index, timestamp) => {
     type,
     id: stringOf(record.sg_event_id) ?? `${timestamp}:${index}`,
     messageId: messageIdOf(record),
+    // The Message-ID of the message as it was sent.
+    rfcMessageId: stringOf(record['smtp-id']),
     recipient: stringOf(record.email),
     occurredAt: dateOf(record.timestamp),
     bounce,

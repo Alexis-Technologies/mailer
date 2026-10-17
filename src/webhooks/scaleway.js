@@ -4,7 +4,13 @@
 // sently and unemail have no Scaleway webhook.
 
 const { X509Certificate } = require('node:crypto');
-const { createEvent, dateOf, metadataFromHeaders, stringOf } = require('./request.js');
+const {
+  createEvent,
+  dateOf,
+  headerValueOf,
+  metadataFromHeaders,
+  stringOf,
+} = require('./request.js');
 const { certificateError, createSnsVerifier, isHttpsUrlOf } = require('./sns.js');
 
 const DEFAULT_TOLERANCE_MS = 60 * 60 * 1000;
@@ -51,6 +57,7 @@ const eventOf = (record, snsMessageId) => {
     type,
     id: stringOf(record.id) ?? snsMessageId,
     messageId: stringOf(record.email_id),
+    rfcMessageId: headerValueOf(record.email_headers, 'message-id'),
     recipient: stringOf(record.email_to),
     occurredAt: dateOf(record.created_at),
     bounce,

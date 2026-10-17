@@ -63,6 +63,8 @@ const eventOf = (data, token) => {
     type: failure?.type ?? TYPES.get(data.event) ?? 'unknown',
     id: stringOf(data.id) ?? token,
     messageId: messageIdOf(data.message),
+    // Mailgun's id of a message is its Message-ID.
+    rfcMessageId: messageIdOf(data.message),
     recipient: stringOf(data.recipient),
     occurredAt: dateOf(data.timestamp),
     bounce: failure?.bounce,

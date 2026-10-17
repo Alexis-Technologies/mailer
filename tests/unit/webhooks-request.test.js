@@ -293,3 +293,46 @@ test('Webhooks: a refusal says what to answer, a certificate not read asks for a
   await delivery.release();
   assert.strictEqual(delivery.events.length, 1);
 });
+
+test('Webhooks: an event carries the Message-ID it was sent with, and its recipient by domain', async () => {
+  // Before: an event had only the provider's id of the message, which a
+  // receipt of unknown delivery lacks, and the recipient as each provider
+  // wrote it.
+  const { createEvent, headerValueOf } = require('../../src/webhooks/request.js');
+  const event = createEvent({
+    provider: 'x',
+    type: 'delivered',
+    id: '1',
+    rfcMessageId: '<m-1@example.com>',
+    recipient: 'Bob.Smith@Example.COM',
+  });
+  assert.strictEqual(event.rfcMessageId, '<m-1@example.com>');
+  assert.strictEqual(event.recipient, 'Bob.Smith@example.com');
+  assert.strictEqual(headerValueOf([{ key: 'Message-ID', value: '<a@b>' }], 'message-id'), '<a@b>');
+  assert.strictEqual(
+    headerValueOf([{ name: 'message-id', value: '<c@d>' }], 'Message-ID'),
+    '<c@d>',
+  );
+  assert.strictEqual(headerValueOf({ 'Message-Id': '<e@f>' }, 'message-id'), '<e@f>');
+  assert.strictEqual(headerValueOf([{ key: 'Subject', value: 's' }], 'message-id'), undefined);
+  assert.strictEqual(headerValueOf('text', 'message-id'), undefined);
+  const served = sns.certificateFetch();
+  const ses = createSesWebhookVerifier({
+    topicArns: [sns.TOPIC],
+    fetch: served.fetch,
+    now: () => Date.parse('2027-01-01T12:00:30Z'),
+    replayStore: null,
+  });
+  const message = sns.notification({
+    eventType: 'Delivery',
+    mail: {
+      messageId: 'ses-1',
+      destination: ['Carol@Example.org'],
+      commonHeaders: { messageId: '<sent-1@example.com>' },
+    },
+    delivery: { recipients: ['Carol@Example.org'] },
+  });
+  const { events } = await ses.verify({ body: JSON.stringify(message) });
+  assert.strictEqual(events[0].rfcMessageId, '<sent-1@example.com>');
+  assert.strictEqual(events[0].recipient, 'Carol@example.org');
+});

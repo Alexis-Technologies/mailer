@@ -435,7 +435,24 @@ const dateOf = (value) => {
   return date !== undefined && Number.isFinite(date.getTime()) ? date : undefined;
 };
 
-const OPTIONAL_FIELDS = ['messageId', 'recipient', 'occurredAt', 'bounce', 'reason', 'url'];
+const OPTIONAL_FIELDS = [
+  'messageId',
+  'rfcMessageId',
+  'recipient',
+  'occurredAt',
+  'bounce',
+  'reason',
+  'url',
+];
+
+// An address with its domain in lower case, as a domain has no case: the
+// same recipient reads the same in the events of every provider, for a list
+// of suppressed addresses to be kept by it.  The local part is kept as it is.
+const recipientOf = (value) => {
+  if (typeof value !== 'string') return value;
+  const at = value.lastIndexOf('@');
+  return at < 0 ? value : value.slice(0, at + 1) + value.slice(at + 1).toLowerCase();
+};
 
 /**
  * An event, its optional fields left out when absent.
@@ -445,7 +462,8 @@ const OPTIONAL_FIELDS = ['messageId', 'recipient', 'occurredAt', 'bounce', 'reas
 const createEvent = (fields) => {
   const event = { provider: fields.provider, type: fields.type, id: fields.id };
   for (const name of OPTIONAL_FIELDS) {
-    if (fields[name] !== undefined && fields[name] !== '') event[name] = fields[name];
+    const value = name === 'recipient' ? recipientOf(fields[name]) : fields[name];
+    if (value !== undefined && value !== '') event[name] = value;
   }
   event.tags = fields.tags ?? [];
   event.metadata = fields.metadata ?? Object.create(null);
@@ -573,6 +591,28 @@ const jsonRecordOf = (text) => {
   }
 };
 
+/**
+ * The value of a header field among the headers an event carries, its name
+ * in any case: a record, or a list of `{ name | key, value }`.
+ *
+ * @internal
+ */
+const headerValueOf = (headers, name) => {
+  const wanted = name.toLowerCase();
+  if (Array.isArray(headers)) {
+    for (const header of headers) {
+      const key = header?.name ?? header?.key;
+      if (typeof key === 'string' && key.toLowerCase() === wanted) return stringOf(header.value);
+    }
+    return undefined;
+  }
+  if (!isRecord(headers)) return undefined;
+  for (const key in headers) {
+    if (key.toLowerCase() === wanted) return stringOf(headers[key]);
+  }
+  return undefined;
+};
+
 const METADATA_HEADER = /^x-metadata-(.+)$/i;
 
 /**
@@ -666,6 +706,7 @@ module.exports = {
   deliveryOf,
   equalBytes,
   headerOf,
+  headerValueOf,
   hmacOf,
   isRecord,
   jsonRecordOf,

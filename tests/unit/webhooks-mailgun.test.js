@@ -61,6 +61,7 @@ test('Webhooks Mailgun: a signed event, its message id that of the receipt', asy
       type: 'delivered',
       id: 'mg-event-1',
       messageId: '<20270115.1@mg.example.com>',
+      rfcMessageId: '<20270115.1@mg.example.com>',
       recipient: 'bob@example.com',
       occurredAt: new Date(1_799_999_990_500),
       tags: ['orders'],

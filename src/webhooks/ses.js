@@ -171,6 +171,7 @@ const eventsOf = (record, snsMessageId) => {
         type: described.type,
         id: `${snsMessageId}:${index}`,
         messageId: stringOf(record.mail?.messageId),
+        rfcMessageId: stringOf(record.mail?.commonHeaders?.messageId),
         recipient: recipient.recipient,
         occurredAt: dateOf(described.at ?? record.mail?.timestamp),
         bounce: recipient.bounce,
