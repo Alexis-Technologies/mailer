@@ -9,7 +9,7 @@ const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
-const { certificateFailure } = require('../internal/refusal.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 
 /**
  * Plunk transport implementation for sending emails via Plunk API.
@@ -226,8 +226,8 @@ class PlunkTransport {
 }
 
 const createPlunkFailure = (message, error) => {
-  const certificate = certificateFailure('plunk', message, error);
-  if (certificate !== undefined) return certificate;
+  const known = refusalFailure('plunk', error) ?? certificateFailure('plunk', message, error);
+  if (known !== undefined) return known;
   if (error instanceof PlunkApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

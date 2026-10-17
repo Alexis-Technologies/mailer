@@ -60,7 +60,7 @@ if (receipt.successful) console.log(receipt.messageId); // the message_id
   lists, and answers another with a 400.
 - Cloudflare has no tags or per-message tracking, which are not sent, as over
   SMTP; it cannot schedule a message, so `scheduledAt` is refused as
-  `validation`.
+  `unsupported`.
 - A message has at most 50 recipients across `to`, `cc` and `bcc`; more are
   refused before the request.
 
@@ -77,7 +77,7 @@ When none was accepted it fails as `rejected`, not retryable. A 200 with
 
 `sendRaw()` sends a ready MIME message through `send_raw`, routed by its
 envelope. The API takes it as a JSON string, so its bytes must be UTF-8; others,
-and an envelope without a sender, are refused as `validation` before any
+and an envelope without a sender, are refused as `unsupported` before any
 request.
 
 ## Batches

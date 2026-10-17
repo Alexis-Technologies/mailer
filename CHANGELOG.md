@@ -36,11 +36,13 @@ additive but the defaults listed below.
   difference.
 - **The default DKIM `h=` signs `List-Unsubscribe` and `List-Unsubscribe-Post`** too, as
   RFC 8058 asks.
-- **Failures are classified more precisely:** a message a provider's limits refuse before any
-  request is a non-retryable `validation` failure, where it was `unknown`; and a TLS certificate
-  refused in the handshake is a non-retryable `configuration` failure at the first attempt, where
-  SMTP reported it as `unknown` and the HTTP transports retried it and reported a retryable
-  `network` failure (`deliveryUnknown` on Deno).
+- **Failures are classified more precisely:** a message a transport cannot send as it is (a
+  provider's limit, a field it cannot express, `scheduledAt` where nothing schedules, a message
+  over the SMTP server's `SIZE`) is a non-retryable failure of the new category `unsupported`,
+  where it was `unknown`, `validation` or `rejected`, and `./pool` fails over with it to a
+  transport that can send it; and a TLS certificate refused in the handshake is a non-retryable
+  `configuration` failure at the first attempt, where SMTP reported it as `unknown` and the HTTP
+  transports retried it and reported a retryable `network` failure (`deliveryUnknown` on Deno).
 - **On Deno, give the HTTP transports a `fetch` that keeps no idle connection**
   (`Deno.createHttpClient({ poolMaxIdlePerHost: 0 })`): Deno's own sends a request again when a
   reused connection closes before its answer. See
@@ -57,8 +59,8 @@ additive but the defaults listed below.
   whitespace, controls or angle brackets is refused, and one-click needs an `https` URL.
 - **`scheduledAt`, `tracking` and `metadata` on the message,** from unemail's model: when the
   provider should deliver it, open and click tracking for this message, and values the provider
-  returns in its events. A transport that cannot schedule refuses the message with a
-  `validation` receipt rather than sending it at once. Resend, SendGrid, Mailgun, Maileroo,
+  returns in its events. A transport that cannot schedule refuses the message with an
+  `unsupported` receipt rather than sending it at once, and `./pool` fails over with it. Resend, SendGrid, Mailgun, Maileroo,
   Brevo, MailerSend, SparkPost and SMTP2GO schedule; ten providers take `tracking`, seventeen
   `metadata` (each page says how).
 - **`./attachments`:** `fromPath`, `fromUrl`, `fromDataUri`, `fromStream` and `inlineDataUrls`,
@@ -149,7 +151,8 @@ additive but the defaults listed below.
   for an untrusted CA. It is now a non-retryable `configuration` failure at the first attempt, on
   every transport and runtime.
 - **A message refused by a provider's limits before any request was `unknown`;** it is a
-  non-retryable `validation` failure.
+  non-retryable `unsupported` failure, which `./pool` fails over with, as a message no transport
+  could send (`validation`, `rejected`) stops it.
 - **A pooled SMTP connection was reused for any number of messages,** while servers limit the
   messages of one connection (`maxMessages`, above).
 

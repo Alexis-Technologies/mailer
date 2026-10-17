@@ -3,17 +3,19 @@
 // take rather than dropping it (src/core/define.ts); a message scheduled for
 // tomorrow and sent now is the worse of the two failures.
 
+const { RefusalError } = require('./refusal.js');
+
 /**
- * The reason a transport gives for a message it cannot schedule.  "Invalid"
- * makes the receipt a non-retryable validation failure, so `./pool` does not
- * fail over with it and `./retry` does not retry it.
+ * The reason a transport gives for a message it cannot schedule.  Its receipt
+ * is a non-retryable `unsupported` failure, so `./retry` does not retry it and
+ * `./pool` fails over to a transport that can schedule.
  *
  * @param provider The transport that refuses it.
  * @returns The error message.
  * @internal
  */
 const schedulingRefusal = (provider) =>
-  `Invalid scheduledAt: ${provider} cannot schedule a message, so it is refused rather than sent at once.`;
+  `Unsupported scheduledAt: ${provider} cannot schedule a message, so it is refused rather than sent at once.`;
 
 /**
  * Refuses a message that asks for a later delivery its transport cannot
@@ -21,11 +23,11 @@ const schedulingRefusal = (provider) =>
  *
  * @param message The message.
  * @param provider The transport that would send it.
- * @throws {TypeError} If the message carries `scheduledAt`.
+ * @throws {RefusalError} If the message carries `scheduledAt`.
  * @internal
  */
 const refuseScheduledAt = (message, provider) => {
-  if (message.scheduledAt != null) throw new TypeError(schedulingRefusal(provider));
+  if (message.scheduledAt != null) throw new RefusalError(schedulingRefusal(provider));
 };
 
 module.exports = { refuseScheduledAt, schedulingRefusal };

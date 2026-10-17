@@ -77,7 +77,7 @@ spent sending limit a `rate-limit` one.
 
 `sendRaw()` sends a ready MIME message as `email_rfc822`, to the recipients of its
 envelope. The API takes it as a JSON string, so its bytes must be UTF-8; others
-are refused as `validation`, before any request.
+are refused as `unsupported`, before any request.
 
 ```js
 const receipt = await transport.sendRaw({

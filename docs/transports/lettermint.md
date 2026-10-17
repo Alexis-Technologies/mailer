@@ -101,7 +101,7 @@ sending the message.
 A message's own `metadata` goes in `metadata` too, its keys over those of the
 transport, and its `tracking` sets `track_opens` and `track_clicks` over the
 transport's `settings`. Lettermint cannot schedule a message, so `scheduledAt`
-is refused as `validation`.
+is refused as `unsupported`, as is a second tag.
 
 ## Batch sending
 

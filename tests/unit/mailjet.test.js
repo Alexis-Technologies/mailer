@@ -185,10 +185,13 @@ test('Mailjet: what Mailjet sets itself, and its limits, are refused before a re
     [message({ headers: { 'X-Mailer': 'Mine 1.0' } }), /sets X-Mailer itself/],
     [message({ subject: 'x'.repeat(256) }), /subject of at most 255/],
     [message({ replyTo: ['a@example.com', 'b@example.com'] }), /one reply-to/],
-    [message({ scheduledAt: new Date() }), /Invalid scheduledAt: mailjet/],
+    [message({ scheduledAt: new Date() }), /Unsupported scheduledAt: mailjet/],
   ];
   for (const [refused, error] of refusals) {
-    assert.match((await transport().send(refused)).errorMessages[0], error);
+    const receipt = await transport().send(refused);
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
   }
   assert.strictEqual(requests.length, 0);
 });

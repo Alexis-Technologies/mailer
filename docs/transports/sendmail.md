@@ -69,7 +69,7 @@ wrote to stderr (its first 4 KiB, addresses replaced by `[REDACTED]`):
 
 An abort of the `signal` kills the process.  A message whose content cannot be
 read (an attachment that fails) kills it with SIGINT, so that no part of it is
-delivered.  `scheduledAt` is refused, as sendmail cannot schedule.
+delivered.  `scheduledAt` is refused as `unsupported`, as sendmail cannot schedule.
 
 ## Raw messages and verification
 

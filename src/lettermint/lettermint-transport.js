@@ -11,7 +11,7 @@ const {
 const { convertMessage, generateIdempotencyKey } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
-const { certificateFailure } = require('../internal/refusal.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -245,8 +245,9 @@ const responseToReceipt = (response) => {
 };
 
 const createLettermintFailure = (message, error) => {
-  const certificate = certificateFailure('lettermint', message, error);
-  if (certificate !== undefined) return certificate;
+  const known =
+    refusalFailure('lettermint', error) ?? certificateFailure('lettermint', message, error);
+  if (known !== undefined) return known;
   if (error instanceof LettermintApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

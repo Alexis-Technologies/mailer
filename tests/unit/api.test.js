@@ -134,14 +134,15 @@ test('API: the receipt of a failure carries what the error says', () => {
   assert.strictEqual(checkCredential('k', 'apiKey', 'DemoTransport'), 'k');
 });
 
-test('API: a refusal of the converter is a non-retryable validation failure', () => {
+test('API: a refusal of the converter is a non-retryable unsupported failure', () => {
   const refused = providerFailure('x', new RefusalError('X takes at most 5 tags.'));
-  assert.strictEqual(refused.errors[0].category, 'validation');
+  assert.strictEqual(refused.errors[0].category, 'unsupported');
+  assert.strictEqual(refused.errors[0].code, 'unsupported');
   assert.strictEqual(refused.retryable, false);
   assert.strictEqual(refused.errorMessages[0], 'X takes at most 5 tags.');
   const other = providerFailure('x', new Error('boom'));
-  assert.notStrictEqual(other.errors[0].category, 'validation');
+  assert.notStrictEqual(other.errors[0].category, 'unsupported');
   // Another RangeError, such as a body over its limit, keeps its own receipt.
   const range = providerFailure('x', new RangeError('The body is over 4 MiB.'));
-  assert.notStrictEqual(range.errors[0].category, 'validation');
+  assert.notStrictEqual(range.errors[0].category, 'unsupported');
 });

@@ -209,9 +209,13 @@ test('Postmark: 500 a batch, a failed request fails its batch, a missing answer 
 test('Postmark: a scheduled message and two tags are refused before any request', async (t) => {
   const requests = stubFetch(t, () => ok());
   const scheduled = await transport().send(message({ scheduledAt: new Date() }));
-  assert.match(scheduled.errorMessages[0], /Invalid scheduledAt: postmark/);
+  assert.match(scheduled.errorMessages[0], /Unsupported scheduledAt: postmark/);
   const tagged = await transport().send(message({ tags: ['a', 'b'] }));
   assert.match(tagged.errorMessages[0], /one tag per message/);
+  for (const receipt of [scheduled, tagged]) {
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
+  }
   assert.strictEqual(requests.length, 0);
 });
 

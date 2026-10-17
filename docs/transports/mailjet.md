@@ -61,8 +61,8 @@ if (receipt.successful) console.log(receipt.messageId); // the MessageUUID
   `List-Id`, `X-Mailer`, `Date` and others are refused before the request, so a
   message with `list.id` cannot go through Mailjet.
 - Mailjet takes one reply-to address, a subject of at most 255 characters and 50
-  recipients a message; it cannot schedule a message.  Each is refused with a
-  failed receipt.
+  recipients a message; it cannot schedule a message.  Each is refused with an
+  `unsupported` receipt, which `./pool` fails over with.
 
 ## Batches and errors
 

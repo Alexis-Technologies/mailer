@@ -6,6 +6,7 @@ const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -37,12 +38,12 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * @param config The resolved Lettermint configuration.
  * @returns JSON object ready for Lettermint API submission.
  * @throws {TypeError} If the message carries an invalid message identifier.
- * @throws {RangeError} If the message has more than one tag.
+ * @throws {RefusalError} If the message has more than one tag, or `scheduledAt`.
  */
 const convertMessage = async (message, config, signal) => {
   refuseScheduledAt(message, 'lettermint');
   if (message.tags.length > 1) {
-    throw new RangeError('Lettermint supports at most one tag per message.');
+    throw new RefusalError('Lettermint supports at most one tag per message.');
   }
 
   const attachments = withCalendarAttachment(message);

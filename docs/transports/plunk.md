@@ -157,8 +157,8 @@ const transport = new PlunkTransport({ apiKey: process.env.PLUNK_API_KEY, concur
 
 ## Scheduling, metadata and tracking
 
-Plunk takes none of the three. A message with `scheduledAt` is refused as a
-`validation` failure rather than sent at once, and its `tracking` and
+Plunk takes none of the three. A message with `scheduledAt` is refused as an
+`unsupported` failure rather than sent at once, and its `tracking` and
 `metadata` are not sent, as over SMTP.
 
 ## Advanced features and reliability

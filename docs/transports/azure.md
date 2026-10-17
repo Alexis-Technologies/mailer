@@ -66,7 +66,7 @@ the environment: pass it, or `endpoint` and `accessKey`, as options.
   resource has on but not the reverse. `tracking` sets it; a message that asks
   for opens without clicks, or the reverse, is refused.
 - Azure has no tags, which are not sent, as over SMTP; it cannot schedule a
-  message, so `scheduledAt` is refused as `validation`.
+  message, so `scheduledAt` is refused as `unsupported`.
 - An inline attachment goes with its Content-ID as `contentId`.
 - A request may be at most 10 MB, its attachments in base64 included; a larger
   one is refused before it is sent.

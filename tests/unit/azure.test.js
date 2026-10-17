@@ -222,7 +222,7 @@ test('Azure: tracking, size and a schedule are refused before a request', async 
   const requests = stubFetch(t, () => accepted());
   const refusals = [
     [message({ tracking: { opens: true, clicks: false } }), /on or off together/],
-    [message({ scheduledAt: new Date(NOW + 1000) }), /Invalid scheduledAt: azure/],
+    [message({ scheduledAt: new Date(NOW + 1000) }), /Unsupported scheduledAt: azure/],
     [
       message({
         attachments: {
@@ -237,7 +237,10 @@ test('Azure: tracking, size and a schedule are refused before a request', async 
     ],
   ];
   for (const [refused, error] of refusals) {
-    assert.match((await transport().send(refused)).errorMessages[0], error);
+    const receipt = await transport().send(refused);
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
   }
   assert.strictEqual(requests.length, 0);
 });

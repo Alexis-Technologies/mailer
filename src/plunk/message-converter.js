@@ -6,6 +6,7 @@ const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const { collectCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 /**
  * Converts a Upyo message to Plunk API format.
@@ -76,7 +77,7 @@ const convertMessage = async (message, _config, signal) => {
   // invitation occupies a slot, going over the limit would silently drop one of
   // the caller's own files, so it is refused instead.
   if (message.calendar != null && sourceAttachments.length > 5) {
-    throw new RangeError(
+    throw new RefusalError(
       'Plunk supports at most five attachments, and a calendar message needs ' +
         'one of them for the invitation.',
     );

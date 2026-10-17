@@ -346,7 +346,7 @@ same name. A key and its value must then be ASCII letters, digits, `_` or `-`,
 fewer than 256 characters, and a key neither `category` nor `priority`; any
 other is refused before the request. Tracking is set by the configuration set,
 so a message's `tracking` is not sent, and SES cannot schedule a message, so
-`scheduledAt` is refused as `validation`.
+`scheduledAt` is refused as `unsupported`.
 
 ## Advanced configuration and reliability
 

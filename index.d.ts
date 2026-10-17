@@ -489,8 +489,9 @@ export interface Message {
   readonly calendar?: CalendarContent;
   /**
    * When the provider should deliver the message.  A transport that cannot
-   * schedule it refuses the message with a non-retryable `validation`
-   * receipt rather than sending it at once.
+   * schedule it refuses the message with a non-retryable `unsupported`
+   * receipt rather than sending it at once, and `./pool` fails over to one
+   * that can.
    */
   readonly scheduledAt?: Date;
   /**
@@ -680,8 +681,8 @@ export interface MessageConstructor {
   /**
    * When the provider should deliver the message.  A transport that cannot
    * schedule it (SMTP, JMAP, and every provider without a scheduling API)
-   * refuses the message with a non-retryable `validation` receipt rather
-   * than sending it at once.
+   * refuses the message with a non-retryable `unsupported` receipt rather
+   * than sending it at once, and `./pool` fails over to one that can.
    */
   readonly scheduledAt?: Date;
   /**
@@ -993,6 +994,13 @@ export declare function comparePriority(a: Priority, b: Priority): number;
 
 /**
  * A machine-readable category for an email delivery failure.
+ *
+ * `validation` and `rejected` say that the message itself was refused: no
+ * transport would take it, so `./pool` stops failing over.  `unsupported`
+ * says that this transport cannot send the message as it is, a field it
+ * cannot express (`scheduledAt`, a second tag) or a limit of its provider
+ * (recipients, attachments): another transport may, so `./pool` fails over
+ * with it.  Neither is retried.
  */
 export type ReceiptErrorCategory =
   | 'auth'
@@ -1001,6 +1009,7 @@ export type ReceiptErrorCategory =
   | 'timeout'
   | 'validation'
   | 'rejected'
+  | 'unsupported'
   | 'server-error'
   | 'service-unavailable'
   | 'configuration'

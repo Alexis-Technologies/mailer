@@ -168,7 +168,8 @@ class PoolTransport {
     const attemptedIndices = new Set();
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
-    // itself was rejected).
+    // itself was rejected).  A message one transport cannot send as it is
+    // (`unsupported`) goes on to the next, which may.
     const failure = {
       errorMessages: [],
       errors: [],
@@ -499,7 +500,8 @@ const isAbortError = (error) => {
 };
 
 // A rejection of the message itself, as opposed to one of the transport
-// (authentication, rate limit, outage), which another transport may not share.
+// (authentication, rate limit, outage) or of what it can express
+// (`unsupported`), which another transport may not share.
 const hasMessageRejection = (errors) => {
   if (errors == null) return false;
   for (const error of errors) {

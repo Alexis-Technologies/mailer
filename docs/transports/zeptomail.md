@@ -62,7 +62,7 @@ if (receipt.successful) console.log(receipt.messageId); // the request_id
 - ZeptoMail takes 500 addresses in each of `to`, `cc` and `bcc`, 60
   attachments and a subject of 500 characters; more are refused before the
   request. It cannot schedule a message, so `scheduledAt` is refused as
-  `validation`.
+  `unsupported`.
 
 ZeptoMail answers 201 with a `request_id`, the receipt's id; an answer without
 one is reported as `deliveryUnknown`. The code in the details of an error says

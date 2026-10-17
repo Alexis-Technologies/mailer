@@ -259,8 +259,8 @@ const message = createMessage({
 
 - `scheduledAt` is when the provider should deliver the message.  A transport
   that cannot schedule it, SMTP and JMAP among them, refuses the message with a
-  non-retryable `validation` receipt rather than sending it at once, so `./pool`
-  does not fail over with it and `./retry` does not retry it.
+  non-retryable `unsupported` receipt rather than sending it at once, so `./pool`
+  fails over to a transport that can schedule and `./retry` does not retry it.
 - `tracking` turns open and click tracking on or off for this message, over the
   configuration of the transport, where the provider takes it per message.
 - `metadata` holds values the provider keeps with the message and returns in its

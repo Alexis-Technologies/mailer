@@ -142,7 +142,7 @@ test('Scaleway: an inline part, a schedule and 2 MB are refused before a request
       }),
       /cannot send an inline attachment/,
     ],
-    [message({ scheduledAt: new Date() }), /Invalid scheduledAt: scaleway/],
+    [message({ scheduledAt: new Date() }), /Unsupported scheduledAt: scaleway/],
     [
       message({
         attachments: {
@@ -157,7 +157,10 @@ test('Scaleway: an inline part, a schedule and 2 MB are refused before a request
     ],
   ];
   for (const [refused, error] of refusals) {
-    assert.match((await transport().send(refused)).errorMessages[0], error);
+    const receipt = await transport().send(refused);
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
   }
   assert.strictEqual(requests.length, 0);
 });

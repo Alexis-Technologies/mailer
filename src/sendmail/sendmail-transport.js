@@ -22,6 +22,7 @@ const {
   RawMessageValidationError,
 } = require('../core/raw-message.js');
 const { createFailedReceipt } = require('../core/receipt.js');
+const { refusalFailure } = require('../internal/refusal.js');
 const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
@@ -52,6 +53,8 @@ const isCallerAbort = (error, signal) =>
   signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
 
 const failureOf = (error) => {
+  const refusal = refusalFailure('sendmail', error);
+  if (refusal !== undefined) return refusal;
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof RawMessageValidationError) {
     return createFailedReceipt(message, { provider: 'sendmail', category: 'validation' });

@@ -57,8 +57,8 @@ if (receipt.successful) console.log(receipt.messageId); // Postmark's MessageID
 - List-* fields, priority and threading go in `Headers`.
 - An inline attachment goes with `cid:` before its Content-ID, as Postmark wants
   it.
-- Postmark cannot schedule a message, so `scheduledAt` is refused with a
-  `validation` receipt, and it has no idempotency key.
+- Postmark cannot schedule a message, so `scheduledAt` is refused with an
+  `unsupported` receipt, as is a second tag, and it has no idempotency key.
 
 ## Errors
 

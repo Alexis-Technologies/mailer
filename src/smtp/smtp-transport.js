@@ -34,6 +34,7 @@ const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 /**
  * SMTP transport implementation for sending emails via SMTP protocol.
@@ -841,8 +842,11 @@ const createSmtpFailure = (message, error) => {
 };
 
 // Failures found before or without a reply of the server, which no retry
-// fixes: the code and category of each, and what the receipt tells of it.
+// fixes: the code and category of each, and what the receipt tells of it.  A
+// message over the server's SIZE, or one it cannot schedule, is `unsupported`:
+// another transport of a pool may send it.
 const LOCAL_FAILURES = [
+  { type: RefusalError, code: 'smtp.unsupported', category: 'unsupported' },
   {
     type: Smtp8BitMimeUnsupportedError,
     code: 'smtp.8bitmime-unsupported',
@@ -860,7 +864,7 @@ const LOCAL_FAILURES = [
   {
     type: SmtpMessageSizeError,
     code: 'smtp.message-size-exceeded',
-    category: 'rejected',
+    category: 'unsupported',
     details: (error) => ({
       actualSize: error.actualSize,
       maximumSize: error.maximumSize.toString(),

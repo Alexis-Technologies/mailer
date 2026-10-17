@@ -11,7 +11,6 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { rawMessageText } = require('../internal/raw.js');
-const { RawMessageValidationError } = require('../core/raw-message.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
 
@@ -103,12 +102,12 @@ const convertMessage = async (message, signal) => {
  *
  * @param raw The envelope and bytes.
  * @returns The request.
- * @throws {RawMessageValidationError} If the envelope has no sender, or the
- * bytes are not UTF-8.
+ * @throws {RefusalError} If the envelope has no sender, or the bytes are not
+ * UTF-8.
  */
 const convertRawMessage = (raw) => {
   if (raw.envelope.from === null) {
-    throw new RawMessageValidationError('Cloudflare needs a sender in the envelope.', 'envelope');
+    throw new RefusalError('Cloudflare needs a sender in the envelope.');
   }
   return {
     from: raw.envelope.from,

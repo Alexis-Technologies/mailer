@@ -57,7 +57,7 @@ if (receipt.successful) console.log(receipt.messageId); // the id of the email
   header fields, List-* and the threading fields.
 - Scaleway has no tags or per-message tracking, which are not sent, as over
   SMTP. It cannot schedule a message, so `scheduledAt` is refused as
-  `validation`.
+  `unsupported`.
 - It has no Content-ID for an attachment, so an inline one is refused rather
   than sent as a file the HTML cannot refer to.
 - A request may be at most 2 MB, its attachments in base64 included; a larger

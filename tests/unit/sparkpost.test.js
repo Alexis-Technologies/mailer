@@ -201,7 +201,7 @@ test('SparkPost: sendRaw sends the message as email_rfc822 to its envelope', asy
     content: new Uint8Array([...new TextEncoder().encode('Subject: x\r\n\r\n'), 0xe9, 13, 10]),
   });
   assert.strictEqual(latin1.successful, false);
-  assert.strictEqual(latin1.errors[0].category, 'validation');
+  assert.strictEqual(latin1.errors[0].category, 'unsupported');
   assert.match(latin1.errorMessages[0], /only as UTF-8/);
   const invalid = await transport().sendRaw({
     envelope: { from: 'shop@example.com', to: [] },

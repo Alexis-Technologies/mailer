@@ -187,10 +187,13 @@ test('Cloudflare: its limits and a schedule are refused before a request', async
   const refusals = [
     [message({ to: many, cc: many }), /at most 50 recipients/],
     [message({ replyTo: ['a@example.com', 'b@example.com'] }), /one reply-to/],
-    [message({ scheduledAt: new Date() }), /Invalid scheduledAt: cloudflare/],
+    [message({ scheduledAt: new Date() }), /Unsupported scheduledAt: cloudflare/],
   ];
   for (const [refused, error] of refusals) {
-    assert.match((await transport().send(refused)).errorMessages[0], error);
+    const receipt = await transport().send(refused);
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
   }
   assert.strictEqual(requests.length, 0);
 });
@@ -213,13 +216,14 @@ test('Cloudflare: sendRaw sends the MIME text through send_raw', async (t) => {
     envelope: { from: null, to: ['bob@example.com'] },
     content: new TextEncoder().encode(text),
   });
-  assert.strictEqual(bounce.errors[0].category, 'validation');
+  assert.strictEqual(bounce.errors[0].category, 'unsupported');
   assert.match(bounce.errorMessages[0], /needs a sender in the envelope/);
   const latin1 = await transport().sendRaw({
     envelope: { from: 'shop@example.com', to: ['bob@example.com'] },
     content: new Uint8Array([...new TextEncoder().encode('Subject: x\r\n\r\n'), 0xe9, 13, 10]),
   });
   assert.match(latin1.errorMessages[0], /Cloudflare takes a raw message only as UTF-8/);
+  assert.strictEqual(latin1.errors[0].category, 'unsupported');
   stubFetch(t, () => json({ success: false, errors: [{ code: 10001 }] }, 400));
   const failed = await transport().sendRaw({
     envelope: { from: 'shop@example.com', to: ['bob@example.com'] },

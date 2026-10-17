@@ -164,6 +164,11 @@ export interface ResolvedTransportEntry<TProviderId extends string = string> {
  * replacement for any single transport. It distributes messages across multiple
  * underlying transports based on the configured strategy.
  *
+ * It fails over after a failure of a transport (an outage, a rate limit) or of
+ * what it can express (`unsupported`: `scheduledAt` on SMTP, a limit of the
+ * provider), and stops at a refused message (`validation`, `rejected`) or an
+ * unknown delivery.
+ *
  * @example Round-robin load balancing
  * ```typescript
  * import { PoolTransport } from "@alexify/mailer/pool";

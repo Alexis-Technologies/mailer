@@ -243,8 +243,13 @@ providers.  Structured errors use each child transport's provider `id`, so
 fallback failures remain tied to the transport that produced them.
 
 Failover moves on after a failure of the transport, such as an authentication
-error, a rate limit or an outage, and stops in two cases where another
-transport could not help:
+error, a rate limit or an outage, and after a message the transport cannot send
+as it is, an error of category `unsupported`: a field it cannot express, such
+as `scheduledAt` on SMTP or a second tag on Postmark, or a limit of its
+provider, such as recipients, attachments or the server's SIZE.  A pool of SMTP
+and Resend sends a scheduled message through Resend whichever comes first; when
+every transport refuses it so, the receipt is `unsupported` and not retryable.
+Failover stops in two cases where another transport could not help:
 
 - **The message itself was refused**, an error of category `validation` or
   `rejected`: another provider would refuse it too.  The receipt is not

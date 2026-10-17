@@ -298,7 +298,9 @@ test('Sendmail: a scheduled message is refused, sendMany sends in turn, DKIM sig
     },
   });
   const scheduled = await transport.send(message({ scheduledAt: new Date() }));
-  assert.match(scheduled.errorMessages[0], /Invalid scheduledAt: sendmail cannot schedule/);
+  assert.match(scheduled.errorMessages[0], /Unsupported scheduledAt: sendmail cannot schedule/);
+  assert.strictEqual(scheduled.errors[0].category, 'unsupported');
+  assert.strictEqual(scheduled.retryable, false);
   const receipts = [];
   for await (const receipt of transport.sendMany([message(), message()])) receipts.push(receipt);
   assert.deepStrictEqual(

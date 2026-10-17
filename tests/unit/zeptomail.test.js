@@ -173,10 +173,13 @@ test('ZeptoMail: its limits, a second tag and a schedule are refused before a re
     [message({ attachments: files }), /at most 60 attachments/],
     [message({ subject: 'x'.repeat(501) }), /subject of at most 500/],
     [message({ tags: ['a', 'b'] }), /one tag per message/],
-    [message({ scheduledAt: new Date() }), /Invalid scheduledAt: zeptomail/],
+    [message({ scheduledAt: new Date() }), /Unsupported scheduledAt: zeptomail/],
   ];
   for (const [refused, error] of refusals) {
-    assert.match((await transport().send(refused)).errorMessages[0], error);
+    const receipt = await transport().send(refused);
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
   }
   assert.strictEqual(requests.length, 0);
 });

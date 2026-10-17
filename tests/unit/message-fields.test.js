@@ -1,6 +1,7 @@
 // Not ported: `scheduledAt`, `tracking` and `metadata` of a message (from
 // unemail), checked by createMessage, and the refusal of a scheduled message by
-// every transport that cannot schedule it, before anything is sent.
+// every transport that cannot schedule it, before anything is sent, as
+// `unsupported`, which `./pool` fails over with.
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
@@ -76,8 +77,8 @@ test('Fields: an invalid scheduledAt, tracking or metadata is refused', () => {
 const assertRefused = (receipt) => {
   assert.strictEqual(receipt.successful, false);
   assert.strictEqual(receipt.retryable, false);
-  assert.strictEqual(receipt.errors[0].category, 'validation');
-  assert.match(receipt.errorMessages[0], /Invalid scheduledAt: \w+ cannot schedule a message/);
+  assert.strictEqual(receipt.errors[0].category, 'unsupported');
+  assert.match(receipt.errorMessages[0], /Unsupported scheduledAt: \w+ cannot schedule a message/);
 };
 
 test('Fields: SMTP refuses a scheduled message before it connects', async () => {
@@ -125,6 +126,50 @@ for (const [name, make] of Object.entries(providers)) {
     assert.strictEqual(fetch.mock.callCount(), 0);
   });
 }
+
+const INVITATION = [
+  'BEGIN:VCALENDAR',
+  'VERSION:2.0',
+  'METHOD:REQUEST',
+  'BEGIN:VEVENT',
+  'UID:1@example.com',
+  'SUMMARY:Lunch',
+  'END:VEVENT',
+  'END:VCALENDAR',
+  '',
+].join('\r\n');
+
+test('Fields: what a provider cannot carry is unsupported: a second Lettermint tag, a sixth Plunk file', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('no request expected');
+  });
+  const files = [];
+  for (let i = 0; i < 5; i++) {
+    const content = new Uint8Array(1);
+    files.push({
+      filename: `f${i}.txt`,
+      contentType: 'text/plain',
+      inline: false,
+      contentId: '',
+      content,
+    });
+  }
+  const refusals = [
+    [providers.lettermint(), { tags: ['a', 'b'] }, /at most one tag/],
+    [
+      providers.plunk(),
+      { calendar: { method: 'REQUEST', content: INVITATION }, attachments: files },
+      /at most five attachments/,
+    ],
+  ];
+  for (const [transport, fields, error] of refusals) {
+    const receipt = await transport.send(createMessage({ ...base, ...fields }));
+    assert.match(receipt.errorMessages[0], error);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
+    assert.strictEqual(receipt.retryable, false);
+  }
+  assert.strictEqual(fetch.mock.callCount(), 0);
+});
 
 test('Fields: Resend sends a scheduled message alone, with scheduled_at', async (t) => {
   const bodies = [];
@@ -187,7 +232,7 @@ test('Fields: Resend sends metadata as tags, alone, and refuses what a tag canno
   ]);
   for (const receipt of receipts.slice(1)) {
     assert.match(receipt.errorMessages[0], /Resend takes metadata as tags/);
-    assert.strictEqual(receipt.errors[0].category, 'validation');
+    assert.strictEqual(receipt.errors[0].category, 'unsupported');
     assert.strictEqual(receipt.retryable, false);
   }
 });
@@ -227,7 +272,7 @@ test('Fields: SendGrid sends send_at, the tracking of the message and custom_arg
     createMessage({ ...base, scheduledAt: new Date(now() + 73 * 3600_000) }),
   );
   assert.match(late.errorMessages[0], /at most 72 hours ahead/);
-  assert.strictEqual(late.errors[0].category, 'validation');
+  assert.strictEqual(late.errors[0].category, 'unsupported');
   assert.strictEqual(bodies.length, 2);
 });
 
@@ -315,7 +360,7 @@ test('Fields: SES sends metadata as tags, over the default ones, and refuses wha
   for (const metadata of [{ 'order.id': '1' }, { note: 'two words' }, { category: 'x' }]) {
     const refused = await transport.send(createMessage({ ...base, metadata }));
     assert.match(refused.errorMessages[0], /SES takes metadata as tags/);
-    assert.strictEqual(refused.errors[0].category, 'validation');
+    assert.strictEqual(refused.errors[0].category, 'unsupported');
   }
   assert.strictEqual(bodies.length, 1);
 });
@@ -361,7 +406,7 @@ test('Fields: Maileroo sends scheduled_at, one tracking switch and metadata as t
   for (const [fields, error] of refusals) {
     const refused = await transport.send(createMessage({ ...base, ...fields }));
     assert.match(refused.errorMessages[0], error);
-    assert.strictEqual(refused.errors[0].category, 'validation');
+    assert.strictEqual(refused.errors[0].category, 'unsupported');
   }
   assert.strictEqual(bodies.length, 2);
 });
@@ -464,7 +509,7 @@ test('Fields: JMAP refuses a scheduled message, and keeps the order of a batch',
   for (const receipt of allRefused) assertRefused(receipt);
 });
 
-test('Fields: the pool does not fail over with a refusal, and retry does not retry it', async (t) => {
+test('Fields: the pool fails over with a refusal to a transport that schedules, and retry does not retry it', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('no request expected');
   });
@@ -476,8 +521,26 @@ test('Fields: the pool does not fail over with a refusal, and retry does not ret
       { transport: mock, priority: 1 },
     ],
   });
-  assertRefused(await pool.send(scheduled()));
-  assert.strictEqual(mock.getSentMessagesCount(), 0);
+  // Changed: a refusal of scheduling was a validation failure, which stopped
+  // failover, so the message was lost although another transport took it.
+  assert.strictEqual((await pool.send(scheduled())).successful, true);
+  assert.deepStrictEqual(mock.getSentMessages()[0].scheduledAt, tomorrow);
+  const unable = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: providers.ses(), priority: 2 },
+      { transport: providers.plunk(), priority: 1 },
+    ],
+  });
+  const refused = await unable.send(scheduled());
+  assertRefused(refused);
+  assert.deepStrictEqual(
+    refused.errors.map((error) => [error.provider, error.category]),
+    [
+      ['ses', 'unsupported'],
+      ['plunk', 'unsupported'],
+    ],
+  );
   let attempts = 0;
   const counted = {
     send: async (message, options) => {

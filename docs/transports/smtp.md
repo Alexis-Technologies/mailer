@@ -282,7 +282,9 @@ server advertises it.  The transport adds the encoded message size in octets to
 uploaded.
 
 If the server advertises a fixed maximum, @alexify/mailer returns a failed receipt without
-sending `MAIL FROM` when the message exceeds that limit.  A bare `SIZE`
+sending `MAIL FROM` when the message exceeds that limit, of category `unsupported`
+(code `smtp.message-size-exceeded`): not retried, and failed over by
+[`./pool`](/transports/pool) to a transport whose limit the message is under.  A bare `SIZE`
 capability, or `SIZE 0`, means that no fixed maximum was advertised, so @alexify/mailer
 still declares the message size without rejecting it locally.  Servers that do
 not advertise `SIZE` retain the existing SMTP flow.

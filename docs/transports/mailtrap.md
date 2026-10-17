@@ -123,7 +123,7 @@ const message = createMessage({
 
 A message's own `metadata` goes in `custom_variables` too, its keys over those of
 the configuration. Mailtrap cannot schedule a message, so `scheduledAt` is
-refused as `validation`, and it sets tracking per domain, so a message's
+refused as `unsupported`, and it sets tracking per domain, so a message's
 `tracking` is not sent.
 
 ## Batch sending

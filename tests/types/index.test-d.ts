@@ -19,6 +19,7 @@ import {
   type DeliveryEvent,
   type DeliveryEventType,
   type ReceiptError,
+  type ReceiptErrorCategory,
   type RetryEvent,
   type Transport,
   type VerifiableTransport,
@@ -119,6 +120,17 @@ const unknownDelivery = createFailedReceipt('Connection closed after DATA', {
 if (!unknownDelivery.successful) {
   expectType<boolean | undefined>(unknownDelivery.deliveryUnknown);
 }
+// A message this transport cannot send as it is, which a pool fails over with.
+const unsupported = createFailedReceipt('Postmark takes one tag per message.', {
+  provider: 'postmark',
+  category: 'unsupported',
+  retryable: false,
+});
+if (!unsupported.successful) {
+  expectAssignable<ReceiptErrorCategory | undefined>(unsupported.errors?.[0]?.category);
+}
+expectAssignable<ReceiptErrorCategory>('unsupported');
+expectError(createReceiptError('x', { category: 'not-supported' }));
 
 const transport: Transport<'smtp'> = {
   id: 'smtp',

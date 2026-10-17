@@ -9,6 +9,7 @@ const {
 const { toAsciiAddress } = require('../core/address.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { joinChunks } = require('./body.js');
+const { RefusalError } = require('./refusal.js');
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 
@@ -54,19 +55,20 @@ const rawMessageFailure = (provider, error) =>
     : undefined;
 
 /**
- * The text of a raw message, for an API that takes it as a JSON string.
+ * The text of a raw message, for an API that takes it as a JSON string.  Bytes
+ * that are not UTF-8 are refused as `unsupported`: SMTP sends them as they are.
  *
  * @param bytes The bytes of the message.
  * @param label The provider's name, for the error.
  * @returns The text.
- * @throws {RawMessageValidationError} If the bytes are not UTF-8.
+ * @throws {RefusalError} If the bytes are not UTF-8.
  * @internal
  */
 const rawMessageText = (bytes, label) => {
   try {
     return UTF8.decode(bytes);
   } catch {
-    throw new RawMessageValidationError(`${label} takes a raw message only as UTF-8.`, 'content');
+    throw new RefusalError(`${label} takes a raw message only as UTF-8.`);
   }
 };
 

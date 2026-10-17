@@ -987,7 +987,7 @@ const executeSubmission = async (client, apiUrl, request, signal) => {
 // this transport does not ask for.
 const refuseScheduled = () =>
   createJmapFailure(schedulingRefusal('jmap'), undefined, {
-    category: 'validation',
+    category: 'unsupported',
     code: 'jmap.scheduling_unsupported',
     retryable: false,
   });

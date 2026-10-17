@@ -15,9 +15,9 @@ const { isDeliveryUnknown } = require('./delivery-unknown.js');
 class RefusalError extends RangeError {}
 
 /**
- * The receipt of a refusal before any request, a non-retryable `validation`
- * failure, as for a message a transport cannot schedule; or `undefined` for
- * another error.
+ * The receipt of a refusal before any request, a non-retryable `unsupported`
+ * failure: this transport cannot send the message as it is, and another one
+ * may, so `./pool` fails over with it; or `undefined` for another error.
  *
  * @param provider The transport.
  * @param error What was thrown.
@@ -26,7 +26,7 @@ class RefusalError extends RangeError {}
  */
 const refusalFailure = (provider, error) =>
   error instanceof RefusalError
-    ? createFailedReceipt(error.message, { provider, category: 'validation', retryable: false })
+    ? createFailedReceipt(error.message, { provider, category: 'unsupported', retryable: false })
     : undefined;
 
 /**
