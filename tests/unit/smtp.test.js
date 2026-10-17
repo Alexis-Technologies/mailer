@@ -528,7 +528,11 @@ test('SMTP: implicit TLS and STARTTLS send the host name for SNI, and no IP addr
       await new Promise((resolve) => server.close(resolve));
     }
   }
-  assert.deepStrictEqual(names, ['localhost', 'localhost', 'localhost', 'localhost', false, false]);
+  // A server reads no SNI as false on Node, undefined on Bun and null on Deno.
+  assert.deepStrictEqual(
+    names.map((name) => name || false),
+    ['localhost', 'localhost', 'localhost', 'localhost', false, false],
+  );
 });
 
 test('SMTP: implicit TLS is connected once its handshake completes, within the timeout', async () => {

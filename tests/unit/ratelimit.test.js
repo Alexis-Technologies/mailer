@@ -12,6 +12,8 @@ const message = (subject = 'Hello', to = 'b@example.com') =>
 // A clock that moves the mocked timers with it.
 const timeline = (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
+  // Node resets the timers after each test; Deno keeps them enabled.
+  t.after(() => t.mock.timers.reset());
   let time = 0;
   return {
     now: () => time,

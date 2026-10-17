@@ -48,7 +48,9 @@ pnpm add @alexify/mailer
 npm install @alexify/mailer
 ```
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer. Bun and Deno run it too, tested in CI; on Deno, see
+[Bun and Deno](https://mailerat.vercel.app/guide/getting-started#bun-and-deno) for the
+permissions and the `fetch` to pass.
 
 ## Usage
 

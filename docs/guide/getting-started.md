@@ -18,6 +18,49 @@ Node.js 22 or newer. The package has no runtime dependencies: every transport is
 package, reached through a subpath (`@alexify/mailer/smtp`), and what a decorator
 needs from your application (an OpenTelemetry provider, a logger) is passed in.
 
+### Bun and Deno
+
+The package runs on Bun and Deno through their Node compatibility. CI runs its
+tests on Bun 1.4.3 and Deno 2.9.6 (Linux), sending over real sockets, TLS and
+`fetch`.
+
+```bash
+bun add @alexify/mailer
+deno add npm:@alexify/mailer
+```
+
+On Deno, import it by its npm name, a subpath included
+(`import { SmtpTransport } from 'npm:@alexify/mailer/smtp'`), and grant what the
+transports you use need:
+
+- `--allow-net` to send: SMTP, the HTTP providers, JMAP, `fromUrl` and the
+  certificates of SNS for `./webhooks`;
+- `--allow-read` for `fromPath`;
+- `--allow-run` and `--allow-env` for `./sendmail`, as Deno's `child_process`
+  passes the environment on;
+- `--allow-sys=hostname` for the default EHLO name of `./smtp`; without it, the
+  name is `[127.0.0.1]` unless you set `localName`.
+
+Deno's `fetch` sends a request again when a reused connection closes before its
+answer, so a message the provider took may go twice, where Node and Bun report it
+as of unknown delivery. Give the HTTP transports and JMAP a `fetch` that keeps no
+idle connection:
+
+```js
+import { PostmarkTransport } from 'npm:@alexify/mailer/postmark';
+
+const client = Deno.createHttpClient({ poolMaxIdlePerHost: 0 });
+const fetchOnce = (input, init) => fetch(input, { ...init, client });
+
+const transport = new PostmarkTransport({
+  serverToken: Deno.env.get('POSTMARK_TOKEN'),
+  fetch: fetchOnce,
+});
+```
+
+Each request then opens a connection of its own, which costs a handshake; see
+[known issues](/guide/known-issues#deno).
+
 ## Choosing a transport
 
 Each transport implements the same `Transport` contract of the root entry, so they

@@ -15,7 +15,8 @@ Nodemailer, emailjs or Upyo, made of two parts:
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
    of delivery events, suppression, idempotency and failover between providers.
 
-It has zero runtime dependencies and runs on Node.js ≥ 22 only (no browser entry).
+It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
+Node compatibility (see "Platform"; no browser entry).
 
 **Status: 1.0.0 is the ported transport, the reliability layer is being designed.** The root
 entry exports the message model and the transport contract of upyo, each transport and decorator
@@ -33,6 +34,9 @@ Package manager is **pnpm** (pinned in `packageManager`).
 
 ```bash
 pnpm test                          # node --test tests/unit/*.test.js
+pnpm test:runtime                  # tests/runtime: the package by its name, no mock (sockets, TLS, fetch, spawn)
+pnpm test:bun                      # tests/unit and tests/runtime on Bun (bun test --parallel)
+pnpm test:deno                     # tests/unit and tests/runtime on Deno (deno test --parallel)
 pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailpit (compose file there)
 pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
 node --test tests/unit/mailer.test.js   # a single file
@@ -49,9 +53,9 @@ pnpm docs:comparison               # renders docs/comparison.json into docs/guid
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
 ```
 
-`prepublishOnly` runs lint + format:check + test:coverage + test:types + check:dts + the size
-gate + check:pack. CI adds the comparison drift check and the docs build. Treat that as the
-pre-merge gate. There is no build step.
+`prepublishOnly` runs lint + format:check + test:coverage + test:runtime + test:types + check:dts +
+the size gate + check:pack. CI adds the comparison drift check, the docs build, and the unit and
+runtime suites on Bun and Deno. Treat that as the pre-merge gate. There is no build step.
 
 ## No build step: CommonJS + hand-written types
 
@@ -66,7 +70,8 @@ pre-merge gate. There is no build step.
   runtime exports with the declared value exports and imports every name from ESM.
   `tests/types/index.test-d.ts` (tsd) pins signatures. `check:dts` needs `--target es2022` because
   there is no tsconfig.
-- `package.json` has a closed `exports` map (`types` first, then `default`), `sideEffects: false`
+- `package.json` has a closed `exports` map (`types` first, then `default`), `sideEffects: false`,
+  `"type": "commonjs"` (Node's default, declared for Deno, which otherwise reads `.js` as ESM)
   and a `files` allowlist: `index.js`, `index.d.ts`, `src`, README, CHANGELOG, LICENSE and
   SECURITY.
 - **Subpaths, not a monorepo.** A subpath is a directory `src/<subpath>/` with an `index.js` that
@@ -630,8 +635,9 @@ src/
                     headers.js, provider.js, batch.js, validate-ssl.js)
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
+  runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)
-  fixtures/<sub>/   static fixtures (certificates)
+  fixtures/<sub>/   static fixtures (certificates; tls/ is a CA and a certificate it issued)
   types/*.test-d.ts tsd assertions, one file per entry
 scripts/
   size.js           bundle-size report; --check gates each entry of the exports map
@@ -759,9 +765,27 @@ whether Fly.io restricts outgoing SMTP (it would make HTTP-first a requirement).
 
 ## Platform
 
-Node.js ≥ 22 only: `engines` is `>=22.0.0`, CI runs 22 and 24 on Linux and Windows. There is no
-`browser.js` and no `browser` field: sending from a browser would expose the credentials, and
-SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not a target for
+Node.js ≥ 22 is the target: `engines` is `>=22.0.0`, and CI runs 22 and 24 on Linux and Windows.
+Bun 1.4.3 and Deno 2.9.6 run the unit suite and `tests/runtime` in CI too, on Linux, through
+their Node compatibility; their versions are pinned in `ci.yml` and named in the docs
+(getting started), and `engines` names neither. A Deno user imports `npm:@alexify/mailer`. What
+differs on them, as of those versions:
+
+- **Deno's `fetch` sends a request again** when a reused HTTP/1.1 connection closes before its
+  answer (hyper retries it), so a message the provider took may go twice where Node and Bun
+  report it as `deliveryUnknown`; upstream streamed the JMAP bodies against it (bug 81), and the
+  HTTP providers always sent a buffer. A streamed body or a client that keeps no idle connection
+  stops it. The docs give Deno users a `fetch` on `Deno.createHttpClient({ poolMaxIdlePerHost:
+  0 })` (known issues, getting started), rather than the library sniffing the runtime;
+  `tests/runtime/http.test.js` pins both the replay and that `fetch`.
+- **Deno's permissions:** `--allow-net`; `--allow-read` for `fromPath`; `--allow-run` and
+  `--allow-env` for `./sendmail` (its `child_process` passes the environment on); and
+  `--allow-sys=hostname` for the default EHLO name, which is `[127.0.0.1]` without it.
+- **Bun's TLS (BoringSSL)** takes no self-signed certificate that is not a CA as a root of
+  trust, as Node and Deno do, so the tests that pass `ca` use `tests/fixtures/tls`.
+
+There is no `browser.js` and no `browser` field: sending from a browser would expose the
+credentials, and SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not a target for
 now; if they become one, the transport over `fetch` and the core would move behind a separate
 entry with no `node:*`, and a platform test would enforce it as in protoarray.
 
@@ -849,6 +873,18 @@ change. **This file wins** if they ever disagree.
   401 to a raw message of unknown size, which streams, is `todo` on Node 24 (known upstream bug
   14). `tests/unit/export-parity.test.js` also checks that every d.ts using `AsyncDisposable`
   references `esnext.disposable` itself.
+- **`tests/runtime/`** runs the package as a consumer does, by its name, with no mock: every entry
+  required and imported by name; SMTP over plain TCP, implicit TLS, STARTTLS and an HTTP CONNECT
+  proxy, with DKIM checked by `tests/helpers/mime/verify-dkim.js`; an HTTP provider and
+  `fromUrl` on the runtime's own `fetch` (a redirect, a body over 4 MiB, a lost answer); and
+  `./sendmail` spawning a shell script (POSIX only). The same files run on Node, Bun and Deno, so
+  they use `node:test` and `node:assert` alone, never `t.mock`.
+- **Bun and Deno** (`pnpm test:bun`, `pnpm test:deno`) run each file in a fresh global
+  (`--parallel`), as `node --test` runs each in a process of its own; in one global, the mocks of
+  one file reach the next. Deno keeps mocked timers enabled after a test (`t.after` resets
+  them), a TLS server reads no SNI as `null` on Deno and `undefined` on Bun (`false` on Node), the
+  JMAP tests of a lost answer are skipped on Deno, whose `fetch` sends it again, and the import
+  by name of `export-parity` spawns the node CLI, which Deno is not.
 
 ## Documentation site
 
