@@ -464,7 +464,16 @@ sendx contributors). Their notices are in `LICENSE`.
 **Upstream bugs fixed in the port** (each in the `feat:` commit of the feature, with a test that
 fails on upstream's behavior):
 
-None yet.
+- N1. nodemailer: nothing wrote `List-Unsubscribe-Post` (a `list.unsubscribePost` key became
+  `List-Unsubscribepost`), and the default DKIM `h=` of neither nodemailer nor unemail covered it
+  or `List-Unsubscribe`, as RFC 8058 §4 requires. `oneClick` of `list` writes it, and the default
+  `h=` of `./mime` ends with `list-unsubscribe:list-unsubscribe-post`.
+- U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
+  after the check for line breaks in header values, so a CR or LF in the URL added header fields.
+  `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and
+  writes what `URL` serializes.
+- U2. unemail: one-click went with any `unsubscribe.url`, `http:` included, and was on by
+  default. RFC 8058 §3.1 asks for an https URI; `oneClick` is opt-in and needs one.
 
 ## Repository layout
 

@@ -79,7 +79,8 @@ const refuse = (what, value) => {
 /**
  * Default header fields to sign if not specified: those a reader trusts or a
  * client renders, present or not, since a field absent when signed cannot be
- * added afterwards without breaking the signature.  From, Reply-To and
+ * added afterwards without breaking the signature.  The two of one-click
+ * unsubscription are among them, as RFC 8058 §4 asks.  From, Reply-To and
  * Subject are listed once more than they can appear, so that a second
  * instance cannot be added either (over-signing, RFC 6376 §8.15).
  */
@@ -98,6 +99,8 @@ const DEFAULT_SIGNED_HEADERS = [
   'references',
   'mime-version',
   'content-type',
+  'list-unsubscribe',
+  'list-unsubscribe-post',
 ];
 
 /**

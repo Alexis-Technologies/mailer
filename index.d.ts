@@ -595,6 +595,13 @@ export interface MessageConstructor {
    */
   readonly headers?: ImmutableHeaders | Record<string, string>;
   /**
+   * The List-* header fields of a mailing list or a newsletter (RFC 2369,
+   * RFC 2919), and one-click unsubscription (RFC 8058).  They are added to
+   * {@link Message.headers}, so every transport that sends custom header
+   * fields sends them; a field given here may not also be in `headers`.
+   */
+  readonly list?: ListFields;
+  /**
    * An idempotency key to ensure that the same message is not sent multiple
    * times.  This is useful for retrying failed send operations without
    * risking duplicate delivery.
@@ -645,6 +652,55 @@ export interface MessageConstructor {
    * than overriding it.  Line endings are normalized to CRLF.
    */
   readonly calendar?: CalendarConstructor;
+}
+/**
+ * A URL of a List-* field: an `http:`, `https:` or `mailto:` URL, or a bare
+ * address for a `mailto:` one, with an optional comment of printable ASCII.
+ */
+export type ListUrl = string | { readonly url: string; readonly comment?: string };
+/**
+ * The List-* header fields of a message.
+ *
+ * @example
+ * ```js
+ * createMessage({
+ *   // ...
+ *   list: {
+ *     id: { id: 'news.example.com', name: 'Weekly News' },
+ *     unsubscribe: ['https://example.com/unsubscribe?u=42', 'unsubscribe@example.com'],
+ *     oneClick: true,
+ *   },
+ * });
+ * ```
+ */
+export interface ListFields {
+  /**
+   * `List-Id` (RFC 2919): a dot-atom with a namespace, such as
+   * `news.example.com`, with an optional name of printable ASCII.
+   */
+  readonly id?: string | { readonly id: string; readonly name?: string };
+  /** `List-Help`. */
+  readonly help?: ListUrl | readonly ListUrl[];
+  /** `List-Unsubscribe`: one field, its URLs separated by commas. */
+  readonly unsubscribe?: ListUrl | readonly ListUrl[];
+  /** `List-Subscribe`. */
+  readonly subscribe?: ListUrl | readonly ListUrl[];
+  /** `List-Post`. */
+  readonly post?: ListUrl | readonly ListUrl[];
+  /** `List-Owner`. */
+  readonly owner?: ListUrl | readonly ListUrl[];
+  /** `List-Archive`. */
+  readonly archive?: ListUrl | readonly ListUrl[];
+  /**
+   * Adds `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058),
+   * which tells a mailbox provider that a POST to the https URL of
+   * `unsubscribe` unsubscribes at once, without a page to confirm.  Gmail and
+   * Yahoo ask bulk senders for it.  Set it only when that endpoint does so;
+   * it needs an https URL in `unsubscribe`.  The DKIM signature of `./mime`
+   * and `./smtp` covers both fields by default.
+   * @default false
+   */
+  readonly oneClick?: boolean;
 }
 /**
  * Creates a new email {@link Message} based on the provided constructor

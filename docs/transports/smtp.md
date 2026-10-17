@@ -753,8 +753,9 @@ Each signature in the `signatures` array can have the following options:
 | `headerFields`     | `string[]`                         | see below                           | Headers to sign (h= tag)              |
 
 By default the signature covers From, Reply-To, Subject, To, Cc, Date,
-Message-ID, In-Reply-To, References, MIME-Version and Content-Type, present or
-not, since a field absent when signed cannot be added afterwards without
+Message-ID, In-Reply-To, References, MIME-Version, Content-Type,
+List-Unsubscribe and List-Unsubscribe-Post (which one-click unsubscription
+needs signed, RFC 8058 §4), present or not, since a field absent when signed cannot be added afterwards without
 breaking the signature; From, Reply-To and Subject are listed twice, so that a
 second instance cannot be added either (over-signing, RFC 6376 §8.15). A name
 listed more than once in `headerFields` signs the instances of that field from

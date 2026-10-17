@@ -6,6 +6,7 @@ const { parseAddress } = require('./address.js');
 const { isAttachment } = require('./attachment.js');
 const { resolveCalendarContent } = require('./calendar.js');
 const { parseMessageId } = require('./message-id.js');
+const { addListHeaders } = require('./list.js');
 
 /**
  * Creates a new email {@link Message} based on the provided constructor
@@ -35,8 +36,9 @@ const { parseMessageId } = require('./message-id.js');
  *                     object is invalid, when a message identifier is not
  *                     valid, when the date is not one RFC 5322 can express, or
  *                     when the calendar content is not a single well-formed
- *                     iCalendar object declaring one supported method, or when
- *                     `generateId` returns no dot-atom-text.
+ *                     iCalendar object declaring one supported method, when a
+ *                     field of `list` is invalid or also given in `headers`,
+ *                     or when `generateId` returns no dot-atom-text.
  */
 const createMessage = (constructor, options) => {
   const sender = checkAddress('sender', constructor.from);
@@ -51,7 +53,7 @@ const createMessage = (constructor, options) => {
     content: constructor.content,
     priority: constructor.priority ?? 'normal',
     tags: ensureArray(constructor.tags),
-    headers: new Headers(constructor.headers ?? {}),
+    headers: addListHeaders(new Headers(constructor.headers ?? {}), constructor.list),
     idempotencyKey: constructor.idempotencyKey,
     messageId:
       constructor.messageId == null ? undefined : checkMessageId('', constructor.messageId),

@@ -34,6 +34,38 @@ expectError(createMessage({ from: 'alex@example.com', subject: 'Hello' }));
 expectError(createMessage({ from: 'alex', to: 'bob@example.com', subject: 'x', content: {} }));
 expectType<Address | undefined>(parseAddress('Alex <alex@example.com>'));
 
+// The List-* fields of a newsletter.
+createMessage({
+  from: 'news@example.com',
+  to: 'reader@example.com',
+  subject: 'Weekly',
+  content: { text: 'Hi' },
+  list: {
+    id: { id: 'news.example.com', name: 'Weekly News' },
+    unsubscribe: ['https://example.com/u', { url: 'unsub@example.com', comment: 'mail' }],
+    help: 'https://example.com/help',
+    oneClick: true,
+  },
+});
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    list: { unsubscribe: 42 },
+  }),
+);
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    list: { oneClick: 'yes' },
+  }),
+);
+
 // A receipt narrows on `successful`.
 const receipt = {} as Receipt<'smtp'>;
 if (receipt.successful) {

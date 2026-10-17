@@ -241,6 +241,50 @@ described in the next section.  They differ from the fields above in that a
 custom header is still honored when the dedicated field is left unset, so the
 header form keeps working.
 
+## Mailing lists and one-click unsubscribe
+
+The `list` field writes the List-* header fields of [RFC 2369] and [RFC 2919],
+which mail clients use to show an unsubscribe button, and, with `oneClick`, the
+`List-Unsubscribe-Post` field of [RFC 8058] that Gmail and Yahoo ask of bulk
+senders:
+
+```js
+const message = createMessage({
+  from: 'news@example.com',
+  to: 'reader@example.com',
+  subject: 'This week',
+  content: { html: '<p>…</p>' },
+  list: {
+    id: { id: 'news.example.com', name: 'Weekly News' },
+    unsubscribe: ['https://example.com/unsubscribe?u=42', 'unsubscribe@example.com'],
+    oneClick: true,
+  },
+});
+// List-ID: Weekly News <news.example.com>
+// List-Unsubscribe: <https://example.com/unsubscribe?u=42>,
+//  <mailto:unsubscribe@example.com>
+// List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
+`help`, `unsubscribe`, `subscribe`, `post`, `owner` and `archive` each take one
+URL or several, which go into one field: an `http:`, `https:` or `mailto:` URL,
+or a bare address for a `mailto:` one.  An entry may be `{ url, comment }`, with
+a comment of printable ASCII.  `id` is a dot-atom with a namespace, with an
+optional `name`.  A URL with whitespace, a control character or an angle bracket,
+a URL of another scheme or without one, and an unknown key are refused with a
+`TypeError`, never stripped or guessed.
+
+Set `oneClick: true` only when a POST to the https URL of `unsubscribe`
+unsubscribes at once, without a page to confirm; it needs such a URL.  RFC 8058
+also asks for a DKIM signature over both fields, which the default signature of
+`./mime` and `./smtp` gives.  The fields go into `Message.headers`, so every
+transport that sends custom header fields sends them; a field given in `list`
+may not also be given in `headers`.
+
+[RFC 2369]: https://www.rfc-editor.org/rfc/rfc2369
+[RFC 2919]: https://www.rfc-editor.org/rfc/rfc2919
+[RFC 8058]: https://www.rfc-editor.org/rfc/rfc8058
+
 ## Message identity and reply threading
 
 Applications that correlate replies, such as a helpdesk matching an incoming
