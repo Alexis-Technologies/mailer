@@ -6,8 +6,8 @@
 > audit log, one model of delivery events, suppression and idempotency.
 
 Key facts:
-- Status: work in progress. The transport layer is ported from upyo 0.7.0 (MIT); the
-  reliability layer (queue, audit log, delivery events) is being designed
+- Status: 1.0 is the transport layer, ported from upyo 0.7.0 (MIT); the reliability layer
+  (queue, audit log, delivery events) is being designed and is not released yet
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
 - Node.js >= 22 only; CommonJS with ESM named-import interop; hand-written d.ts per entry
 - Zero runtime dependencies: the transports are built on `node:*` modules and `fetch`; the

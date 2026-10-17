@@ -12,10 +12,10 @@ and HTTP providers, and on top of them what the other libraries leave to the app
 persistent queue and outbox, an audit log, one model of delivery events, suppression and
 idempotency. Zero runtime dependencies.
 
-> 🚧 **Work in progress.** The transport layer is here, ported from
-> [upyo](https://github.com/dahlia/upyo) 0.7.0: messages, MIME and DKIM, SMTP, Amazon SES and seven
-> more HTTP providers, JMAP, and the pool, retry, OpenTelemetry, logger and mock transports. The
-> reliability layer (queue, audit log, delivery events) is being designed.
+> **Status: 1.0 is the transport layer,** ported from [upyo](https://github.com/dahlia/upyo) 0.7.0:
+> messages, MIME and DKIM, SMTP, Amazon SES and seven more HTTP providers, JMAP, and the pool,
+> retry, OpenTelemetry, logger and mock transports. The reliability layer (queue, audit log,
+> delivery events) is being designed and comes in later releases.
 
 ### 📖 [Read the documentation →](https://mailerat.vercel.app/)
 

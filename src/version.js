@@ -3,4 +3,4 @@
 // require of package.json would bundle the whole manifest into ./otel.
 // tests/unit/version.test.js keeps it equal to package.json, and the release
 // process bumps both.
-module.exports = { name: '@alexify/mailer', version: '0.0.1' };
+module.exports = { name: '@alexify/mailer', version: '1.0.0' };

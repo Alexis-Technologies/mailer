@@ -7,11 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0 (MIT, © 2025
-Hong Minhee): the code is upstream's, converted to CommonJS with hand-written types and no
-runtime dependency, one subpath per upstream package. Upstream's known bugs are fixed one by one:
-the open ones are on the [Known issues](https://mailerat.vercel.app/guide/known-issues) page, the
-fixed ones below.
+## [1.0.0] - 2026-10-17
+
+The first release: the transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0
+(MIT, © 2025 Hong Minhee). The code is upstream's, converted to CommonJS with hand-written types
+and no runtime dependency, one subpath per upstream package. Upstream's known bugs are fixed one
+by one: the open ones are on the [Known issues](https://mailerat.vercel.app/guide/known-issues)
+page, the fixed ones below. The reliability layer (a persistent queue, an audit log, delivery
+events) is being designed and is not in this release.
+
+### Upgrading from upyo 0.7
+
+The messages, the `Transport` contract and the options of each transport are upyo's. What changes
+for code written against upyo 0.7:
+
+- **One package, a subpath per upstream package.** `@upyo/core` is the root entry,
+  `@upyo/smtp` is `@alexify/mailer/smtp`, and so on for every transport and decorator;
+  `@upyo/opentelemetry` is `./otel` and `@upyo/logtape` is `./logger`. The package is CommonJS,
+  with the same names importable from ESM, and needs Node.js 22 or newer; Deno, Bun and browsers
+  are not targets.
+- **A failed receipt may carry `deliveryUnknown: true`:** the provider may have taken the message
+  before the failure. Such a receipt is never retryable; reconcile it rather than send the message
+  again.
+- **`./otel` uses the providers you pass** (`tracerProvider`, `meterProvider`) and names its
+  metrics and attributes after the semantic conventions (see Changed). `auto`, `serviceName`,
+  `serviceVersion` and `metrics.samplingRate` throw a `TypeError`.
+- **`./logger` takes any pino-like logger** in place of a LogTape one.
+- **Options that never did anything throw:** `continueOnSuccess: true` of `./pool`,
+  `validateSsl: false` of the HTTP providers and `method: 'cram-md5'` of `./smtp`.
+- **Input is checked where it is made:** an address domain is held to host-name characters, a
+  display name may not hold a line break, a provider URL must be HTTPS (plain HTTP only to a
+  loopback host), an SES region must look like one, and `timeout` and `retries` must be
+  non-negative numbers.
 
 ### Added
 
@@ -377,6 +404,10 @@ fixed ones below.
   was never called. Through the new `onRetry`, each retry of the wrapped transport or of a
   `./retry` inside it now adds a `retry` event and to `mailer.retry.count` on the span, and to
   a new counter of retries, and still reaches the caller's own `onRetry`.
+- **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
+  (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
+  any step or after DATA; the greeting waits for a complete line; and a UTF-8 character split
+  across two chunks of a reply stays whole.
 
 ### Changed
 
@@ -396,9 +427,5 @@ fixed ones below.
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-- **`./smtp` reads every well-formed reply** (upstream bugs): a final line that is the code alone
-  (`250`), which RFC 5321 allows, no longer leaves the client waiting for the socket timeout, at
-  any step or after DATA; the greeting waits for a complete line; and a UTF-8 character split
-  across two chunks of a reply stays whole.
-
-[unreleased]: https://github.com/Alexis-Technologies/mailer/commits/main
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0

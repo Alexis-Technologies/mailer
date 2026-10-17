@@ -1,7 +1,7 @@
 # Why @alexify/mailer?
 
-::: warning Work in progress
-The transport layer is here, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0. The
+::: tip Status
+Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0. The
 reliability layer is being designed: the direction below is settled, its API is not.
 :::
 

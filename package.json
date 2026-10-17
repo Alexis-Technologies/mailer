@@ -1,7 +1,7 @@
 {
   "name": "@alexify/mailer",
-  "version": "0.0.1",
-  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM and HTTP providers, with a reliability layer on top — a persistent queue, an audit log, delivery events, suppression and idempotency",
+  "version": "1.0.0",
+  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM, Amazon SES and seven more HTTP providers, JMAP, failover, retries and OpenTelemetry; a reliability layer (persistent queue, audit log, delivery events) is next",
   "license": "MIT",
   "author": "Alex Dolid <dolid.sasha@gmail.com>",
   "repository": {

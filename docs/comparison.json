@@ -492,10 +492,10 @@
           "text": "MIT"
         },
         "version": {
-          "text": "0.0.1 (unreleased)"
+          "text": "1.0.0"
         },
         "lastCommit": {
-          "text": "2026-10 (in development)"
+          "text": "2026-10 (this release)"
         },
         "tests": {
           "text": "126 / ~1440"

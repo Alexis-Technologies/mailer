@@ -1,8 +1,8 @@
 # Getting Started
 
-::: warning Work in progress
-The transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0, is
-here: messages, SMTP, eight HTTP providers, JMAP and the decorators. The reliability
+::: tip Status
+Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo)
+0.7.0: messages, SMTP, eight HTTP providers, JMAP and the decorators. The reliability
 layer (queue, audit log, delivery events) is still being designed.
 :::
 

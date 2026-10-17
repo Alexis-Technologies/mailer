@@ -6,7 +6,7 @@ Only the latest published version receives fixes.
 
 | Version | Supported |
 |---|---|
-| 0.x | ✅ |
+| 1.x | ✅ |
 
 ## Reporting a vulnerability
 
@@ -28,8 +28,8 @@ timeline once the report is confirmed.
 
 ## Threat model
 
-The mailer is still being designed, and this section will be completed with it. The principles it
-is designed around:
+The transport layer is built and the reliability layer is being designed; this section will be
+completed with it. The principles both are designed around:
 
 - **Message content is untrusted data.** Addresses, display names, subjects, headers, file names
   and bodies can come from users. A CR or LF in any header field is rejected rather than encoded

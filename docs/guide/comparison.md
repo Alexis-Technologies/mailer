@@ -1,10 +1,10 @@
 # Compared with alternatives
 
-@alexify/mailer is being built in the place of the libraries below, with a reliability layer none
-of them has. The table compares fourteen solutions in five directions: SMTP clients (Nodemailer,
-emailjs), unified libraries over many providers (Upyo, unemail, sently), SMTP for edge runtimes
-(worker-mailer, edge-mailer), a MIME builder (MIMEText) and the official SDKs of the providers
-(Resend, SendGrid, Mailgun, Postmark, Mailtrap, Amazon SES). It follows the idea of
+@alexify/mailer is an email library in the place of the libraries below, built towards a
+reliability layer none of them has. The table compares fourteen solutions in five directions: SMTP
+clients (Nodemailer, emailjs), unified libraries over many providers (Upyo, unemail, sently), SMTP
+for edge runtimes (worker-mailer, edge-mailer), a MIME builder (MIMEText) and the official SDKs of
+the providers (Resend, SendGrid, Mailgun, Postmark, Mailtrap, Amazon SES). It follows the idea of
 [Upyo's own comparison](https://upyo.org/why), with every feature in one table rather than a few
 convenient libraries in a few convenient rows. @alexify/mailer itself is the first column, in teal
 and, on a wide screen, pinned beside the features as the table scrolls, so every row reads against
@@ -114,8 +114,8 @@ it.
 <tr><td>Runtime dependencies</td><td>0</td><td>0</td><td>0</td><td>0–1 (@noble/hashes)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>4</td><td>2</td><td>2+ (axios)</td><td>3 (axios)</td><td>0</td><td>2 (axios, qs)</td><td>9</td></tr>
 <tr><td>Module format</td><td>CJS, ESM <code>import</code></td><td>ESM + CJS</td><td>ESM only</td><td>ESM + CJS + JSR</td><td>ESM only</td><td>ESM only</td><td>ESM + CJS</td><td>ESM + CJS + JSR</td><td>ESM + CJS</td><td>ESM + CJS</td><td>CJS only</td><td>ESM + CJS</td><td>CJS only</td><td>CJS only</td><td>ESM + CJS</td></tr>
 <tr><td>License</td><td>MIT</td><td>MIT-0</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>MIT</td><td>Apache-2.0</td></tr>
-<tr><td>Version (2026-10-07)</td><td>0.0.1 (unreleased)</td><td>10.0.16</td><td>5.0.3</td><td>0.7.0 (unreleased; release 0.6.0)</td><td>0.7.0</td><td>1.2.2</td><td>1.2.1</td><td>0.8.5</td><td>3.0.24 (tag 3.0.28)</td><td>6.32.1</td><td>8.1.6</td><td>14.0.2</td><td>5.1.0</td><td>4.10.0 (HEAD ahead)</td><td>3.1147.0</td></tr>
-<tr><td>Last commit</td><td>2026-10 (in development)</td><td>2026-10-07</td><td>2026-08-26</td><td>2026-09-09</td><td>2026-09-02</td><td>2026-08-19</td><td>2025-11-15</td><td>2026-09-08</td><td>2026-01-28</td><td>2026-10-06</td><td>2025-09-19</td><td>2026-10-07</td><td>2026-07-10</td><td>2026-10-07</td><td>2026-10-06</td></tr>
+<tr><td>Version (2026-10-07)</td><td>1.0.0</td><td>10.0.16</td><td>5.0.3</td><td>0.7.0 (unreleased; release 0.6.0)</td><td>0.7.0</td><td>1.2.2</td><td>1.2.1</td><td>0.8.5</td><td>3.0.24 (tag 3.0.28)</td><td>6.32.1</td><td>8.1.6</td><td>14.0.2</td><td>5.1.0</td><td>4.10.0 (HEAD ahead)</td><td>3.1147.0</td></tr>
+<tr><td>Last commit</td><td>2026-10 (this release)</td><td>2026-10-07</td><td>2026-08-26</td><td>2026-09-09</td><td>2026-09-02</td><td>2026-08-19</td><td>2025-11-15</td><td>2026-09-08</td><td>2026-01-28</td><td>2026-10-06</td><td>2025-09-19</td><td>2026-10-07</td><td>2026-07-10</td><td>2026-10-07</td><td>2026-10-06</td></tr>
 <tr><td>Tests: files / cases</td><td>126 / ~1440</td><td>61 / ~1330</td><td>15 / ~153</td><td>109 / ~1300</td><td>40 / ~773</td><td>66 / ~532</td><td>4 / ~189</td><td>14 / ~258</td><td>6 / ~30</td><td>39 / ~441</td><td>43 / ~450</td><td>49 files</td><td>23 (16 integration)</td><td>55 files</td><td>2 smoke (the rest in the monorepo)</td></tr>
 <tr><td>Owner / maintenance risk</td><td>1 author, Alexis Technologies</td><td>1 maintainer</td><td>no SECURITY.md</td><td>1 main author</td><td>1 author</td><td>1 author, 0.1 → 1.2 in ~80 days</td><td>1 author</td><td>1 author, 0.x</td><td>no SECURITY.md</td><td>vendor</td><td>vendor, old toolchain</td><td>vendor</td><td>vendor</td><td>vendor</td><td>vendor</td></tr>
 </tbody>

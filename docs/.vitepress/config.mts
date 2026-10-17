@@ -7,9 +7,9 @@ const { version } = createRequire(import.meta.url)('../../package.json') as { ve
 
 const ogTitle = '@alexify/mailer — email for Node.js, with a reliability layer';
 const ogDescription =
-  'Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM and HTTP ' +
-  'providers, with a reliability layer on top — a persistent queue, an audit log, delivery ' +
-  'events, suppression and idempotency.';
+  'Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM, Amazon SES and ' +
+  'seven more HTTP providers, JMAP, failover, retries and OpenTelemetry; a reliability layer ' +
+  '(persistent queue, audit log, delivery events) is next.';
 const repo = 'https://github.com/Alexis-Technologies/mailer';
 const base = '/';
 const hostname = 'https://mailerat.vercel.app/';

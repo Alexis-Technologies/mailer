@@ -17,9 +17,9 @@ Nodemailer, emailjs or Upyo, made of two parts:
 
 It has zero runtime dependencies and runs on Node.js ≥ 22 only (no browser entry).
 
-**Status: the transport is ported, the reliability layer is being designed.** The root entry
-exports the message model and the transport contract of upyo, each transport and decorator is a
-subpath. The reliability layer (queue, audit log, delivery events) has no API yet; its direction
+**Status: 1.0.0 is the ported transport, the reliability layer is being designed.** The root
+entry exports the message model and the transport contract of upyo, each transport and decorator
+is a subpath, and their API is under semver from 1.0.0. The reliability layer (queue, audit log, delivery events) has no API yet; its direction
 is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
