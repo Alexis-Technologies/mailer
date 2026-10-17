@@ -540,6 +540,9 @@ fails on upstream's behavior):
   reads only its options, holds the endpoint to HTTPS or loopback HTTP, sends both headers with
   the key as `Operation-Id` too, reports a repeat Azure answers 409 or 412 as `deliveryUnknown`,
   and refuses tracking it cannot express.
+- U8. unemail (`src/drivers/scaleway.ts`): an inline attachment went as an ordinary file without
+  its Content-ID, which the API has no field for, so the `cid:` of the HTML matched nothing.
+  `./scaleway` refuses it before the request.
 
 ## Repository layout
 

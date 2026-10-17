@@ -21,6 +21,7 @@
   "./zeptomail": 7,
   "./smtp2go": 7,
   "./azure": 8,
+  "./scaleway": 7,
   "./pool": 3,
   "./retry": 3,
   "./mock": 2,

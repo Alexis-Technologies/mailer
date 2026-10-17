@@ -92,6 +92,7 @@ const guide = [
       { text: 'ZeptoMail', link: '/transports/zeptomail' },
       { text: 'SMTP2GO', link: '/transports/smtp2go' },
       { text: 'Azure Communication Services', link: '/transports/azure' },
+      { text: 'Scaleway', link: '/transports/scaleway' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

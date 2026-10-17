@@ -61,6 +61,7 @@ The message model and the transport contract, ported from `@upyo/core`.
 | `@alexify/mailer/zeptomail` | `ZeptoMailTransport` | [ZeptoMail](/transports/zeptomail) |
 | `@alexify/mailer/smtp2go` | `Smtp2goTransport` | [SMTP2GO](/transports/smtp2go) |
 | `@alexify/mailer/azure` | `AzureTransport` | [Azure Communication Services](/transports/azure) |
+| `@alexify/mailer/scaleway` | `ScalewayTransport` | [Scaleway](/transports/scaleway) |
 | `@alexify/mailer/jmap` | `JmapTransport`, `createJmapConfig`, `JmapApiError`, `JMAP_ERROR_TYPES`, `isCapabilityError`, `uploadBlob` | [JMAP](/transports/jmap) |
 | `@alexify/mailer/mock` | `MockTransport` | [Mock](/transports/mock) |
 | `@alexify/mailer/pool` | `PoolTransport`, `RoundRobinStrategy`, `WeightedStrategy`, `PriorityStrategy`, `SelectorStrategy` | [Pool](/transports/pool) |
