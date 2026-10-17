@@ -280,6 +280,8 @@ class LoggerTransport {
         errorMessages: failure.errorMessages,
         errors: failure.errors,
         retryable: failure.retryable,
+        // The provider may have taken it: to reconcile, not to send again.
+        ...(failure.deliveryUnknown === true && { deliveryUnknown: true }),
         provider: failure.provider ?? this.id,
         attempts: failure.attempts,
         receipt: failure,

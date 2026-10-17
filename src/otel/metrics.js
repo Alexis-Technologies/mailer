@@ -97,13 +97,15 @@ class MetricsCollector {
 
   /**
    * Records the receipt of one message, once, with the priority of the
-   * message and whether it was sent.
+   * message, whether it was sent, and, for a failure the provider may have
+   * taken, `mailer.delivery_unknown`: the messages to reconcile.
    */
-  recordMessageOutcome(transport, priority, successful) {
+  recordMessageOutcome(transport, priority, receipt) {
     this.messageCounter.add(1, {
       'mailer.transport.name': transport,
       'email.priority': priority,
-      'mailer.status': successful ? 'success' : 'failure',
+      'mailer.status': receipt.successful ? 'success' : 'failure',
+      ...(receipt.deliveryUnknown === true && { 'mailer.delivery_unknown': true }),
     });
   }
 

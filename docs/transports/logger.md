@@ -158,6 +158,11 @@ count, and priority. Completion events additionally include duration and receipt
 error details. Instead of a category, give the transport a child logger with the
 bindings you want (`logger.child({ component: 'mail' })`).
 
+A failed receipt of unknown delivery, which the provider may have taken, adds
+`deliveryUnknown: true` to the fields of its `email.failed` line, so that the
+messages to reconcile from the provider's events, rather than send again, can be
+found by it.
+
 ## Recording message content
 
 Messages are excluded from logs by default, and so are the addresses that the

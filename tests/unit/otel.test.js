@@ -6,7 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { OpenTelemetryTransport } = require('../../src/otel/index.js');
 const { MockMeterProvider, MockTracerProvider } = require('../helpers/otel/mock-otel-providers.js');
-const { createTestMessage } = require('../helpers/otel/test-config.js');
+const { createTestMessage, extractSpans } = require('../helpers/otel/test-config.js');
 
 const providers = () => ({
   tracerProvider: new MockTracerProvider(),
@@ -452,4 +452,28 @@ test('OTel: random decides which operations get a span', async () => {
     await transport.send(createTestMessage());
     assert.strictEqual(tracerProvider.getAllSpans().length, spans);
   }
+});
+
+test('OTel: a failure of unknown delivery is told apart, on the span and the counter', async () => {
+  // Before: it was a failure like any other, though it is the one to
+  // reconcile from the provider's events rather than to send again.
+  const unknown = {
+    successful: false,
+    errorMessages: ['The connection closed after the end of DATA.'],
+    errors: [{ message: 'lost', category: 'network', retryable: false }],
+    deliveryUnknown: true,
+  };
+  const otel = providers();
+  const transport = new OpenTelemetryTransport(plain({}, unknown), otel);
+  await transport.send(createTestMessage());
+  for await (const receipt of transport.sendMany([createTestMessage()])) assert.ok(receipt);
+  const spans = extractSpans(otel.tracerProvider);
+  assert.strictEqual(spans.length, 2);
+  for (const span of spans) assert.strictEqual(span.attributes['mailer.delivery_unknown'], true);
+  const counted = [];
+  for (const metric of otel.meterProvider.getAllRecords()) {
+    if (metric.name !== 'mailer.email.messages') continue;
+    for (const record of metric.records) counted.push(record.attributes['mailer.delivery_unknown']);
+  }
+  assert.deepStrictEqual(counted, [true, true]);
 });

@@ -209,7 +209,7 @@ class OpenTelemetryTransport {
       // Delegate to wrapped transport
       const receipt = await deliver(this.withRetryRecording(options, span));
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
-      this.metricsCollector?.recordMessageOutcome(this.transportName, priority, receipt.successful);
+      this.metricsCollector?.recordMessageOutcome(this.transportName, priority, receipt);
 
       // Record success/failure
       if (receipt.successful) {
@@ -218,6 +218,7 @@ class OpenTelemetryTransport {
       } else {
         const errorCategory = this.classifyReceipt(receipt);
         span?.recordFailure(receipt.errorMessages);
+        if (receipt.deliveryUnknown === true) span?.setAttributes(DELIVERY_UNKNOWN);
         this.metricsCollector?.recordAttempt(
           this.transportName,
           'send',
@@ -298,7 +299,8 @@ class OpenTelemetryTransport {
           pending.length = 0;
           head = 0;
         }
-        metrics?.recordMessageOutcome(transportName, priority, receipt.successful);
+        metrics?.recordMessageOutcome(transportName, priority, receipt);
+        if (receipt.deliveryUnknown === true) span?.setAttributes(DELIVERY_UNKNOWN);
 
         if (receipt.successful) {
           successCount++;
@@ -486,6 +488,10 @@ class OpenTelemetryTransport {
     return this.classifyError(syntheticError);
   }
 }
+
+// A failure the provider may have taken: the message is to be reconciled
+// from its events, not sent again.
+const DELIVERY_UNKNOWN = { 'mailer.delivery_unknown': true };
 
 // Keeps the messages of a failed receipt while fewer than the bound are kept,
 // and counts all of them.
