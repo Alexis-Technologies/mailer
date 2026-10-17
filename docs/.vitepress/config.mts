@@ -88,6 +88,7 @@ const guide = [
       { text: 'Brevo', link: '/transports/brevo' },
       { text: 'Mailjet', link: '/transports/mailjet' },
       { text: 'MailerSend', link: '/transports/mailersend' },
+      { text: 'SparkPost', link: '/transports/sparkpost' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

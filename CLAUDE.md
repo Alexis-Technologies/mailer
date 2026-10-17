@@ -525,6 +525,13 @@ fails on upstream's behavior):
 - U3. unemail: the keys and values of `metadata` became `X-Metadata-<key>` header fields in eight
   drivers with no check, so a key or value with a line break added header fields. `createMessage`
   holds a key to 1 to 128 of `[A-Za-z0-9_.-]` and a value to a string without control characters.
+- S3. sently (`src/transports/sparkpost.ts`): cc and bcc recipients went into `recipients` with no
+  `header_to` and no Cc field, so the message lost its Cc field and each copy named only its own
+  recipient in To; every address was reported accepted whatever `total_rejected_recipients` said,
+  and an answer without an id was a success with an empty one. `./sparkpost` gives each recipient
+  the shared To in `header_to` and the Cc field in `content.headers`, counts the rejected ones on
+  the receipt (`rejectedRecipientCount`), fails it as `rejected` when none was accepted, and
+  reports an answer without an id as `deliveryUnknown`.
 
 ## Repository layout
 
