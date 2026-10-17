@@ -7,7 +7,8 @@
 // the arrival, so a message is refused at once when the queue ahead of it
 // would hold it longer, where unemail started counting only at its turn; a
 // cost over the capacity is refused, where unemail cut it to the capacity and
-// sent more than the limit; and the buckets of the keys are bounded.
+// sent more than the limit; the buckets of the keys are held to `maxKeys`, the
+// least used dropped first; and disposal stops the waits.
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
@@ -30,9 +31,10 @@ class RateLimitTransport {
   id;
   config;
   wrappedTransport;
+  // In the order of their last use, the least recent first.
   #buckets = new Map();
-  #sweepAt;
   #refillPerMs;
+  #disposed = false;
 
   /**
    * @param transport The transport to throttle.
@@ -45,7 +47,6 @@ class RateLimitTransport {
     this.id = transport.id;
     this.config = createRateLimitConfig(config);
     this.#refillPerMs = this.config.limit / this.config.intervalMs;
-    this.#sweepAt = this.config.maxKeys;
   }
 
   /**
@@ -91,14 +92,30 @@ class RateLimitTransport {
     if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
   }
 
-  /** Disposes of the wrapped transport when it supports disposal. */
+  /**
+   * Stops the waits, each send that waits rejecting with an `AbortError`,
+   * and disposes of the wrapped transport when it supports disposal.
+   */
   async [Symbol.asyncDispose]() {
+    this.#disposed = true;
+    const reason = disposedError();
+    for (const bucket of this.#buckets.values()) {
+      clearTimeout(bucket.timer);
+      while (bucket.waiters.size > 0) {
+        const waiter = bucket.waiters.shift();
+        if (waiter.cancelled) continue;
+        waiter.signal?.removeEventListener('abort', waiter.onAbort);
+        waiter.reject(reason);
+      }
+    }
+    this.#buckets.clear();
     await disposeOf(this.wrappedTransport);
   }
 
   // Takes the tokens of a message, waiting for them: `undefined` once taken,
   // or the receipt of a refusal.
   #admit(message, signal) {
+    if (this.#disposed) return Promise.reject(disposedError());
     const { cost: costOf, key: keyOf } = this.config;
     const cost = costOf === undefined ? 1 : costOf(message);
     if (typeof cost !== 'number' || !(cost >= 0) || cost === Infinity) {
@@ -147,7 +164,13 @@ class RateLimitTransport {
 
   #wait(bucket, cost, signal) {
     return new Promise((resolve, reject) => {
-      const waiter = { cost, resolve, cancelled: false, signal, onAbort: undefined };
+      // A signal that aborted before, between two messages of a batch, fires
+      // no event: the message would wait and take its tokens.
+      if (signal?.aborted) {
+        reject(abortReason(signal));
+        return;
+      }
+      const waiter = { cost, resolve, reject, cancelled: false, signal, onAbort: undefined };
       if (signal !== undefined) {
         waiter.onAbort = () => {
           waiter.cancelled = true;
@@ -194,34 +217,40 @@ class RateLimitTransport {
     bucket.last = now;
   }
 
+  // The bucket of a key, moved to the end of the order of use.
   #bucketOf(key) {
     let bucket = this.#buckets.get(key);
-    if (bucket === undefined) {
-      if (this.#buckets.size >= this.#sweepAt) this.#sweep();
-      bucket = {
-        tokens: this.config.burst,
-        last: this.config.now(),
-        waiters: new Fifo(),
-        queuedCost: 0,
-        timer: undefined,
-      };
+    if (bucket !== undefined) {
+      this.#buckets.delete(key);
       this.#buckets.set(key, bucket);
+      return bucket;
     }
+    if (this.#buckets.size >= this.config.maxKeys) this.#evict();
+    bucket = {
+      tokens: this.config.burst,
+      last: this.config.now(),
+      waiters: new Fifo(),
+      queuedCost: 0,
+      timer: undefined,
+    };
+    this.#buckets.set(key, bucket);
     return bucket;
   }
 
-  // Drops the buckets that are full again and have no waiter: one made anew
-  // would be the same.  When too few are, the next sweep waits for twice as
-  // many, so a crowd of busy keys does not sweep on every new one.
-  #sweep() {
+  // Makes room for a key: drops the least used buckets that have no waiter,
+  // until there is room.  One that is not full starts full when its key comes
+  // back, the price of holding no more than `maxKeys` keys; a bucket with
+  // waiters is never dropped, so they alone can hold more.
+  #evict() {
     for (const [key, bucket] of this.#buckets) {
-      this.#refill(bucket);
-      if (bucket.waiters.size === 0 && bucket.tokens >= this.config.burst) {
-        this.#buckets.delete(key);
-      }
+      if (this.#buckets.size < this.config.maxKeys) return;
+      if (bucket.waiters.size === 0) this.#buckets.delete(key);
     }
-    this.#sweepAt = Math.max(this.config.maxKeys, this.#buckets.size * 2);
   }
 }
+
+// What a send waiting for tokens rejects with when the transport is disposed of.
+const disposedError = () =>
+  new DOMException('The rate limit transport was disposed of.', 'AbortError');
 
 module.exports = { RateLimitTransport };

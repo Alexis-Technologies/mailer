@@ -210,3 +210,57 @@ test('RateLimit: sendRaw, verify, dispose and the options', async (t) => {
   assert.strictEqual(defaults.config.mode, 'wait');
   assert.strictEqual(defaults.id, 'fake');
 });
+
+test('RateLimit: no more than maxKeys keys are held, the least used dropped first', async (t) => {
+  // Before: maxKeys only started a sweep of the full buckets, so keys whose
+  // buckets had not refilled were all kept, and the next sweep waited for
+  // twice as many.
+  const clock = timeline(t);
+  const limiter = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 3_600_000,
+    mode: 'reject',
+    maxKeys: 2,
+    key: (m) => m.recipients[0].address,
+    now: clock.now,
+  });
+  const to = (address) => limiter.send(message('x', address));
+  assert.strictEqual((await to('a@example.com')).successful, true);
+  assert.strictEqual((await to('b@example.com')).successful, true);
+  // a is limited for an hour; used again, it is the most recent.
+  assert.strictEqual((await to('a@example.com')).successful, false);
+  // c needs a place: b, the least used, goes, and starts full when it is back.
+  assert.strictEqual((await to('c@example.com')).successful, true);
+  assert.strictEqual((await to('a@example.com')).successful, false);
+  assert.strictEqual((await to('b@example.com')).successful, true);
+});
+
+test('RateLimit: dispose stops the waits, and a later send is refused', async (t) => {
+  // Before: the waiters stayed queued with their timer, and sent through the
+  // disposed transport when their tokens came.
+  const clock = timeline(t);
+  const inner = fakeTransport();
+  const limiter = new RateLimitTransport(inner, { limit: 1, intervalMs: 1000, now: clock.now });
+  await limiter.send(message('first'));
+  const waiting = limiter.send(message('second'));
+  await limiter[Symbol.asyncDispose]();
+  await assert.rejects(waiting, { name: 'AbortError' });
+  await assert.rejects(limiter.send(message('third')), { name: 'AbortError' });
+  await clock.advance(5000);
+  assert.strictEqual(inner.calls.length, 1);
+});
+
+test('RateLimit: a signal that aborted between two messages of a batch stops the next', async (t) => {
+  // Before: an aborted signal fires no event, so the next message waited and
+  // took its tokens.
+  const clock = timeline(t);
+  const inner = fakeTransport();
+  const limiter = new RateLimitTransport(inner, { limit: 1, intervalMs: 1000, now: clock.now });
+  const controller = new AbortController();
+  const receipts = limiter.sendMany([message('a'), message('b')], { signal: controller.signal });
+  const iterator = receipts[Symbol.asyncIterator]();
+  assert.strictEqual((await iterator.next()).value.successful, true);
+  controller.abort(new Error('stop'));
+  await assert.rejects(iterator.next(), /stop/);
+  assert.strictEqual(inner.calls.length, 1);
+});

@@ -52,7 +52,8 @@ export interface RateLimitConfig {
    */
   readonly cost?: (message: Message | RawMessage) => number;
   /**
-   * The buckets kept before those full and idle are dropped.
+   * The most buckets kept: past it, the least used bucket with no waiter is
+   * dropped, and its key starts full when it comes back.
    * @default 10000
    */
   readonly maxKeys?: number;
@@ -126,6 +127,10 @@ export declare class RateLimitTransport<TProviderId extends string = string>
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the wrapped transport, without taking tokens. */
   verify(options?: TransportOptions): Promise<void>;
-  /** Disposes of the wrapped transport when it supports disposal. */
+  /**
+   * Stops the waits, each send waiting for tokens rejecting with an
+   * `AbortError`, refuses the sends after it, and disposes of the wrapped
+   * transport when it supports disposal.
+   */
   [Symbol.asyncDispose](): Promise<void>;
 }

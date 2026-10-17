@@ -35,9 +35,10 @@ takes `cost(message)` of them, 1 without `cost`.
 ## Per key
 
 `key(message)` chooses the bucket, such as a tenant's, so one tenant's burst
-does not hold back the others. Buckets that are full again and have no waiter
-are dropped once there are `maxKeys` of them, as one made anew would be the
-same.
+does not hold back the others. No more than `maxKeys` buckets are kept: past
+it, the least used one with no waiter is dropped, and its key starts full when
+it comes back, the price of a bound on memory. Disposing of the transport stops
+the waits, each rejecting with an `AbortError`.
 
 ```js
 const perTenant = new RateLimitTransport(transport, {
@@ -57,7 +58,7 @@ const perTenant = new RateLimitTransport(transport, {
 | `maxWaitMs` | `30000` | The longest wait, from the arrival. |
 | `key` | one bucket | The bucket of a message. |
 | `cost` | `1` | The tokens a message takes. |
-| `maxKeys` | `10000` | The buckets kept before full idle ones are dropped. |
+| `maxKeys` | `10000` | The most buckets kept, the least used dropped first. |
 | `now` | `Date.now` | The clock. |
 
 `sendMany()` goes through the `sendMany()` of the wrapped transport, each
