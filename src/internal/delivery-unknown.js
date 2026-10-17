@@ -1,4 +1,4 @@
-// Not ported from upyo: marks the failures after which a message may have
+// Not ported: marks the failures after which a message may have
 // been accepted, so that a transport reports them as of unknown delivery
 // rather than as retryable, whatever class of error carries them.
 

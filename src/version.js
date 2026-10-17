@@ -1,4 +1,4 @@
-// Not ported from upyo: the package's own name and version, for the
+// Not ported: the package's own name and version, for the
 // instrumentation scope of the OpenTelemetry tracer and meter: a relative
 // require of package.json would bundle the whole manifest into ./otel.
 // tests/unit/version.test.js keeps it equal to package.json, and the release

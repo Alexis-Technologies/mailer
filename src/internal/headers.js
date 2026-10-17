@@ -1,4 +1,4 @@
-// Not ported from upyo: small helpers of header names that the converters of
+// Not ported: small helpers of header names that the converters of
 // the HTTP providers share.
 
 /**

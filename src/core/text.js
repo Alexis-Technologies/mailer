@@ -1,4 +1,4 @@
-// Not ported from upyo: the character classes RFC 5322 builds atoms and address
+// Not ported: the character classes RFC 5322 builds atoms and address
 // literals from, as tables indexed by char code, and a scan of them in one pass.
 
 const DOT = 0x2e;

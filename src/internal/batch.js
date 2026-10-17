@@ -1,4 +1,4 @@
-// Not ported from upyo: the messages of a sendMany() read as they are needed
+// Not ported: the messages of a sendMany() read as they are needed
 // rather than all at once, so that it holds a batch in memory, not its input.
 
 const noop = () => {};

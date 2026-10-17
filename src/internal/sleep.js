@@ -1,4 +1,4 @@
-// Not ported from upyo: the wait of a retry or a delay, which upstream wrote in
+// Not ported: the wait of a retry or a delay, which upstream wrote in
 // five ways, some deaf to the AbortSignal or rejecting with an error of their
 // own instead of its reason.
 

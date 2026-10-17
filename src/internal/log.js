@@ -1,4 +1,4 @@
-// Not ported from upyo: the logging of what happens inside a transport, through
+// Not ported: the logging of what happens inside a transport, through
 // the pino-like logger the application passes in.  Without one a transport
 // writes nothing, except the warnings of warnDegradation.
 

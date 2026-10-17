@@ -1,4 +1,4 @@
-// Not ported from upyo: reads the body of a response within a bound, so that
+// Not ported: reads the body of a response within a bound, so that
 // a broken or hostile server cannot fill the memory of a sender.
 
 // Far above any answer of a provider (a batch of receipts, a JMAP session or

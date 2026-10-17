@@ -1,4 +1,4 @@
-// Not ported from upyo: keeps credentials out of a transport that is logged,
+// Not ported: keeps credentials out of a transport that is logged,
 // inspected or serialized.  The configuration stays readable as it is.
 
 const { EventEmitter } = require('node:events');

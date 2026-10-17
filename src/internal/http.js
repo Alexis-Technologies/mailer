@@ -1,4 +1,4 @@
-// Not ported from upyo: the retry loop that the HTTP providers carried as
+// Not ported: the retry loop that the HTTP providers carried as
 // copies.  A provider keeps what is its own (the request, its errors, what it
 // retries and how long it waits) and passes it in.
 

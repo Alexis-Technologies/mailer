@@ -108,8 +108,8 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   A d.ts names the directory of its package (`// Types ported from upyo v0.7.0
   (packages/smtp/src)`), as its types come from several files, and lines that say how a file
   was adapted may come between the two. A file that is not a port starts with
-  `// Not ported from upyo:` and what it is. `tests/unit/attribution.test.js` checks one or the
-  other in every file the package ships.
+  `// Not ported:` and what it is. `tests/unit/attribution.test.js` checks one or the other in
+  every file the package ships.
 - **The port keeps upstream's behavior.** What changes is the platform: CommonJS and the code
   style below, `node:crypto` instead of `@noble/hashes`, the OpenTelemetry providers and the
   logger passed in, fallbacks for runtimes older than Node 22 dropped, and the `@since` tags of
@@ -429,6 +429,43 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     a message that went out through one transport again through the others. It is gone from
     the type, and `continueOnSuccess: true` throws a `TypeError` when the pool is made.
 
+## Code ported from nodemailer, unemail and sently
+
+From 1.1 the package also takes the features of three libraries of `docs/comparison.json` where
+they lead it: [nodemailer](https://github.com/nodemailer/nodemailer) 10.0.16 (MIT-0, Copyright
+2011-2023 Andris Reinman), [unemail](https://github.com/productdevbook/unemail) 0.7.0 (MIT,
+Copyright 2025 Wind) and [sently](https://github.com/omqkhafi/sently) 1.2.2 (MIT, Copyright 2026
+sendx contributors). Their notices are in `LICENSE`.
+
+- **What is ported is the feature, onto the contracts of this package:** the mapping of a
+  provider's fields, an algorithm (a token bucket, a circuit breaker), the formatting of header
+  fields, and the test cases. The code lands on `Receipt`, `src/internal/http.js` and the injected
+  options; the HTTP paths, retries and error models of the sources are not kept.
+- **Known upstream bugs are fixed in the port,** unlike upyo's: in the same `feat:` commit, each
+  with a test that fails on upstream's behavior and an entry in the list below (N for nodemailer,
+  U for unemail, S for sently). A ported test that pinned upstream's behavior says "Changed in the
+  port".
+- A ported file starts with the header of its source, as for upyo:
+  ```js
+  // Ported from nodemailer v10.0.16 (src/sendmail-transport/index.ts)
+  // https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
+  ```
+  The notice of unemail is `// https://github.com/productdevbook/unemail — MIT, Copyright 2025
+  Wind`, that of sently `// https://github.com/omqkhafi/sently — MIT, Copyright 2026 sendx
+  contributors`. A file with a second source names it further down, `// Also ported from <name>
+  v<version> (<path>)` followed by its notice. Ported test suites keep their `describe`/`it`, as
+  upyo's do; the `expect` of vitest and bun:test becomes `node:assert`.
+- **Not ported, on purpose:** the DKIM, SES over the AWS SDK, `addressparser`, `fetch`, `punycode`
+  and plugin pipeline of nodemailer (this package does each better or has it); the SMTP client,
+  MIME builder, DKIM, fallback, round-robin and retry of unemail (`./smtp`, `./mime`, `./pool` and
+  `./retry` are safer); the `{{var}}` engine, SMS, WhatsApp and push, socket adapters, pool, retry,
+  fallback, rate limiter and idempotency of sently (unemail's are the base where one is needed).
+
+**Upstream bugs fixed in the port** (each in the `feat:` commit of the feature, with a test that
+fails on upstream's behavior):
+
+None yet.
+
 ## Repository layout
 
 ```
@@ -542,8 +579,11 @@ optional React Email adapter (no template engine of its own); more providers.
   ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
-- **Few new providers.** The eight HTTP providers of upyo come with the port. Each provider adds
-  its webhooks and API drift to maintain, so another one waits for a user who needs it.
+- **Eighteen providers, then few new ones.** The eight HTTP providers of upyo came with the port;
+  1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
+  SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare). Each
+  provider adds its webhooks and API drift to maintain, so another one waits for a user who needs
+  it.
 
 **What the competitors appear to get wrong, to not repeat** (findings from reading their code in
 October 2026, not reproduced except for emailjs, which was run against fake SMTP servers): no

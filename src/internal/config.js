@@ -1,4 +1,4 @@
-// Not ported from upyo: the checks of the options that every HTTP provider
+// Not ported: the checks of the options that every HTTP provider
 // shares, made once, when its configuration is made.
 
 const { isLoopbackHost } = require('./loopback.js');

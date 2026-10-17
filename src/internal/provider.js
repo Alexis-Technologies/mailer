@@ -1,4 +1,4 @@
-// Not ported from upyo: what the message converters of the HTTP providers
+// Not ported: what the message converters of the HTTP providers
 // share, once in place of a copy in each provider.
 
 const { combineSignals } = require('../core/abort-signal.js');

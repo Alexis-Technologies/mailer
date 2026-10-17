@@ -1,4 +1,4 @@
-// Not ported from upyo: tells a request that never left from one that may
+// Not ported: tells a request that never left from one that may
 // have reached the server, for a request that must not be sent twice.
 
 // System error codes of a connection that was never made, so no request went

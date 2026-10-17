@@ -1,4 +1,4 @@
-// Not ported from upyo: whether a host is this machine, the one place where
+// Not ported: whether a host is this machine, the one place where
 // credentials may go over plain text: SMTP AUTH without TLS, an OAuth 2.0 token
 // endpoint or an HTTP provider over http:, to a local fake server.  One rule
 // for all three, which upstream wrote three times, differently.

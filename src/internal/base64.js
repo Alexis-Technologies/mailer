@@ -1,4 +1,4 @@
-// Not ported from upyo: the one base64 encoder of the HTTP providers, which
+// Not ported: the one base64 encoder of the HTTP providers, which
 // carried seven, from String.fromCharCode with btoa to string concatenation
 // byte by byte, all far slower than Buffer, which Node always has.
 
