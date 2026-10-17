@@ -11,6 +11,7 @@ const { canonicalHeaderName } = require('./headers.js');
 const { convertAttachments, visitCustomHeaders, withCalendarAttachment } = require('./provider.js');
 const { isDeliveryUnknown } = require('./delivery-unknown.js');
 const { requestWithRetry } = require('./http.js');
+const { refusalFailure } = require('./refusal.js');
 const { createLog } = require('./log.js');
 
 const MAX_ERROR_TEXT = 500;
@@ -182,7 +183,10 @@ const providerFailure = (provider, error) => {
       providerDetails: error.providerDetails,
     });
   }
-  return createFailedReceipt(message, { provider, deliveryUnknown: isDeliveryUnknown(error) });
+  return (
+    refusalFailure(provider, error) ??
+    createFailedReceipt(message, { provider, deliveryUnknown: isDeliveryUnknown(error) })
+  );
 };
 
 /**

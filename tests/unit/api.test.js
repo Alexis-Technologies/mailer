@@ -132,3 +132,12 @@ test('API: the receipt of a failure carries what the error says', () => {
   assert.throws(() => checkCredential('', 'apiKey', 'DemoTransport'), TypeError);
   assert.strictEqual(checkCredential('k', 'apiKey', 'DemoTransport'), 'k');
 });
+
+test('API: a refusal of the converter is a non-retryable validation failure', () => {
+  const refused = providerFailure('x', new RangeError('X takes at most 5 tags.'));
+  assert.strictEqual(refused.errors[0].category, 'validation');
+  assert.strictEqual(refused.retryable, false);
+  assert.strictEqual(refused.errorMessages[0], 'X takes at most 5 tags.');
+  const other = providerFailure('x', new Error('boom'));
+  assert.notStrictEqual(other.errors[0].category, 'validation');
+});
