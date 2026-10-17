@@ -136,3 +136,53 @@ test('Decorators: retry does not retry an unsupported message, nor does a breake
   assert.strictEqual((await breaker.send(message())).successful, true);
   assert.strictEqual(requests.length, 1);
 });
+
+test('Decorators: a logger hears the breaker, the rate limit, idempotency and the tee', async () => {
+  // Before: they took no logger; a circuit that opened or a limit that
+  // refused told nothing but a receipt.
+  const { RateLimitTransport } = require('../../src/ratelimit/index.js');
+  const { TeeTransport } = require('../../src/tee/index.js');
+  const records = [];
+  const logger = {};
+  for (const level of ['debug', 'info', 'warn', 'error']) {
+    logger[level] = (fields) => records.push([level, fields.code, fields.decorator]);
+  }
+  const mail = (fields = {}) =>
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+      ...fields,
+    });
+  const breaker = new CircuitBreakerTransport(
+    fakeTransport(() => failed('network')),
+    {
+      failureThreshold: 1,
+      logger,
+    },
+  );
+  await breaker.send(mail());
+  await breaker.send(mail());
+  const limit = new RateLimitTransport(fakeTransport(), { limit: 1, mode: 'reject', logger });
+  await limit.send(mail());
+  await limit.send(mail());
+  const idempotent = new IdempotencyTransport(fakeTransport(), { logger });
+  await idempotent.send(mail({ idempotencyKey: 'k' }));
+  await idempotent.send(mail({ idempotencyKey: 'k' }));
+  await idempotent.send(mail({ idempotencyKey: 'k', subject: 'other' }));
+  const tee = new TeeTransport(fakeTransport(), {
+    mirrors: [fakeTransport(() => failed('server-error'))],
+    awaitMirrors: true,
+    logger,
+  });
+  await tee.send(mail());
+  assert.deepStrictEqual(records, [
+    ['warn', 'breaker.open', 'breaker'],
+    ['debug', 'breaker.open', 'breaker'],
+    ['info', 'ratelimit.limited', 'ratelimit'],
+    ['debug', 'idempotency.hit', 'idempotency'],
+    ['warn', 'idempotency.key_reused', 'idempotency'],
+    ['warn', 'MAILER_TEE_MIRROR_FAILED', 'tee'],
+  ]);
+});

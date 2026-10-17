@@ -30,9 +30,9 @@
   "./mock": 2,
   "./otel": 5,
   "./logger": 2.5,
-  "./breaker": 2.5,
-  "./ratelimit": 2.5,
-  "./idempotency": 3.5,
+  "./breaker": 3,
+  "./ratelimit": 3,
+  "./idempotency": 4,
   "./hooks": 2.5,
-  "./tee": 2.5
+  "./tee": 3
 }

@@ -35,6 +35,7 @@ const createTeeConfig = (config = {}) => {
     awaitMirrors,
     maxPending: checkPositiveInteger(config.maxPending ?? 100, 'maxPending'),
     onMirror: checkOptionalFunction(config.onMirror, 'onMirror'),
+    logger: config.logger,
   };
 };
 

@@ -16,6 +16,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createBreakerConfig } = require('./config.js');
 
@@ -51,6 +52,7 @@ class CircuitBreakerTransport {
   // Grows at each change of state: a result counts only in the period it
   // was sent in, not in one the circuit came to since.
   #period = 0;
+  #log;
 
   /**
    * @param transport The transport to guard.
@@ -62,6 +64,7 @@ class CircuitBreakerTransport {
     this.wrappedTransport = transport;
     this.id = transport.id;
     this.config = createBreakerConfig(config);
+    this.#log = createLog(this.config.logger, { transport: transport.id, decorator: 'breaker' });
   }
 
   /**
@@ -205,6 +208,11 @@ class CircuitBreakerTransport {
   }
 
   #refusal(remaining) {
+    this.#log.write(
+      'debug',
+      () => ({ code: 'breaker.open', remaining }),
+      'The circuit refused a send.',
+    );
     const receipt = createFailedReceipt(
       `The circuit of ${this.id} is open after ${this.config.failureThreshold} failures in a ` +
         'row; the message was not sent.',
@@ -280,6 +288,11 @@ class CircuitBreakerTransport {
     const previous = this.#state;
     this.#state = state;
     this.#period++;
+    this.#log.write(
+      state === 'open' ? 'warn' : 'info',
+      () => ({ code: `breaker.${state}`, previous }),
+      `The circuit of ${this.id} is ${state}.`,
+    );
     try {
       this.config.onStateChange?.(state, previous);
     } catch (error) {

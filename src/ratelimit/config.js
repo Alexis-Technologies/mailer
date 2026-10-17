@@ -36,6 +36,7 @@ const createRateLimitConfig = (config = {}) => {
     cost: checkOptionalFunction(config.cost, 'cost'),
     maxKeys: checkPositiveInteger(config.maxKeys ?? 10000, 'maxKeys'),
     now: checkOptionalFunction(config.now, 'now') ?? Date.now,
+    logger: config.logger,
   };
 };
 

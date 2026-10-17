@@ -38,6 +38,7 @@ const createIdempotencyConfig = (config = {}, transportId) => {
     ttlMs: checkPositiveNumber(config.ttlMs ?? DEFAULT_TTL_MS, 'ttlMs'),
     key: checkOptionalFunction(config.key, 'key'),
     namespace,
+    logger: config.logger,
   };
 };
 

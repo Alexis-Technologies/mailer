@@ -15,6 +15,7 @@ const { isRawTransport, isVerifiableTransport } = require('../core/transport.js'
 const { describeThrown, warnLimited, warnThrown } = require('../internal/callback.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createTeeConfig } = require('./config.js');
 
@@ -55,6 +56,7 @@ class TeeTransport {
   primary;
   #pending = 0;
   #detached = new Set();
+  #log;
 
   /**
    * @param primary The transport whose receipt is returned.
@@ -66,6 +68,7 @@ class TeeTransport {
     this.primary = primary;
     this.id = primary.id;
     this.config = createTeeConfig(config);
+    this.#log = createLog(this.config.logger, { transport: primary.id, decorator: 'tee' });
   }
 
   /**
@@ -202,7 +205,13 @@ class TeeTransport {
   #report(outcome) {
     const listener = this.config.onMirror;
     if (listener === undefined) {
-      if (outcome.receipt?.successful !== true) {
+      if (outcome.receipt?.successful !== true && this.#log.hasLogger) {
+        this.#log.write(
+          'warn',
+          () => ({ code: 'MAILER_TEE_MIRROR_FAILED', mirror: outcome.mirror }),
+          `The mirror ${outcome.mirror} failed: ${describe(outcome)}`,
+        );
+      } else if (outcome.receipt?.successful !== true) {
         warnLimited(
           'MAILER_TEE_MIRROR_FAILED',
           `The mirror ${outcome.mirror} failed: ${describe(outcome)}`,

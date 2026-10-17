@@ -28,6 +28,7 @@ const createBreakerConfig = (config = {}) => ({
   isFailure: checkOptionalFunction(config.isFailure, 'isFailure'),
   onStateChange: checkOptionalFunction(config.onStateChange, 'onStateChange'),
   now: checkOptionalFunction(config.now, 'now') ?? Date.now,
+  logger: config.logger,
 });
 
 module.exports = { createBreakerConfig };

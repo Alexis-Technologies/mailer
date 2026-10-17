@@ -14,6 +14,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
 const { refuseRaw } = require('../internal/capabilities.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
+const { createLog } = require('../internal/log.js');
 const { abortReason } = require('../internal/sleep.js');
 const { createRateLimitConfig } = require('./config.js');
 
@@ -35,6 +36,7 @@ class RateLimitTransport {
   #buckets = new Map();
   #refillPerMs;
   #disposed = false;
+  #log;
 
   /**
    * @param transport The transport to throttle.
@@ -47,6 +49,7 @@ class RateLimitTransport {
     this.id = transport.id;
     this.config = createRateLimitConfig(config);
     this.#refillPerMs = this.config.limit / this.config.intervalMs;
+    this.#log = createLog(this.config.logger, { transport: transport.id, decorator: 'ratelimit' });
   }
 
   /**
@@ -142,12 +145,14 @@ class RateLimitTransport {
       Math.ceil((bucket.queuedCost + cost - bucket.tokens) / this.#refillPerMs),
     );
     if (this.config.mode === 'reject' || waitMs > this.config.maxWaitMs) {
+      this.#log.write('info', () => ({ code: 'ratelimit.limited', waitMs }), 'A send was refused.');
       return this.#refused(
         `The local rate limit of ${this.id} (${this.config.limit} per ${this.config.intervalMs} ms) ` +
           `would hold the message ${waitMs} ms.`,
         { category: 'rate-limit', retryable: true, retryAfterMilliseconds: waitMs },
       );
     }
+    this.#log.write('debug', () => ({ code: 'ratelimit.waiting', waitMs }), 'A send waits.');
     return this.#wait(bucket, cost, signal);
   }
 

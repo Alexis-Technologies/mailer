@@ -4,6 +4,7 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  Logger,
   Message,
   RawMessage,
   RawTransport,
@@ -109,6 +110,13 @@ export interface IdempotencyConfig {
    * @default the id of the wrapped transport
    */
   readonly namespace?: string;
+  /**
+   * A pino-like logger: it hears a send answered as before at `debug` (`idempotency.hit`), one
+   * out at `info` (`idempotency.in_flight`), a key used again and a store
+   * that throws after a send at `warn`, the latter in place of a process
+   * warning.
+   */
+  readonly logger?: Logger;
 }
 
 /**

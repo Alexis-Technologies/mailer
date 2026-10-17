@@ -181,6 +181,7 @@ const mongoStore = {
 | `ttlMs` | `86400000` | How long the receipt of a send is kept under its key. |
 | `key` | `message.idempotencyKey` | The key of a message. |
 | `namespace` | the wrapped transport's id | The prefix of the keys in the store. |
+| `logger` | | A pino-like logger: a send answered as before at `debug`, one in flight at `info`, a key used again and a store that throws at `warn`. |
 
 `createMemoryIdempotencyStore({ maxEntries, now })` makes the in-process store,
 whose tokens come from `crypto.randomUUID()`. It keeps at most `maxEntries`

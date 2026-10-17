@@ -4,6 +4,7 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  Logger,
   Message,
   RawMessage,
   RawTransport,
@@ -57,6 +58,11 @@ export interface CircuitBreakerConfig {
   readonly onStateChange?: (state: CircuitState, previous: CircuitState) => void;
   /** The clock, in milliseconds. */
   readonly now?: () => number;
+  /**
+   * A pino-like logger: it hears a change of state, at `warn` when the circuit opens, `info`
+   * otherwise, and a refused send at `debug`, each with its `code`.
+   */
+  readonly logger?: Logger;
 }
 
 /**

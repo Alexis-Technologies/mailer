@@ -4,6 +4,7 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  Logger,
   Message,
   RawMessage,
   RawTransport,
@@ -60,6 +61,11 @@ export interface TeeConfig {
    * throws becomes one too (`MAILER_TEE_LISTENER_FAILED`).
    */
   readonly onMirror?: (outcome: MirrorOutcome) => void;
+  /**
+   * A pino-like logger: without `onMirror`, it hears a failed copy at `warn`
+   * (`MAILER_TEE_MIRROR_FAILED`) in place of a process warning.
+   */
+  readonly logger?: Logger;
 }
 
 /**

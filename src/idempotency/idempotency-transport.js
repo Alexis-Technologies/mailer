@@ -14,8 +14,9 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
-const { warnThrown } = require('../internal/callback.js');
+const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createIdempotencyConfig } = require('./config.js');
 const { fingerprintOf } = require('./fingerprint.js');
@@ -43,6 +44,7 @@ class IdempotencyTransport {
   id;
   config;
   wrappedTransport;
+  #log;
 
   /**
    * @param transport The transport to guard.
@@ -53,6 +55,10 @@ class IdempotencyTransport {
     this.wrappedTransport = transport;
     this.id = transport.id;
     this.config = createIdempotencyConfig(config, transport.id);
+    this.#log = createLog(this.config.logger, {
+      transport: transport.id,
+      decorator: 'idempotency',
+    });
   }
 
   /**
@@ -159,6 +165,7 @@ class IdempotencyTransport {
 
   #replyOf(record, fingerprint, key) {
     if (record.fingerprint !== fingerprint) {
+      this.#log.write('warn', { code: 'idempotency.key_reused', key }, 'A key was used again.');
       return createFailedReceipt(
         `The idempotency key ${key} was used for another message; this one was not sent.`,
         {
@@ -169,7 +176,11 @@ class IdempotencyTransport {
         },
       );
     }
-    if (record.state === 'done' && record.receipt !== undefined) return record.receipt;
+    if (record.state === 'done' && record.receipt !== undefined) {
+      this.#log.write('debug', { code: 'idempotency.hit', key }, 'A send was answered as before.');
+      return record.receipt;
+    }
+    this.#log.write('info', { code: 'idempotency.in_flight', key }, 'A send of the key is out.');
     // The category is given, as the words of the text, which hold the key,
     // would otherwise choose one (a key `order-timeout-1` made it a timeout,
     // which a circuit breaker counts against the provider).
@@ -215,7 +226,7 @@ class IdempotencyTransport {
       }
     } catch (error) {
       // The receipt stands; the key stays reserved until its lease ends.
-      warnThrown('The idempotency store', error, STORE_FAILED);
+      this.#storeThrew(error);
     }
   }
 
@@ -262,8 +273,22 @@ class IdempotencyTransport {
     try {
       await this.config.store.release(entry.key, entry.token);
     } catch (error) {
-      warnThrown('The idempotency store', error, STORE_FAILED);
+      this.#storeThrew(error);
     }
+  }
+
+  // A store that failed after the send: the logger hears of it when there is
+  // one, the process otherwise.
+  #storeThrew(error) {
+    if (!this.#log.hasLogger) {
+      warnThrown('The idempotency store', error, STORE_FAILED);
+      return;
+    }
+    this.#log.write(
+      'warn',
+      () => ({ code: STORE_FAILED, error: describeThrown(error) }),
+      'The idempotency store threw.',
+    );
   }
 }
 

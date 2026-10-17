@@ -60,6 +60,7 @@ const perTenant = new RateLimitTransport(transport, {
 | `cost` | `1` | The tokens a message takes. |
 | `maxKeys` | `10000` | The most buckets kept, the least used dropped first. |
 | `now` | `Date.now` | The clock. |
+| `logger` | | A pino-like logger: a refused send (`ratelimit.limited`) at `info`, a send that waits at `debug`. |
 
 `sendMany()` goes through the `sendMany()` of the wrapped transport, each
 message handed to it once it has its tokens, so a batch is throttled like as

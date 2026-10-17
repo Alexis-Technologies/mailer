@@ -4,6 +4,7 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  Logger,
   Message,
   RawMessage,
   RawTransport,
@@ -59,6 +60,11 @@ export interface RateLimitConfig {
   readonly maxKeys?: number;
   /** The clock, in milliseconds. */
   readonly now?: () => number;
+  /**
+   * A pino-like logger: it hears a refused send at `info` (`ratelimit.limited`) and a send that
+   * waits at `debug` (`ratelimit.waiting`), with `waitMs`.
+   */
+  readonly logger?: Logger;
 }
 
 /**

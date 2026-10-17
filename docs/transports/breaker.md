@@ -66,6 +66,7 @@ const pool = new PoolTransport({
 | `isFailure` | the categories above | Whether a receipt counts as a failure. |
 | `onStateChange` | | Hears each change of state; one that throws becomes a process warning (`MAILER_BREAKER_LISTENER_FAILED`). |
 | `now` | `Date.now` | The clock. |
+| `logger` | | A pino-like logger: a change of state (`breaker.open` at `warn`), a refused send at `debug`. |
 
 `sendMany()` goes through the `sendMany()` of the wrapped transport while the
 circuit is closed, so its batching is kept; a message read while it is open is
