@@ -107,3 +107,12 @@ const azure = createAzureWebhookVerifier({
 expectType<string | undefined>((await azure.verify({ body: '' })).validation?.validationCode);
 expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));
 expectError(createAzureWebhookVerifier({}));
+createSesWebhookVerifier({
+  topicArns: ['arn'],
+  replayStore: null,
+  signatureVersions: ['2'],
+  certificateTimeoutMs: 5000,
+});
+expectError(
+  createSesWebhookVerifier({ topicArns: ['arn'], replayStore: null, signatureVersions: ['3'] }),
+);

@@ -164,13 +164,33 @@ export interface WebhookVerifier<TResult> {
 }
 
 /**
- * The options of {@link createSesWebhookVerifier}.
+ * The options of the verifiers of SNS messages (SES, Scaleway).
  */
-export interface SesWebhookVerifierOptions extends WebhookVerifierOptions {
+export interface SnsWebhookVerifierOptions extends WebhookVerifierOptions {
   /** The SNS topics taken; a message of another is refused. */
   readonly topicArns: readonly string[];
   /** The fetch the signing certificates are read with. */
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * The signature versions taken: `'1'` (RSA-SHA1), the default of an SNS
+   * topic, and `'2'` (RSA-SHA256). A topic set to sign with version 2 takes
+   * `['2']`.
+   * @default ['1', '2']
+   */
+  readonly signatureVersions?: readonly ('1' | '2')[];
+  /**
+   * How long a signing certificate is read for, in milliseconds.  At most
+   * four are read at once; a message that needs a fifth is refused with 503,
+   * for the provider to try again.
+   * @default 10000
+   */
+  readonly certificateTimeoutMs?: number;
+}
+
+/**
+ * The options of {@link createSesWebhookVerifier}.
+ */
+export interface SesWebhookVerifierOptions extends SnsWebhookVerifierOptions {
   /**
    * How far from now an SNS message may have been published, as SNS
    * retries it with its first time.
@@ -202,8 +222,9 @@ export interface SesWebhookResult extends WebhookResult<'ses'> {
 /**
  * Makes the verifier of the SNS messages of Amazon SES.  A message is taken
  * when its topic is listed, its signature (version 1 or 2) matches the
- * certificate of its `sns.<region>.amazonaws.com` URL, it was published within
- * `toleranceMs`, and its id was not taken before.  A bounce says whether it
+ * certificate of its `https://sns.<region>.amazonaws.com/SimpleNotificationService-….pem`
+ * URL, it was published within `toleranceMs`, and its id was not taken
+ * before.  A bounce says whether it
  * is hard (Permanent) or soft (Transient); the `category` tags are the tags
  * of the message, the other tags of the application its metadata.
  *
@@ -405,7 +426,7 @@ export declare function createSparkPostWebhookVerifier(
 /**
  * The options of {@link createScalewayWebhookVerifier}.
  */
-export interface ScalewayWebhookVerifierOptions extends WebhookVerifierOptions {
+export interface ScalewayWebhookVerifierOptions extends SnsWebhookVerifierOptions {
   /** The topics of Topics and Events taken; a message of another is refused. */
   readonly topicArns: readonly string[];
   /**
@@ -413,8 +434,6 @@ export interface ScalewayWebhookVerifierOptions extends WebhookVerifierOptions {
    * message is signed with.
    */
   readonly trustChain: string;
-  /** The fetch the signing certificates are read with. */
-  readonly fetch?: typeof globalThis.fetch;
   /**
    * How far from now a message may have been published.
    * @default 3600000
@@ -511,7 +530,9 @@ export interface AzureWebhookVerifierOptions {
 
 /**
  * The validation of a new Event Grid subscription, which the application
- * answers with `{ validationResponse: validationCode }`.
+ * answers with `{ validationResponse: validationCode }`, or confirms by
+ * fetching `validationUrl`, which is on `*.eventgrid.azure.net` over HTTPS
+ * (another is refused).  The token is checked when the validation carries it.
  */
 export interface EventGridValidation {
   readonly validationCode: string;

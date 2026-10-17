@@ -143,9 +143,13 @@ const replayStore = {
 SES publishes its events to an SNS topic, which posts them to the webhook.
 `createSesWebhookVerifier` takes a message only from a topic in `topicArns`,
 signed (SignatureVersion 1 or 2) with the certificate of an
-`https://sns.<region>.amazonaws.com/….pem` URL, which it reads once through
-`fetch` and keeps; within an hour, as SNS retries a delivery with the time it
-first published it; and once, by its `MessageId`.
+`https://sns.<region>.amazonaws.com/SimpleNotificationService-….pem` URL, with
+no query, which it reads once through `fetch` and keeps; within an hour, as
+SNS retries a delivery with the time it first published it; and once, by its
+`MessageId`. A topic set to sign with version 2 takes `signatureVersions:
+['2']`, so that a message signed with SHA1 is refused. A certificate is read
+within `certificateTimeoutMs` (10 seconds), and at most four at once: a
+message that needs a fifth is refused with 503, for SNS to send it again.
 
 A subscription message is verified and handed back as `confirmation`, with
 `subscribeUrl` to fetch when the application wants the subscription; nothing is
@@ -329,7 +333,9 @@ nothing, so give the subscription a secret delivery property: `Authorization`
 with `Bearer <token>`, or a header of your own with `header`. Every
 notification must carry it; each event is taken once by its id. The
 validation of a new subscription carries no event and is handed back for the
-application to answer. Delivery reports are `delivered`, `bounced`,
+application to answer, its token checked when it carries one; its
+`validationUrl`, for a validation by hand, must be on `*.eventgrid.azure.net`
+over HTTPS, or the request is refused. Delivery reports are `delivered`, `bounced`,
 `rejected` (Suppressed) or `deferred` (Quarantined); engagement reports
 `opened` or `clicked`. The message id is that of the send operation, the
 receipt's.

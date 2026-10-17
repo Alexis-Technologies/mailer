@@ -9,6 +9,7 @@ const { certificateError, createSnsVerifier, isHttpsUrlOf } = require('./sns.js'
 
 const DEFAULT_TOLERANCE_MS = 60 * 60 * 1000;
 const SCALEWAY_HOST = /(^|\.)(scw\.cloud|scaleway\.com)$/;
+const isScalewayUrl = (value) => isHttpsUrlOf(value, SCALEWAY_HOST);
 const PEM_CERTIFICATE = /-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----/g;
 const TYPES = new Map([
   ['email_queued', 'accepted'],
@@ -77,7 +78,10 @@ const createScalewayWebhookVerifier = (options = {}) => {
   const verify = createSnsVerifier(options, {
     provider: 'scaleway',
     defaultToleranceMs: DEFAULT_TOLERANCE_MS,
-    isCertificateUrl: (value) => isHttpsUrlOf(value, SCALEWAY_HOST),
+    // Scaleway documents no form of its certificate URLs: the trust chain,
+    // not the host, is what a certificate is taken by.
+    isCertificateUrl: isScalewayUrl,
+    isSubscribeUrl: isScalewayUrl,
     trust: (certificate) => {
       for (const authority of authorities) {
         if (certificate.checkIssued(authority) && certificate.verify(authority.publicKey)) return;

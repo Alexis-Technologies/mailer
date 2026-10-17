@@ -516,3 +516,39 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
   assert.deepStrictEqual(ok.events, []);
   assert.throws(() => createAzureWebhookVerifier({}), /token is required/);
 });
+
+test('Webhooks Azure: a validation sends nowhere but Event Grid, and checks a token it carries', async () => {
+  // Before: the validation was parsed with no check and its validationUrl
+  // handed back as given, so an application that fetched it could be sent to
+  // any address.
+  const verifier = createAzureWebhookVerifier({ token: 'eg-token', replayStore: null });
+  const validation = (data) => ({
+    body: JSON.stringify([{ eventType: 'Microsoft.EventGrid.SubscriptionValidationEvent', data }]),
+    headers: { 'aeg-event-type': 'SubscriptionValidation' },
+  });
+  const url = 'https://rp-eastus2.eventgrid.azure.net:553/eventsubscriptions/s/validate?id=1';
+  const good = await verifier.verify(validation({ validationCode: 'c', validationUrl: url }));
+  assert.strictEqual(good.validation.validationUrl, url);
+  const codeOnly = await verifier.verify(validation({ validationCode: 'c' }));
+  assert.strictEqual(codeOnly.validation.validationUrl, undefined);
+  for (const validationUrl of [
+    'http://rp-eastus2.eventgrid.azure.net/validate',
+    'https://169.254.169.254/latest/meta-data',
+    'https://eventgrid.azure.net.example.com/validate',
+    'https://user@rp.eventgrid.azure.net/validate',
+    'not a url',
+  ]) {
+    await rejects(verifier.verify(validation({ validationCode: 'c', validationUrl })), 'payload');
+  }
+  await rejects(verifier.verify(validation({ validationUrl: url })), 'payload');
+  const signed = validation({ validationCode: 'c' });
+  await rejects(
+    verifier.verify({ ...signed, headers: { ...signed.headers, authorization: 'Bearer other' } }),
+    'credentials',
+  );
+  const withToken = await verifier.verify({
+    ...signed,
+    headers: { ...signed.headers, authorization: 'Bearer eg-token' },
+  });
+  assert.strictEqual(withToken.validation.validationCode, 'c');
+});

@@ -6,7 +6,7 @@
 
 const { X509Certificate, verify: verifySignature } = require('node:crypto');
 const { readText } = require('../internal/body.js');
-const { checkOptionalFunction } = require('../internal/options.js');
+const { checkOptionalFunction, checkPositiveNumber } = require('../internal/options.js');
 const {
   WebhookVerificationError,
   bodyBytesOf,
@@ -19,6 +19,11 @@ const {
 
 const MAX_CERTIFICATE_BYTES = 64 * 1024;
 const MAX_CERTIFICATES = 32;
+// A message of a listed topic makes the verifier read its certificate before
+// the signature can be checked, so a few reads at a time are made, and the
+// next is refused for the provider to try again, rather than a crowd of them.
+const MAX_LOADING = 4;
+const DEFAULT_CERTIFICATE_TIMEOUT_MS = 10_000;
 const ALGORITHMS = new Map([
   ['1', 'RSA-SHA1'],
   ['2', 'RSA-SHA256'],
@@ -41,11 +46,12 @@ const SIGNED_FIELDS = new Map([
 
 /**
  * Whether a value is an HTTPS URL on a host the pattern takes, with no port
- * or credentials.
+ * or credentials, and with a path the other pattern takes and no query or
+ * fragment when one is given.
  *
  * @internal
  */
-const isHttpsUrlOf = (value, host) => {
+const isHttpsUrlOf = (value, host, path) => {
   let url;
   try {
     url = new URL(value);
@@ -57,7 +63,8 @@ const isHttpsUrlOf = (value, host) => {
     host.test(url.hostname) &&
     url.port === '' &&
     url.username === '' &&
-    url.password === ''
+    url.password === '' &&
+    (path === undefined || (path.test(url.pathname) && url.search === '' && url.hash === ''))
   );
 };
 
@@ -81,11 +88,11 @@ const certificateError = (message, cause, status) =>
 // delivery, so the answer asks for one.
 const UNREAD = 503;
 
-const loadCertificate = async (fetchOption, url) => {
+const loadCertificate = async (fetchOption, url, timeoutMs) => {
   const fetch = fetchOption ?? globalThis.fetch;
   let response;
   try {
-    response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+    response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     throw certificateError('The signing certificate could not be read.', error, UNREAD);
   }
@@ -104,27 +111,38 @@ const loadCertificate = async (fetchOption, url) => {
 };
 
 // The certificates by URL: each read once while it is cached, the oldest
-// dropped past MAX_CERTIFICATES, one that failed to load not kept.
-const createCertificateCache = (fetchOption, trust) => {
+// dropped past MAX_CERTIFICATES, one that failed to load not kept, and no
+// more than MAX_LOADING read at once.
+const createCertificateCache = (fetchOption, trust, timeoutMs) => {
   const certificates = new Map();
+  let loading = 0;
   return (url) => {
     let pending = certificates.get(url);
-    if (pending === undefined) {
-      pending = loadCertificate(fetchOption, url).then((certificate) => {
+    if (pending !== undefined) return pending;
+    if (loading >= MAX_LOADING) {
+      return Promise.reject(
+        certificateError('Too many signing certificates are being read.', undefined, UNREAD),
+      );
+    }
+    loading++;
+    pending = loadCertificate(fetchOption, url, timeoutMs)
+      .then((certificate) => {
         trust(certificate);
         return certificate;
+      })
+      .finally(() => {
+        loading--;
       });
-      pending.catch(() => certificates.delete(url));
-      certificates.set(url, pending);
-      if (certificates.size > MAX_CERTIFICATES) {
-        certificates.delete(certificates.keys().next().value);
-      }
+    pending.catch(() => certificates.delete(url));
+    certificates.set(url, pending);
+    if (certificates.size > MAX_CERTIFICATES) {
+      certificates.delete(certificates.keys().next().value);
     }
     return pending;
   };
 };
 
-const checkSignature = async (message, certificateOf, isCertificateUrl, common) => {
+const checkSignature = async (message, certificateOf, service, algorithms, common) => {
   const fields = SIGNED_FIELDS.get(message.Type);
   if (fields === undefined) {
     throw new WebhookVerificationError(
@@ -132,11 +150,15 @@ const checkSignature = async (message, certificateOf, isCertificateUrl, common) 
       `The SNS message type ${message.Type} is unknown.`,
     );
   }
-  const algorithm = ALGORITHMS.get(message.SignatureVersion);
+  const algorithm = algorithms.get(message.SignatureVersion);
   if (algorithm === undefined || typeof message.Signature !== 'string') {
-    throw new WebhookVerificationError('signature', 'The SNS signature version is unknown.');
+    throw new WebhookVerificationError(
+      'signature',
+      'The SNS signature version is unknown, or not taken.',
+    );
   }
-  if (typeof message.SigningCertURL !== 'string' || !isCertificateUrl(message.SigningCertURL)) {
+  const url = message.SigningCertURL;
+  if (typeof url !== 'string' || !service.isCertificateUrl(url)) {
     throw certificateError('The signing certificate is not on a host of the service.');
   }
   const text = stringToSign(message, fields);
@@ -149,6 +171,24 @@ const checkSignature = async (message, certificateOf, isCertificateUrl, common) 
   if (!verifySignature(algorithm, Buffer.from(text, 'utf8'), certificate.publicKey, signature)) {
     throw new WebhookVerificationError('signature', 'The SNS signature does not match.');
   }
+};
+
+// The algorithms of the signature versions taken: both by default, as a
+// topic signs with version 1, SHA1, unless it is set to sign with 2.
+const algorithmsOf = (versions) => {
+  if (versions === undefined) return ALGORITHMS;
+  if (!Array.isArray(versions) || versions.length === 0) {
+    throw new TypeError("signatureVersions lists the versions taken, '1' or '2'.");
+  }
+  const algorithms = new Map();
+  for (const version of versions) {
+    const algorithm = ALGORITHMS.get(version);
+    if (algorithm === undefined) {
+      throw new TypeError(`signatureVersions takes '1' or '2': ${String(version)}`);
+    }
+    algorithms.set(version, algorithm);
+  }
+  return algorithms;
 };
 
 const topicsOf = (topicArns) => {
@@ -168,20 +208,26 @@ const topicsOf = (topicArns) => {
  * delivery of the events of a notification, or of the `confirmation` of a
  * subscription message, under the id of the SNS message.
  *
- * @param options `topicArns`, `fetch`, and the options every verifier takes.
- * @param service `provider`, `defaultToleranceMs`, `isCertificateUrl` (the
- * hosts of certificates and subscriptions), `trust(certificate)`, which
- * throws for a certificate the service did not issue, and `eventsOf(message,
- * record)`, the events of a notification, `record` its parsed message when it
- * is a JSON object.
+ * @param options `topicArns`, `fetch`, `signatureVersions`,
+ * `certificateTimeoutMs`, and the options every verifier takes.
+ * @param service `provider`, `defaultToleranceMs`, `isCertificateUrl` and
+ * `isSubscribeUrl` (where its certificates and subscriptions are),
+ * `trust(certificate)`, which throws for a certificate the service did not
+ * issue, and `eventsOf(message, record)`, the events of a notification,
+ * `record` its parsed message when it is a JSON object.
  * @internal
  */
 const createSnsVerifier = (options, service) => {
   const topics = topicsOf(options.topicArns);
   const common = resolveCommonOptions(options, service.defaultToleranceMs);
+  const algorithms = algorithmsOf(options.signatureVersions);
   const certificateOf = createCertificateCache(
     checkOptionalFunction(options.fetch, 'fetch'),
     service.trust ?? (() => {}),
+    checkPositiveNumber(
+      options.certificateTimeoutMs ?? DEFAULT_CERTIFICATE_TIMEOUT_MS,
+      'certificateTimeoutMs',
+    ),
   );
   return async (request) => {
     const message = parseJsonOf(bodyBytesOf(request, common));
@@ -191,11 +237,11 @@ const createSnsVerifier = (options, service) => {
     if (!topics.has(message.TopicArn)) {
       throw new WebhookVerificationError('topic', `The topic ${message.TopicArn} is not taken.`);
     }
-    await checkSignature(message, certificateOf, service.isCertificateUrl, common);
+    await checkSignature(message, certificateOf, service, algorithms, common);
     checkTime(Date.parse(message.Timestamp), common);
     const key = `${service.provider}:${message.MessageId}`;
     if (message.Type !== 'Notification') {
-      if (!service.isCertificateUrl(message.SubscribeURL)) {
+      if (!service.isSubscribeUrl(message.SubscribeURL)) {
         throw new WebhookVerificationError(
           'payload',
           'The subscription URL is not of the service.',

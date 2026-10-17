@@ -380,3 +380,84 @@ test('Webhooks SES: the options are checked, and a replay store may be given or 
   }
   assert.deepStrictEqual(fetched, [CERT_URL]);
 });
+
+test('Webhooks SES: a certificate URL off the path of SNS, or with a query, is not read', async () => {
+  // Before: any path and query of an SNS host was read before the signature,
+  // so a message of a listed topic with `?x=N` made a new read each time and
+  // pushed the real certificate out of the cache.
+  const { verify, requests } = verifier();
+  for (const url of [
+    `${CERT_URL}?x=1`,
+    `${CERT_URL}#x`,
+    'https://sns.eu-west-1.amazonaws.com/other.pem',
+    'https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-abc.pem/x',
+  ]) {
+    const message = notification({ eventType: 'Send', mail: mail() }, { SigningCertURL: url });
+    await rejects(verify(request(message)), 'certificate');
+  }
+  assert.strictEqual(requests.length, 0);
+});
+
+test('Webhooks SES: a few certificates are read at a time, the next one is asked again', async () => {
+  const waiting = [];
+  const fetch = () =>
+    new Promise((resolve) => {
+      waiting.push(() => resolve(new Response(require('../helpers/webhooks/sns.js').certificate)));
+    });
+  const ses = createSesWebhookVerifier({
+    topicArns: [TOPIC],
+    fetch,
+    now: () => NOW,
+    replayStore: null,
+  });
+  const message = (index) =>
+    notification(
+      { eventType: 'Send', mail: mail() },
+      {
+        MessageId: `m-${index}`,
+        SigningCertURL: `https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-c${index}.pem`,
+      },
+    );
+  const reads = [];
+  for (let index = 0; index < 4; index++) reads.push(ses.verify(request(message(index))));
+  await assert.rejects(ses.verify(request(message(4))), (error) => {
+    assert.strictEqual(error.reason, 'certificate');
+    assert.strictEqual(error.status, 503);
+    return true;
+  });
+  assert.strictEqual(waiting.length, 4);
+  for (const release of waiting) release();
+  for (const read of reads) assert.strictEqual((await read).events.length, 2);
+  // Once read, the slots are free again.
+  const later = ses.verify(request(message(5)));
+  waiting[4]();
+  assert.strictEqual((await later).events.length, 2);
+});
+
+test('Webhooks SES: the signature versions taken, and the time a certificate is read for', async () => {
+  const sha1 = signSns(notification({ eventType: 'Send', mail: mail() }, { MessageId: 'v1' }), '1');
+  const strict = verifier({ signatureVersions: ['2'], replayStore: null });
+  await rejects(strict.verify(request(sha1)), 'signature');
+  assert.strictEqual(
+    (await verifier({ signatureVersions: ['1'], replayStore: null }).verify(request(sha1))).events
+      .length,
+    2,
+  );
+  assert.throws(() => verifier({ signatureVersions: [] }), /signatureVersions/);
+  assert.throws(() => verifier({ signatureVersions: ['3'] }), /signatureVersions takes/);
+  assert.throws(() => verifier({ certificateTimeoutMs: 0 }), /certificateTimeoutMs/);
+  const slow = createSesWebhookVerifier({
+    topicArns: [TOPIC],
+    now: () => NOW,
+    replayStore: null,
+    certificateTimeoutMs: 5,
+    fetch: (url, init) =>
+      new Promise((resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason));
+      }),
+  });
+  await assert.rejects(
+    slow.verify(request(notification({ eventType: 'Send', mail: mail() }))),
+    (error) => error.reason === 'certificate' && error.status === 503,
+  );
+});

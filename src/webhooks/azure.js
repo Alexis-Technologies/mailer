@@ -21,6 +21,9 @@ const {
 // Event Grid retries a delivery for a day: an event id is kept a day and an
 // hour.
 const VALIDATION = 'Microsoft.EventGrid.SubscriptionValidationEvent';
+// Where Event Grid has a subscription validated by hand: an application that
+// fetches the URL of a validation must not be sent anywhere else by it.
+const EVENT_GRID_HOST = /^[a-z0-9-]+\.eventgrid\.azure\.net$/i;
 const DELIVERY = 'Microsoft.Communication.EmailDeliveryReportReceived';
 const ENGAGEMENT = 'Microsoft.Communication.EmailEngagementTrackingReportReceived';
 const DELIVERY_TYPES = new Map([
@@ -82,26 +85,45 @@ const eventOf = (record) => {
  * release }`.
  * @throws {TypeError} If an option is invalid.
  */
+const isEventGridUrl = (value) => {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === 'https:' && EVENT_GRID_HOST.test(url.hostname) && url.username === '';
+};
+
+const validationOf = (payload) => {
+  const first = Array.isArray(payload) ? payload[0] : undefined;
+  const data = isRecord(first) ? first.data : undefined;
+  if (
+    first?.eventType !== VALIDATION ||
+    !isRecord(data) ||
+    stringOf(data.validationCode) === undefined
+  ) {
+    throw new WebhookVerificationError('payload', 'The body is not a validation event.');
+  }
+  if (data.validationUrl !== undefined && !isEventGridUrl(data.validationUrl)) {
+    throw new WebhookVerificationError('payload', 'The validation URL is not of Event Grid.');
+  }
+  return { validationCode: data.validationCode, validationUrl: data.validationUrl };
+};
+
 const createAzureWebhookVerifier = (options = {}) => {
   const checkToken = tokenCheckOf(options, 'Event Grid');
+  const tokenHeader = options.header ?? 'authorization';
   const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
       const kind = headerOf(request, 'aeg-event-type');
-      // A validation carries no event, and answering it gives nothing away.
+      // A validation carries no event, and answering it gives nothing away;
+      // the token is checked when it comes with it.
       if (kind === 'SubscriptionValidation') {
-        const payload = parseJsonOf(bytes);
-        const first = Array.isArray(payload) ? payload[0] : undefined;
-        if (!isRecord(first) || first.eventType !== VALIDATION || !isRecord(first.data)) {
-          throw new WebhookVerificationError('payload', 'The body is not a validation event.');
-        }
-        return deliveryOf([], {
-          validation: {
-            validationCode: first.data.validationCode,
-            validationUrl: first.data.validationUrl,
-          },
-        });
+        if (headerOf(request, tokenHeader) !== undefined) checkToken(request);
+        return deliveryOf([], { validation: validationOf(parseJsonOf(bytes)) });
       }
       checkToken(request);
       const payload = parseJsonOf(bytes);

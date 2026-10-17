@@ -17,11 +17,15 @@ const { createSnsVerifier, isHttpsUrlOf } = require('./sns.js');
 // by default.
 const DEFAULT_TOLERANCE_MS = 60 * 60 * 1000;
 const SNS_HOST = /^sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$/;
+// Where SNS keeps its signing certificates: a file of its own, with no query
+// a forged message could vary to make each a new one to read.
+const SNS_CERTIFICATE_PATH = /^\/SimpleNotificationService-[A-Za-z0-9]+\.pem$/;
 // The tags SES writes itself, and the one `./ses` writes for the priority.
 const OWN_TAG = /^(ses|aws):/;
 
 // The certificates and subscriptions of SNS are on its hosts, over HTTPS.
 const isSnsUrl = (value) => isHttpsUrlOf(value, SNS_HOST);
+const isSnsCertificateUrl = (value) => isHttpsUrlOf(value, SNS_HOST, SNS_CERTIFICATE_PATH);
 
 // The tags and metadata of `mail.tags`: `category` holds the message's tags,
 // as `./ses` sends them, and the others its metadata.
@@ -203,7 +207,8 @@ const createSesWebhookVerifier = (options = {}) => ({
   verify: createSnsVerifier(options, {
     provider: 'ses',
     defaultToleranceMs: DEFAULT_TOLERANCE_MS,
-    isCertificateUrl: isSnsUrl,
+    isCertificateUrl: isSnsCertificateUrl,
+    isSubscribeUrl: isSnsUrl,
     eventsOf: (message, record) =>
       record === undefined
         ? [
