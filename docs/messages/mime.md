@@ -28,7 +28,15 @@ Typed identity and threading fields follow the same precedence as
 [structured messages](/messages/compose).
 
 The bytes use CRLF and include the final line ending. They contain neither SMTP
-dot-stuffing nor the DATA terminator. Collecting them as shown above uses memory
+dot-stuffing nor the DATA terminator.
+
+A text or HTML body is written with CRLF line breaks, a bare LF or CR included,
+and in the transfer encoding its content needs, as nodemailer chooses it:
+`7bit` for ASCII whose lines fit in 76 columns and do not end in whitespace,
+`quoted-printable` for text with more Latin letters than other characters, and
+`base64` otherwise, which keeps Cyrillic or CJK text at about 4/3 of its UTF-8
+bytes instead of three times.  Attachments are Base64, and an iCalendar part is
+Base64 so its CRLF structure survives. Collecting them as shown above uses memory
 proportional to the complete message. For large messages, consume the chunks:
 
 ```js
