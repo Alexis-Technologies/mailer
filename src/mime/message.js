@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { Buffer } = require('node:buffer');
-const { formatPhrase } = require('../core/address.js');
+const { formatPhrase, toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { checkAttachment } = require('../core/message.js');
 const {
@@ -541,9 +541,10 @@ const encodeAddress = (address) => {
   if (/[\r\n]/.test(address.address)) {
     throw new TypeError('Address must not contain a carriage return or line feed.');
   }
+  const email = toAsciiAddress(address.address);
   if (address.name == null) {
     // No display name, just return the email address
-    return address.address;
+    return email;
   }
 
   // Encode only the display name part, leave email address as-is.  An
@@ -552,7 +553,7 @@ const encodeAddress = (address) => {
   const encodedDisplayName = encodeHeaderValue(address.name, true);
   const displayName =
     encodedDisplayName === address.name ? formatPhrase(address.name) : encodedDisplayName;
-  return `${displayName} <${address.address}>`;
+  return `${displayName} <${email}>`;
 };
 
 // Whether a word of the value, between whitespace, is longer than `limit`.

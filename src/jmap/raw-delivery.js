@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/jmap/src/raw-delivery.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { RawMessageValidationError } = require('../core/raw-message.js');
 const { JMAP_ERROR_TYPES, JmapApiError } = require('./errors.js');
@@ -228,7 +229,7 @@ const existingEmailId = async (execute, accountId, existingId, blobId) => {
  */
 const submitRawEmail = async (execute, accountId, emailId, identityId, envelope) => {
   const rcptTo = [];
-  for (const email of envelope.to) rcptTo.push({ email });
+  for (const email of envelope.to) rcptTo.push({ email: toAsciiAddress(email) });
   const submitted = methodResult(
     await execute({
       using,
@@ -241,7 +242,7 @@ const submitRawEmail = async (execute, accountId, emailId, identityId, envelope)
               raw: {
                 emailId,
                 identityId,
-                envelope: { mailFrom: { email: envelope.from ?? '' }, rcptTo },
+                envelope: { mailFrom: { email: toAsciiAddress(envelope.from ?? '') }, rcptTo },
               },
             },
           },

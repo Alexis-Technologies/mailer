@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const {
@@ -119,8 +120,8 @@ const hashReference = (value) => {
 
 const convertAddress = (address) => {
   return address.name == null || address.name === ''
-    ? { address: address.address }
-    : { address: address.address, display_name: address.name };
+    ? { address: toAsciiAddress(address.address) }
+    : { address: toAsciiAddress(address.address), display_name: address.name };
 };
 
 const convertAddressList = (addresses) => {

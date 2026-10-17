@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const {
@@ -119,9 +120,9 @@ const buildCustomVariables = (tags, metadata) => {
 
 const formatAddress = (address) => {
   if (address.name) {
-    return { email: address.address, name: address.name };
+    return { email: toAsciiAddress(address.address), name: address.name };
   }
-  return { email: address.address };
+  return { email: toAsciiAddress(address.address) };
 };
 
 const convertAttachment = async (attachment, signal) => {

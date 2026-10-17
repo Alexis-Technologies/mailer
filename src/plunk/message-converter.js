@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/plunk/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const { collectCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
@@ -27,21 +28,26 @@ const isDedicatedHeader = (name) => DEDICATED_HEADERS.has(name.toLowerCase());
 
 const addressesOf = (message) => {
   const addresses = [];
-  for (const recipient of message.recipients) addresses.push(recipient.address);
+  for (const recipient of message.recipients) addresses.push(toAsciiAddress(recipient.address));
   return addresses;
 };
 
 const convertMessage = async (message, _config, signal) => {
   // Convert recipients - Plunk accepts either string or array
-  const to = message.recipients.length === 1 ? message.recipients[0].address : addressesOf(message);
+  const to =
+    message.recipients.length === 1
+      ? toAsciiAddress(message.recipients[0].address)
+      : addressesOf(message);
 
   // Convert sender information
   const senderName = message.sender.name;
-  const senderEmail = message.sender.address;
+  const senderEmail = toAsciiAddress(message.sender.address);
 
   // Convert reply-to (use first reply recipient)
   const replyTo =
-    message.replyRecipients.length > 0 ? message.replyRecipients[0].address : undefined;
+    message.replyRecipients.length > 0
+      ? toAsciiAddress(message.replyRecipients[0].address)
+      : undefined;
 
   // Convert content - HTML takes precedence over text
   let body;

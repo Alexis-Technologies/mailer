@@ -89,7 +89,14 @@ The local part is limited to 64 UTF-8 octets.  @alexify/mailer preserves the spe
 Unicode normalization supplied by the caller because changing a local part can
 change the mailbox it identifies.
 
-Provider support still depends on the selected transport.  The
+A Unicode domain under an ASCII local part needs no extension: when the message is
+written, into its header fields, an SMTP envelope, a JMAP request or a provider's API,
+the domain goes as its A-label (IDNA with the mapping of UTS #46, as browsers and DNS
+resolvers apply it), so `user@bücher.de` is sent as `user@xn--bcher-kva.de`.  The
+`Message` keeps the address as you gave it.  An address literal, and a local part beyond
+ASCII with its domain, are written as given.
+
+Provider support for a UTF-8 local part still depends on the selected transport.  The
 [SMTP transport](/transports/smtp#internationalized-addresses) negotiates
 the `SMTPUTF8` extension automatically and reports a failed receipt when the
 server cannot accept an internationalized address.

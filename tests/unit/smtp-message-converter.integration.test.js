@@ -279,7 +279,10 @@ describe('Message Converter Integration Tests', () => {
 
       assert.equal(sender.requiresSmtpUtf8, true);
       assert.equal(recipient.requiresSmtpUtf8, true);
-      assert.equal(replyTo.requiresSmtpUtf8, true);
+      // Changed in the port: a domain beyond ASCII under an ASCII local part
+      // goes as its A-label, which needs no SMTPUTF8.
+      assert.equal(replyTo.requiresSmtpUtf8, false);
+      assert.ok(replyTo.raw.includes('Reply-To: support@xn--r8jz45g.xn--zckzah'));
       assert.ok(sender.raw.includes('From: josé@example.com'));
     });
 

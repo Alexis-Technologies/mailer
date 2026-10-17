@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/sendgrid/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const {
@@ -121,7 +122,7 @@ const trackingSettingsOf = (config) => {
  */
 const formatAddress = (address) => {
   const result = {
-    email: address.address,
+    email: toAsciiAddress(address.address),
   };
 
   if (address.name) {

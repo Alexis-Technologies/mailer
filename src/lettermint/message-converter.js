@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const {
@@ -120,9 +121,9 @@ const convertSettings = (config) => {
 const formatAddress = (address) => {
   if (address.name) {
     const escapedName = address.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    return `"${escapedName}" <${address.address}>`;
+    return `"${escapedName}" <${toAsciiAddress(address.address)}>`;
   }
-  return address.address;
+  return toAsciiAddress(address.address);
 };
 
 const convertAttachment = async (attachment, signal) => {

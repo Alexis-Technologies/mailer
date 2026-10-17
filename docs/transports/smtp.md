@@ -386,11 +386,15 @@ override does not alter message headers or DKIM signatures.
 
 @alexify/mailer automatically uses the `SMTPUTF8` extension defined by [RFC 6531] when the
 effective SMTP envelope or a visible From, To, Cc, or Reply-To mailbox contains
-a non-ASCII character.  The default envelope includes the message's Bcc
+a non-ASCII local part.  The default envelope includes the message's Bcc
 addresses.  The transport requires the server to advertise both `SMTPUTF8` and
 `8BITMIME`, then adds `BODY=8BITMIME SMTPUTF8` to `MAIL FROM`.  This supports
-UTF-8 local parts and Unicode domain labels without another configuration
-option.
+UTF-8 local parts without another configuration option.
+
+A Unicode domain under an ASCII local part does not require SMTPUTF8: the envelope
+(including an `envelope` override and the envelope of a raw message) and the header
+fields carry its A-label, so `user@bücher.de` goes as `RCPT TO:<user@xn--bcher-kva.de>`
+to any server.
 
 If either required extension is missing, @alexify/mailer returns a non-retryable failed
 receipt with the code `smtp.smtputf8-unsupported` before sending `MAIL FROM`.
@@ -398,9 +402,9 @@ The connection remains available for a later ASCII-only message.
 
 Unicode display names and subjects do not by themselves require SMTPUTF8.
 @alexify/mailer continues to encode those values as RFC 2047 encoded words, so an address
-such as `José <jose@example.com>` follows the ordinary ASCII SMTP flow.  An
-ASCII A-label domain such as `xn--r8jz45g.xn--zckzah` likewise does not require
-SMTPUTF8, while its Unicode U-label form does.
+such as `José <jose@example.com>` follows the ordinary ASCII SMTP flow, and so does
+`support@例え.テスト`, written as `support@xn--r8jz45g.xn--zckzah`.  A verbatim custom
+header with a Unicode address in it is written as given and does require SMTPUTF8.
 
 [RFC 6531]: https://www.rfc-editor.org/rfc/rfc6531
 

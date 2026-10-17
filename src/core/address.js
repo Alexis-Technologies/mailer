@@ -1,7 +1,11 @@
 // Ported from upyo v0.7.0 (packages/core/src/address.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Also ported from nodemailer v10.0.16 (src/mime-node/index.ts): the A-label of
+// a domain, `toAsciiAddress`.
+// https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 
 const net = require('node:net');
+const { domainToASCII } = require('node:url');
 const { ATEXT, isDotAtomText } = require('./text.js');
 
 /**
@@ -74,9 +78,9 @@ const checkDisplayName = (name) => {
  * @internal
  */
 const formatMailbox = (address) => {
-  if (!address.name) return address.address;
+  if (!address.name) return toAsciiAddress(address.address);
   checkDisplayName(address.name);
-  return `${formatPhrase(address.name)} <${address.address}>`;
+  return `${formatPhrase(address.name)} <${toAsciiAddress(address.address)}>`;
 };
 
 /**
@@ -89,9 +93,9 @@ const formatMailbox = (address) => {
  * @internal
  */
 const formatQuotedMailbox = (address) => {
-  if (!address.name) return address.address;
+  if (!address.name) return toAsciiAddress(address.address);
   checkDisplayName(address.name);
-  return `${quoteString(address.name)} <${address.address}>`;
+  return `${quoteString(address.name)} <${toAsciiAddress(address.address)}>`;
 };
 
 /**
@@ -342,6 +346,44 @@ const isEmailAddress = (email) => {
   return typeof email === 'string' && isValidEmail(email);
 };
 
+// domainToASCII is a WHATWG host parser rather than a plain IDNA mapper: it
+// cuts the host at "/", "\\", "?" and "#", drops controls and percent-decodes,
+// so "evil.example/mail.corp.example" would come back as the deliverable
+// "evil.example".  None of these belongs in a domain, and a domain holding one
+// is left as it is.
+// oxlint-disable-next-line no-control-regex -- the controls are what it finds
+const URL_PARSER_UNSAFE = /[/\\?#%\x00-\x20\x7f]/;
+
+const hasNonAscii = (text) => {
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) > 0x7f) return true;
+  }
+  return false;
+};
+
+/**
+ * Writes the domain of an address as an A-label (IDNA with the mapping of
+ * UTS #46, as browsers and resolvers do) when its local part is ASCII, so that
+ * `user@bücher.de` goes as `user@xn--bcher-kva.de` and needs no SMTPUTF8.  A
+ * local part beyond ASCII needs SMTPUTF8 anyway, and its domain stays as given;
+ * so does an address literal, and a domain the mapper does not take.
+ *
+ * @param address A valid address.
+ * @returns The address to write into a header field, an envelope or a request.
+ * @internal
+ */
+const toAsciiAddress = (address) => {
+  if (!hasNonAscii(address)) return address;
+  const at = findLocalPartEnd(address);
+  if (at === -1) return address;
+  const localPart = address.slice(0, at);
+  const domain = address.slice(at + 1);
+  if (hasNonAscii(localPart) || domain.charCodeAt(0) === 0x5b) return address;
+  if (URL_PARSER_UNSAFE.test(domain)) return address;
+  const ascii = domainToASCII(domain);
+  return ascii === '' ? address : `${localPart}@${ascii}`;
+};
+
 module.exports = {
   formatAddress,
   formatMailbox,
@@ -349,4 +391,5 @@ module.exports = {
   formatQuotedMailbox,
   parseAddress,
   isEmailAddress,
+  toAsciiAddress,
 };
