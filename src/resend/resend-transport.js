@@ -13,7 +13,7 @@ const {
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
-const { refusalFailure } = require('../internal/refusal.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 
 /**
  * Resend transport implementation for sending emails via Resend API.
@@ -343,8 +343,8 @@ class ResendTransport {
 }
 
 const createResendFailure = (message, error) => {
-  const refusal = refusalFailure('resend', error);
-  if (refusal !== undefined) return refusal;
+  const known = refusalFailure('resend', error) ?? certificateFailure('resend', message, error);
+  if (known !== undefined) return known;
   if (error instanceof ResendApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

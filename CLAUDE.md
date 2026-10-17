@@ -446,9 +446,17 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `classifyReceiptError` (36) took only the codes that name a certificate, which the leaf of an
     unknown issuer does not (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report for an
     untrusted CA). The receipt takes the classification of the error, by the code along its
-    causes, and `isCertificateCode` (`src/core/receipt.js`, shared with `isUnsentRequestError`)
-    knows that code: a refused certificate is a `configuration` failure, not retried, on Node,
-    Bun and Deno.
+    causes, and `isCertificateCode` (`src/core/receipt.js`) knows that code: a refused
+    certificate is a `configuration` failure, not retried, on Node, Bun and Deno.
+87. every HTTP provider and jmap: a TLS certificate refused in the handshake was retried, as
+    `requestWithRetry` retries any failure without a status, and its receipt was classified by
+    the words of its message (`fetch failed`), a retryable `network` failure; on Deno, whose
+    `fetch` gives it no code, `isUnsentRequestError` found no sign of an unsent request and it was
+    `deliveryUnknown`. `isCertificateFailure` (`src/core/receipt.js`) knows it by the code along
+    the causes or by Deno's text (`invalid peer certificate`), for `classifyReceiptError` and
+    `isUnsentRequestError`; `requestWithRetry` throws it at the first attempt; and
+    `certificateFailure` (`internal/refusal.js`), first in the failure of every HTTP transport,
+    makes its receipt a non-retryable `configuration` failure.
 
 ## Code ported from nodemailer, unemail and sently
 

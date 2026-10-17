@@ -10,7 +10,7 @@ const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
-const { refusalFailure } = require('../internal/refusal.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 const { verifyByRequest } = require('../internal/verify.js');
 
 /**
@@ -279,8 +279,8 @@ const checkAuthentication = (authentication) => {
 };
 
 const createSesFailure = (message, error) => {
-  const refusal = refusalFailure('ses', error);
-  if (refusal !== undefined) return refusal;
+  const known = refusalFailure('ses', error) ?? certificateFailure('ses', message, error);
+  if (known !== undefined) return known;
   if (error instanceof SesApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

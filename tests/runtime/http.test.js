@@ -3,9 +3,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
+const https = require('node:https');
 const { createMessage, readAttachmentContent } = require('@alexify/mailer');
 const { PostmarkTransport } = require('@alexify/mailer/postmark');
 const { fromUrl } = require('@alexify/mailer/attachments');
+const { credentials } = require('../helpers/smtp/servers.js');
 
 // A server that records each request with its body, then answers as
 // `answer(request, response, count)` says.
@@ -142,6 +144,27 @@ test(
     assert.strictEqual(requests.length, 3);
   },
 );
+
+test('Runtime HTTP: a certificate of an unknown CA fails at once, as configuration', async (t) => {
+  // An HTTPS server with the certificate of the test CA, which the runtime
+  // does not trust; each TCP connection is an attempt.
+  let connections = 0;
+  const listener = https.createServer(credentials, (_request, response) => accepted(response));
+  listener.on('connection', (socket) => {
+    connections++;
+    socket.on('error', () => {});
+  });
+  listener.on('tlsClientError', () => {});
+  await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => listener.close(() => resolve())));
+  const url = `https://localhost:${listener.address().port}`;
+  const receipt = await postmark(url, { retries: 2 }).send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.errors[0].category, 'configuration', receipt.errorMessages.join());
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.deliveryUnknown, undefined);
+  assert.strictEqual(connections, 1);
+});
 
 test('Runtime attachments: fromUrl reads through the fetch of the runtime, checking each URL', async (t) => {
   const { requests, url } = await server(t, (request, response) => {

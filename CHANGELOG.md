@@ -35,8 +35,10 @@ additive but the defaults listed below.
 - **The default DKIM `h=` signs `List-Unsubscribe` and `List-Unsubscribe-Post`** too, as
   RFC 8058 asks.
 - **Failures are classified more precisely:** a message a provider's limits refuse before any
-  request is a non-retryable `validation` failure, and a TLS certificate refused in the handshake
-  of `./smtp` a non-retryable `configuration` failure, where both were `unknown`.
+  request is a non-retryable `validation` failure, where it was `unknown`; and a TLS certificate
+  refused in the handshake is a non-retryable `configuration` failure at the first attempt, where
+  SMTP reported it as `unknown` and the HTTP transports retried it and reported a retryable
+  `network` failure (`deliveryUnknown` on Deno).
 - **On Deno, give the HTTP transports a `fetch` that keeps no idle connection**
   (`Deno.createHttpClient({ poolMaxIdlePerHost: 0 })`): Deno's own sends a request again when a
   reused connection closes before its answer. See
@@ -127,10 +129,12 @@ additive but the defaults listed below.
 
 ### Fixed
 
-- **A TLS certificate refused in the handshake was `unknown` in an SMTP receipt,** classified by
-  the words of its message alone; and `classifyReceiptError` missed
-  `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report for an untrusted CA. Both are now a
-  non-retryable `configuration` failure.
+- **A TLS certificate refused in the handshake was misclassified everywhere:** `unknown` in an
+  SMTP receipt, a retried and retryable `network` failure on the HTTP transports (their receipts
+  read the words `fetch failed`), and `deliveryUnknown` on Deno, whose `fetch` gives it no code;
+  `classifyReceiptError` also missed `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report
+  for an untrusted CA. It is now a non-retryable `configuration` failure at the first attempt, on
+  every transport and runtime.
 - **A message refused by a provider's limits before any request was `unknown`;** it is a
   non-retryable `validation` failure.
 - **A pooled SMTP connection was reused for any number of messages,** while servers limit the

@@ -3,6 +3,7 @@
 // retries and how long it waits) and passes it in.
 
 const { combineSignals } = require('../core/abort-signal.js');
+const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
 const { abortReason, sleep } = require('./sleep.js');
@@ -151,6 +152,10 @@ const requestWithRetry = async (request) => {
         const wrapped = isAccepted ? request.wrapAccepted?.(failure, attempt + 1) : undefined;
         throw markDeliveryUnknown(wrapped ?? request.finalError?.(failure, attempt + 1) ?? failure);
       }
+    }
+    // A certificate refused in the handshake refuses every attempt alike.
+    if (isCertificateFailure(failure)) {
+      throw settle(request.finalError?.(failure, attempt + 1) ?? failure);
     }
     const isRetryable = isAccepted || (request.isRetryable ?? isRetryableFailure)(failure);
     if (!isRetryable) throw settle(failure);

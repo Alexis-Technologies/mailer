@@ -11,7 +11,7 @@ const { canonicalHeaderName } = require('./headers.js');
 const { convertAttachments, visitCustomHeaders, withCalendarAttachment } = require('./provider.js');
 const { isDeliveryUnknown } = require('./delivery-unknown.js');
 const { requestWithRetry } = require('./http.js');
-const { refusalFailure } = require('./refusal.js');
+const { certificateFailure, refusalFailure } = require('./refusal.js');
 const { createLog } = require('./log.js');
 
 const MAX_ERROR_TEXT = 500;
@@ -170,6 +170,8 @@ const createApiClient = (config, provider) => {
  */
 const providerFailure = (provider, error) => {
   const message = error instanceof Error ? error.message : String(error);
+  const certificate = certificateFailure(provider, message, error);
+  if (certificate !== undefined) return certificate;
   if (error instanceof ProviderApiError) {
     return createFailedReceipt(message, {
       provider,

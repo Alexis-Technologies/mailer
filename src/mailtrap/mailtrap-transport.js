@@ -12,6 +12,7 @@ const {
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { certificateFailure } = require('../internal/refusal.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -250,6 +251,8 @@ const toReceipt = (response, options) => {
 };
 
 const createMailtrapFailure = (message, error) => {
+  const certificate = certificateFailure('mailtrap', message, error);
+  if (certificate !== undefined) return certificate;
   if (error instanceof MailtrapResponseError) {
     return createFailedReceipt(message, {
       deliveryUnknown: true,

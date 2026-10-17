@@ -115,8 +115,6 @@ const matchesWordRule = (rule, text, name) => {
   return rule.name !== undefined && rule.name === name;
 };
 
-// The first `code` along the chain of causes, as `fetch failed` keeps the
-// socket error behind it.
 // A certificate refused during the TLS handshake: the verification errors of
 // OpenSSL that name one (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT), Node's
 // ERR_TLS_CERT_ALTNAME_INVALID, and the leaf of an unknown issuer, which names
@@ -124,6 +122,33 @@ const matchesWordRule = (rule, text, name) => {
 const isCertificateCode = (code) =>
   typeof code === 'string' && (code.includes('CERT') || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE');
 
+// Deno's fetch, on rustls, gives a refused certificate no code, only the text
+// of its cause: "… client error (Connect): invalid peer certificate: …".
+const CERTIFICATE_TEXT = /\binvalid peer certificate\b/i;
+
+/**
+ * Whether a failure is a TLS certificate refused in the handshake: by the code
+ * along its causes on Node and Bun, by their text on Deno.  No retry passes
+ * it, and no request went out.
+ *
+ * @param error The failure.
+ * @returns `true` for a refused certificate.
+ * @internal
+ */
+const isCertificateFailure = (error) => {
+  let current = error;
+  for (let depth = 0; depth < 4 && current != null && typeof current === 'object'; depth++) {
+    if (isCertificateCode(current.code)) return true;
+    if (typeof current.message === 'string' && CERTIFICATE_TEXT.test(current.message)) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
+};
+
+// The first `code` along the chain of causes, as `fetch failed` keeps the
+// socket error behind it.
 const findErrorCode = (error) => {
   let current = error;
   for (let depth = 0; depth < 4 && current != null && typeof current === 'object'; depth++) {
@@ -153,7 +178,7 @@ const classifyReceiptError = (error) => {
     return { category: 'network', retryable: true, code: 'network' };
   }
   // A certificate refused during the TLS handshake will not pass on a retry.
-  if (isCertificateCode(errorCode)) {
+  if (isCertificateFailure(error)) {
     return { category: 'configuration', retryable: false, code: 'configuration' };
   }
 
@@ -320,6 +345,6 @@ module.exports = {
   classifyReceiptError,
   createReceiptError,
   createFailedReceipt,
-  isCertificateCode,
+  isCertificateFailure,
   parseRetryAfter,
 };

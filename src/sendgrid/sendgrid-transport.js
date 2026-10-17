@@ -7,7 +7,7 @@ const { createSendGridConfig } = require('./config.js');
 const { verifyByRequest } = require('../internal/verify.js');
 const { SendGridApiError, SendGridHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
-const { refusalFailure } = require('../internal/refusal.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
@@ -259,8 +259,8 @@ class SendGridTransport {
 }
 
 const createSendGridFailure = (message, error) => {
-  const refusal = refusalFailure('sendgrid', error);
-  if (refusal !== undefined) return refusal;
+  const known = refusalFailure('sendgrid', error) ?? certificateFailure('sendgrid', message, error);
+  if (known !== undefined) return known;
   if (error instanceof SendGridApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

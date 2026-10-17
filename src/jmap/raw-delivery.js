@@ -7,6 +7,7 @@ const { RawMessageValidationError } = require('../core/raw-message.js');
 const { JMAP_ERROR_TYPES, JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
 const { findOnlyResponse, isRecord, rawOperation, uploadRawMessage } = require('./raw-upload.js');
+const { certificateFailure } = require('../internal/refusal.js');
 
 const using = [
   'urn:ietf:params:jmap:core',
@@ -277,6 +278,8 @@ const submitRawEmail = async (execute, accountId, emailId, identityId, envelope)
 // be retried, and a submission without a definite answer may have gone.
 const rawDeliveryFailure = (error, stage) => {
   const message = error instanceof Error ? error.message : String(error);
+  const certificate = certificateFailure('jmap', message, error);
+  if (certificate !== undefined) return certificate;
   if (error instanceof RawMessageValidationError) {
     return createFailedReceipt(message, {
       provider: 'jmap',

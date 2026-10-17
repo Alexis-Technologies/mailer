@@ -19,6 +19,7 @@ const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { chunks, readItems } = require('../internal/batch.js');
 const { schedulingRefusal } = require('../internal/schedule.js');
+const { certificateFailure } = require('../internal/refusal.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -992,6 +993,8 @@ const refuseScheduled = () =>
   });
 
 const createJmapFailure = (message, error, override = {}) => {
+  const certificate = certificateFailure('jmap', message, error);
+  if (certificate !== undefined) return certificate;
   const attempts = getAttemptCount(error);
 
   if (error instanceof JmapApiError) {

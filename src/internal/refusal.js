@@ -1,8 +1,10 @@
-// Not ported: the receipt of a message a provider cannot take as it is, which
-// its converter refuses before any request: over a limit of the provider, or
-// with a field it cannot express.
+// Not ported: the receipts of what fails before a provider could take a
+// message: a message its converter refuses before any request (over a limit of
+// the provider, or with a field it cannot express), and a TLS certificate
+// refused in the handshake.
 
-const { createFailedReceipt } = require('../core/receipt.js');
+const { createFailedReceipt, isCertificateFailure } = require('../core/receipt.js');
+const { isDeliveryUnknown } = require('./delivery-unknown.js');
 
 /**
  * The refusal of a converter, a RangeError that only a converter throws, so
@@ -27,4 +29,28 @@ const refusalFailure = (provider, error) =>
     ? createFailedReceipt(error.message, { provider, category: 'validation', retryable: false })
     : undefined;
 
-module.exports = { RefusalError, refusalFailure };
+/**
+ * The receipt of a TLS certificate refused in the handshake, wrapped or not by
+ * the provider's own error: a non-retryable `configuration` failure, as no
+ * retry passes it; or `undefined` for another error.  An earlier attempt of
+ * unknown delivery keeps the receipt so.
+ *
+ * @param provider The transport.
+ * @param message The text of the receipt.
+ * @param error What was thrown.
+ * @returns The failed receipt, or `undefined`.
+ * @internal
+ */
+const certificateFailure = (provider, message, error) =>
+  isCertificateFailure(error)
+    ? createFailedReceipt(message, {
+        provider,
+        category: 'configuration',
+        code: 'configuration',
+        retryable: false,
+        deliveryUnknown: isDeliveryUnknown(error),
+        attempts: Number.isInteger(error.attempts) ? error.attempts : undefined,
+      })
+    : undefined;
+
+module.exports = { RefusalError, certificateFailure, refusalFailure };

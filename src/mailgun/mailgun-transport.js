@@ -10,6 +10,7 @@ const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
+const { certificateFailure } = require('../internal/refusal.js');
 
 /**
  * Mailgun transport implementation for sending emails via Mailgun API.
@@ -246,6 +247,8 @@ class MailgunTransport {
 }
 
 const createMailgunFailure = (message, error) => {
+  const certificate = certificateFailure('mailgun', message, error);
+  if (certificate !== undefined) return certificate;
   if (error instanceof MailgunApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),
