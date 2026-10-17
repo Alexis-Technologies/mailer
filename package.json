@@ -139,6 +139,10 @@
     "./breaker": {
       "types": "./src/breaker/index.d.ts",
       "default": "./src/breaker/index.js"
+    },
+    "./ratelimit": {
+      "types": "./src/ratelimit/index.d.ts",
+      "default": "./src/ratelimit/index.js"
     }
   },
   "directories": {

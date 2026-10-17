@@ -20,6 +20,10 @@ class Fifo {
     this.#items.push(item);
   }
 
+  peek() {
+    return this.#items[this.#head];
+  }
+
   shift() {
     const item = this.#items[this.#head];
     this.#items[this.#head] = undefined;

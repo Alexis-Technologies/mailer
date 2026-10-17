@@ -556,6 +556,12 @@ fails on upstream's behavior):
   through, answers the others as while open, counts only network, timeout, server and
   unavailability failures and a thrown error that is not the caller's abort, and ignores a late
   result of a send made in another state.
+- U11. unemail (`src/middleware/rate-limit.ts`): the wait for tokens did not hear the caller's
+  signal, so an aborted send kept its place and its tokens; `maxWaitMs` counted from the turn of
+  a message, not its arrival, so one queued behind others waited past it; and a batch costing
+  more than the capacity was cut to it and went through, over the limit. `./ratelimit` serves the
+  waiters in turn from one timer and drops one whose caller aborts, refuses at once a message the
+  queue ahead would hold past `maxWaitMs`, and refuses a cost over `burst`.
 
 ## Repository layout
 
