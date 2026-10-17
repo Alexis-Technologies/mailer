@@ -12,6 +12,7 @@ const { checkSmtpPath } = require('../../src/smtp/envelope.js');
 const { OAuth2TokenManager } = require('../../src/smtp/oauth2.js');
 const { SmtpConnection } = require('../../src/smtp/smtp-connection.js');
 const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
+const { ca, smtpServer } = require('../helpers/smtp/servers.js');
 
 const message = () =>
   createMessage({
@@ -832,5 +833,35 @@ test('SMTP: mail sent in plain text to another host is warned of, to the logger 
     assert.strictEqual(warnings[0].code, 'MAILER_SMTP_PLAINTEXT');
   } finally {
     await server.stop();
+  }
+});
+
+test('SMTP: a certificate refused in the handshake is a configuration failure, not retried', async (t) => {
+  const { connect } = require('node:net');
+  const cases = [
+    // The CA is not trusted: UNABLE_TO_VERIFY_LEAF_SIGNATURE, which names no
+    // certificate, over implicit TLS and after STARTTLS.
+    { mode: 'implicit', config: { host: 'localhost', secure: true } },
+    { mode: 'starttls', config: { host: 'localhost', requireTls: true } },
+    // Trusted, for another name: ERR_TLS_CERT_ALTNAME_INVALID.
+    { mode: 'implicit', config: { host: 'mail.example.test', secure: true, tls: { ca } } },
+  ];
+  for (const { mode, config } of cases) {
+    const { port, state } = await smtpServer(t, mode);
+    const transport = new SmtpTransport({
+      ...config,
+      port,
+      pool: false,
+      connect: () => connect(port, '127.0.0.1'),
+    });
+    const receipt = await transport.send(message());
+    await transport.closeAllConnections();
+    // Changed after the port: the receipt was `unknown`, by the words of the
+    // message alone.
+    assert.strictEqual(receipt.errors[0].category, 'configuration', receipt.errorMessages[0]);
+    assert.strictEqual(receipt.errors[0].code, 'configuration');
+    assert.strictEqual(receipt.retryable, false);
+    assert.strictEqual(receipt.deliveryUnknown, undefined);
+    assert.strictEqual(state.messages, 0);
   }
 });

@@ -97,11 +97,12 @@ test('Runtime SMTP: implicit TLS and STARTTLS trust the CA they are given', asyn
   }
 });
 
-test('Runtime SMTP: a certificate of an unknown CA is a failure that is not retried', async (t) => {
+test('Runtime SMTP: a certificate of an unknown CA is a configuration failure', async (t) => {
   const { port, state } = await smtpServer(t, 'implicit');
   const [receipt] = await sendWith({ host: 'localhost', port, secure: true }, [message()]);
   assert.strictEqual(receipt.successful, false);
-  assert.strictEqual(receipt.retryable, false, receipt.errorMessages.join());
+  assert.strictEqual(receipt.errors[0].category, 'configuration', receipt.errorMessages.join());
+  assert.strictEqual(receipt.retryable, false);
   assert.strictEqual(receipt.deliveryUnknown, undefined);
   assert.strictEqual(state.commands.length, 0);
 });

@@ -1,6 +1,8 @@
 // Not ported: tells a request that never left from one that may
 // have reached the server, for a request that must not be sent twice.
 
+const { isCertificateCode } = require('../core/receipt.js');
+
 // System error codes of a connection that was never made, so no request went
 // out: a refused connection, an unknown or unreachable host.  A certificate
 // rejected during the TLS handshake also ends the connection before it.
@@ -10,11 +12,9 @@ const UNSENT_CODES = new Set([
   'EAI_AGAIN',
   'EHOSTUNREACH',
   'ENETUNREACH',
-  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
 ]);
 
-const isUnsentCode = (code) =>
-  typeof code === 'string' && (UNSENT_CODES.has(code) || code.includes('CERT'));
+const isUnsentCode = (code) => UNSENT_CODES.has(code) || isCertificateCode(code);
 
 /**
  * Whether a failed request certainly never reached the server: somewhere in

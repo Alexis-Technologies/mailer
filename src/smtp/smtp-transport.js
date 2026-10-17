@@ -834,10 +834,10 @@ const createSmtpFailure = (message, error) => {
   if (error instanceof SmtpResponseError || error instanceof SmtpAuthResponseError) {
     return createReplyFailure(message, error);
   }
-  return createFailedReceipt(message, {
-    provider: 'smtp',
-    attempts: 1,
-  });
+  // No reply to read: what the error is, by the code along its causes (a
+  // refused certificate, a reset), and only then by its words.
+  const { category, retryable } = classifyReceiptError(error);
+  return createFailedReceipt(message, { provider: 'smtp', category, retryable, attempts: 1 });
 };
 
 // Failures found before or without a reply of the server, which no retry

@@ -117,6 +117,13 @@ const matchesWordRule = (rule, text, name) => {
 
 // The first `code` along the chain of causes, as `fetch failed` keeps the
 // socket error behind it.
+// A certificate refused during the TLS handshake: the verification errors of
+// OpenSSL that name one (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT), Node's
+// ERR_TLS_CERT_ALTNAME_INVALID, and the leaf of an unknown issuer, which names
+// none and is the one Node and Bun report for a CA they do not know.
+const isCertificateCode = (code) =>
+  typeof code === 'string' && (code.includes('CERT') || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE');
+
 const findErrorCode = (error) => {
   let current = error;
   for (let depth = 0; depth < 4 && current != null && typeof current === 'object'; depth++) {
@@ -146,7 +153,7 @@ const classifyReceiptError = (error) => {
     return { category: 'network', retryable: true, code: 'network' };
   }
   // A certificate refused during the TLS handshake will not pass on a retry.
-  if (typeof errorCode === 'string' && errorCode.includes('CERT')) {
+  if (isCertificateCode(errorCode)) {
     return { category: 'configuration', retryable: false, code: 'configuration' };
   }
 
@@ -313,5 +320,6 @@ module.exports = {
   classifyReceiptError,
   createReceiptError,
   createFailedReceipt,
+  isCertificateCode,
   parseRetryAfter,
 };

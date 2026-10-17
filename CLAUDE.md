@@ -435,6 +435,14 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 85. pool (known bug 7): `continueOnSuccess` was accepted and never read; honored, it would send
     a message that went out through one transport again through the others. It is gone from
     the type, and `continueOnSuccess: true` throws a `TypeError` when the pool is made.
+86. smtp: a failure without a reply of the server was classified by the words of its message
+    alone, so a certificate refused during the TLS handshake was `unknown`; and
+    `classifyReceiptError` (36) took only the codes that name a certificate, which the leaf of an
+    unknown issuer does not (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report for an
+    untrusted CA). The receipt takes the classification of the error, by the code along its
+    causes, and `isCertificateCode` (`src/core/receipt.js`, shared with `isUnsentRequestError`)
+    knows that code: a refused certificate is a `configuration` failure, not retried, on Node,
+    Bun and Deno.
 
 ## Code ported from nodemailer, unemail and sently
 

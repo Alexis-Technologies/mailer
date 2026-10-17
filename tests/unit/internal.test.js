@@ -7,7 +7,8 @@ const fetchFailed = (code) =>
   new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
 
 test('Internal: a request whose connection was never made was not sent', () => {
-  for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'CERT_HAS_EXPIRED']) {
+  const codes = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'CERT_HAS_EXPIRED'];
+  for (const code of [...codes, 'UNABLE_TO_VERIFY_LEAF_SIGNATURE']) {
     assert.strictEqual(isUnsentRequestError(fetchFailed(code)), true, code);
   }
   const wrapped = new Error('JMAP request failed', { cause: fetchFailed('ECONNREFUSED') });
