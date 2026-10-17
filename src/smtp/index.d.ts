@@ -88,7 +88,10 @@ export interface SmtpConfig extends TransportDependencies {
    */
   readonly socketTimeout?: number;
   /**
-   * The name to use for the local hostname in the HELO/EHLO command.
+   * The name to use for the local hostname in the HELO/EHLO command.  By
+   * default the host name of this machine when it is a fully qualified
+   * domain name, its address as an address literal, or `[127.0.0.1]`, as
+   * nodemailer gives it; a server that checks the name refuses `localhost`.
    */
   readonly localName?: string;
   /**

@@ -141,6 +141,11 @@ while `SmtpConfig.secure` determines whether to use implicit TLS and
 `SmtpConfig.requireTls` makes a STARTTLS upgrade mandatory for plaintext
 connections.  Connection and socket timeouts prevent hanging connections, and
 the `SmtpConfig.localName` identifies your server during the SMTP handshake.
+Without one, EHLO gives the host name of this machine when it is a fully
+qualified domain name, its address as an address literal, or `[127.0.0.1]`, as
+nodemailer does; a server that checks the name, such as Postfix with
+`reject_non_fqdn_helo_hostname`, refuses `localhost`.  A name with whitespace or
+a control character is refused when the transport is made.
 Connection pooling improves performance by reusing connections across multiple
 messages.
 

@@ -23,7 +23,7 @@ const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { checkDkimKeys } = require('../mime/dkim/sign.js');
-const { checkAuthMethod, checkConnect, checkLocalAddress } = require('./config.js');
+const { checkAuthMethod, checkConnect, checkLocalAddress, checkLocalName } = require('./config.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
@@ -129,6 +129,7 @@ class SmtpTransport {
     checkDkimKeys(config.dkim);
     checkAuthMethod(config.auth);
     checkLocalAddress(config.localAddress);
+    if (config.localName != null) checkLocalName(config.localName);
     checkConnect(config.connect);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
