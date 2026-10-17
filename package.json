@@ -36,6 +36,10 @@
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"
     },
+    "./sendmail": {
+      "types": "./src/sendmail/index.d.ts",
+      "default": "./src/sendmail/index.js"
+    },
     "./jmap": {
       "types": "./src/jmap/index.d.ts",
       "default": "./src/jmap/index.js"

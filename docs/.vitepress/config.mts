@@ -75,6 +75,7 @@ const guide = [
     text: 'Transports',
     items: [
       { text: 'SMTP', link: '/transports/smtp' },
+      { text: 'Sendmail', link: '/transports/sendmail' },
       { text: 'Amazon SES', link: '/transports/ses' },
       { text: 'Resend', link: '/transports/resend' },
       { text: 'SendGrid', link: '/transports/sendgrid' },

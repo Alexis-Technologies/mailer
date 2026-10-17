@@ -3,6 +3,7 @@
   "./mime": 7.5,
   "./attachments": 4,
   "./smtp": 22.5,
+  "./sendmail": 10.5,
   "./jmap": 12.5,
   "./ses": 6.5,
   "./resend": 6,

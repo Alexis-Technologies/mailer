@@ -488,6 +488,12 @@ fails on upstream's behavior):
   brackets it, passes the `tls` options and the proxy's name, decodes the credentials as UTF-8,
   and puts back what came with the reply in the paused socket. A connection opened by `connect`
   counts as local for plain-text AUTH only by its `host`, never by the proxy it reaches.
+- N5. nodemailer (`sendmail-transport`): a process killed by a signal (`code === null`) was a
+  success, the code of `close` was handed on as an error value, stderr was never read, the
+  recipients followed the options with no `--`, and the message kept its Bcc field for the MTA to
+  strip. `./sendmail` succeeds on an exit with 0 alone, reports a signal after the whole message
+  as `deliveryUnknown`, classifies the sysexits codes, reads stderr bounded and redacted, ends the
+  options with `--`, and puts blind recipients on the command line only.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and
