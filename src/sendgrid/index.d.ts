@@ -97,6 +97,12 @@ export interface SendGridConfig extends TransportDependencies {
    * @default false
    */
   readonly googleAnalytics?: boolean;
+  /**
+   * The clock, in milliseconds, for the 72 hours of `scheduledAt`.
+   *
+   * @default Date.now
+   */
+  readonly now?: () => number;
 }
 /**
  * Resolved SendGrid configuration with all optional fields filled with default values.

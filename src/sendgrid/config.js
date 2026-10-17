@@ -32,6 +32,7 @@ const createSendGridConfig = (config) => {
     openTracking: config.openTracking ?? true,
     subscriptionTracking: config.subscriptionTracking ?? false,
     googleAnalytics: config.googleAnalytics ?? false,
+    now: config.now ?? Date.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
   checkConcurrency(resolved.concurrency);

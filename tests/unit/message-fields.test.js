@@ -104,7 +104,6 @@ const providers = {
       authentication: { type: 'credentials', accessKeyId: 'AKID', secretAccessKey: 'secret' },
       retries: 0,
     }),
-  sendgrid: () => new SendGridTransport({ apiKey: 'SG.key', retries: 0 }),
   mailgun: () => new MailgunTransport({ apiKey: 'key', domain: 'mg.example.com', retries: 0 }),
   mailtrap: () => new MailtrapTransport({ apiToken: 'token', retries: 0 }),
   maileroo: () => new MailerooTransport({ apiKey: 'key', retries: 0 }),
@@ -193,6 +192,45 @@ test('Fields: Resend sends metadata as tags, alone, and refuses what a tag canno
     assert.strictEqual(receipt.errors[0].category, 'validation');
     assert.strictEqual(receipt.retryable, false);
   }
+});
+
+test('Fields: SendGrid sends send_at, the tracking of the message and custom_args', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(null, { status: 202, headers: { 'x-message-id': `sg${bodies.length}` } });
+  });
+  const now = () => Date.parse('2026-10-17T12:00:00Z');
+  const transport = new SendGridTransport({ apiKey: 'SG.key', retries: 0, now });
+  const sent = await transport.send(
+    createMessage({
+      ...base,
+      scheduledAt: tomorrow,
+      tracking: { opens: false },
+      metadata: { orderId: '42' },
+    }),
+  );
+  assert.strictEqual(sent.successful, true);
+  assert.strictEqual(bodies[0].send_at, tomorrow.getTime() / 1000);
+  assert.deepStrictEqual(bodies[0].custom_args, { orderId: '42' });
+  assert.deepStrictEqual(bodies[0].tracking_settings.open_tracking, { enable: false });
+  assert.deepStrictEqual(bodies[0].tracking_settings.click_tracking, {
+    enable: true,
+    enable_text: true,
+  });
+  await transport.send(createMessage({ ...base, tracking: { clicks: false } }));
+  assert.deepStrictEqual(bodies[1].tracking_settings.click_tracking, {
+    enable: false,
+    enable_text: false,
+  });
+  assert.strictEqual(bodies[1].send_at, undefined);
+  assert.strictEqual(bodies[1].custom_args, undefined);
+  const late = await transport.send(
+    createMessage({ ...base, scheduledAt: new Date(now() + 73 * 3600_000) }),
+  );
+  assert.match(late.errorMessages[0], /at most 72 hours ahead/);
+  assert.strictEqual(late.errors[0].category, 'validation');
+  assert.strictEqual(bodies.length, 2);
 });
 
 const CORE = 'urn:ietf:params:jmap:core';

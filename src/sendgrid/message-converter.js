@@ -4,13 +4,15 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
-const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   collectCustomHeaders,
   convertAttachments,
   formatAddresses,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+
+// `send_at` may be at most 72 hours ahead.
+const SCHEDULE_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 /**
  * Converts a Upyo Message to SendGrid API JSON format.
@@ -22,6 +24,7 @@ const {
  * @param config - The resolved SendGrid configuration
  * @returns Promise that resolves to a SendGrid mail object
  * @throws {TypeError} If the message carries an invalid message identifier.
+ * @throws {RangeError} If it is scheduled more than 72 hours ahead.
  *
  * @example
  * ```typescript
@@ -30,7 +33,12 @@ const {
  * ```
  */
 const convertMessage = async (message, config, signal) => {
-  refuseScheduledAt(message, 'sendgrid');
+  if (
+    message.scheduledAt !== undefined &&
+    message.scheduledAt.getTime() - config.now() > SCHEDULE_WINDOW_MS
+  ) {
+    throw new RangeError('SendGrid schedules a message at most 72 hours ahead.');
+  }
   const attachments = withCalendarAttachment(message);
   const personalization = {
     to: formatAddresses(message.recipients, formatAddress),
@@ -72,8 +80,13 @@ const convertMessage = async (message, config, signal) => {
     sendGridMail.attachments = await convertAttachments(attachments, convertAttachment, signal);
   }
 
-  const trackingSettings = trackingSettingsOf(config);
+  const trackingSettings = trackingSettingsOf(config, message.tracking);
   if (trackingSettings !== undefined) sendGridMail.tracking_settings = trackingSettings;
+  if (message.scheduledAt !== undefined) {
+    sendGridMail.send_at = Math.floor(message.scheduledAt.getTime() / 1000);
+  }
+  // SendGrid returns custom arguments in its events.
+  if (message.metadata !== undefined) sendGridMail.custom_args = { ...message.metadata };
 
   return sendGridMail;
 };
@@ -94,16 +107,19 @@ const contentOf = (message) => {
   return content;
 };
 
-// The tracking settings the configuration sets, or `undefined` for none.
-const trackingSettingsOf = (config) => {
+// The tracking settings of the message over those of the configuration, or
+// `undefined` for none.
+const trackingSettingsOf = (config, tracking) => {
   let settings;
-  if (config.clickTracking !== undefined) {
+  const clicks = tracking?.clicks ?? config.clickTracking;
+  const opens = tracking?.opens ?? config.openTracking;
+  if (clicks !== undefined) {
     settings ??= {};
-    settings.click_tracking = { enable: config.clickTracking, enable_text: config.clickTracking };
+    settings.click_tracking = { enable: clicks, enable_text: clicks };
   }
-  if (config.openTracking !== undefined) {
+  if (opens !== undefined) {
     settings ??= {};
-    settings.open_tracking = { enable: config.openTracking };
+    settings.open_tracking = { enable: opens };
   }
   if (config.subscriptionTracking !== undefined) {
     settings ??= {};
