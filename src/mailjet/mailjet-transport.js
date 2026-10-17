@@ -8,7 +8,7 @@
 
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
-const { chunks } = require('../internal/batch.js');
+const { chunks, jsonBytes } = require('../internal/batch.js');
 const {
   ProviderApiError,
   convertBatch,
@@ -21,6 +21,9 @@ const { verifyByRequest } = require('../internal/verify.js');
 const { createMailjetConfig } = require('./config.js');
 const { createMailjetClient } = require('./http-client.js');
 const { MAX_RECIPIENTS, convertMessage, recipientCount } = require('./message-converter.js');
+
+// Mailjet takes 15 MB a request at most, attachments included.
+const MAX_REQUEST_BYTES = 15 * 1000 * 1000;
 
 // Mailjet names every problem of a message at once, with the fields it is
 // about.
@@ -134,8 +137,8 @@ class MailjetTransport {
   }
 
   /**
-   * Sends messages in requests of up to 50 recipients, each message with the
-   * receipt of its own answer.
+   * Sends messages in requests of up to 50 recipients and 15 MB, each message
+   * with the receipt of its own answer.
    *
    * @param messages The messages.
    * @param options Optional abort signal and retry callback.
@@ -154,16 +157,22 @@ class MailjetTransport {
       const receipts = [];
       let run = [];
       let recipients = 0;
+      let bytes = 16;
       for (let i = 0; i < batch.length; i++) {
         if (typeof converted.slots[i] !== 'number') continue;
         const count = recipientCount(batch[i]);
-        if (run.length > 0 && recipients + count > MAX_RECIPIENTS) {
+        const entry = converted.payloads[converted.slots[i]];
+        const size = jsonBytes(entry);
+        const full = recipients + count > MAX_RECIPIENTS || bytes + size > MAX_REQUEST_BYTES;
+        if (run.length > 0 && full) {
           for (const receipt of await this.sendEntries(run, options)) receipts.push(receipt);
           run = [];
           recipients = 0;
+          bytes = 16;
         }
-        run.push(converted.payloads[converted.slots[i]]);
+        run.push(entry);
         recipients += count;
+        bytes += size;
       }
       if (run.length > 0) {
         for (const receipt of await this.sendEntries(run, options)) receipts.push(receipt);

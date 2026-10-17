@@ -83,4 +83,12 @@ const sendConcurrently = async function* (messages, limit, send, signal) {
   }
 };
 
-module.exports = { chunks, readItems, sendConcurrently };
+/**
+ * The bytes a value takes as JSON, with the comma that follows it in an
+ * array: what it adds to the body of a batch request.
+ *
+ * @internal
+ */
+const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value)) + 1;
+
+module.exports = { chunks, jsonBytes, readItems, sendConcurrently };

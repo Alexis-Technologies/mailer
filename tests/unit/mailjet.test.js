@@ -225,3 +225,28 @@ test('Mailjet: verify reads the profile, the options are checked, the secret nev
   controller.abort(new Error('stop'));
   await assert.rejects(made.send(message(), { signal: controller.signal }), /stop/);
 });
+
+test('Mailjet: a batch past 15 MB goes in as many requests as that takes', async (t) => {
+  // Before: only the recipients split a batch, so messages with files went in
+  // one request past the 15 MB Mailjet takes.
+  const requests = stubFetch(t, (request) =>
+    json({ Messages: request.json.Messages.map((_entry, index) => success(`u-${index}`)) }),
+  );
+  const file = () => ({
+    filename: 'big.bin',
+    contentType: 'application/octet-stream',
+    inline: false,
+    contentId: '',
+    content: new Uint8Array(8 * 1000 * 1000),
+  });
+  const receipts = [];
+  for await (const receipt of transport().sendMany([
+    message({ attachments: [file()] }),
+    message({ attachments: [file()] }),
+  ])) {
+    receipts.push(receipt);
+  }
+  assert.ok(receipts.every((receipt) => receipt.successful));
+  assert.strictEqual(requests.length, 2);
+  for (const request of requests) assert.ok(Buffer.byteLength(request.body) <= 15 * 1000 * 1000);
+});

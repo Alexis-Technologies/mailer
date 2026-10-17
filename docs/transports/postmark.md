@@ -71,8 +71,9 @@ the message is `deliveryUnknown`.
 
 ## Batches
 
-`sendMany()` sends up to 500 messages a request through `/email/batch`, reading
-its input a batch at a time.  Each message has the receipt of its own answer, so an
+`sendMany()` sends up to 500 messages and 50 MB a request through `/email/batch`,
+reading its input a batch at a time: messages with files go in as many requests
+as their size takes, each of which fails, or is of unknown delivery, on its own.  Each message has the receipt of its own answer, so an
 inactive recipient fails its message alone; a message that cannot be converted
 fails alone too.
 

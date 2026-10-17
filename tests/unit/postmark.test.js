@@ -252,3 +252,33 @@ test('Postmark: an abort rejects with its reason', async (t) => {
   const sending = transport().sendMany([message()], { signal: controller.signal });
   await assert.rejects(sending.next(), /stop/);
 });
+
+test('Postmark: a batch past 50 MB goes in as many requests as that takes', async (t) => {
+  // Before: 500 messages went in one request whatever their files, which
+  // Postmark refuses past 50 MB, and one failure failed them all.
+  const requests = stubFetch(t, (request) =>
+    json(request.json.map((_payload, index) => ({ ErrorCode: 0, MessageID: `pm-${index}` }))),
+  );
+  const file = () => ({
+    filename: 'big.bin',
+    contentType: 'application/octet-stream',
+    inline: false,
+    contentId: '',
+    content: new Uint8Array(20 * 1000 * 1000),
+  });
+  const receipts = [];
+  for await (const receipt of transport().sendMany([
+    message({ attachments: [file()] }),
+    message({ attachments: [file()] }),
+    message(),
+  ])) {
+    receipts.push(receipt);
+  }
+  assert.ok(receipts.every((receipt) => receipt.successful));
+  assert.strictEqual(requests.length, 2);
+  assert.deepStrictEqual(
+    requests.map((request) => request.json.length),
+    [1, 2],
+  );
+  for (const request of requests) assert.ok(Buffer.byteLength(request.body) <= 50 * 1000 * 1000);
+});
