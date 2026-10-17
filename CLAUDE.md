@@ -543,6 +543,13 @@ fails on upstream's behavior):
 - U8. unemail (`src/drivers/scaleway.ts`): an inline attachment went as an ordinary file without
   its Content-ID, which the API has no field for, so the `cid:` of the HTML matched nothing.
   `./scaleway` refuses it before the request.
+- U9. unemail (`src/drivers/cloudflare-email-rest.ts`): the REST driver wrote the addresses as
+  `{ email, name }`, the reply-to as `replyTo` and the Content-ID as `contentId`, the shapes of the
+  Workers binding, where the REST API takes `{ address, name }`, `reply_to` and `content_id`
+  (Cloudflare's API reference and SDK 7.3.0); and the receipt's id was made of the delivered
+  addresses and the clock, which put the recipients into every log of a receipt and could repeat
+  within a millisecond, while the answer has a `message_id`. `./cloudflare` writes the REST
+  shapes and takes the `message_id`.
 
 ## Repository layout
 

@@ -10,6 +10,8 @@ const { toAsciiAddress } = require('../core/address.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { joinChunks } = require('./body.js');
 
+const UTF8 = new TextDecoder('utf-8', { fatal: true });
+
 /**
  * Reads a raw message into one buffer, its lines checked as they are read,
  * and its envelope with domains as A-labels.
@@ -51,4 +53,21 @@ const rawMessageFailure = (provider, error) =>
     ? createFailedReceipt(error.message, { provider, category: 'validation', retryable: false })
     : undefined;
 
-module.exports = { rawMessageFailure, readRawMessage };
+/**
+ * The text of a raw message, for an API that takes it as a JSON string.
+ *
+ * @param bytes The bytes of the message.
+ * @param label The provider's name, for the error.
+ * @returns The text.
+ * @throws {RawMessageValidationError} If the bytes are not UTF-8.
+ * @internal
+ */
+const rawMessageText = (bytes, label) => {
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    throw new RawMessageValidationError(`${label} takes a raw message only as UTF-8.`, 'content');
+  }
+};
+
+module.exports = { rawMessageFailure, rawMessageText, readRawMessage };

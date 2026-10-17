@@ -9,13 +9,12 @@
 // message goes as `email_rfc822`.
 
 const { formatMailbox, toAsciiAddress } = require('../core/address.js');
-const { RawMessageValidationError } = require('../core/raw-message.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
+const { rawMessageText } = require('../internal/raw.js');
 
 // "Maximum number of tags - 10 per recipient".
 const MAX_TAGS = 10;
-const UTF8 = new TextDecoder('utf-8', { fatal: true });
 
 // `start_time` is "YYYY-MM-DDTHH:MM:SS+-HH:MM", without milliseconds.
 const startTimeOf = (date) => `${date.toISOString().slice(0, 19)}+00:00`;
@@ -114,15 +113,6 @@ const convertMessage = async (message, config, signal) => {
   return transmission;
 };
 
-// The API takes the message as a JSON string, so its bytes must be UTF-8.
-const textOf = (bytes) => {
-  try {
-    return UTF8.decode(bytes);
-  } catch {
-    throw new RawMessageValidationError('SparkPost takes a raw message only as UTF-8.', 'content');
-  }
-};
-
 /**
  * Converts a raw message, read with `readRawMessage`, to a transmission of
  * its RFC 822 text to the recipients of its envelope.
@@ -136,7 +126,8 @@ const convertRawMessage = (raw, config) => {
   for (const email of raw.envelope.to) recipients.push({ address: { email } });
   const transmission = {
     recipients,
-    content: { email_rfc822: textOf(raw.bytes) },
+    // The API takes the message as a JSON string.
+    content: { email_rfc822: rawMessageText(raw.bytes, 'SparkPost') },
   };
   const options = optionsOf(undefined, config);
   if (Object.keys(options).length > 0) transmission.options = options;

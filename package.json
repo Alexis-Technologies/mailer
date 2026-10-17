@@ -112,6 +112,10 @@
       "types": "./src/scaleway/index.d.ts",
       "default": "./src/scaleway/index.js"
     },
+    "./cloudflare": {
+      "types": "./src/cloudflare/index.d.ts",
+      "default": "./src/cloudflare/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"
