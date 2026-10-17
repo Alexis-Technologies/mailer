@@ -117,6 +117,13 @@ test('DKIM: a domain, selector or field name that could break the signature fiel
     { signingDomain: '-example.com' },
     { selector: 'mail\r\nX: y' },
     { selector: 'a;b' },
+    // The URL parser removes these, so the name read as valid while the line
+    // break went into the field.
+    { signingDomain: 'exa\r\nmple.com' },
+    { signingDomain: 'example.com\n' },
+    { signingDomain: 'ex\tample.com' },
+    { signingDomain: 'example.com/x' },
+    { selector: 'mail\r\n2026' },
     { headerFields: ['from', 'subject; x=1'] },
     { headerFields: ['from:to'] },
     { algorithm: 'rsa-sha1' },

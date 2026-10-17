@@ -341,7 +341,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 62. DKIM: `signingDomain`, `selector`, the names in `headerFields`, the algorithm and the
     canonicalization went into the DKIM-Signature field unchecked, so a domain with a line
     break added a header field such as Bcc to the message, and a `;` ended a tag early.
-    `checkDkimConfig` refuses them, from the SMTP constructor and at every composition.
+    `checkDkimConfig` refuses them, from the SMTP constructor and at every composition. A name
+    with a tab, CR or LF, which the WHATWG parser behind `domainToASCII` removes before it reads
+    the name, is refused before it gets there; the first version of this fix let one through.
 63. DKIM (known bug 6): a PEM was stripped of its armor and imported as PKCS#8, so a PKCS#1
     key (`BEGIN RSA PRIVATE KEY`) failed. `createPrivateKey` of node:crypto reads either and
     the key reaches Web Crypto as PKCS#8; the import error keeps its cause.
