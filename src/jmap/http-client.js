@@ -1,0 +1,144 @@
+// Ported from upyo v0.7.0 (packages/jmap/src/http-client.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { parseRetryAfter } = require('../core/receipt.js');
+const { JmapApiError } = require('./errors.js');
+const { isAbortError, requestWithRetry } = require('../internal/http.js');
+const { createLog } = require('../internal/log.js');
+const { readJson, readText } = require('../internal/body.js');
+const { Buffer } = require('node:buffer');
+
+/**
+ * HTTP client for JMAP API requests.
+ */
+class JmapHttpClient {
+  config;
+  replayableRequests;
+
+  /**
+   * @param config HTTP and authentication settings.
+   * @param replayableRequests Whether request bodies and failed requests may be replayed.
+   */
+  constructor(config, replayableRequests = true) {
+    this.config = config;
+    this.log = createLog(config.logger, { transport: 'jmap' });
+    this.replayableRequests = replayableRequests;
+  }
+
+  /**
+   * Fetches the JMAP session from the session URL.
+   * @param signal Optional abort signal.
+   * @returns The JMAP session response.
+   */
+  fetchSession(signal) {
+    signal?.throwIfAborted();
+
+    return requestWithRetry({
+      log: this.log,
+      signal,
+      retries: 0,
+      timeoutMs: this.config.timeout,
+      isIdempotent: true,
+      send: (attemptSignal) =>
+        this.fetchWithAuth(this.config.sessionUrl, { method: 'GET' }, attemptSignal),
+      read: (response) => readJson(response),
+      reject: async (response) =>
+        new JmapApiError(
+          `Session fetch failed: ${response.status}`,
+          response.status,
+          await readText(response),
+          undefined,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          1,
+        ),
+    });
+  }
+
+  /**
+   * Executes a JMAP API request.
+   * @param apiUrl The JMAP API URL.
+   * @param request The JMAP request payload.
+   * @param signal Optional abort signal.
+   * @param onRetry Optional callback of each retry.
+   * @returns The JMAP response.
+   */
+  executeRequest(apiUrl, request, signal, onRetry) {
+    signal?.throwIfAborted();
+    // Serialized once rather than on every attempt.
+    const json = JSON.stringify(request);
+
+    return requestWithRetry({
+      log: this.log,
+      signal,
+      onRetry,
+      retries: this.replayableRequests ? this.config.retries : 0,
+      timeoutMs: this.config.timeout,
+      // A JMAP request is retried after a 2xx it could not read, as upstream
+      // did; the submission of an email has no retries (`submissionClient`).
+      isIdempotent: true,
+      send: (attemptSignal) =>
+        this.fetchWithAuth(
+          apiUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // Upstream streamed a request that must not be replayed, against a
+            // replay seen in Deno; Node's fetch does not replay a POST, and on
+            // Node 24 it reports a 401 to a streamed body as a network failure.
+            body: json,
+            ...(this.replayableRequests ? {} : { redirect: 'error' }),
+          },
+          attemptSignal,
+        ),
+      read: (response) => readJson(response),
+      reject: async (response, attempt) =>
+        new JmapApiError(
+          `JMAP request failed: ${response.status}`,
+          response.status,
+          await readText(response),
+          undefined,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        ),
+      // The cause tells a request that never left (a refused connection) from
+      // one that may have reached the server.
+      finalError: (error, attempts) => {
+        if (error instanceof JmapApiError) return error;
+        const message = isAbortError(error) ? 'JMAP request timed out.' : error.message;
+        return new JmapApiError(message, undefined, undefined, undefined, undefined, attempts, {
+          cause: error,
+        });
+      },
+    });
+  }
+
+  /**
+   * Makes an authenticated fetch request.
+   * @param url The URL to fetch.
+   * @param options Fetch options.
+   * @param signal The signal of the attempt, with its deadline.
+   * @returns The fetch response.
+   */
+  fetchWithAuth(url, options, signal) {
+    const headers = new Headers(options.headers);
+    if (this.config.bearerToken) {
+      headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
+    } else if (this.config.basicAuth) {
+      const { username, password } = this.config.basicAuth;
+      const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+      headers.set('Authorization', `Basic ${credentials}`);
+    }
+
+    // Add custom headers from config
+    for (const [key, value] of Object.entries(this.config.headers)) {
+      headers.set(key, value);
+    }
+
+    // A redirect comes back as a response rather than being followed, so the
+    // credentials in the headers never reach another origin.
+    const fetch = this.config.fetch ?? globalThis.fetch;
+    return fetch(url, { redirect: 'manual', ...options, headers, signal });
+  }
+}
+
+module.exports = { JmapHttpClient };

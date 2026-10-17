@@ -1,0 +1,74 @@
+// Ported from upyo v0.7.0 (packages/mailgun/src/test-utils/test-config.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { isEmailAddress } = require('../../../src/core/address.js');
+const process = require('node:process');
+
+const getTestConfig = () => {
+  if (!isE2eTestingEnabled()) {
+    throw new Error(
+      'E2E testing is not enabled. Set MAILGUN_KEY, MAILGUN_FROM, MAILGUN_TO, and MAILGUN_DOMAIN environment variables.',
+    );
+  }
+
+  return {
+    mailgun: {
+      apiKey: process.env.MAILGUN_KEY,
+      domain: process.env.MAILGUN_DOMAIN,
+      region: process.env.MAILGUN_REGION ?? 'us',
+    },
+    testEmails: {
+      from: process.env.MAILGUN_FROM,
+      to: process.env.MAILGUN_TO,
+    },
+  };
+};
+
+const isE2eTestingEnabled = () => {
+  return !!(
+    process.env.MAILGUN_KEY &&
+    process.env.MAILGUN_FROM &&
+    process.env.MAILGUN_TO &&
+    process.env.MAILGUN_DOMAIN
+  );
+};
+
+const createTestMessage = (options = {}) => {
+  const config = getTestConfig();
+  const timestamp = Date.now();
+  const randomId = Math.random().toString(36).substr(2, 9);
+
+  const senderEmail = options.senderEmail ?? config.testEmails.from;
+  const recipientEmail = options.recipientEmail ?? config.testEmails.to;
+
+  if (!isEmailAddress(senderEmail)) {
+    throw new Error(`Invalid sender email address: ${senderEmail}`);
+  }
+  if (!isEmailAddress(recipientEmail)) {
+    throw new Error(`Invalid recipient email address: ${recipientEmail}`);
+  }
+
+  return {
+    sender: {
+      name: options.senderName ?? 'Mailgun E2E Test Sender',
+      address: senderEmail,
+    },
+    recipients: options.recipients ?? [
+      {
+        name: 'E2E Test Recipient',
+        address: recipientEmail,
+      },
+    ],
+    ccRecipients: options.ccRecipients ?? [],
+    bccRecipients: options.bccRecipients ?? [],
+    replyRecipients: options.replyRecipients ?? [],
+    subject: options.subject ?? `[Mailgun E2E Test] ${timestamp}`,
+    content: options.content ?? { text: `Test message content ${randomId}` },
+    attachments: options.attachments ?? [],
+    priority: options.priority ?? 'normal',
+    tags: options.tags ?? ['e2e-test'],
+    headers: options.headers ?? new Headers(),
+  };
+};
+
+module.exports = { getTestConfig, isE2eTestingEnabled, createTestMessage };

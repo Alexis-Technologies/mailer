@@ -1,7 +1,7 @@
 {
   "name": "@alexify/mailer",
-  "version": "0.0.1",
-  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM and HTTP providers, with a reliability layer on top — a persistent queue, an audit log, delivery events, suppression and idempotency",
+  "version": "1.0.0",
+  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM, Amazon SES and seven more HTTP providers, JMAP, failover, retries and OpenTelemetry; a reliability layer (persistent queue, audit log, delivery events) is next",
   "license": "MIT",
   "author": "Alex Dolid <dolid.sasha@gmail.com>",
   "repository": {
@@ -18,10 +18,75 @@
   "packageManager": "pnpm@10.34.5",
   "main": "index.js",
   "types": "index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./index.d.ts",
       "default": "./index.js"
+    },
+    "./mime": {
+      "types": "./src/mime/index.d.ts",
+      "default": "./src/mime/index.js"
+    },
+    "./smtp": {
+      "types": "./src/smtp/index.d.ts",
+      "default": "./src/smtp/index.js"
+    },
+    "./jmap": {
+      "types": "./src/jmap/index.d.ts",
+      "default": "./src/jmap/index.js"
+    },
+    "./ses": {
+      "types": "./src/ses/index.d.ts",
+      "default": "./src/ses/index.js"
+    },
+    "./resend": {
+      "types": "./src/resend/index.d.ts",
+      "default": "./src/resend/index.js"
+    },
+    "./sendgrid": {
+      "types": "./src/sendgrid/index.d.ts",
+      "default": "./src/sendgrid/index.js"
+    },
+    "./mailgun": {
+      "types": "./src/mailgun/index.d.ts",
+      "default": "./src/mailgun/index.js"
+    },
+    "./mailtrap": {
+      "types": "./src/mailtrap/index.d.ts",
+      "default": "./src/mailtrap/index.js"
+    },
+    "./maileroo": {
+      "types": "./src/maileroo/index.d.ts",
+      "default": "./src/maileroo/index.js"
+    },
+    "./lettermint": {
+      "types": "./src/lettermint/index.d.ts",
+      "default": "./src/lettermint/index.js"
+    },
+    "./plunk": {
+      "types": "./src/plunk/index.d.ts",
+      "default": "./src/plunk/index.js"
+    },
+    "./pool": {
+      "types": "./src/pool/index.d.ts",
+      "default": "./src/pool/index.js"
+    },
+    "./retry": {
+      "types": "./src/retry/index.d.ts",
+      "default": "./src/retry/index.js"
+    },
+    "./mock": {
+      "types": "./src/mock/index.d.ts",
+      "default": "./src/mock/index.js"
+    },
+    "./otel": {
+      "types": "./src/otel/index.d.ts",
+      "default": "./src/otel/index.js"
+    },
+    "./logger": {
+      "types": "./src/logger/index.d.ts",
+      "default": "./src/logger/index.js"
     }
   },
   "directories": {
@@ -41,10 +106,13 @@
   },
   "scripts": {
     "test": "node --test tests/unit/*.test.js",
+    "test:mailpit": "node --test --test-concurrency=1 tests/mailpit/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
-    "check:dts": "tsc --noEmit --strict --target es2022 --skipLibCheck false index.d.ts",
-    "lint": "oxlint src tests scripts bench",
+    "check:dts": "node scripts/check-dts.js",
+    "check:pack": "node scripts/check-pack.js",
+    "lint": "oxlint --report-unused-disable-directives-severity=error src tests scripts bench",
     "format": "oxfmt src tests scripts bench",
     "format:check": "oxfmt --check src tests scripts bench",
     "size": "node scripts/size.js",
@@ -53,7 +121,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "docs:comparison": "node scripts/comparison.js",
-    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts",
+    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack",
     "release": "pnpm publish"
   },
   "tsd": {
@@ -82,12 +150,20 @@
     "zero-dependency"
   ],
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/context-async-hooks": "^1.30.1",
+    "@opentelemetry/resources": "^1.30.1",
+    "@opentelemetry/sdk-metrics": "^1.30.1",
+    "@opentelemetry/sdk-trace-base": "^1.30.1",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "c8": "^12.0.0",
     "esbuild": "^0.28.2",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.75.0",
+    "pino": "^10.4.0",
+    "postal-mime": "^3.0.1",
     "tsd": "^0.33.0",
     "typescript": "^7.0.2",
     "vitepress": "^1.6.4"

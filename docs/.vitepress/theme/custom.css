@@ -62,18 +62,25 @@
 }
 
 /* ─── The comparison matrix (/guide/comparison): one wide table ─────────────
- * It scrolls sideways with the feature names pinned on the left and the group
- * rows set apart. Sticky cells need an opaque background that follows the
- * zebra stripes of the default theme. */
+ * It scrolls sideways with the feature names pinned on the left, the
+ * @alexify/mailer column tinted (and pinned beside them where there is room)
+ * and the group rows set apart. Sticky cells need an opaque background that
+ * follows the zebra stripes of the default theme, and borders of their own:
+ * collapsed borders belong to the table, and the text scrolling under a pinned
+ * cell shows through their seam. Each cell draws its right and bottom border,
+ * the first row and column the outer edges. */
 .vp-doc .ml-matrix table {
   display: block;
   max-height: 85vh;
   overflow: auto;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 .vp-doc .ml-matrix th,
 .vp-doc .ml-matrix td {
   min-width: 8.5rem;
   padding: 5px 9px;
+  border-width: 0 1px 1px 0;
   font-size: 12.5px;
   line-height: 1.4;
   vertical-align: top;
@@ -82,6 +89,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
+  border-top-width: 1px;
   background-color: var(--vp-c-bg-soft);
 }
 .vp-doc .ml-matrix th:first-child,
@@ -90,6 +98,7 @@
   left: 0;
   z-index: 1;
   min-width: 11rem;
+  border-left-width: 1px;
   background-color: var(--vp-c-bg);
   font-weight: 600;
 }
@@ -99,6 +108,42 @@
 }
 .vp-doc .ml-matrix tr:nth-child(2n) td:first-child {
   background-color: var(--vp-c-bg-soft);
+}
+/* The column of @alexify/mailer, the first library of the data: the tint is an
+ * image over the background colour, so a pinned cell stays opaque, and a teal
+ * bar tops its name. */
+.vp-doc .ml-matrix th:nth-child(2),
+.vp-doc .ml-matrix td:nth-child(2) {
+  background-image: linear-gradient(var(--vp-c-brand-soft), var(--vp-c-brand-soft));
+}
+.vp-doc .ml-matrix thead th:nth-child(2) {
+  box-shadow: inset 0 3px 0 var(--vp-c-brand-3);
+}
+/* Two pinned columns take 20rem, too much of a phone: from a tablet up the
+ * features get a fixed width, the left offset of the column after them. */
+@media (min-width: 768px) {
+  .vp-doc .ml-matrix th:first-child,
+  .vp-doc .ml-matrix td:first-child {
+    width: 11rem;
+  }
+  .vp-doc .ml-matrix th:nth-child(2),
+  .vp-doc .ml-matrix td:nth-child(2) {
+    position: sticky;
+    left: 11rem;
+    z-index: 1;
+    background-color: var(--vp-c-bg);
+    box-shadow: inset -2px 0 0 var(--vp-c-brand-3);
+  }
+  .vp-doc .ml-matrix tr:nth-child(2n) td:nth-child(2) {
+    background-color: var(--vp-c-bg-soft);
+  }
+  .vp-doc .ml-matrix thead th:nth-child(2) {
+    z-index: 3;
+    background-color: var(--vp-c-bg-soft);
+    box-shadow:
+      inset 0 3px 0 var(--vp-c-brand-3),
+      inset -2px 0 0 var(--vp-c-brand-3);
+  }
 }
 .vp-doc .ml-matrix td code {
   font-size: 11.5px;
@@ -110,6 +155,12 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--vp-c-text-2);
+}
+/* A group cell spans the whole table, so it cannot stick: its title does. */
+.vp-doc .ml-matrix tr.ml-matrix-group strong {
+  display: inline-block;
+  position: sticky;
+  left: 9px;
 }
 
 /* The page of the matrix uses the whole width next to the sidebar instead of

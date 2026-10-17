@@ -1,0 +1,407 @@
+// Ported from upyo v0.7.0 (packages/smtp/src/oauth2.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { isLoopbackHost } = require('../internal/loopback.js');
+const { readText } = require('../internal/body.js');
+
+/**
+ * An error thrown when SMTP authentication fails, including OAuth 2.0 token
+ * acquisition and SASL exchange failures.
+ */
+class SmtpAuthError extends Error {
+  /**
+   * Creates a new {@link SmtpAuthError}.
+   * @param message A human-readable description of the failure.
+   */
+  constructor(message) {
+    super(message);
+    this.name = 'SmtpAuthError';
+  }
+}
+
+/**
+ * Encodes a string as Base64 in a cross-runtime, UTF-8-safe manner.
+ *
+ * Unlike calling `btoa()` directly, this first encodes the input as UTF-8 so
+ * that non-ASCII characters (e.g., in an internationalized address) do not
+ * throw.
+ *
+ * @param input The string to encode.
+ * @returns The Base64-encoded representation of the UTF-8 bytes of `input`.
+ */
+const toBase64 = (input) => Buffer.from(input, 'utf8').toString('base64');
+
+/**
+ * Builds the SASL `XOAUTH2` initial client response for SMTP authentication.
+ *
+ * The unencoded payload follows Google's XOAUTH2 format
+ * (`user=<user>^Aauth=Bearer <token>^A^A`, where `^A` is the `0x01` control
+ * character) and is returned Base64-encoded, ready to be sent as the argument
+ * of `AUTH XOAUTH2`.
+ *
+ * @param user The user (email address) to authenticate as.
+ * @param accessToken The OAuth 2.0 access token.
+ * @returns The Base64-encoded XOAUTH2 initial client response.
+ */
+const formatXoauth2 = (user, accessToken) => {
+  return toBase64(`user=${user}\x01auth=Bearer ${accessToken}\x01\x01`);
+};
+
+/**
+ * Builds the SASL `OAUTHBEARER` initial client response for SMTP
+ * authentication, as defined by [RFC 7628].
+ *
+ * The unencoded payload is
+ * `n,a=<user>,^A[host=<host>^A][port=<port>^A]auth=Bearer <token>^A^A`
+ * (where `^A` is the `0x01` control character) and is returned Base64-encoded,
+ * ready to be sent as the argument of `AUTH OAUTHBEARER`.
+ *
+ * [RFC 7628]: https://www.rfc-editor.org/rfc/rfc7628
+ *
+ * @param user The user (email address) to authenticate as.
+ * @param accessToken The OAuth 2.0 access token.
+ * @param host The server host to include as the `host` key/value, if any.
+ * @param port The server port to include as the `port` key/value, if any.
+ * @returns The Base64-encoded OAUTHBEARER initial client response.
+ */
+const formatOauthbearer = (user, accessToken, host, port) => {
+  let response = `n,a=${escapeSaslName(user)},\x01`;
+  if (host != null) response += `host=${host}\x01`;
+  if (port != null) response += `port=${port}\x01`;
+  response += `auth=Bearer ${accessToken}\x01\x01`;
+  return toBase64(response);
+};
+
+/**
+ * Escapes a SASL name (GS2 `authzid`) per RFC 5801, encoding `,` as `=2C` and
+ * `=` as `=3D` so that identities containing those characters do not corrupt
+ * the GS2 header.
+ *
+ * @param name The SASL name to escape.
+ * @returns The escaped SASL name.
+ */
+const escapeSaslName = (name) => {
+  return name.replace(/=/g, '=3D').replace(/,/g, '=2C');
+};
+
+/**
+ * Chooses an OAuth 2.0 SASL mechanism based on the mechanisms advertised by the
+ * server in its `AUTH` capability line.
+ *
+ * `XOAUTH2` is preferred when available (it is the de-facto standard supported
+ * by Gmail and Outlook); otherwise `OAUTHBEARER` is used when advertised.  When
+ * neither is advertised, `xoauth2` is returned as a best-effort default.
+ *
+ * @param capabilities The capability lines parsed from the server's EHLO
+ *                     response.
+ * @returns The selected mechanism, either `"xoauth2"` or `"oauthbearer"`.
+ */
+const selectOAuth2Mechanism = (capabilities) => {
+  let authLine;
+  for (const capability of capabilities) {
+    if (capability.toUpperCase().startsWith('AUTH')) {
+      authLine = capability;
+      break;
+    }
+  }
+  // Normalize "=" to whitespace so the older `AUTH=XOAUTH2 ...` form (where the
+  // first mechanism is glued to the AUTH keyword) is parsed like `AUTH XOAUTH2`.
+  const mechanisms =
+    authLine == null ? [] : authLine.toUpperCase().replace(/=/g, ' ').split(/\s+/).slice(1);
+  if (mechanisms.includes('XOAUTH2')) return 'xoauth2';
+  if (mechanisms.includes('OAUTHBEARER')) return 'oauthbearer';
+  return 'xoauth2';
+};
+
+/**
+ * Validates that an OAuth 2.0 token endpoint is safe to send client credentials
+ * to, requiring HTTPS except for loopback addresses (for local testing).
+ *
+ * @param endpoint The token endpoint URL to validate.
+ * @throws {TypeError} If the URL is malformed or uses an insecure scheme.
+ */
+const assertSecureTokenEndpoint = (endpoint) => {
+  let url;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new TypeError(`Invalid OAuth 2.0 token endpoint URL: ${endpoint}`);
+  }
+  if (url.protocol === 'https:') return;
+  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return;
+  throw new TypeError(
+    'OAuth 2.0 token endpoint must use HTTPS to protect client credentials: ' + endpoint,
+  );
+};
+
+/**
+ * The number of milliseconds before a cached access token's expiry at which it
+ * is considered stale and eligible for refresh.
+ */
+const REFRESH_SAFETY_MARGIN_MS = 60_000;
+
+/**
+ * The default access token lifetime (in seconds) assumed when the token
+ * endpoint omits `expires_in`.
+ */
+const DEFAULT_EXPIRES_IN_SECONDS = 3600;
+
+/**
+ * How long to wait for the token endpoint before aborting the request, so a
+ * stalled endpoint cannot block authentication indefinitely.
+ */
+const TOKEN_REQUEST_TIMEOUT_MS = 60_000;
+
+/** Maximum number of response-body characters to include in error messages. */
+const MAX_ERROR_BODY_LENGTH = 500;
+
+/**
+ * Truncates a token-endpoint response body so an oversized payload (e.g. a
+ * large proxy/CDN error page) does not bloat error messages and logs.
+ *
+ * @param text The response body text.
+ * @returns The text, truncated with an ellipsis if it exceeds the limit.
+ */
+const truncateErrorBody = (text) => {
+  return text.length > MAX_ERROR_BODY_LENGTH ? `${text.slice(0, MAX_ERROR_BODY_LENGTH)}…` : text;
+};
+
+/**
+ * Mirrors a promise but rejects early if the given abort signal fires, without
+ * cancelling the underlying promise.  This lets a single waiter abort its own
+ * wait on a shared operation without affecting other waiters.
+ *
+ * @param promise The promise to await.
+ * @param signal An optional abort signal that rejects the returned promise.
+ * @returns A promise that settles with `promise`, or rejects when `signal`
+ *          aborts.
+ */
+const abortable = (promise, signal) => {
+  if (signal == null) return promise;
+  return new Promise((resolve, reject) => {
+    // Fall back to a standard AbortError when the signal has no reason (e.g.
+    // aborted without one, or a runtime that does not populate `reason`), so the
+    // promise never rejects with `undefined`.
+    const abortReason = () =>
+      signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(abortReason());
+    };
+    if (signal.aborted) {
+      reject(abortReason());
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    // Always attach to the underlying promise so its settlement is observed
+    // (avoiding unhandled rejections) even after an abort wins the race.
+    promise.then(
+      // oxlint-disable-next-line promise/always-return -- upstream
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+};
+
+/**
+ * Acquires and caches OAuth 2.0 access tokens for SMTP authentication.
+ *
+ * Depending on the {@link SmtpOAuth2Auth} configuration, the manager either
+ * returns a static token, invokes a provider callback on every request, or
+ * exchanges a refresh token for an access token at the configured token
+ * endpoint and caches it until shortly before it expires.  A single manager is
+ * shared across all pooled connections of a transport so that the refresh-token
+ * exchange happens at most once per token lifetime.
+ */
+class OAuth2TokenManager {
+  auth;
+  fetchFn;
+  cached;
+  pending;
+
+  /**
+   * Creates a new {@link OAuth2TokenManager}.
+   *
+   * @param auth The OAuth 2.0 authentication configuration.
+   * @param fetchFn The `fetch` implementation to use for the refresh-token
+   *                exchange, the `fetch` of the transport configuration.
+   *                Defaults to the global `fetch`, read at each refresh.
+   * @throws {TypeError} If a refresh-token configuration has an insecure
+   *                     (non-HTTPS) token endpoint.
+   */
+  constructor(auth, fetchFn) {
+    if ('refreshToken' in auth) {
+      assertSecureTokenEndpoint(auth.tokenEndpoint);
+    }
+    this.auth = auth;
+    this.fetchFn = fetchFn;
+  }
+
+  /**
+   * Returns a valid OAuth 2.0 access token, acquiring or refreshing it as
+   * needed.
+   *
+   * @param signal An optional {@link AbortSignal} to cancel token acquisition.
+   * @returns The current access token.
+   * @throws {SmtpAuthError} If a refresh-token exchange fails or returns an
+   *                         unexpected response.
+   */
+  async getAccessToken(signal) {
+    signal?.throwIfAborted();
+
+    const auth = this.auth;
+    if ('accessToken' in auth) {
+      return typeof auth.accessToken === 'function'
+        ? await abortable(Promise.resolve(auth.accessToken(signal)), signal)
+        : auth.accessToken;
+    }
+
+    const cached = this.cached;
+    if (cached != null && cached.expiresAt > Date.now()) {
+      return cached.accessToken;
+    }
+
+    // Coalesce concurrent refreshes so the token endpoint is hit at most once
+    // per token lifetime.  The shared request is not tied to any single caller's
+    // abort signal; each caller instead races it against its own signal so that
+    // one caller's cancellation cannot fail the others.
+    this.pending ??= this.refresh(auth)
+      .then((result) => {
+        // Populate the cache before `finally` clears `pending`, so a concurrent
+        // caller in the microtask gap finds the fresh token instead of starting
+        // a duplicate refresh.  Refresh slightly before expiry; cap the safety
+        // margin at half the lifetime so short-lived tokens are not treated as
+        // already expired (which would refresh on every connection).
+        const lifetimeMs = result.expiresInSeconds * 1000;
+        const safetyMarginMs = Math.min(REFRESH_SAFETY_MARGIN_MS, lifetimeMs / 2);
+        this.cached = {
+          accessToken: result.accessToken,
+          expiresAt: Date.now() + lifetimeMs - safetyMarginMs,
+        };
+        return result;
+      })
+      .finally(() => {
+        this.pending = undefined;
+      });
+
+    const { accessToken } = await abortable(this.pending, signal);
+    return accessToken;
+  }
+
+  /**
+   * Exchanges the configured refresh token for a fresh access token.
+   *
+   * The request deliberately runs without a caller-specific abort signal; it is
+   * shared across concurrent callers, each of which applies its own
+   * cancellation separately (see {@link getAccessToken}).
+   *
+   * @param auth The refresh-token authentication configuration.
+   * @returns The new access token and its lifetime in seconds.
+   * @throws {SmtpAuthError} If the request fails or the response is invalid.
+   */
+  async refresh(auth) {
+    const { response, text } = await this.requestToken(auth);
+    return readTokenResponse(response, text);
+  }
+
+  // The token request and its body, bounded by an internal timeout so that a
+  // stalled endpoint cannot leave the shared `pending` promise unresolved.
+  async requestToken(auth) {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: auth.clientId,
+      refresh_token: auth.refreshToken,
+    });
+    if (auth.clientSecret != null) body.set('client_secret', auth.clientSecret);
+    if (auth.scope != null) body.set('scope', auth.scope);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort(new Error('OAuth 2.0 token request timed out'));
+    }, TOKEN_REQUEST_TIMEOUT_MS);
+    // Call through a local variable so the global `fetch` is not invoked as a
+    // method of this manager, which throws "Illegal invocation" in some
+    // runtimes (the native `fetch` requires a `globalThis`/undefined receiver).
+    // Read at each refresh, so that the global one may be replaced later.
+    const fetchFn = this.fetchFn ?? globalThis.fetch;
+    try {
+      const response = await fetchFn(auth.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
+        },
+        body,
+        signal: controller.signal,
+        // A redirect is not followed: it would send the client secret and the
+        // refresh token in the body to wherever it points.
+        redirect: 'manual',
+      });
+      // Read the body under the same timeout: an endpoint that returns headers
+      // but stalls on the body must not leave `pending` unresolved forever.
+      return { response, text: await readText(response) };
+    } catch (error) {
+      throw new SmtpAuthError(
+        `Failed to request an OAuth 2.0 access token from ` +
+          `${auth.tokenEndpoint}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
+ * Reads the access token and its lifetime from the answer of a token endpoint.
+ *
+ * @param response The response of the token request.
+ * @param text Its body.
+ * @returns The access token and its lifetime in seconds.
+ * @throws {SmtpAuthError} If the endpoint failed or answered without a token.
+ */
+const readTokenResponse = (response, text) => {
+  const safeText = truncateErrorBody(text);
+  if (!response.ok) {
+    throw new SmtpAuthError(
+      `OAuth 2.0 token endpoint responded with HTTP ${response.status}: ${safeText}`,
+    );
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new SmtpAuthError(`OAuth 2.0 token endpoint returned a non-JSON response: ${safeText}`);
+  }
+  if (typeof json !== 'object' || json == null || typeof json.access_token !== 'string') {
+    throw new SmtpAuthError(
+      `OAuth 2.0 token endpoint response did not include an access_token: ${safeText}`,
+    );
+  }
+  return { accessToken: json.access_token, expiresInSeconds: readExpiresIn(json.expires_in) };
+};
+
+// Accepts `expires_in` only as a finite, non-negative number of seconds.  Some
+// providers send it as a numeric string; `Number()` (unlike `parseInt`)
+// rejects partial parses like "100abc".  Negative, NaN, and Infinity values
+// fall back to the default lifetime.
+const readExpiresIn = (value) => {
+  let seconds = NaN;
+  if (typeof value === 'number') seconds = value;
+  else if (typeof value === 'string' && value.trim() !== '') seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : DEFAULT_EXPIRES_IN_SECONDS;
+};
+
+module.exports = {
+  SmtpAuthError,
+  formatXoauth2,
+  formatOauthbearer,
+  selectOAuth2Mechanism,
+  OAuth2TokenManager,
+};

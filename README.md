@@ -12,27 +12,33 @@ and HTTP providers, and on top of them what the other libraries leave to the app
 persistent queue and outbox, an audit log, one model of delivery events, suppression and
 idempotency. Zero runtime dependencies.
 
-> 🚧 **Work in progress.** The API is being designed. `createMailer` is exported today as a
-> placeholder that throws.
+> **Status: 1.0 is the transport layer,** ported from [upyo](https://github.com/dahlia/upyo) 0.7.0:
+> messages, MIME and DKIM, SMTP, Amazon SES and seven more HTTP providers, JMAP, and the pool,
+> retry, OpenTelemetry, logger and mock transports. The reliability layer (queue, audit log,
+> delivery events) is being designed and comes in later releases.
 
 ### 📖 [Read the documentation →](https://mailerat.vercel.app/)
 
 ## Why @alexify/mailer
 
-- **Its own transport.** An SMTP client, a MIME builder and DKIM written for this library, and
-  HTTP providers on `fetch`, starting with Amazon SES v2. Secure by default: TLS certificates are
-  verified, AUTH never goes over plain text, CRLF in a header is rejected.
-- **What happens after `send()`.** A persistent queue and outbox, an append-only audit log and one
-  model of delivery events (delivered, bounced, complained, failed). None of the
+- **Its own transport.** An SMTP client (pool, STARTTLS, PIPELINING, DSN, SMTPUTF8, OAuth 2.0), a
+  MIME builder and DKIM (RSA-SHA256, Ed25519), and HTTP providers on `fetch`: Amazon SES v2,
+  Resend, SendGrid, Mailgun, Mailtrap, Maileroo, Lettermint, Plunk, and JMAP. Secure by default:
+  TLS certificates are verified, AUTH never goes over plain text, CRLF in a header is rejected.
+- **What happens after `send()`** (being designed). A persistent queue and outbox, an append-only
+  audit log and one model of delivery events (delivered, bounced, complained, failed). None of the
   [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has the three.
-- **Sent once, or known to be unknown.** Idempotency keys with deduplication, errors classified as
-  permanent or temporary, and a `delivery_unknown` state instead of a blind retry when a provider
-  has no idempotency key.
-- **Correct before broad.** Golden `.eml` messages, DKIM checked by an independent verifier, and
-  fuzzing of headers, `multipart/related`, dot-stuffing and internationalized addresses.
-- **Zero dependencies.** Built on `node:*` modules and `fetch`. The driver of a queue or a database
-  (BullMQ, MongoDB) is created by your application and passed in. CommonJS with ESM named imports
-  and hand-written TypeScript typings, no build step.
+- **Sent once, or known to be unknown.** Errors are classified as permanent or temporary, and a
+  failure after which the provider may have taken the message is marked `deliveryUnknown`:
+  `./retry` and `./pool` never send it again. Idempotency keys with deduplication come with the
+  outbox.
+- **Correct before broad.** The tests read the composed messages back with an independent parser;
+  golden `.eml` messages, DKIM checked by an independent verifier and fuzzing of headers,
+  `multipart/related`, dot-stuffing and internationalized addresses are planned.
+- **Zero dependencies.** Built on `node:*` modules and `fetch`. What a part needs from your
+  application is passed in: the OpenTelemetry providers, a pino-like logger, and later the driver of
+  a queue or a database (BullMQ, MongoDB). CommonJS with ESM named imports and hand-written
+  TypeScript typings, no build step.
 
 ## Installation
 
@@ -44,23 +50,60 @@ npm install @alexify/mailer
 
 Requires Node.js 22 or newer.
 
-## Exports
+## Usage
+
+The root entry builds messages; each transport is a subpath of the same package:
 
 ```js
-const { createMailer } = require('@alexify/mailer');
+const { createMessage } = require('@alexify/mailer');
+const { SmtpTransport } = require('@alexify/mailer/smtp');
+
+const transport = new SmtpTransport({
+  host: 'smtp.example.com',
+  port: 587,
+  auth: { user: 'user@example.com', pass: 'secret' },
+});
+
+const receipt = await transport.send(
+  createMessage({
+    from: 'Alex <alex@example.com>',
+    to: 'bob@example.net',
+    subject: 'Hello',
+    content: { text: 'Hi there.', html: '<p>Hi there.</p>' },
+  }),
+);
+if (!receipt.successful) console.error(receipt.errorMessages);
 ```
 
-```js
-import { createMailer } from '@alexify/mailer';
-```
+| Subpath | What it is |
+| --- | --- |
+| `@alexify/mailer` | messages, attachments, calendar parts, the `Transport` contract, receipts |
+| `/mime` | MIME composition and DKIM signing |
+| `/smtp`, `/jmap` | SMTP and JMAP transports |
+| `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/mailtrap`, `/maileroo`, `/lettermint`, `/plunk` | HTTP providers |
+| `/pool`, `/retry`, `/otel`, `/logger` | decorators: failover, retries, OpenTelemetry, logging |
+| `/mock` | an in-memory transport for tests |
 
-The [API reference](https://mailerat.vercel.app/api/exports) lists every member.
+Every transport takes `generateId` for the identifiers it makes (a ULID or a cuid2 instead of a
+UUID) and a pino-like `logger` for what happens inside it, and every HTTP transport a `fetch`,
+such as one bound to an undici `Agent` or a proxy; see
+[your own fetch and identifiers](https://mailerat.vercel.app/guide/getting-started#your-own-fetch-and-identifiers).
+
+The same names import from ESM (`import { SmtpTransport } from '@alexify/mailer/smtp'`). The
+[API reference](https://mailerat.vercel.app/api/exports) lists every member, and the
+[guide](https://mailerat.vercel.app/guide/getting-started) every transport.
 
 ## Compared with alternatives
 
 The [comparison](https://mailerat.vercel.app/guide/comparison) puts Nodemailer, emailjs, Upyo,
 unemail, sently, worker-mailer, edge-mailer, MIMEText and the SDKs of Resend, SendGrid, Mailgun,
 Postmark, Mailtrap and Amazon SES side by side, feature by feature, from their source code.
+
+## Credits
+
+The transport layer is a port of [upyo](https://github.com/dahlia/upyo) 0.7.0 by Hong Minhee
+(MIT), converted to CommonJS with hand-written types and no dependencies; its notice is in
+[LICENSE](./LICENSE).
 
 ## Changelog
 

@@ -1,0 +1,19 @@
+{
+  ".": 8.5,
+  "./mime": 7,
+  "./smtp": 20,
+  "./jmap": 12.5,
+  "./ses": 6.5,
+  "./resend": 5.5,
+  "./sendgrid": 5.5,
+  "./mailgun": 5.5,
+  "./mailtrap": 6,
+  "./maileroo": 5.5,
+  "./lettermint": 5.5,
+  "./plunk": 5.5,
+  "./pool": 3,
+  "./retry": 3,
+  "./mock": 2,
+  "./otel": 5,
+  "./logger": 2.5
+}

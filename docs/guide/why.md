@@ -1,8 +1,8 @@
 # Why @alexify/mailer?
 
-::: warning Work in progress
-@alexify/mailer is being designed. The direction below is settled; the API is not. `createMailer`
-is exported today as a placeholder that throws.
+::: tip Status
+Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0. The
+reliability layer is being designed: the direction below is settled, its API is not.
 :::
 
 ## Two parts
@@ -10,11 +10,13 @@ is exported today as a placeholder that throws.
 @alexify/mailer is an email library of its own, in the place of Nodemailer, emailjs or Upyo, made
 of two parts:
 
-1. **The transport.** An SMTP client, a MIME builder and DKIM signing written for this library,
-   and HTTP providers on `fetch`, starting with Amazon SES v2 (signed with SigV4 on
-   `node:crypto`, without the AWS SDK).
-2. **A reliability layer on top of it.** A persistent queue and outbox, an append-only audit log,
-   one model of delivery events, suppression, idempotency and failover between providers.
+1. **The transport,** here today, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0: an
+   SMTP client, a MIME builder and DKIM signing, Amazon SES v2 (signed with SigV4, without the AWS
+   SDK) and seven more HTTP providers on `fetch`, JMAP, and decorators for failover, retries,
+   telemetry and logs.
+2. **A reliability layer on top of it,** being designed. A persistent queue and outbox, an
+   append-only audit log, one model of delivery events, suppression, idempotency and failover
+   between providers.
 
 ## The gap it fills
 
@@ -26,10 +28,14 @@ That work is left to every application: a job that dies between "submitted" and 
 retry after a timeout that sends the same password reset twice, a bounce that nobody records.
 
 The breadth of providers is not where the gap is. Each provider added is one more webhook format
-and one more API that drifts, so the library starts with few providers and puts its effort into
-what happens to a message after `send()`.
+and one more API that drifts, so beyond the eight that came with the port, a new provider waits
+for a user who needs it, and the effort goes into what happens to a message after `send()`.
 
 ## Design
+
+The transport is built; the rest of this list is the design of the reliability layer, which is
+being built. A failure after which a provider may have taken the message is already marked
+`deliveryUnknown`, and `./retry` and `./pool` do not send it again.
 
 - **At least once, with deduplication.** Exactly-once delivery is not possible over SMTP or HTTP.
   A message carries an idempotency key, the outbox deduplicates by it, and a provider that has no
@@ -45,9 +51,10 @@ what happens to a message after `send()`.
 - **Secure by default.** TLS certificates are verified, AUTH never goes over plain text, CRLF in
   any header is rejected, the body is dot-stuffed, and reading files or URLs for attachments is
   off unless asked for.
-- **Correct before broad.** The transport is checked against a public set of golden `.eml`
-  messages, DKIM signatures verified by an independent verifier, and fuzzing of headers,
-  `multipart/related`, dot-stuffing and internationalized addresses.
+- **Correct before broad.** The tests read the composed messages back with an independent
+  parser; the transport is to be checked against a public set of golden `.eml` messages, DKIM
+  signatures verified by an independent verifier, and fuzzing of headers, `multipart/related`,
+  dot-stuffing and internationalized addresses.
 - **No dependencies.** The transports use `node:*` modules and `fetch`. The driver of a queue or a
   database (BullMQ on Valkey or Redis, MongoDB) is created by your application and passed in.
 

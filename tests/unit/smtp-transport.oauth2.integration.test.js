@@ -1,0 +1,140 @@
+// Ported from upyo v0.7.0 (packages/smtp/src/smtp-transport.oauth2.integration.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const assert = require('node:assert/strict');
+const { describe, test } = require('node:test');
+const { isSmtpResponseProviderDetails } = require('../../src/smtp/smtp-receipt.js');
+const { SmtpTransport } = require('../../src/smtp/smtp-transport.js');
+const { MockSmtpServer } = require('../helpers/smtp/mock-smtp-server.js');
+const { createTestMessage } = require('../helpers/smtp/test-config.js');
+
+describe('SmtpTransport OAuth 2.0 integration', () => {
+  const setup = async (auth, overrides = {}) => {
+    const server = new MockSmtpServer();
+    await server.start();
+    const transport = new SmtpTransport({
+      host: 'localhost',
+      port: server.getPort(),
+      secure: false,
+      connectionTimeout: 5000,
+      socketTimeout: 5000,
+      auth,
+      ...overrides,
+    });
+    return { server, transport };
+  };
+
+  test('sends a message authenticated with a static XOAUTH2 token', async () => {
+    const { server, transport } = await setup({
+      user: 'user@example.com',
+      accessToken: 'the-access-token',
+    });
+    try {
+      const receipt = await transport.send(createTestMessage());
+      assert.ok(receipt.successful);
+      assert.equal(server.getReceivedMessages().length, 1);
+      assert.ok(server.getLastAuthCommand()?.startsWith('AUTH XOAUTH2 '));
+    } finally {
+      await transport.closeAllConnections();
+      await server.stop();
+    }
+  });
+
+  test('sends a message authenticated with OAUTHBEARER', async () => {
+    const { server, transport } = await setup({
+      user: 'user@example.com',
+      accessToken: 'the-access-token',
+      method: 'oauthbearer',
+    });
+    try {
+      const receipt = await transport.send(createTestMessage());
+      assert.ok(receipt.successful);
+      assert.ok(server.getLastAuthCommand()?.startsWith('AUTH OAUTHBEARER '));
+    } finally {
+      await transport.closeAllConnections();
+      await server.stop();
+    }
+  });
+
+  test('shares one refreshed access token across connections', async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = (_input, _init) => {
+      fetchCalls++;
+      return Promise.resolve(
+        new Response(JSON.stringify({ access_token: 'refreshed', expires_in: 3600 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    };
+
+    let server;
+    let transport;
+    try {
+      // Pooling disabled so each send uses a fresh connection that
+      // authenticates independently; the shared token manager must still
+      // refresh only once.
+      ({ server, transport } = await setup(
+        {
+          user: 'user@example.com',
+          clientId: 'client-id',
+          clientSecret: 'client-secret',
+          refreshToken: 'refresh-token',
+          tokenEndpoint: 'https://oauth2.example.com/token',
+        },
+        { pool: false },
+      ));
+
+      const first = await transport.send(createTestMessage());
+      const second = await transport.send(createTestMessage());
+      assert.ok(first.successful);
+      assert.ok(second.successful);
+      assert.equal(
+        fetchCalls,
+        1,
+        'the refresh token is exchanged once and cached across connections',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      await transport?.closeAllConnections();
+      await server?.stop();
+    }
+  });
+
+  test('reports a failed receipt when OAuth authentication is rejected', async () => {
+    // Authentication happens while establishing the connection; like other SMTP
+    // setup failures, a rejected token yields a failed receipt rather than
+    // throwing.
+    const { server, transport } = await setup({
+      user: 'user@example.com',
+      accessToken: 'bad-token',
+    });
+    server.setResponse('AUTH', { code: 535, message: '5.7.8 Bad credentials' });
+    try {
+      const receipt = await transport.send(createTestMessage());
+      assert.ok(!receipt.successful);
+      if (!receipt.successful) {
+        assert.ok(receipt.errorMessages.some((m) => /XOAUTH2/.test(m)));
+        const error = receipt.errors?.[0];
+        assert.equal(error?.code, 'smtp.535');
+        assert.equal(error?.category, 'rejected');
+        assert.equal(error?.retryable, false);
+        assert.ok(isSmtpResponseProviderDetails(error?.providerDetails));
+        if (isSmtpResponseProviderDetails(error?.providerDetails)) {
+          assert.equal(error.providerDetails.command, 'AUTH XOAUTH2');
+          assert.equal(error.providerDetails.response, '5.7.8 Bad credentials');
+          assert.deepEqual(error.providerDetails.enhancedStatusCode, {
+            code: '5.7.8',
+            class: 5,
+            subject: 7,
+            detail: 8,
+          });
+        }
+      }
+    } finally {
+      await transport.closeAllConnections();
+      await server.stop();
+    }
+  });
+});

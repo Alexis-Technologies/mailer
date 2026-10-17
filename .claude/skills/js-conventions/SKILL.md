@@ -4,7 +4,8 @@ description: Apply the Alexis JavaScript style (Metarhia-derived, linted by oxli
 ---
 
 <!-- Adapted from metaskills v1.0.5 (skills/js-conventions) for the Alexis toolchain:
-     oxlint + oxfmt instead of ESLint + Prettier, pnpm instead of npm, 100 columns instead of 80. -->
+     oxlint + oxfmt instead of ESLint + Prettier, pnpm instead of npm, 100 columns instead of 80;
+     loops in one pass instead of array iteration methods in library code (src/). -->
 
 # JavaScript Code Style
 
@@ -58,15 +59,18 @@ Use following conventions for JavaScript and TypeScript code.
 - Do not mutate input parameters; avoid `arguments`
 - Keep functions small and single-purpose
 - Decompose long expressions into intermediate variables
-- Prefer explicit loops (`for`, `for..of`) in hot paths
-- Use array methods when they improve readability
+- Iterate with `for` and `for..of` loops in library code (`src/`), index loops in hot paths; no
+  array iteration methods there (`.map`, `.filter`, `.some`, `.every`, `.find`, `.findIndex`,
+  `.findLast`, `.reduce`, `.flatMap`, `.forEach`), cold paths included
+- Compute everything a collection gives in one pass with an early exit; never chain passes
+  (`.map().join()`, `Object.entries().filter()`, `Array.from().map()`), and do not build an array
+  only to iterate it (spread of an iterable, `Array.from(string)`, `split` only to test)
 - Use `===` and `!==` only
 - Keep return types consistent
 - Avoid nested ternaries and deep callback nesting
 - Self-documented and self-descriptive code: do not add
   obvious comments, code should be clear without comments
-- Use iteration methods like `.map`, `.filter`, `.reduce` if it is good for code semantic
-- Try to avoid `.forEach` if callback operates with outer context
+- Tests, scripts and benchmarks may use array iteration methods where they read better
 
 ## Optimizations
 
@@ -86,6 +90,10 @@ Use following conventions for JavaScript and TypeScript code.
 - Move reusable callbacks outside loops
 - Keep `try/catch`, spread/rest away from hot loops
 - Use `Map` for dynamic key dictionaries, plain objects for fixed schemas
+- Build a lookup once: a module-level `Set` for membership, a `Map` for keyed search, instead of
+  repeated linear scans (`.includes`, a `.find` per call)
+- Keep caches and metadata on objects you do not own (a message, a config) in a `WeakMap` or
+  `WeakSet` rather than in a property on them
 - Use `Set` for big and dynamic collections, prefer arrays for short and stable
 - Use `Object.create(null)` for pure dictionaries
 - Use typed arrays for numeric and binary workloads

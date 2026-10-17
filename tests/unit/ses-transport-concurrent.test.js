@@ -1,0 +1,196 @@
+// Ported from upyo v0.7.0 (packages/ses/src/ses-transport-concurrent.test.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { createMessage } = require('../../src/core/message.js');
+const { SesTransport } = require('../../src/ses/index.js');
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+
+test('SesTransport sendMany handles concurrent sending', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
+
+  try {
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      return Promise.resolve(
+        new Response(JSON.stringify({ MessageId: `test-id-${fetchCallCount}` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    };
+
+    const transport = new SesTransport({
+      authentication: {
+        type: 'credentials',
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+      },
+      region: 'us-east-1',
+      batchSize: 2,
+    });
+
+    const messages = [
+      createMessage({
+        from: 'sender@example.com',
+        to: 'recipient1@example.com',
+        subject: 'Test Subject 1',
+        content: { text: 'Hello World 1!' },
+      }),
+      createMessage({
+        from: 'sender@example.com',
+        to: 'recipient2@example.com',
+        subject: 'Test Subject 2',
+        content: { text: 'Hello World 2!' },
+      }),
+    ];
+
+    const receipts = [];
+    for await (const receipt of transport.sendMany(messages)) {
+      receipts.push(receipt);
+    }
+
+    assert.equal(receipts.length, 2);
+    assert.equal(fetchCallCount, 2);
+
+    for (const receipt of receipts) {
+      assert.ok(receipt.successful);
+      if (receipt.successful) {
+        assert.ok(receipt.messageId.startsWith('test-id-'));
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SesTransport sendMany respects batchSize', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchCalls = [];
+
+  try {
+    globalThis.fetch = () => {
+      fetchCalls.push(Date.now());
+      return Promise.resolve(
+        new Response(JSON.stringify({ MessageId: `test-id-${fetchCalls.length}` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    };
+
+    const transport = new SesTransport({
+      authentication: {
+        type: 'credentials',
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+      },
+      region: 'us-east-1',
+      batchSize: 2,
+    });
+
+    const messages = Array(5)
+      .fill(null)
+      .map((_, i) =>
+        createMessage({
+          from: 'sender@example.com',
+          to: `recipient${i}@example.com`,
+          subject: `Test Subject ${i}`,
+          content: { text: `Hello World ${i}!` },
+        }),
+      );
+
+    const receipts = [];
+    for await (const receipt of transport.sendMany(messages)) {
+      receipts.push(receipt);
+    }
+
+    assert.equal(receipts.length, 5);
+    assert.equal(fetchCalls.length, 5);
+
+    // Check that first 2 calls happened roughly at the same time (concurrent)
+    // and next 2 calls happened roughly at the same time
+    // and last call happened separately
+    const timeDiff1 = Math.abs(fetchCalls[1] - fetchCalls[0]);
+    const timeDiff2 = Math.abs(fetchCalls[3] - fetchCalls[2]);
+
+    // Concurrent calls should happen within 50ms of each other
+    assert.ok(
+      timeDiff1 < 50,
+      `First batch calls should be concurrent, but diff was ${timeDiff1}ms`,
+    );
+    assert.ok(
+      timeDiff2 < 50,
+      `Second batch calls should be concurrent, but diff was ${timeDiff2}ms`,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SesTransport sendMany handles errors in concurrent sending', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
+
+  try {
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      if (fetchCallCount === 2) {
+        return Promise.reject(new Error('Network error'));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ MessageId: `test-id-${fetchCallCount}` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    };
+
+    const transport = new SesTransport({
+      authentication: {
+        type: 'credentials',
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+      },
+      region: 'us-east-1',
+      batchSize: 2,
+      retries: 0, // Disable retries for predictable test behavior
+    });
+
+    const messages = [
+      createMessage({
+        from: 'sender@example.com',
+        to: 'recipient1@example.com',
+        subject: 'Test Subject 1',
+        content: { text: 'Hello World 1!' },
+      }),
+      createMessage({
+        from: 'sender@example.com',
+        to: 'recipient2@example.com',
+        subject: 'Test Subject 2',
+        content: { text: 'Hello World 2!' },
+      }),
+    ];
+
+    const receipts = [];
+    for await (const receipt of transport.sendMany(messages)) {
+      receipts.push(receipt);
+    }
+
+    assert.equal(receipts.length, 2);
+    assert.equal(fetchCallCount, 2);
+
+    const successfulReceipts = receipts.filter((receipt) => receipt.successful);
+    const failedReceipts = receipts.filter((receipt) => !receipt.successful);
+
+    assert.equal(successfulReceipts.length, 1);
+    assert.equal(failedReceipts.length, 1);
+
+    const [failedReceipt] = failedReceipts;
+    assert.ok(!failedReceipt.successful);
+    assert.ok(failedReceipt.errorMessages.includes('Network error'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

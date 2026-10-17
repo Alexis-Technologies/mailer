@@ -1,0 +1,42 @@
+// Ported from upyo v0.7.0 (packages/sendgrid/src/config.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkValidateSsl } = require('../internal/validate-ssl.js');
+
+/**
+ * Creates a resolved SendGrid configuration by applying default values to optional fields.
+ *
+ * This function takes a partial SendGrid configuration and returns a complete
+ * configuration with all optional fields filled with sensible defaults.
+ * It is used internally by the SendGrid transport.
+ *
+ * @param config - The SendGrid configuration with optional fields
+ * @returns A resolved configuration with all defaults applied
+ * @internal
+ */
+const createSendGridConfig = (config) => {
+  checkValidateSsl(config.validateSsl);
+  const resolved = {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl ?? 'https://api.sendgrid.com/v3',
+    timeout: config.timeout ?? 30000,
+    fetch: config.fetch,
+    generateId: config.generateId,
+    logger: config.logger,
+    retries: config.retries ?? 3,
+    concurrency: config.concurrency ?? 1,
+    validateSsl: true,
+    headers: config.headers ?? {},
+    clickTracking: config.clickTracking ?? true,
+    openTracking: config.openTracking ?? true,
+    subscriptionTracking: config.subscriptionTracking ?? false,
+    googleAnalytics: config.googleAnalytics ?? false,
+  };
+  checkRequestOptions(resolved.timeout, resolved.retries);
+  checkConcurrency(resolved.concurrency);
+  checkSecureUrl(resolved.baseUrl, 'baseUrl');
+  return resolved;
+};
+
+module.exports = { createSendGridConfig };

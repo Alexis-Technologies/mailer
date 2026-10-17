@@ -1,14 +1,17 @@
 /**
- * The feature matrix of docs/guide/comparison.md: one table, the alternatives
- * in columns, the features in rows grouped by area, rendered from
- * docs/comparison.json into the region between `<!-- comparison:start -->`
- * and `<!-- comparison:end -->`, so the table and the data cannot drift (CI
- * regenerates it and fails on a diff). A cell is `{ mark, text, note? }`: the
- * mark is one of ✅ ⚠️ ❌ 🔜 —, the text a few words (backticks become code),
- * and a note becomes a numbered footnote under the table.
+ * The feature matrix of docs/guide/comparison.md: one table, @alexify/mailer
+ * and the alternatives in columns, the features in rows grouped by area,
+ * rendered from docs/comparison.json into the region between
+ * `<!-- comparison:start -->` and `<!-- comparison:end -->`, so the table and
+ * the data cannot drift (CI regenerates it and fails on a diff). A cell is
+ * `{ mark, text, note? }`: the mark is one of ✅ ⚠️ ❌ 🔜 —, the text a few
+ * words (backticks become code), and a note becomes a numbered footnote under
+ * the table.
  *
- * Every cell of the data was decided by reading the source of the project
- * (see the page for the method); edit the data, not the table.
+ * The first library of the data is @alexify/mailer: custom.css tints the
+ * second column of the table in the brand colour and pins it beside the
+ * features. Every cell of the data was decided by reading the source of the
+ * project (see the page for the method); edit the data, not the table.
  *
  * Run: pnpm docs:comparison
  */

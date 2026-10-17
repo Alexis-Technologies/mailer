@@ -1,0 +1,268 @@
+// Paths of the ported RetryTransport (src/retry/) that upstream's suites
+// leave out: the default wait, the validation of the options, and receipts
+// without a retryable flag.
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { createMessage } = require('../../index.js');
+const { RetryTransport, createRetryTransport } = require('../../src/retry/index.js');
+
+const message = () =>
+  createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Hello',
+    content: { text: 'Hi' },
+  });
+const sequence = (...results) => {
+  let calls = 0;
+  return {
+    id: 'base',
+    get calls() {
+      return calls;
+    },
+    send: async () => results[Math.min(calls++, results.length - 1)],
+    async *sendMany() {},
+  };
+};
+const failure = (retryable) => ({
+  successful: false,
+  errorMessages: ['Busy'],
+  errors: [{ message: 'Busy', category: 'server-error', code: 'busy', retryable }],
+});
+const success = { successful: true, messageId: 'ok' };
+
+test('Retry: the options are validated', () => {
+  const base = sequence(success);
+  assert.throws(() => createRetryTransport(base, { maxAttempts: 0 }), {
+    name: 'RangeError',
+    message: 'maxAttempts must be an integer greater than or equal to 1.',
+  });
+  assert.throws(() => createRetryTransport(base, { backoff: { factor: 0.5 } }), {
+    name: 'RangeError',
+    message: 'backoff.factor must be greater than or equal to 1.',
+  });
+  assert.ok(new RetryTransport(base) instanceof RetryTransport);
+});
+
+test('Retry: the default wait sleeps between attempts and stops on an abort', async () => {
+  const base = sequence(failure(true), success);
+  const options = { maxAttempts: 2, backoff: { baseDelayMilliseconds: 10 }, jitter: 'none' };
+  const receipt = await createRetryTransport(base, options).send(message());
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(base.calls, 2);
+
+  const controller = new AbortController();
+  const slow = { ...options, backoff: { baseDelayMilliseconds: 5000 } };
+  const sending = createRetryTransport(sequence(failure(true)), slow).send(message(), {
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(sending, { name: 'AbortError' });
+});
+
+test('Retry: a receipt without a retryable flag is retried by its errors', async () => {
+  const unflagged = failure(true);
+  const base = sequence(unflagged, success);
+  const receipt = await createRetryTransport(base, {
+    maxAttempts: 2,
+    wait: async () => {},
+  }).send(message());
+  assert.strictEqual(receipt.successful, true);
+
+  const custom = sequence(failure(false), success);
+  const forced = await createRetryTransport(custom, {
+    maxAttempts: 2,
+    wait: async () => {},
+    shouldRetry: ({ kind }) => kind === 'receipt',
+  }).send(message());
+  assert.strictEqual(forced.successful, true);
+  assert.strictEqual(custom.calls, 2);
+
+  const final = await createRetryTransport(sequence(failure(true)), {
+    maxAttempts: 1,
+  }).send(message());
+  assert.strictEqual(final.retryable, true);
+  assert.strictEqual(final.attempts, 1);
+});
+
+test('Retry: the default wait rejects with an AbortError for a signal without a reason', async () => {
+  const { createRetryConfig } = require('../../src/retry/config.js');
+  const { wait } = createRetryConfig();
+  const signal = {
+    aborted: true,
+    reason: undefined,
+    throwIfAborted() {},
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  await assert.rejects(wait({ delayMilliseconds: 10 }, signal), { name: 'AbortError' });
+});
+
+const unknownDelivery = {
+  successful: false,
+  errorMessages: ['Timed out after the request was sent'],
+  errors: [{ message: 'Timed out', category: 'timeout', code: 'timeout', retryable: true }],
+  deliveryUnknown: true,
+};
+
+test('Retry: a receipt of unknown delivery is not retried, unless shouldRetry says so', async () => {
+  const base = sequence(unknownDelivery, { successful: true, messageId: 'm1' });
+  const receipt = await new RetryTransport(base, { maxAttempts: 3 }).send(message());
+  assert.strictEqual(base.calls, 1);
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+
+  const opted = sequence(unknownDelivery, { successful: true, messageId: 'm1' });
+  const transport = new RetryTransport(opted, {
+    maxAttempts: 3,
+    shouldRetry: () => true,
+    wait: async () => {},
+  });
+  assert.strictEqual((await transport.send(message())).successful, true);
+  assert.strictEqual(opted.calls, 2);
+});
+
+test('Retry: every attempt sends the same Message-ID, without changing the message', async () => {
+  const ids = [];
+  const base = {
+    id: 'base',
+    send: async (sent) => {
+      ids.push(sent.messageId);
+      return ids.length < 3 ? failure(true) : { successful: true, messageId: 'm1' };
+    },
+    async *sendMany() {},
+  };
+  const original = message();
+  await new RetryTransport(base, { maxAttempts: 3, wait: async () => {} }).send(original);
+  assert.strictEqual(ids.length, 3);
+  assert.match(ids[0], /^[0-9a-f-]+@example\.com$/);
+  assert.deepStrictEqual(new Set(ids).size, 1);
+  assert.strictEqual(original.messageId, undefined);
+  const own = createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    content: {},
+    messageId: 'own@example.com',
+  });
+  ids.length = 2;
+  await new RetryTransport(base, { maxAttempts: 1 }).send(own);
+  assert.strictEqual(ids[2], 'own@example.com');
+});
+
+test('Retry: onRetry hears the retries of the decorator and reaches the wrapped transport', async () => {
+  const events = [];
+  const seen = [];
+  const base = sequence(failure(true), failure(true), success);
+  const send = base.send;
+  base.send = (sent, options) => {
+    seen.push(options?.onRetry);
+    return send(sent, options);
+  };
+  const onRetry = (event) => events.push(event);
+  const transport = new RetryTransport(base, {
+    maxAttempts: 3,
+    jitter: 'none',
+    backoff: { baseDelayMilliseconds: 10, factor: 2 },
+    wait: async () => {},
+  });
+  assert.strictEqual((await transport.send(message(), { onRetry })).successful, true);
+  assert.deepStrictEqual(events, [
+    { attempt: 1, delayMilliseconds: 10, error: failure(true).errors[0] },
+    { attempt: 2, delayMilliseconds: 20, error: failure(true).errors[0] },
+  ]);
+  assert.deepStrictEqual(seen, [onRetry, onRetry, onRetry]);
+});
+
+test('Retry: a bug of the wrapped transport rejects, a network TypeError is retried', async () => {
+  let calls = 0;
+  const bug = new TypeError("Cannot read properties of undefined (reading 'address')");
+  const buggy = {
+    id: 'base',
+    send: async () => {
+      calls++;
+      throw bug;
+    },
+    async *sendMany() {},
+  };
+  const options = { maxAttempts: 3, wait: async () => {} };
+  await assert.rejects(
+    new RetryTransport(buggy, options).send(message()),
+    (error) => error === bug,
+  );
+  assert.strictEqual(calls, 1);
+
+  calls = 0;
+  const network = new TypeError('fetch failed', {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+  });
+  const flaky = {
+    ...buggy,
+    send: async () => {
+      calls++;
+      throw network;
+    },
+  };
+  const receipt = await new RetryTransport(flaky, options).send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(calls, 3);
+});
+
+test('Retry: generateId makes the Message-ID pinned for every attempt', async () => {
+  const ids = [];
+  const base = sequence(failure(true), success);
+  const send = base.send;
+  base.send = (sent, options) => {
+    ids.push(sent.messageId);
+    return send(sent, options);
+  };
+  const transport = new RetryTransport(base, {
+    maxAttempts: 2,
+    wait: async () => {},
+    generateId: () => '01JRETRY',
+  });
+  await transport.send(message());
+  assert.deepStrictEqual(ids, ['01JRETRY@example.com', '01JRETRY@example.com']);
+});
+
+test('Retry: the logger hears each retry it schedules', async () => {
+  const records = [];
+  const transport = new RetryTransport(sequence(failure(true), success), {
+    maxAttempts: 2,
+    jitter: 'none',
+    backoff: { baseDelayMilliseconds: 5 },
+    wait: async () => {},
+    logger: { debug: (properties, text) => records.push([properties, text]) },
+  });
+  await transport.send(message());
+  assert.deepStrictEqual(records, [
+    [{ transport: 'retry', attempt: 1, delayMilliseconds: 5 }, 'Retrying send'],
+  ]);
+});
+
+test('Retry: a slow first message holds at most maxConcurrent receipts back', async () => {
+  let started = 0;
+  let releaseFirst;
+  const first = new Promise((resolve) => (releaseFirst = resolve));
+  const base = {
+    id: 'base',
+    send: async () => {
+      const index = started++;
+      if (index === 0) await first;
+      return { successful: true, messageId: `m${index}`, provider: 'base' };
+    },
+    async *sendMany() {},
+  };
+  const transport = createRetryTransport(base, { maxAttempts: 1, sendMany: { maxConcurrent: 2 } });
+  const messages = (function* () {
+    for (let index = 0; index < 100; index++) yield message();
+  })();
+  const receipts = transport.sendMany(messages)[Symbol.asyncIterator]();
+  const pending = receipts.next();
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  // The first, the one that took its freed slot, and one more: the two
+  // finished ones wait for the first, and nothing else starts.
+  assert.strictEqual(started, 3);
+  releaseFirst();
+  assert.strictEqual((await pending).value.messageId, 'm0');
+  await receipts.return();
+});

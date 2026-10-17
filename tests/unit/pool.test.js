@@ -1,0 +1,260 @@
+// Paths of the ported PoolTransport (src/pool/) that upstream's suites leave
+// out: weights that leave nothing to pick, aborts before a send, a timeout
+// without a caller signal, and a transport whose dispose throws.
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { createMessage } = require('../../index.js');
+const { MockTransport } = require('../../src/mock/index.js');
+const { PoolTransport } = require('../../src/pool/index.js');
+
+const message = () =>
+  createMessage({
+    from: 'alex@example.com',
+    to: 'bob@example.com',
+    subject: 'Hello',
+    content: { text: 'Hi' },
+  });
+
+test('Pool: a weighted pool needs an enabled transport with a positive weight', () => {
+  assert.throws(
+    () =>
+      new PoolTransport({
+        strategy: 'weighted',
+        transports: [{ transport: new MockTransport(), weight: 0 }],
+      }),
+    { message: 'Weighted strategy requires at least one enabled transport with positive weight' },
+  );
+});
+
+test('Pool: an aborted signal rejects a send and a batch before any transport', async () => {
+  const mock = new MockTransport();
+  const pool = new PoolTransport({ strategy: 'round-robin', transports: [{ transport: mock }] });
+  const signal = AbortSignal.abort();
+  await assert.rejects(pool.send(message(), { signal }), { name: 'AbortError' });
+  await assert.rejects(pool.sendMany([message()], { signal })[Symbol.asyncIterator]().next(), {
+    name: 'AbortError',
+  });
+  assert.strictEqual(mock.getSentMessagesCount(), 0);
+});
+
+test('Pool: a timeout applies without a caller signal, and retries stop at the last transport', async () => {
+  const failing = new MockTransport({
+    defaultResponse: { successful: false, errorMessages: ['Down'] },
+  });
+  const pool = new PoolTransport({
+    strategy: 'priority',
+    transports: [{ transport: failing }],
+    timeout: 1000,
+    maxRetries: 3,
+  });
+  const receipt = await pool.send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(failing.getSentMessagesCount(), 1);
+});
+
+test('Pool: every transport is disposed of once, and the failures come together', async () => {
+  const disposed = [];
+  const transport = (id, dispose) => ({
+    id,
+    send: async () => ({ successful: true, messageId: 'x' }),
+    async *sendMany() {},
+    ...dispose,
+  });
+  const syncError = new Error('sync dispose failed');
+  const asyncError = new Error('async dispose failed');
+  const shared = transport('shared', {
+    async [Symbol.asyncDispose]() {
+      disposed.push('shared');
+    },
+  });
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [
+      {
+        transport: transport('sync', {
+          [Symbol.dispose]() {
+            disposed.push('sync');
+            throw syncError;
+          },
+        }),
+      },
+      // Throws before it returns a promise.
+      {
+        transport: transport('eager', {
+          [Symbol.asyncDispose]() {
+            disposed.push('eager');
+            throw asyncError;
+          },
+        }),
+      },
+      { transport: shared },
+      { transport: shared },
+      {
+        transport: transport('last', {
+          [Symbol.dispose]() {
+            disposed.push('last');
+          },
+        }),
+      },
+    ],
+  });
+  await assert.rejects(pool[Symbol.asyncDispose](), (error) => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepStrictEqual(error.errors, [syncError, asyncError]);
+    return true;
+  });
+  assert.deepStrictEqual(disposed, ['sync', 'eager', 'shared', 'last']);
+});
+
+const failing = (receipt, sent = []) => ({
+  id: 'failing',
+  send: async (sentMessage) => {
+    sent.push(sentMessage);
+    return receipt;
+  },
+  async *sendMany() {},
+});
+const rejected = (category, extra = {}) => ({
+  successful: false,
+  errorMessages: [category],
+  errors: [{ message: category, category, code: category, retryable: category !== 'rejected' }],
+  ...extra,
+});
+
+test('Pool: failover stops at a rejected message or an unknown delivery, not at an auth failure', async () => {
+  for (const [first, isFailedOver] of [
+    [rejected('rejected'), false],
+    [rejected('validation'), false],
+    [rejected('timeout', { deliveryUnknown: true }), false],
+    [rejected('auth'), true],
+    [rejected('service-unavailable'), true],
+  ]) {
+    const second = [];
+    const pool = new PoolTransport({
+      strategy: 'priority',
+      transports: [
+        { transport: failing(first), priority: 2 },
+        { transport: failing({ successful: true, messageId: 'm2' }, second), priority: 1 },
+      ],
+    });
+    const receipt = await pool.send(message());
+    assert.strictEqual(second.length === 1, isFailedOver, first.errors[0].category);
+    assert.strictEqual(receipt.successful, isFailedOver);
+    if (!isFailedOver) {
+      assert.strictEqual(receipt.retryable, false);
+      assert.strictEqual(receipt.deliveryUnknown, first.deliveryUnknown);
+    }
+  }
+});
+
+test('Pool: every transport of a failover sends the same Message-ID', async () => {
+  const sent = [];
+  const pool = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: failing(rejected('auth'), sent), priority: 2 },
+      { transport: failing({ successful: true, messageId: 'm2' }, sent), priority: 1 },
+    ],
+  });
+  await pool.send(message());
+  assert.strictEqual(sent.length, 2);
+  assert.ok(sent[0].messageId);
+  assert.strictEqual(sent[0].messageId, sent[1].messageId);
+});
+
+test('Pool: an abort rejects with the reason of the signal', async () => {
+  const controller = new AbortController();
+  const reason = new Error('Stop.');
+  controller.abort(reason);
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [{ transport: failing({ successful: true, messageId: 'x' }) }],
+  });
+  await assert.rejects(pool.send(message(), { signal: controller.signal }), (e) => e === reason);
+  const batch = pool.sendMany([message()], { signal: controller.signal });
+  await assert.rejects(batch[Symbol.asyncIterator]().next(), (e) => e === reason);
+});
+
+test('Pool: random makes the choices, and generateId the pinned Message-ID', async () => {
+  const received = [];
+  const recording = (id) => ({
+    id,
+    send: async (sent) => {
+      received.push([id, sent.messageId]);
+      return { successful: true, messageId: id };
+    },
+    async *sendMany() {},
+  });
+  const values = [0.9, 0.1];
+  const pool = new PoolTransport({
+    strategy: 'weighted',
+    transports: [
+      { transport: recording('a'), weight: 1 },
+      { transport: recording('b'), weight: 1 },
+    ],
+    random: () => values.shift(),
+    generateId: (kind) => `01JPOOL.${kind}`,
+  });
+  await pool.send(message());
+  await pool.send(message());
+  assert.deepStrictEqual(received, [
+    ['b', '01JPOOL.message-id@example.com'],
+    ['a', '01JPOOL.message-id@example.com'],
+  ]);
+});
+
+test('Pool: the logger hears a selector that throws and a failover', async () => {
+  const records = [];
+  const logger = {
+    debug: (properties, text) => records.push(['debug', properties, text]),
+    warn: (properties, text) => records.push(['warn', properties, text]),
+  };
+  const refused = { successful: false, errorMessages: ['Busy'], errors: [], retryable: true };
+  const pool = new PoolTransport({
+    strategy: 'selector-based',
+    logger,
+    // The first candidate first, so that the busy one fails over.
+    random: () => 0,
+    transports: [
+      {
+        transport: failing(refused),
+        selector: () => {
+          throw new Error('Selector bug');
+        },
+      },
+      { transport: failing(refused) },
+      { transport: failing({ successful: true, messageId: 'x' }) },
+    ],
+  });
+  assert.strictEqual((await pool.send(message())).successful, true);
+  const warns = records.filter(([level]) => level === 'warn');
+  assert.ok(warns.length >= 1);
+  assert.deepStrictEqual(warns[0][1], { transport: 'pool', index: 0, error: 'Selector bug' });
+  assert.ok(records.some(([level, , text]) => level === 'debug' && text === 'Pool failing over'));
+});
+
+test('Pool: round-robin goes on across sends and batches', async () => {
+  const first = new MockTransport();
+  const second = new MockTransport();
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [{ transport: first }, { transport: second }],
+  });
+  await pool.send(message());
+  for (let batch = 0; batch < 3; batch++) {
+    for await (const receipt of pool.sendMany([message()])) assert.ok(receipt.successful);
+  }
+  // Upstream reset the rotation for each batch, so a batch of one message
+  // always went through the first transport.
+  assert.strictEqual(first.getSentMessagesCount(), 2);
+  assert.strictEqual(second.getSentMessagesCount(), 2);
+});
+
+test('Pool: continueOnSuccess, which would deliver a message twice, is refused', () => {
+  const transports = [{ transport: new MockTransport() }];
+  assert.throws(
+    () => new PoolTransport({ strategy: 'priority', transports, continueOnSuccess: true }),
+    { name: 'TypeError', message: /deliver a sent message again/ },
+  );
+  assert.ok(new PoolTransport({ strategy: 'priority', transports, continueOnSuccess: false }));
+});

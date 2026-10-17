@@ -1,0 +1,499 @@
+// Ported from upyo v0.7.0 (packages/smtp/src/test-utils/mock-smtp-server.ts)
+// https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+
+const { Buffer } = require('node:buffer');
+const { EventEmitter } = require('node:events');
+const { createServer } = require('node:net');
+
+// What a socket reports once the client has gone: a reset (ECONNRESET), or a
+// reply written after the client closed, which is EPIPE on Linux and
+// ECONNABORTED on Windows. SmtpConnection#quit() sends QUIT and closes without
+// waiting for the 221, so the reply to QUIT can always meet one of them.
+const CLIENT_GONE = new Set(['ECONNRESET', 'EPIPE', 'ECONNABORTED']);
+
+class MockSmtpServer extends EventEmitter {
+  server;
+  port;
+  connections = new Set();
+  connectionCount = 0;
+  responses = new Map();
+  responseQueues = new Map();
+  capabilities = ['AUTH PLAIN LOGIN XOAUTH2 OAUTHBEARER', 'HELP'];
+  deferEnvelopeResponses = false;
+  deferredEnvelopeResponses = [];
+  responseDelays = new Map();
+  activeSessions = new Set();
+  peakConcurrentConnections = 0;
+  receivedMessages = [];
+  receivedCommands = [];
+  timeouts = new Set();
+  lastAuthCommand = null;
+
+  constructor(port = 0) {
+    super();
+    this.port = port;
+    this.server = createServer();
+    this.setupDefaultResponses();
+    this.setupServerHandlers();
+  }
+
+  setupDefaultResponses() {
+    this.responses.set('GREETING', {
+      code: 220,
+      message: 'Mock SMTP Server ready',
+    });
+    this.responses.set('EHLO', {
+      code: 250,
+      message: 'Hello, pleased to meet you',
+    });
+    this.responses.set('HELO', {
+      code: 250,
+      message: 'Hello, pleased to meet you',
+    });
+    this.responses.set('AUTH', {
+      code: 235,
+      message: 'Authentication successful',
+    });
+    this.responses.set('MAIL', { code: 250, message: 'OK' });
+    this.responses.set('RCPT', { code: 250, message: 'OK' });
+    this.responses.set('DATA', {
+      code: 354,
+      message: 'Start mail input; end with <CRLF>.<CRLF>',
+    });
+    this.responses.set('DATA_END', {
+      code: 250,
+      message: 'OK: Message accepted for delivery',
+    });
+    this.responses.set('RSET', { code: 250, message: 'OK' });
+    this.responses.set('QUIT', { code: 221, message: 'Bye' });
+    this.responses.set('STARTTLS', {
+      code: 220,
+      message: 'Ready to start TLS',
+    });
+  }
+
+  setupServerHandlers() {
+    this.server.on('connection', (socket) => {
+      this.connections.add(socket);
+      this.connectionCount++;
+      this.activeSessions.add(socket);
+      if (this.activeSessions.size > this.peakConcurrentConnections) {
+        this.peakConcurrentConnections = this.activeSessions.size;
+      }
+
+      socket.on('close', () => {
+        this.connections.delete(socket);
+        this.activeSessions.delete(socket);
+      });
+
+      socket.on('error', (error) => {
+        // A client may reset the connection as it leaves (macOS and Windows send
+        // an RST when a socket closes with unread data, Linux usually a FIN), or
+        // close it before a reply is written. That is no failure of the server,
+        // and an 'error' event nobody listens to would throw.
+        if (CLIENT_GONE.has(error.code) && this.listenerCount('error') === 0) return;
+        this.emit('error', error);
+      });
+
+      // Send greeting
+      const greeting = this.responses.get('GREETING');
+      socket.write(`${greeting.code} ${greeting.message}\r\n`);
+
+      let buffer = '';
+      let rawBuffer = Buffer.alloc(0);
+      let inDataMode = false;
+      let currentMessage = {};
+      // When set, the server has sent a SASL failure challenge (334) for an
+      // OAuth mechanism and is awaiting the client's continuation line (an
+      // empty line for XOAUTH2, or "AQ==" for OAUTHBEARER) before sending the
+      // final failure reply.
+      let awaitingOAuthFailure = null;
+      // When set, the client used the two-step SASL form (`AUTH <mech>` without
+      // an inline initial response) and the next line is that initial response.
+      let awaitingSaslInitialResponse = null;
+
+      // Replies to an OAuth SASL initial response: success (235) or a 334
+      // failure challenge that awaits the client's continuation line.
+      const respondToOAuth = (mechanism) => {
+        const authResponse = this.responses.get('AUTH');
+        if (authResponse.code === 235) {
+          socket.write(`${authResponse.code} ${authResponse.message}\r\n`);
+        } else {
+          socket.write('334 eyJzdGF0dXMiOiJpbnZhbGlkX3Rva2VuIn0=\r\n');
+          awaitingOAuthFailure = mechanism;
+        }
+      };
+
+      socket.on('data', (data) => {
+        if (inDataMode) {
+          rawBuffer = Buffer.concat([rawBuffer, data]);
+          const end = rawBuffer.indexOf('\r\n.\r\n');
+          if (end >= 0) {
+            currentMessage.rawData = rawBuffer.subarray(0, end + 2);
+            // Keep the legacy text view without its final CRLF or de-stuffing.
+            currentMessage.data = rawBuffer.subarray(0, end).toString('utf8');
+            this.receivedMessages.push(currentMessage);
+            const response = this.responses.get('DATA_END');
+            this.writeResponse(socket, 'DATA_END', `${response.code} ${response.message}\r\n`);
+            inDataMode = false;
+            buffer = rawBuffer.subarray(end + 5).toString('utf8');
+            rawBuffer = Buffer.alloc(0);
+            currentMessage = {};
+          }
+          return;
+        }
+        buffer += data.toString();
+
+        const lines = buffer.split('\r\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          // Consume the two-step SASL initial response sent on its own line.
+          if (awaitingSaslInitialResponse != null) {
+            const mechanism = awaitingSaslInitialResponse;
+            awaitingSaslInitialResponse = null;
+            respondToOAuth(mechanism);
+            continue;
+          }
+
+          // Validate and drain the OAuth SASL failure continuation (an empty
+          // line for XOAUTH2, "AQ==" for OAUTHBEARER) before the empty-line skip
+          // below, so a wrong continuation is rejected instead of masked.
+          if (awaitingOAuthFailure != null) {
+            const expected = awaitingOAuthFailure === 'xoauth2' ? '' : 'AQ==';
+            if (line === expected) {
+              const authResponse = this.responses.get('AUTH');
+              socket.write(`${authResponse.code} ${authResponse.message}\r\n`);
+            } else {
+              socket.write('501 Invalid OAuth continuation\r\n');
+            }
+            awaitingOAuthFailure = null;
+            continue;
+          }
+
+          if (!line.trim()) continue;
+
+          const command = line.split(' ')[0].toUpperCase();
+          this.receivedCommands.push(line);
+          this.emit('command', line);
+
+          switch (command) {
+            case 'EHLO': {
+              const ehloResponse = this.responses.get('EHLO');
+              if (ehloResponse.code === 250) {
+                // oxlint-disable-next-line no-shadow -- upstream
+                const lines = [ehloResponse.message, ...this.capabilities];
+                socket.write(
+                  lines
+                    .map((capability, index) => {
+                      const separator = index === lines.length - 1 ? ' ' : '-';
+                      return `${ehloResponse.code}${separator}${capability}\r\n`;
+                    })
+                    .join(''),
+                );
+              } else {
+                socket.write(`${ehloResponse.code} ${ehloResponse.message}\r\n`);
+              }
+              break;
+            }
+
+            case 'HELO': {
+              const heloResponse = this.responses.get('HELO');
+              socket.write(`${heloResponse.code} ${heloResponse.message}\r\n`);
+              break;
+            }
+
+            case 'AUTH': {
+              this.lastAuthCommand = line;
+              const parts = line.split(' ');
+              const mechanism = parts[1]?.toUpperCase();
+              if (mechanism === 'XOAUTH2' || mechanism === 'OAUTHBEARER') {
+                const mech = mechanism === 'XOAUTH2' ? 'xoauth2' : 'oauthbearer';
+                if (parts.length >= 3) {
+                  respondToOAuth(mech);
+                } else {
+                  // Two-step form: the client omitted the initial response, so
+                  // request it with an empty 334 challenge.
+                  socket.write('334 \r\n');
+                  awaitingSaslInitialResponse = mech;
+                }
+              } else if (line.includes('PLAIN')) {
+                const authResponse = this.responses.get('AUTH');
+                socket.write(`${authResponse.code} ${authResponse.message}\r\n`);
+              } else if (line.includes('LOGIN')) {
+                // AUTH LOGIN requires multi-step process
+                socket.write('334 VXNlcm5hbWU6\r\n'); // "Username:" in base64
+              } else {
+                socket.write('334 Continue\r\n');
+              }
+              break;
+            }
+
+            case 'MAIL':
+              currentMessage.from = this.extractEmail(line);
+              // oxlint-disable-next-line no-case-declarations -- upstream
+              const mailResponse = this.responses.get('MAIL');
+              if (this.writeEnvelopeResponse(socket, mailResponse)) return;
+              break;
+
+            case 'RCPT':
+              // oxlint-disable-next-line no-case-declarations -- upstream
+              const rcptResponse =
+                this.responseQueues.get('RCPT')?.shift() ?? this.responses.get('RCPT');
+              if (rcptResponse.code >= 200 && rcptResponse.code < 300) {
+                if (!currentMessage.to) currentMessage.to = [];
+                currentMessage.to.push(this.extractEmail(line));
+              }
+              if (this.writeEnvelopeResponse(socket, rcptResponse)) return;
+              break;
+
+            case 'DATA':
+              inDataMode = true;
+              // oxlint-disable-next-line no-case-declarations -- upstream
+              const dataResponse = this.responses.get('DATA');
+              socket.write(`${dataResponse.code} ${dataResponse.message}\r\n`);
+              break;
+
+            case 'RSET':
+              currentMessage = {};
+              // oxlint-disable-next-line no-case-declarations -- upstream
+              const rsetResponse = this.responses.get('RSET');
+              this.writeResponse(
+                socket,
+                'RSET',
+                `${rsetResponse.code} ${rsetResponse.message}\r\n`,
+              );
+              break;
+
+            case 'STARTTLS': {
+              // Note: This is a simplified mock that doesn't actually upgrade to TLS
+              // For real TLS testing, use integration tests with actual SMTP servers
+              const starttlsResponse = this.responses.get('STARTTLS');
+              socket.write(`${starttlsResponse.code} ${starttlsResponse.message}\r\n`);
+              break;
+            }
+
+            case 'QUIT': {
+              // The session is over as soon as the client asks to end it, even
+              // though the socket lingers until both sides finish closing.
+              this.activeSessions.delete(socket);
+              const quitResponse = this.responses.get('QUIT');
+              socket.write(`${quitResponse.code} ${quitResponse.message}\r\n`);
+              socket.end();
+              break;
+            }
+
+            default:
+              // Handle base64 encoded username/password for AUTH LOGIN
+              if (line.includes('dGVzdHVzZXI=')) {
+                // "testuser" in base64
+                socket.write('334 UGFzc3dvcmQ6\r\n'); // "Password:" in base64
+              } else if (line.includes('dGVzdHBhc3M=')) {
+                // "testpass" in base64
+                const authResponse = this.responses.get('AUTH');
+                socket.write(`${authResponse.code} ${authResponse.message}\r\n`);
+              } else if (this.responses.get('AUTH')?.code === 235) {
+                socket.write('334 Continue\r\n');
+              } else {
+                const authResponse = this.responses.get('AUTH');
+                socket.write(`${authResponse.code} ${authResponse.message}\r\n`);
+              }
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * Writes a reply, honouring any delay configured through
+   * {@link setResponseDelay} for the given command.  A delayed reply lets a
+   * test hold a client inside a single SMTP command long enough for other
+   * clients to run concurrently.
+   */
+  writeResponse(socket, command, text) {
+    const delay = this.responseDelays.get(command) ?? 0;
+    if (delay <= 0) {
+      socket.write(text);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      this.timeouts.delete(timeout);
+      if (!socket.destroyed) socket.write(text);
+    }, delay);
+    this.timeouts.add(timeout);
+  }
+
+  extractEmail(line) {
+    const match = line.match(/<([^>]+)>/);
+    return match ? match[1] : '';
+  }
+
+  formatResponse(response) {
+    const continuationLines =
+      response.continuationLines?.map((line) => `${response.code}-${line}\r\n`).join('') ?? '';
+    return `${continuationLines}${response.code} ${response.message}\r\n`;
+  }
+
+  writeEnvelopeResponse(socket, response) {
+    if (this.deferEnvelopeResponses) {
+      this.deferredEnvelopeResponses.push({ socket, response });
+      return false;
+    }
+    const formatted = this.formatResponse(response);
+    if (response.closeConnection === true) {
+      socket.end(formatted);
+      return true;
+    }
+    socket.write(formatted);
+    return false;
+  }
+
+  start() {
+    return new Promise((resolve, reject) => {
+      this.server.listen(this.port, () => {
+        const address = this.server.address();
+        if (address && typeof address === 'object') {
+          this.port = address.port;
+          resolve(this.port);
+        } else {
+          reject(new Error('Failed to start server'));
+        }
+      });
+
+      this.server.on('error', reject);
+    });
+  }
+
+  async stop() {
+    // Immediately destroy all connections
+    for (const socket of this.connections) {
+      socket.removeAllListeners();
+      socket.destroy();
+    }
+    this.connections.clear();
+
+    // Clear all timeouts immediately
+    for (const timeout of this.timeouts) {
+      clearTimeout(timeout);
+    }
+    this.timeouts.clear();
+
+    // Close the server and wait for it to complete
+    await new Promise((resolve) => {
+      this.server.removeAllListeners();
+      this.server.close(() => {
+        resolve();
+      });
+
+      // Failsafe timeout
+      setTimeout(() => {
+        resolve();
+      }, 100);
+    });
+
+    // Give the event loop a chance to clean up
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  setResponse(command, response) {
+    this.responses.set(command, response);
+  }
+
+  setResponses(command, responses) {
+    this.responseQueues.set(command, [...responses]);
+  }
+
+  /** Replaces the SMTP extensions advertised in successful EHLO responses. */
+  setCapabilities(capabilities) {
+    this.capabilities = [...capabilities];
+  }
+
+  /** Holds MAIL and RCPT replies until {@link flushEnvelopeResponses} runs. */
+  holdEnvelopeResponses() {
+    this.deferEnvelopeResponses = true;
+  }
+
+  /** Sends the next held MAIL or RCPT reply, if one is available. */
+  flushNextEnvelopeResponse() {
+    while (this.deferredEnvelopeResponses.length > 0) {
+      const pending = this.deferredEnvelopeResponses.shift();
+      if (pending == null || pending.socket.destroyed) continue;
+      const formatted = this.formatResponse(pending.response);
+      if (pending.response.closeConnection === true) {
+        pending.socket.end(formatted);
+      } else {
+        pending.socket.write(formatted);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** Sends all held MAIL and RCPT replies in command order. */
+  flushEnvelopeResponses() {
+    this.deferEnvelopeResponses = false;
+    const pending = this.deferredEnvelopeResponses.splice(0);
+    const closedSockets = new Set();
+    for (const { socket, response } of pending) {
+      if (socket.destroyed || closedSockets.has(socket)) continue;
+      const formatted = this.formatResponse(response);
+      if (response.closeConnection === true) {
+        socket.end(formatted);
+        closedSockets.add(socket);
+      } else {
+        socket.write(formatted);
+      }
+    }
+  }
+
+  /**
+   * Delays the reply to the given command by `delayMs` milliseconds.
+   * Only `DATA_END` and `RSET` honour this today.
+   */
+  setResponseDelay(command, delayMs) {
+    this.responseDelays.set(command, delayMs);
+  }
+
+  /** Returns the number of client sockets currently open. */
+  getActiveConnectionCount() {
+    return this.connections.size;
+  }
+
+  /**
+   * Returns the highest number of SMTP sessions that were live at the same
+   * time since the server started.  A session runs from the greeting until the
+   * client sends `QUIT` or the socket closes, so a socket still winding down
+   * after `QUIT` does not count against a client's connection limit.
+   */
+  getPeakConcurrentConnections() {
+    return this.peakConcurrentConnections;
+  }
+
+  getReceivedMessages() {
+    return [...this.receivedMessages];
+  }
+
+  /** Returns all SMTP command lines received by the server. */
+  getReceivedCommands() {
+    return [...this.receivedCommands];
+  }
+
+  getLastAuthCommand() {
+    return this.lastAuthCommand;
+  }
+
+  clearReceivedMessages() {
+    this.receivedMessages = [];
+    this.receivedCommands = [];
+  }
+
+  getPort() {
+    return this.port;
+  }
+
+  getConnectionCount() {
+    return this.connectionCount;
+  }
+}
+
+module.exports = { MockSmtpServer };
