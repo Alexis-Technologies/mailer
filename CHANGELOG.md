@@ -102,8 +102,9 @@ additive but the defaults listed below.
   `reserve`, `complete` and `release`.
 - **`./hooks`:** `beforeSend` may replace or refuse a message, `afterSend`, `onRetry` and
   `onError` hear each send, with a context made for each.
-- **`./tee`:** mirrors each message to other transports, each with a timeout of its own and not
-  awaited by default, the primary's receipt the one returned.
+- **`./tee`:** mirrors each message to other transports, with one Message-ID, each with a
+  timeout of its own and not awaited by default, the primary's receipt the one returned;
+  disposal waits for the copies in flight.
 - **Delivery events and `./webhooks`:** the `DeliveryEvent` model at the root, one event per
   message and recipient, and a verifier per provider for SES, Resend, SendGrid, Mailgun,
   Postmark, MailerSend, Mailtrap, Brevo, Mailjet, SparkPost, Lettermint, Maileroo, SMTP2GO, Azure

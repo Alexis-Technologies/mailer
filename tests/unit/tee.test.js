@@ -202,3 +202,85 @@ test('Tee: the options are checked', () => {
   assert.strictEqual(tee.config.awaitMirrors, false);
   assert.strictEqual(tee.config.maxPending, 100);
 });
+
+test('Tee: a mirror that ignores its signal fails at its timeout all the same', async () => {
+  // Before: the timeout reached a mirror only through its signal, so one that
+  // ignored it held a slot of maxPending for ever.
+  const deaf = fakeTransport(() => new Promise(() => {}));
+  const outcomes = [];
+  const tee = new TeeTransport(fakeTransport(), {
+    mirrors: [deaf],
+    timeout: 20,
+    maxPending: 1,
+    onMirror: (outcome) => outcomes.push(outcome),
+  });
+  await tee.send(message('one'));
+  await waitFor(() => outcomes.length === 1);
+  assert.match(outcomes[0].error.message, /did not answer within 20 ms/);
+  // The slot is free again: the next copy is sent, not skipped.
+  await tee.send(message('two'));
+  await waitFor(() => outcomes.length === 2);
+  assert.strictEqual(outcomes[1].skipped, undefined);
+});
+
+test('Tee: dispose waits for the copies in flight before disposing of the mirrors', async () => {
+  // Before: the mirrors were disposed of while their copies were being sent.
+  const order = [];
+  const slow = fakeTransport(
+    () =>
+      new Promise((resolve) =>
+        setTimeout(() => {
+          order.push('copied');
+          resolve(sent('m'));
+        }, 30),
+      ),
+    {
+      overrides: {
+        async [Symbol.asyncDispose]() {
+          order.push('disposed');
+        },
+      },
+    },
+  );
+  const tee = new TeeTransport(fakeTransport(), { mirrors: [slow], onMirror: () => {} });
+  await tee.send(message());
+  await tee[Symbol.asyncDispose]();
+  assert.deepStrictEqual(order, ['copied', 'disposed']);
+});
+
+test('Tee: the primary and the mirrors send one Message-ID', async () => {
+  // Before: each composed its own, so a copy could not be told for the message.
+  const primary = fakeTransport();
+  const mirror = fakeTransport();
+  const tee = new TeeTransport(primary, { mirrors: [mirror], awaitMirrors: true });
+  await tee.send(message());
+  await collect(tee.sendMany([message('b')]));
+  for (let i = 0; i < 2; i++) {
+    const id = primary.calls[i].message.messageId;
+    assert.match(id, /^[^<>]+@example\.com$/);
+    assert.strictEqual(mirror.calls[i].message.messageId, id);
+  }
+});
+
+test('Tee: a failed copy is a warning with no address, and a flood of them is cut', async (t) => {
+  // Before: the first error text of the receipt went out as it was, the
+  // recipient of an SMTP rejection in it, once for every message.
+  // An hour on, past the minute of the warnings of the tests before.
+  let time = performance.now() + 60 * 60 * 1000;
+  t.mock.method(performance, 'now', () => time);
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push([text, options.code]));
+  const rejecting = fakeTransport(() => ({
+    ...failed('rejected'),
+    errorMessages: ['550 5.1.1 <bob@example.com>: Recipient address rejected'],
+  }));
+  const tee = new TeeTransport(fakeTransport(), { mirrors: [rejecting], awaitMirrors: true });
+  for (let i = 0; i < 12; i++) await tee.send(message());
+  assert.strictEqual(warnings.length, 10);
+  assert.ok(!warnings[0][0].includes('bob@example.com'), warnings[0][0]);
+  assert.match(warnings[0][0], /The mirror fake failed: 550 5\.1\.1/);
+  time += 60 * 1000;
+  await tee.send(message());
+  assert.strictEqual(warnings.length, 11);
+  assert.match(warnings[10][0], /2 more warnings of MAILER_TEE_MIRROR_FAILED were left out/);
+});

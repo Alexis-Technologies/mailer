@@ -27,3 +27,29 @@ test('Privacy: redaction runs in linear time on a long text without an address',
   assert.strictEqual(redactAddresses('"@['.repeat(100_000)).length, 300_000);
   assert.ok(performance.now() - started < 1000);
 });
+
+test('Privacy: the warning of a hook that threw names no address', async (t) => {
+  // Before: the message of what a hook, a listener or a store threw went into
+  // the process warning as it was.
+  const { createMessage } = require('../../index.js');
+  const { HooksTransport } = require('../../src/hooks/index.js');
+  const { fakeTransport } = require('../helpers/decorators/fake.js');
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text) => warnings.push(text));
+  const hooks = new HooksTransport(fakeTransport(), {
+    afterSend: () => {
+      throw new Error('cannot record the delivery to carol@example.com');
+    },
+  });
+  await hooks.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'carol@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  );
+  assert.strictEqual(warnings.length, 1);
+  assert.ok(!warnings[0].includes('carol@example.com'), warnings[0]);
+  assert.match(warnings[0], /cannot record the delivery to/);
+});

@@ -5,11 +5,15 @@
 // Changed in the port: a mirror has a timeout of its own and, by default, its
 // send is not awaited, where unemail awaited every leg with no bound, so a
 // slow or hung mirror held the primary's receipt; with `awaitMirrors` they
-// are awaited, bounded by the timeout; and the detached sends in flight are
-// bounded too.
+// are awaited, bounded by the timeout; the detached sends in flight are
+// bounded too, and disposal waits for them; the primary and the mirrors send
+// one Message-ID; and a failure without `onMirror` is a warning with no
+// address in it.
 
+const { pinMessageId } = require('../core/message-id.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
-const { warnThrown } = require('../internal/callback.js');
+const { describeThrown, warnLimited, warnThrown } = require('../internal/callback.js');
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseRaw } = require('../internal/capabilities.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createTeeConfig } = require('./config.js');
@@ -22,10 +26,23 @@ const disposeOf = async (transport) => {
 
 const describe = (outcome) => {
   if (outcome.skipped !== undefined) return outcome.skipped;
-  if (outcome.error !== undefined) {
-    return outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
-  }
-  return outcome.receipt.errorMessages[0];
+  if (outcome.error !== undefined) return describeThrown(outcome.error);
+  return redactAddresses(outcome.receipt.errorMessages[0] ?? 'no error message');
+};
+
+// A send of a mirror that does not settle by `timeout`, as one that ignores
+// its signal would not, fails then all the same.
+const withDeadline = (sending, timeout, mirror) => {
+  let timer;
+  const deadline = new Promise((resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`The mirror ${mirror} did not answer within ${timeout} ms.`)),
+      timeout,
+    );
+    // A detached send does not keep the process alive; disposal waits for it.
+    timer.unref?.();
+  });
+  return Promise.race([sending, deadline]).finally(() => clearTimeout(timer));
 };
 
 /**
@@ -37,6 +54,7 @@ class TeeTransport {
   config;
   primary;
   #pending = 0;
+  #detached = new Set();
 
   /**
    * @param primary The transport whose receipt is returned.
@@ -58,8 +76,10 @@ class TeeTransport {
    */
   async send(message, options) {
     options?.signal?.throwIfAborted();
-    const mirrored = this.#mirror(message, options?.signal, 'send');
-    const receipt = await this.primary.send(message, options);
+    // The copies are of one message, so they carry one Message-ID.
+    const pinned = pinMessageId(message);
+    const mirrored = this.#mirror(pinned, options?.signal, 'send');
+    const receipt = await this.primary.send(pinned, options);
     await mirrored;
     return receipt;
   }
@@ -84,7 +104,10 @@ class TeeTransport {
    */
   sendMany(messages, options) {
     return gatedSendMany(this.primary, messages, options, {
-      admit: (message) => ({ message, mirrored: this.#mirror(message, options?.signal, 'send') }),
+      admit: (message) => {
+        const pinned = pinMessageId(message);
+        return { message: pinned, mirrored: this.#mirror(pinned, options?.signal, 'send') };
+      },
       settle: async (receipt, admitted) => {
         await admitted.mirrored;
         return receipt;
@@ -99,10 +122,12 @@ class TeeTransport {
   }
 
   /**
-   * Disposes of the primary and the mirrors, each once, all of them whatever
+   * Waits for the mirrored sends in flight, each bounded by `timeout`, then
+   * disposes of the primary and the mirrors, each once, all of them whatever
    * fails; the failures reject together.
    */
   async [Symbol.asyncDispose]() {
+    await Promise.allSettled(this.#detached);
     const seen = new Set();
     const errors = [];
     const disposeOnce = async (transport) => {
@@ -148,15 +173,27 @@ class TeeTransport {
     const mirrorSignal =
       detached || signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
     if (detached) this.#pending++;
-    try {
-      const receipt = await (operation === 'sendRaw'
+    const sending = withDeadline(
+      operation === 'sendRaw'
         ? mirror.sendRaw(message, { signal: mirrorSignal })
-        : mirror.send(message, { signal: mirrorSignal }));
-      this.#report({ mirror: mirror.id, message, receipt });
-    } catch (error) {
-      this.#report({ mirror: mirror.id, message, error });
+        : mirror.send(message, { signal: mirrorSignal }),
+      this.config.timeout,
+      mirror.id,
+    );
+    const settled = sending.then(
+      (receipt) => this.#report({ mirror: mirror.id, message, receipt }),
+      (error) => this.#report({ mirror: mirror.id, message, error }),
+    );
+    if (!detached) {
+      await settled;
+      return;
+    }
+    this.#detached.add(settled);
+    try {
+      await settled;
     } finally {
-      if (detached) this.#pending--;
+      this.#detached.delete(settled);
+      this.#pending--;
     }
   }
 
@@ -166,9 +203,10 @@ class TeeTransport {
     const listener = this.config.onMirror;
     if (listener === undefined) {
       if (outcome.receipt?.successful !== true) {
-        process.emitWarning(`The mirror ${outcome.mirror} failed: ${describe(outcome)}`, {
-          code: 'MAILER_TEE_MIRROR_FAILED',
-        });
+        warnLimited(
+          'MAILER_TEE_MIRROR_FAILED',
+          `The mirror ${outcome.mirror} failed: ${describe(outcome)}`,
+        );
       }
       return;
     }

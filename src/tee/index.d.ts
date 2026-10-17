@@ -35,7 +35,8 @@ export interface TeeConfig {
   /** The transports each message is mirrored to. */
   readonly mirrors: readonly Transport[];
   /**
-   * The time a mirror's send may take, in milliseconds.
+   * The time a mirror's send may take, in milliseconds: its signal aborts
+   * then, and a send that ignores it fails all the same.
    * @default 10000
    */
   readonly timeout?: number;
@@ -54,8 +55,9 @@ export interface TeeConfig {
   readonly maxPending?: number;
   /**
    * Hears every outcome of a mirror.  Without it, a failure or a skipped copy
-   * becomes a process warning (`MAILER_TEE_MIRROR_FAILED`); one that throws
-   * becomes one too (`MAILER_TEE_LISTENER_FAILED`).
+   * becomes a process warning (`MAILER_TEE_MIRROR_FAILED`), with the
+   * addresses of its text redacted and no more than ten a minute; one that
+   * throws becomes one too (`MAILER_TEE_LISTENER_FAILED`).
    */
   readonly onMirror?: (outcome: MirrorOutcome) => void;
 }
@@ -117,8 +119,9 @@ export declare class TeeTransport<TProviderId extends string = string>
   /** Verifies the primary; the mirrors are not checked. */
   verify(options?: TransportOptions): Promise<void>;
   /**
-   * Disposes of the primary and the mirrors, each once, whatever fails; the
-   * failures reject together as an `AggregateError`.
+   * Waits for the copies in flight, each bounded by `timeout`, then disposes
+   * of the primary and the mirrors, each once, whatever fails; the failures
+   * reject together as an `AggregateError`.
    */
   [Symbol.asyncDispose](): Promise<void>;
 }

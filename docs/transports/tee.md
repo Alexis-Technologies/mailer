@@ -19,17 +19,22 @@ const transport = new TeeTransport(ses, {
 
 ## Mirrors never hold the primary
 
-Each mirror's send has a timeout of its own (`timeout`, 10 seconds), and by
-default it is not awaited: the primary's receipt comes back as soon as the
+Each mirror's send has a timeout of its own (`timeout`, 10 seconds), which ends
+it whether or not the mirror heeds its signal, and by default it is not
+awaited: the primary's receipt comes back as soon as the
 primary answers, and the copies go on alone, not stopped by the caller's
 signal. At most `maxPending` copies are in flight; one over that is skipped and
 reported. On a runtime that freezes after the response, such as a serverless
 function, set `awaitMirrors`: the copies are then awaited, bounded by the
-timeout, and follow the caller's signal.
+timeout, and follow the caller's signal. Disposing of the tee waits for the
+copies in flight before it disposes of the mirrors. The primary and the mirrors
+send one Message-ID, so a copy reads as the message it is.
 
 `onMirror` hears the outcome of every copy: its `receipt`, the `error` its send
 threw, or why it was `skipped`. Without it, a failed or skipped copy becomes a
-process warning (`MAILER_TEE_MIRROR_FAILED`).
+process warning (`MAILER_TEE_MIRROR_FAILED`), with the addresses of its text
+redacted, and no more than ten a minute: the first after a minute says how many
+were left out.
 
 ## Options
 
