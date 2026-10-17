@@ -126,11 +126,53 @@ test('MIME: long headers fold at whitespace and unfold to the original', async (
   assert.strictEqual((await PostalMime.parse(text)).subject, subject);
 });
 
+test('MIME: a custom field name is written capitalized, as nodemailer writes it', async () => {
+  const names = [
+    'x-custom-header',
+    'list-unsubscribe-post',
+    'list-id',
+    'x-entity-ref-id',
+    'received-spf',
+    'x-report-fbl',
+    'content-md5',
+    'x-smtpapi',
+    'arc-seal',
+    'dkim-filter',
+    'bimi-selector',
+    'mime-extra',
+    'archived-at',
+    'content-features',
+  ];
+  const headers = {};
+  for (const name of names) headers[name] = 'v';
+  const text = await wire(createMessage({ ...base, subject: 'a', headers }));
+  const written = text
+    .split('\r\n')
+    .filter((line) => line.endsWith(': v'))
+    .map((line) => line.slice(0, -3));
+  assert.deepStrictEqual(written.sort(), [
+    'ARC-Seal',
+    'Archived-At',
+    'BIMI-Selector',
+    'Content-MD5',
+    'Content-features',
+    'DKIM-Filter',
+    'List-ID',
+    'List-Unsubscribe-Post',
+    'MIME-Extra',
+    'Received-SPF',
+    'X-Custom-Header',
+    'X-Entity-Ref-ID',
+    'X-Report-FBL',
+    'X-SMTPAPI',
+  ]);
+});
+
 test('MIME: a token too long to fold is refused', async () => {
   const message = createMessage({ ...base, subject: 'a', headers: { 'X-Long': 'y'.repeat(1200) } });
   await assert.rejects(wire(message), {
     name: 'RangeError',
-    message: 'Header field x-long contains a token too long to fold.',
+    message: 'Header field X-Long contains a token too long to fold.',
   });
 });
 

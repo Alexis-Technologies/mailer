@@ -461,9 +461,10 @@ describe('Message Converter Integration Tests', () => {
       const result = await convertMessage(message);
 
       // Should include all custom headers without encoding (ASCII only)
-      assert.ok(result.raw.includes('x-custom-header: Custom Value'));
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
-      assert.ok(result.raw.includes('x-custom-info: ASCII Info'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Custom-Header: Custom Value'));
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
+      assert.ok(result.raw.includes('X-Custom-Info: ASCII Info'));
     });
 
     test('should preserve long structured ASCII header values', async () => {
@@ -689,9 +690,10 @@ describe('Message Converter Integration Tests', () => {
       const message = createTestMessage({ headers });
       const result = await convertMessage(message);
 
-      assert.ok(result.raw.includes('x-custom-header: Custom Value'));
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
-      assert.ok(result.raw.includes('x-ascii-header: ASCII Value'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Custom-Header: Custom Value'));
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
+      assert.ok(result.raw.includes('X-Ascii-Header: ASCII Value'));
     });
 
     test('should handle reply-to addresses', async () => {
@@ -886,7 +888,8 @@ describe('Message Converter Integration Tests', () => {
       });
       const result = await convertMessage(createTestMessage({ headers }));
 
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
       assert.ok(result.raw.includes('In-Reply-To: <788@example.com>'));
     });
   });

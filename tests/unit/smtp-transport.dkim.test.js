@@ -339,8 +339,9 @@ describe('DKIM Integration Tests', () => {
       const result = await convertMessage(message, testDkimConfig);
 
       assert.ok(result.raw.includes('DKIM-Signature:'));
-      assert.ok(result.raw.includes('x-custom-header: Custom Value'));
-      assert.ok(result.raw.includes('x-mailer: Upyo Test'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Custom-Header: Custom Value'));
+      assert.ok(result.raw.includes('X-Mailer: Upyo Test'));
     });
 
     test('should sign email with multiple recipients', async () => {

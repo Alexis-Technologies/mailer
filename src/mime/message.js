@@ -1,5 +1,8 @@
 // Ported from upyo v0.7.0 (packages/mime/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Also ported from nodemailer v10.0.16 (src/mime-node/index.ts): the case of
+// a custom field name, `_normalizeHeaderKey`.
+// https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 
 const { Buffer } = require('node:buffer');
 const { formatPhrase, toAsciiAddress } = require('../core/address.js');
@@ -239,9 +242,19 @@ const pushHeaderFields = (lines, message, generateId) => {
     const name = key.toLowerCase();
     if (COMPOSED_HEADERS.has(name) || reservedHeaders.has(name)) continue;
     if (hasPriority && PRIORITY_HEADERS.has(name)) continue;
-    lines.push(foldHeader(key, encodeHeaderValue(value)));
+    lines.push(foldHeader(canonicalHeaderName(name), encodeHeaderValue(value)));
   }
 };
+
+// Each word of a field name capitalized, as nodemailer writes it, the
+// abbreviations its readers know upper-cased: `Headers` keeps names in lower
+// case, and `list-unsubscribe-post` reads as a field nobody named.
+const UPPER_CASE_PARTS =
+  /^x-smtpapi$|^(?:mime|dkim|arc|bimi)\b|^[a-z]|-(?:spf|fbl|id|md5)$|-[a-z]/g;
+const canonicalHeaderName = (name) =>
+  name === 'content-features'
+    ? 'Content-features'
+    : name.replace(UPPER_CASE_PARTS, (part) => part.toUpperCase());
 
 const encodeAddressList = (addresses) => {
   let list = '';

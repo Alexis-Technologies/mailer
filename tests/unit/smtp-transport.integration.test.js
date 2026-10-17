@@ -1195,8 +1195,9 @@ describe('SmtpTransport Integration Tests', () => {
       const receivedMessages = server.getReceivedMessages();
       const receivedMessage = receivedMessages[0];
 
-      assert.ok(receivedMessage.data.includes('x-custom-header: Custom Value'));
-      assert.ok(receivedMessage.data.includes('x-mailer: Test Mailer'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(receivedMessage.data.includes('X-Custom-Header: Custom Value'));
+      assert.ok(receivedMessage.data.includes('X-Mailer: Test Mailer'));
     } finally {
       await teardownTest(server, transport);
     }

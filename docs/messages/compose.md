@@ -218,6 +218,12 @@ The `createMessage()` function handles all the complexity of email message
 construction, ensuring that your messages are properly formatted and valid
 before sending them through your chosen transport.
 
+`Headers` keeps names in lower case, so a transport that composes the message
+writes each custom field name capitalized, as nodemailer does: `X-Custom-Header`,
+with `MIME`, `DKIM`, `ARC` and `BIMI` at the start and `-ID`, `-SPF`, `-FBL` and
+`-MD5` at the end upper-cased (`X-Entity-Ref-ID`, `Received-SPF`), and `X-SMTPAPI`
+as SendGrid spells it.
+
 [`Headers`]: https://developer.mozilla.org/en-US/docs/Web/API/Headers
 
 ### Headers the transport owns
