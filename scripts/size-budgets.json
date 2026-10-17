@@ -15,6 +15,7 @@
   "./plunk": 5.5,
   "./postmark": 7,
   "./brevo": 7,
+  "./mailjet": 8,
   "./pool": 3,
   "./retry": 3,
   "./mock": 2,

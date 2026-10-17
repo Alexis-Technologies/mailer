@@ -84,6 +84,10 @@
       "types": "./src/brevo/index.d.ts",
       "default": "./src/brevo/index.js"
     },
+    "./mailjet": {
+      "types": "./src/mailjet/index.d.ts",
+      "default": "./src/mailjet/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"
