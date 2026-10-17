@@ -106,7 +106,6 @@ const providers = {
     }),
   sendgrid: () => new SendGridTransport({ apiKey: 'SG.key', retries: 0 }),
   mailgun: () => new MailgunTransport({ apiKey: 'key', domain: 'mg.example.com', retries: 0 }),
-  resend: () => new ResendTransport({ apiKey: 'key', retries: 0 }),
   mailtrap: () => new MailtrapTransport({ apiToken: 'token', retries: 0 }),
   maileroo: () => new MailerooTransport({ apiKey: 'key', retries: 0 }),
   lettermint: () => new LettermintTransport({ apiToken: 'token', retries: 0 }),
@@ -130,16 +129,13 @@ for (const [name, make] of Object.entries(providers)) {
   });
 }
 
-test('Fields: Resend sends the others of a chunk in one batch request', async (t) => {
+test('Fields: Resend sends a scheduled message alone, with scheduled_at', async (t) => {
   const bodies = [];
   t.mock.method(globalThis, 'fetch', async (input, init) => {
     bodies.push({ url: String(input), body: JSON.parse(init.body) });
-    if (String(input).endsWith('/emails/batch')) {
-      return Response.json({ data: [{ id: 'r1' }, { id: 'r2' }] });
-    }
-    return Response.json({ id: 'single' });
+    return Response.json({ id: `r${bodies.length}` });
   });
-  const transport = providers.resend();
+  const transport = new ResendTransport({ apiKey: 'key', retries: 0 });
   const receipts = [];
   for await (const receipt of transport.sendMany([
     createMessage(base),
@@ -148,13 +144,55 @@ test('Fields: Resend sends the others of a chunk in one batch request', async (t
   ])) {
     receipts.push(receipt);
   }
-  // A scheduled message keeps the chunk off the batch API, so each goes alone.
+  // The batch API takes no scheduled message, so each of the chunk goes alone.
   assert.deepStrictEqual(
     receipts.map((receipt) => receipt.successful),
-    [true, false, true],
+    [true, true, true],
   );
-  assertRefused(receipts[1]);
-  assert.strictEqual(bodies.length, 2);
+  assert.deepStrictEqual(
+    bodies.map((body) => body.url),
+    [
+      'https://api.resend.com/emails',
+      'https://api.resend.com/emails',
+      'https://api.resend.com/emails',
+    ],
+  );
+  assert.strictEqual(bodies[1].body.scheduled_at, scheduled().scheduledAt.toISOString());
+  assert.strictEqual(bodies[0].body.scheduled_at, undefined);
+});
+
+test('Fields: Resend sends metadata as tags, alone, and refuses what a tag cannot hold', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    bodies.push({ url: String(input), body: JSON.parse(init.body) });
+    return Response.json({ id: `r${bodies.length}` });
+  });
+  const transport = new ResendTransport({ apiKey: 'key', retries: 0 });
+  const receipts = [];
+  for await (const receipt of transport.sendMany([
+    createMessage({ ...base, tags: ['welcome'], metadata: { orderId: '42', tenant: 'acme-1' } }),
+    createMessage({ ...base, metadata: { 'order.id': '42' } }),
+    createMessage({ ...base, metadata: { note: 'two words' } }),
+    createMessage({ ...base, tags: ['a'], metadata: { tag1: 'x' } }),
+  ])) {
+    receipts.push(receipt);
+  }
+  assert.deepStrictEqual(
+    receipts.map((receipt) => receipt.successful),
+    [true, false, false, false],
+  );
+  assert.strictEqual(bodies.length, 1);
+  assert.strictEqual(bodies[0].url, 'https://api.resend.com/emails');
+  assert.deepStrictEqual(bodies[0].body.tags, [
+    { name: 'tag1', value: 'welcome' },
+    { name: 'orderId', value: '42' },
+    { name: 'tenant', value: 'acme-1' },
+  ]);
+  for (const receipt of receipts.slice(1)) {
+    assert.match(receipt.errorMessages[0], /Resend takes metadata as tags/);
+    assert.strictEqual(receipt.errors[0].category, 'validation');
+    assert.strictEqual(receipt.retryable, false);
+  }
 });
 
 const CORE = 'urn:ietf:params:jmap:core';

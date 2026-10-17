@@ -5,7 +5,6 @@ const { generateId } = require('../core/id.js');
 const { formatMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
-const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -14,6 +13,34 @@ const {
 } = require('../internal/provider.js');
 
 const PRIORITIES = { high: '1', normal: '3', low: '5' };
+// The name and value of a Resend tag: "ASCII letters, numbers, underscores,
+// or dashes", at most 256 characters.
+const TAG_TEXT = /^[A-Za-z0-9_-]{1,256}$/;
+
+// The tags of a message, `tag1`… for its tags and the keys of its metadata,
+// which Resend returns in its events.
+const tagsOf = (message) => {
+  const tags = [];
+  const names = new Set();
+  for (let index = 0; index < message.tags.length; index++) {
+    const name = `tag${index + 1}`;
+    names.add(name);
+    tags.push({ name, value: message.tags[index] });
+  }
+  if (message.metadata !== undefined) {
+    for (const key in message.metadata) {
+      const value = message.metadata[key];
+      if (!TAG_TEXT.test(key) || !TAG_TEXT.test(value) || names.has(key)) {
+        throw new RangeError(
+          `Resend takes metadata as tags, whose name and value are ASCII letters, digits, ` +
+            `_ or -, and a name other than those of the tags: ${key}`,
+        );
+      }
+      tags.push({ name: key, value });
+    }
+  }
+  return tags;
+};
 
 /**
  * Converts a Upyo Message to Resend API JSON format.
@@ -26,6 +53,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * @param options - Optional conversion options
  * @returns JSON object ready for Resend API submission
  * @throws {TypeError} If the message carries an invalid message identifier.
+ * @throws {RangeError} If a key or value of its metadata cannot be a tag.
  *
  * @example
  * ```typescript
@@ -38,7 +66,6 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * ```
  */
 const convertMessage = async (message, _config, options = {}) => {
-  refuseScheduledAt(message, 'resend');
   const attachments = withCalendarAttachment(message);
 
   const emailData = {
@@ -86,14 +113,8 @@ const convertMessage = async (message, _config, options = {}) => {
   }
 
   // Tags - Resend uses different format than Upyo
-  if (message.tags.length > 0) {
-    // Resend requires name-value pairs.
-    const tags = [];
-    for (let index = 0; index < message.tags.length; index++) {
-      tags.push({ name: `tag${index + 1}`, value: message.tags[index] });
-    }
-    emailData.tags = tags;
-  }
+  const tags = tagsOf(message);
+  if (tags.length > 0) emailData.tags = tags;
 
   let headers;
   if (message.priority !== 'normal') headers = { 'X-Priority': PRIORITIES[message.priority] };
@@ -104,8 +125,8 @@ const convertMessage = async (message, _config, options = {}) => {
   if (headers !== undefined) emailData.headers = headers;
 
   // Scheduled sending
-  if (options.scheduledAt) {
-    emailData.scheduled_at = options.scheduledAt.toISOString();
+  if (message.scheduledAt !== undefined) {
+    emailData.scheduled_at = message.scheduledAt.toISOString();
   }
 
   return emailData;

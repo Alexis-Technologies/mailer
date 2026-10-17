@@ -146,6 +146,29 @@ statistics, open rates, and engagement metrics for specific message categories.
 This helps you understand which types of emails perform best with your audience
 and optimize your email strategies accordingly.
 
+## Scheduling, metadata and tracking
+
+`scheduledAt` is Resend's `scheduled_at`. `metadata` goes in its tags, next to
+`tag1`, `tag2`… of the message's `tags`, since Resend returns tags in its events:
+a key and its value must then be ASCII letters, digits, `_` or `-`, at most 256
+characters, and a key not one of those names; any other is refused before the
+request. A message with either goes alone rather than through the batch API,
+which takes neither. Resend sets tracking per domain, so a message's `tracking`
+is not sent.
+
+```js
+const receipt = await transport.send(
+  createMessage({
+    from: 'shop@example.com',
+    to: 'user@example.com',
+    subject: 'Your order has shipped',
+    content: { html: '<p>On its way.</p>' },
+    scheduledAt: new Date(Date.now() + 60 * 60 * 1000),
+    metadata: { orderId: '42' },
+  }),
+);
+```
+
 ## Idempotency and reliability
 
 Resend provides built-in idempotency support to prevent duplicate email sends
