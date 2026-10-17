@@ -80,6 +80,10 @@
       "types": "./src/postmark/index.d.ts",
       "default": "./src/postmark/index.js"
     },
+    "./brevo": {
+      "types": "./src/brevo/index.d.ts",
+      "default": "./src/brevo/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"

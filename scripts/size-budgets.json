@@ -14,6 +14,7 @@
   "./lettermint": 6,
   "./plunk": 5.5,
   "./postmark": 7,
+  "./brevo": 7,
   "./pool": 3,
   "./retry": 3,
   "./mock": 2,

@@ -85,6 +85,7 @@ const guide = [
       { text: 'Lettermint', link: '/transports/lettermint' },
       { text: 'Plunk', link: '/transports/plunk' },
       { text: 'Postmark', link: '/transports/postmark' },
+      { text: 'Brevo', link: '/transports/brevo' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

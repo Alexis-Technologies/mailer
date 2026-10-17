@@ -505,6 +505,12 @@ fails on upstream's behavior):
   Postmark wants `cid:` before it, and the JSON of an answer was parsed before its status, so a
   non-JSON 5xx failed with a `SyntaxError` and no status. `./postmark` writes `cid:`, and the
   shared client reads the status first.
+- U5. unemail (`src/drivers/brevo.ts`): a batch went as the `messageVersions` of one request
+  when its messages agreed on the file names and lengths of their attachments, so a recipient
+  could get another's file, and the idempotency key of a batch folded only the keys present, so
+  two batches could share one. `./brevo` sends single requests, each with its own key, generated
+  when the message has none, so a retry after an unknown delivery cannot send twice; Brevo's
+  `duplicate_parameter` is reported as `deliveryUnknown`.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and

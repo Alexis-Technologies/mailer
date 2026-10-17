@@ -54,6 +54,7 @@ The message model and the transport contract, ported from `@upyo/core`.
 | `@alexify/mailer/lettermint` | `LettermintTransport`, `createLettermintConfig` and its error classes | [Lettermint](/transports/lettermint) |
 | `@alexify/mailer/plunk` | `PlunkTransport` | [Plunk](/transports/plunk) |
 | `@alexify/mailer/postmark` | `PostmarkTransport` | [Postmark](/transports/postmark) |
+| `@alexify/mailer/brevo` | `BrevoTransport` | [Brevo](/transports/brevo) |
 | `@alexify/mailer/jmap` | `JmapTransport`, `createJmapConfig`, `JmapApiError`, `JMAP_ERROR_TYPES`, `isCapabilityError`, `uploadBlob` | [JMAP](/transports/jmap) |
 | `@alexify/mailer/mock` | `MockTransport` | [Mock](/transports/mock) |
 | `@alexify/mailer/pool` | `PoolTransport`, `RoundRobinStrategy`, `WeightedStrategy`, `PriorityStrategy`, `SelectorStrategy` | [Pool](/transports/pool) |
