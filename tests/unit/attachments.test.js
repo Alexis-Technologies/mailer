@@ -258,6 +258,100 @@ test('Attachments: fromUrl refuses local addresses by default, and takes an inje
   await assert.rejects(fromUrl('https://example.com', { maxRedirects: 1.5 }), /maxRedirects/);
 });
 
+test('Attachments: isPublicUrl refuses the ranges that reach a local address or are not unicast', () => {
+  // Each of these reached the machine, or a network next to it, and was allowed.
+  const refused = [
+    // ::/96, the IPv4-compatible form (it holds :: and ::1 too).
+    'http://[::127.0.0.1]/a',
+    'http://[::10.0.0.1]/a',
+    'http://[::a9fe:a9fe]/a',
+    // NAT64, 64:ff9b::/96 and 64:ff9b:1::/48: the whole prefix, whatever it embeds.
+    'http://[64:ff9b::7f00:1]/a',
+    'http://[64:ff9b::808:808]/a',
+    'http://[64:ff9b:1::1]/a',
+    'http://[64:ff9b:1:ffff::1]/a',
+    // 6to4, 2002::/16.
+    'http://[2002:7f00:1::]/a',
+    'http://[2002:a9fe:a9fe::1]/a',
+    'http://[2002:5db8:d822::1]/a',
+    // Site-local, fec0::/10, and multicast, ff00::/8.
+    'http://[fec0::1]/a',
+    'http://[feff::1]/a',
+    'http://[ff02::1]/a',
+    'http://[ff0e::1]/a',
+    // IETF protocol assignments, multicast, reserved, broadcast.
+    'http://192.0.0.1/a',
+    'http://192.0.0.255/a',
+    'http://224.0.0.1/a',
+    'http://239.255.255.255/a',
+    'http://240.0.0.1/a',
+    'http://255.255.255.254/a',
+    'http://255.255.255.255/a',
+    // The documentation ranges.
+    'http://192.0.2.1/a',
+    'http://198.51.100.7/a',
+    'http://203.0.113.9/a',
+  ];
+  for (const url of refused) assert.strictEqual(isPublicUrl(new URL(url)), false, url);
+  // The edges of the new ranges stay public.
+  const allowed = [
+    'http://192.0.1.1/a',
+    'http://192.0.3.1/a',
+    'http://223.255.255.255/a',
+    'http://198.51.99.1/a',
+    'http://198.51.101.1/a',
+    'http://203.0.112.1/a',
+    'http://203.0.114.1/a',
+    'http://[::1:0:0]/a',
+    'http://[64:ff9a::1]/a',
+    'http://[64:ff9c::1]/a',
+    'http://[2003::1]/a',
+    'http://[2606:4700:4700::1111]/a',
+  ];
+  for (const url of allowed) assert.strictEqual(isPublicUrl(new URL(url)), true, url);
+});
+
+test('Attachments: fromUrl refuses a redirect from https to http, and no other change of scheme', async () => {
+  const calls = [];
+  const redirecting = (to) => async (url) => {
+    calls.push(url.href);
+    if (calls.length === 1) return new Response(null, { status: 302, headers: { location: to } });
+    return new Response('body', { headers: { 'content-type': 'text/plain' } });
+  };
+  // The downgrade is refused before the second request, so nothing is sent in clear.
+  calls.length = 0;
+  await assert.rejects(
+    fromUrl('https://cdn.example.com/a.txt', {
+      fetch: redirecting('http://cdn.example.com/b.txt'),
+      headers: { authorization: 'Bearer secret' },
+    }),
+    /not allowed.*downgrade/s,
+  );
+  assert.deepStrictEqual(calls, ['https://cdn.example.com/a.txt']);
+  // It is refused even when allowUrl allows everything, and when the host is another one.
+  calls.length = 0;
+  await assert.rejects(
+    fromUrl('https://cdn.example.com/a.txt', {
+      fetch: redirecting('http://other.example.org/b.txt'),
+      allowUrl: anyUrl,
+    }),
+    /downgrade/,
+  );
+  assert.strictEqual(calls.length, 1);
+  // A relative Location keeps the scheme; an upgrade and http to http are allowed.
+  for (const [from, to] of [
+    ['https://cdn.example.com/a.txt', '/b.txt'],
+    ['https://cdn.example.com/a.txt', 'https://other.example.org/b.txt'],
+    ['http://cdn.example.com/a.txt', 'https://cdn.example.com/b.txt'],
+    ['http://cdn.example.com/a.txt', 'http://cdn.example.com/b.txt'],
+  ]) {
+    calls.length = 0;
+    const attachment = await fromUrl(from, { fetch: redirecting(to) });
+    assert.strictEqual(await textOf(attachment), 'body', `${from} to ${to}`);
+    assert.strictEqual(calls.length, 2, `${from} to ${to}`);
+  }
+});
+
 test('Attachments: fromDataUri decodes base64 and percent-encoded bytes', async () => {
   const png = fromDataUri('data:image/png;base64,iVBO\nRw0K');
   assert.strictEqual(png.contentType, 'image/png');
@@ -309,6 +403,41 @@ test('Attachments: fromDataUri refuses what does not parse or is too long', () =
     /Invalid attachment content ID/,
   );
   assert.throws(() => fromDataUri('data:,x', { inline: 'yes' }), /inline must be a boolean/);
+});
+
+test('Attachments: fromDataUri refuses a percent-encoded part that cannot fit before decoding it', () => {
+  const tooLong = (uri, maxBytes) =>
+    assert.throws(() => fromDataUri(uri, { maxBytes }), RangeError);
+  // A byte takes at most three characters (%XX), so more than three times maxBytes cannot fit.
+  // The invalid escapes are never read: before, the first one was a TypeError.
+  tooLong(`data:,${'%G0'.repeat(1001)}`, 1000);
+  tooLong(`data:,${'%41'.repeat(1000)}a`, 1000);
+  // Fewer characters can still be too many bytes: a character is up to three.
+  tooLong(`data:,${'é'.repeat(501)}`, 1000);
+  tooLong(`data:,${'€'.repeat(334)}`, 1000);
+  // The count is kept as the input is read, so the decoded part never outgrows maxBytes
+  // before the check: it does not wait for an invalid escape at the end.
+  tooLong(`data:,${'a'.repeat(1001)}%G0`, 1000);
+  tooLong(`data:,%41${'a'.repeat(1000)}%G0`, 1000);
+  // What fits is decoded, to the last byte.
+  assert.strictEqual(
+    fromDataUri(`data:,${'%41'.repeat(1000)}`, { maxBytes: 1000 }).content.length,
+    1000,
+  );
+  assert.strictEqual(
+    fromDataUri(`data:,${'é'.repeat(500)}`, { maxBytes: 1000 }).content.length,
+    1000,
+  );
+  assert.strictEqual(
+    fromDataUri(`data:,${'a'.repeat(999)}%41`, { maxBytes: 1000 }).content.length,
+    1000,
+  );
+  assert.strictEqual(
+    fromDataUri(`data:,${'😀'.repeat(250)}`, { maxBytes: 1000 }).content.length,
+    1000,
+  );
+  // A part that is invalid and short enough is still invalid.
+  assert.throws(() => fromDataUri('data:,a%G0', { maxBytes: 1000 }), /Invalid data URI/);
 });
 
 test('Attachments: fromStream reads a Node stream, a web stream or an async iterable once', async () => {
@@ -374,6 +503,44 @@ test('Attachments: inlineDataUrls makes inline attachments of the images of HTML
   assert.throws(() => inlineDataUrls('<img src="data:image/png;base64,!!!!">'), /Invalid data URI/);
   assert.throws(() => inlineDataUrls(42), TypeError);
   assert.throws(() => inlineDataUrls('', { domain: 'a b' }), /Content-ID domain/);
+});
+
+test('Attachments: inlineDataUrls reads a long input in linear time', () => {
+  // The media type was `[^;]+`, which every `<img src=data:` start ran to the end of the
+  // input: 30 KB took 80 ms, 240 KB 5 s, a megabyte a minute and a half.
+  const sized = (unit, bytes) => unit.repeat(Math.ceil(bytes / unit.length));
+  const time = (html) => {
+    const start = process.hrtime.bigint();
+    const result = inlineDataUrls(html);
+    const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+    assert.strictEqual(result.html, html);
+    assert.deepStrictEqual(result.attachments, []);
+    return elapsed;
+  };
+  time(sized('<img src=data:x', 30_000));
+  const one = time(sized('<img src=data:x', 1_000_000));
+  const two = time(sized('<img src=data:x', 2_000_000));
+  assert.ok(one < 100, `1 MB took ${one} ms`);
+  // Twice the input, about twice the time; the floor keeps a fast run from a noisy ratio.
+  assert.ok(two < 3 * Math.max(one, 10), `1 MB took ${one} ms, 2 MB ${two} ms`);
+  // Other starts of a match that never completes.
+  for (const unit of ['<img src=data:', '<img src="data:image/png', '<img src= ']) {
+    const elapsed = time(sized(unit, 1_000_000));
+    assert.ok(elapsed < 100, `${unit} took ${elapsed} ms`);
+  }
+});
+
+test('Attachments: inlineDataUrls holds the media type to a token of at most 127 characters', () => {
+  const pixel = 'iVBORw0KGgo=';
+  const longest = `x/${'a'.repeat(125)}`;
+  assert.strictEqual(longest.length, 127);
+  const found = inlineDataUrls(`<img src="data:${longest};base64,${pixel}">`);
+  assert.strictEqual(found.attachments.length, 1);
+  // A type past 127 characters, or with a space or a quote, is not one: the image is left as it is.
+  for (const type of [`${longest}a`, 'image/pn g', 'image/"png']) {
+    const html = `<img src='data:${type};base64,${pixel}'>`;
+    assert.deepStrictEqual(inlineDataUrls(html), { html, attachments: [] }, type);
+  }
 });
 
 test('Attachments: a composed message carries them, read back by postal-mime', async (t) => {

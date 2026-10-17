@@ -22,22 +22,28 @@ const HEX = /^[0-9A-Fa-f]{2}$/;
 const invalid = (uri) =>
   new TypeError(`Invalid data URI: ${JSON.stringify(String(uri).slice(0, 64))}`);
 
+const tooLong = (maxBytes) => new RangeError(`The data URI holds more than ${maxBytes} bytes.`);
+
 const decodeBase64 = (uri, data, maxBytes) => {
   const text = data.replace(ASCII_WHITESPACE, '');
   if (!BASE64.test(text) || text.length % 4 === 1) throw invalid(uri);
-  if (Math.floor((text.length * 3) / 4) > maxBytes) {
-    throw new RangeError(`The data URI holds more than ${maxBytes} bytes.`);
-  }
+  if (Math.floor((text.length * 3) / 4) > maxBytes) throw tooLong(maxBytes);
   return new Uint8Array(Buffer.from(text, 'base64'));
 };
 
 // RFC 2397 data is a URL-encoded string of octets: `%XX` is a byte, and any
-// other character stands for its UTF-8 bytes.
+// other character stands for its UTF-8 bytes.  The size is bounded as the data
+// is read, not once it has all been decoded into an array: a byte takes at
+// most three characters (`%XX`), so more than three times `maxBytes` cannot
+// fit, and every byte so far, and every character waiting to be encoded, is at
+// least one byte of the result.
 const decodePercent = (uri, data, maxBytes) => {
+  if (data.length > maxBytes * 3) throw tooLong(maxBytes);
   const bytes = [];
   let text = '';
   const flush = () => {
     if (text === '') return;
+    if (bytes.length + Buffer.byteLength(text, 'utf8') > maxBytes) throw tooLong(maxBytes);
     const encoded = Buffer.from(text, 'utf8');
     for (let i = 0; i < encoded.length; i++) bytes.push(encoded[i]);
     text = '';
@@ -45,18 +51,17 @@ const decodePercent = (uri, data, maxBytes) => {
   for (let i = 0; i < data.length; i++) {
     if (data.charCodeAt(i) !== 0x25) {
       text += data[i];
+      if (bytes.length + text.length > maxBytes) throw tooLong(maxBytes);
       continue;
     }
     const hex = data.slice(i + 1, i + 3);
     if (!HEX.test(hex)) throw invalid(uri);
     flush();
     bytes.push(Number.parseInt(hex, 16));
+    if (bytes.length > maxBytes) throw tooLong(maxBytes);
     i += 2;
   }
   flush();
-  if (bytes.length > maxBytes) {
-    throw new RangeError(`The data URI holds more than ${maxBytes} bytes.`);
-  }
   return Uint8Array.from(bytes);
 };
 
@@ -90,8 +95,12 @@ const fromDataUri = (uri, options = {}) => {
 };
 
 // nodemailer's pattern, bounded so that no input makes it backtrack long: an
-// <img> whose src is a data URI with a parameter (`;base64`).
-const DATA_IMAGE = /(<img\b[^<>]{0,1024} src\s{0,20}=[\s"']{0,20})(data:([^;]+);[^"'>\s]+)/gi;
+// <img> whose src is a data URI with a parameter (`;base64`).  Its media type
+// was `[^;]+`, so each `<img src=data:` in an input without a `;` ran to the
+// end of it and the scan was quadratic; a type is a token of at most 127
+// characters (RFC 6838 §4.2) that cannot hold a space or a quote.
+const DATA_IMAGE =
+  /(<img\b[^<>]{0,1024} src\s{0,20}=[\s"']{0,20})(data:([^;"'\s>]{1,127});[^"'>\s]+)/gi;
 
 /**
  * Turns the images of HTML given as data URIs into inline attachments, each

@@ -45,10 +45,19 @@ designed around:
   host); and an answer is read up to 4 MiB.
 - **Attachments do not read the machine by default.** No file or URL is read for an attachment
   but through `fromPath` and `fromUrl` of `./attachments`, which the application calls.
-  `fromUrl` checks every URL, redirects included, with `allowUrl`, by default refusing
-  `localhost` and loopback, private and link-local addresses; it sends its headers to the first
-  origin only and bounds time and bytes. `fromPath` with a `root` compares real paths, so a
-  symbolic link cannot lead out of it.
+  `fromUrl` checks every URL, redirects included, with `allowUrl`; it refuses a redirect from
+  https to http, sends its headers to the first origin only and bounds time and bytes. `fromPath`
+  with a `root` compares real paths, so a symbolic link cannot lead out of it.
+- **The default `allowUrl` of `fromUrl` reads the host as written, and resolves nothing.**
+  `isPublicUrl` refuses `localhost`, `*.localhost` and an IP literal in a loopback, private,
+  link-local (the cloud metadata address among them), carrier-grade NAT, multicast, reserved,
+  documentation or benchmarking range, and in the IPv6 forms that carry an IPv4 address
+  (IPv4-compatible `::/96`, NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4 `2002::/16`). A host
+  *name* is not looked up, so a name that resolves to a private address passes, and so does one
+  that answers with a public address to the check and a private one to the fetch (DNS rebinding).
+  An application that fetches URLs its users give must pass an `allowUrl` of its own, or a
+  `fetch` that checks the address it connects to; the default is a guard against a mistake, not
+  against an attacker who controls a name.
 - **The sendmail command gets arguments, not a shell line.** The recipients follow `--`, none may
   start with `-`, and Bcc recipients go on the command line, never into the message.
 - **Credentials and personal data stay out of logs.** A transport shows `[REDACTED]` in place of

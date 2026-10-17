@@ -61,10 +61,12 @@ export interface FromUrlOptions extends AttachmentOptions {
   readonly maxRedirects?: number;
   /**
    * Whether to fetch a URL, the first and each one a redirect leads to.  By
-   * default ({@link isPublicUrl}) `localhost` and loopback, private and
-   * link-local addresses are refused; a name is fetched whatever it resolves
-   * to, so a sender that fetches URLs from users checks them here, or passes
-   * a `fetch` whose dispatcher checks the address it connects to.
+   * default ({@link isPublicUrl}) `localhost` and IP literals in the loopback,
+   * private, link-local and other ranges it lists are refused; a host name is
+   * not resolved, so one that resolves to a private address passes, and a
+   * sender that fetches URLs from users checks them here, or passes a `fetch`
+   * that checks the address it connects to.  A redirect from https to http is
+   * refused whatever this says.
    */
   readonly allowUrl?: (url: URL) => boolean | Promise<boolean>;
 }
@@ -153,7 +155,12 @@ export declare function inlineDataUrls(
 ): { readonly html: string; readonly attachments: readonly Attachment[] };
 
 /**
- * The check of a URL {@link fromUrl} makes when no `allowUrl` is given: no
- * `localhost`, and no loopback, private or link-local address.
+ * The check of a URL {@link fromUrl} makes when no `allowUrl` is given.  It
+ * reads the host of the URL as written: no `localhost`, and no IP literal in a
+ * loopback, private, link-local, multicast, reserved or documentation range,
+ * or in an IPv6 range that carries an IPv4 address (IPv4-compatible, NAT64,
+ * 6to4).  A host name is not resolved, so one that resolves to such an address
+ * passes, and so does one that changes its address between the check and the
+ * fetch (DNS rebinding).
  */
 export declare function isPublicUrl(url: URL): boolean;

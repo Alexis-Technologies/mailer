@@ -63,9 +63,11 @@ additive but the defaults listed below.
   `metadata` (each page says how).
 - **`./attachments`:** `fromPath`, `fromUrl`, `fromDataUri`, `fromStream` and `inlineDataUrls`,
   for what nodemailer read through `path`, `href` and data URIs. Nothing is read implicitly:
-  `fromUrl` goes through an injected `fetch`, checks each redirect with `allowUrl` (by default no
-  `localhost`, loopback, private or link-local address), and bounds time and bytes; `fromPath`
-  can be held to a `root` by real path.
+  `fromUrl` goes through an injected `fetch`, checks each redirect with `allowUrl` (by default the
+  host as written: no `localhost`, and no IP literal of a loopback, private, link-local,
+  multicast, reserved or documentation range, NAT64 and 6to4 included; a host name is not
+  resolved), refuses a redirect from https to http, and bounds time and bytes; `fromPath` can be
+  held to a `root` by real path.
 - **`./render`:** `renderContent(renderer, input)` for the content of `createMessage`,
   `createReactEmailRenderer({ render })` with the `render` of `@react-email/render` passed in, and
   `htmlToText`, linear in the length of its input.
