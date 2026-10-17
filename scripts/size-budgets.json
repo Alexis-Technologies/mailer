@@ -32,7 +32,7 @@
   "./logger": 2.5,
   "./breaker": 2.5,
   "./ratelimit": 2.5,
-  "./idempotency": 3,
+  "./idempotency": 3.5,
   "./hooks": 2.5,
   "./tee": 2.5
 }

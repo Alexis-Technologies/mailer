@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
+const { CircuitBreakerTransport } = require('../../src/breaker/index.js');
 const {
   IdempotencyTransport,
   createMemoryIdempotencyStore,
@@ -143,7 +144,7 @@ test('Idempotency: an abort keeps the key as of unknown delivery, another throw 
       ...createMemoryIdempotencyStore(),
       reserve: async () => {
         early.abort(new Error('changed my mind'));
-        return undefined;
+        return { token: 't' };
       },
       release: () => {},
     },
@@ -169,10 +170,10 @@ test('Idempotency: a store that fails fails its message alone, or becomes a warn
       if (failing === 'complete') throw new Error('cannot write');
       return memory.complete(...args);
     },
-    release: (key) => {
+    release: (...args) => {
       // oxlint-disable-next-line no-throw-literal -- a store may throw anything
       if (failing === 'release') throw 'cannot delete';
-      return memory.release(key);
+      return memory.release(...args);
     },
   };
   const answers = [
@@ -196,6 +197,127 @@ test('Idempotency: a store that fails fails its message alone, or becomes a warn
     ['The idempotency store threw: cannot delete', 'MAILER_IDEMPOTENCY_STORE_FAILED'],
     ['The idempotency store threw: cannot delete', 'MAILER_IDEMPOTENCY_STORE_FAILED'],
   ]);
+});
+
+test('Idempotency: a reserved key is free again after leaseMs, a receipt kept for ttlMs', async () => {
+  let time = 0;
+  const store = createMemoryIdempotencyStore({ now: () => time });
+  const hung = deferred();
+  const inner = fakeTransport((_m, index) => (index === 0 ? hung.promise : sent(`m${index}`)));
+  const once = new IdempotencyTransport(inner, { store, leaseMs: 1000, ttlMs: 5000 });
+  // The first send does not settle, as after a crash: its key stays reserved
+  // for its lease, not for the day a receipt is kept.
+  const first = once.send(message({ idempotencyKey: 'k' }));
+  time = 999;
+  const during = await once.send(message({ idempotencyKey: 'k' }));
+  assert.strictEqual(during.errors[0].code, 'idempotency.in_flight');
+  time = 1000;
+  assert.strictEqual((await once.send(message({ idempotencyKey: 'k' }))).messageId, 'm1');
+  time = 5999;
+  assert.strictEqual((await once.send(message({ idempotencyKey: 'k' }))).messageId, 'm1');
+  // The first ends at last, failed: its release does not free the receipt of
+  // the send that took its key.
+  hung.resolve(failed('validation', { retryable: false }));
+  assert.strictEqual((await first).successful, false);
+  assert.strictEqual((await once.send(message({ idempotencyKey: 'k' }))).messageId, 'm1');
+  time = 6000;
+  assert.strictEqual((await once.send(message({ idempotencyKey: 'k' }))).messageId, 'm2');
+  assert.strictEqual(inner.calls.length, 3);
+});
+
+test('Idempotency: a send that outlived its lease leaves the new owner of its key alone', async () => {
+  let time = 0;
+  const store = createMemoryIdempotencyStore({ now: () => time });
+  const slow = deferred();
+  const owner = deferred();
+  const gates = [slow, owner];
+  const inner = fakeTransport((_m, index) => gates[index]?.promise ?? sent(`m${index}`));
+  const once = new IdempotencyTransport(inner, { store, leaseMs: 1000 });
+  const late = once.send(message({ idempotencyKey: 'k' }));
+  time = 1000;
+  const taken = once.send(message({ idempotencyKey: 'k' }));
+  // Slow rather than gone, the first completes under its old token.
+  slow.resolve(sent('late'));
+  assert.strictEqual((await late).messageId, 'late');
+  const during = await once.send(message({ idempotencyKey: 'k' }));
+  assert.strictEqual(during.errors[0].code, 'idempotency.in_flight');
+  // The owner's failure frees the key for the next send.
+  owner.resolve(failed('validation', { retryable: false }));
+  assert.strictEqual((await taken).successful, false);
+  assert.strictEqual((await once.send(message({ idempotencyKey: 'k' }))).messageId, 'm2');
+  assert.strictEqual(inner.calls.length, 3);
+});
+
+test('Idempotency: its receipts carry their own category, not one the words of a key suggest', async () => {
+  const gate = deferred();
+  const inner = fakeTransport(() => gate.promise);
+  const once = new IdempotencyTransport(inner);
+  const breaker = new CircuitBreakerTransport(once, { failureThreshold: 1 });
+  const first = once.send(message({ idempotencyKey: 'order-timeout-1' }));
+  const inFlight = await breaker.send(message({ idempotencyKey: 'order-timeout-1' }));
+  assert.strictEqual(inFlight.errors[0].code, 'idempotency.in_flight');
+  assert.strictEqual(inFlight.errors[0].category, 'unknown');
+  assert.strictEqual(inFlight.deliveryUnknown, true);
+  assert.strictEqual(inFlight.retryable, false);
+  gate.resolve(sent('m'));
+  await first;
+  const controller = new AbortController();
+  const started = deferred();
+  const stuck = fakeTransport((_m, _index, options) => {
+    started.resolve();
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason));
+    });
+  });
+  const abortable = new IdempotencyTransport(stuck);
+  const aborted = abortable.send(message({ idempotencyKey: 'timeout' }), {
+    signal: controller.signal,
+  });
+  await started.promise;
+  controller.abort(new Error('left'));
+  await assert.rejects(aborted, /left/);
+  const after = await abortable.send(message({ idempotencyKey: 'timeout' }));
+  assert.strictEqual(after.errors[0].code, 'idempotency.aborted');
+  assert.strictEqual(after.errors[0].category, 'unknown');
+  assert.strictEqual(after.deliveryUnknown, true);
+  // A store that fails is retried, but is not the provider failing.
+  const down = new IdempotencyTransport(inner, {
+    store: {
+      reserve: () => {
+        throw new Error('connection timeout');
+      },
+      complete() {},
+      release() {},
+    },
+  });
+  const guarded = new CircuitBreakerTransport(down, { failureThreshold: 1 });
+  const failure = await guarded.send(message({ idempotencyKey: 'k' }));
+  assert.strictEqual(failure.errors[0].code, 'idempotency.store_failed');
+  assert.strictEqual(failure.errors[0].category, 'unknown');
+  assert.strictEqual(failure.errors[0].retryable, true);
+  assert.strictEqual(failure.retryable, true);
+  assert.strictEqual(breaker.state, 'closed');
+  assert.strictEqual(guarded.state, 'closed');
+});
+
+test('Idempotency: a reserve that answers neither or both of token and record fails its message', async () => {
+  const inner = fakeTransport();
+  for (const answer of [
+    undefined,
+    null,
+    {},
+    { token: '' },
+    { record: null },
+    { token: 't', record: { state: 'done', fingerprint: 'f' } },
+  ]) {
+    const store = { reserve: async () => answer, complete() {}, release() {} };
+    const receipt = await new IdempotencyTransport(inner, { store }).send(
+      message({ idempotencyKey: 'k' }),
+    );
+    assert.strictEqual(receipt.errors[0].code, 'idempotency.store_failed', String(answer));
+    assert.match(receipt.errorMessages[0], /reserve must resolve to \{ token \} or \{ record \}/);
+  }
+  assert.strictEqual(inner.calls.length, 0);
 });
 
 test('Idempotency: sendMany answers repeated keys in place, the batch too', async () => {
@@ -274,29 +396,80 @@ test('Idempotency: a key function, a namespace, sendRaw, verify and dispose', as
   assert.strictEqual(disposed, 1);
   assert.throws(() => new IdempotencyTransport(inner, { store: {} }), /store must have a reserve/);
   assert.throws(() => new IdempotencyTransport(inner, { ttlMs: 0 }), /ttlMs/);
+  assert.throws(() => new IdempotencyTransport(inner, { leaseMs: Infinity }), /leaseMs/);
   assert.throws(() => new IdempotencyTransport(inner, { namespace: 1 }), /namespace/);
-  assert.strictEqual(new IdempotencyTransport(inner).config.namespace, 'fake');
+  const defaults = new IdempotencyTransport(inner).config;
+  assert.strictEqual(defaults.namespace, 'fake');
+  assert.strictEqual(defaults.leaseMs, 10 * 60 * 1000);
+  assert.strictEqual(defaults.ttlMs, 24 * 60 * 60 * 1000);
 });
 
-test('Idempotency: the memory store forgets a key after its time, and the oldest first', () => {
+test('Idempotency: the memory store reserves under a token, for a lease, then a time', () => {
+  let time = 0;
+  const store = createMemoryIdempotencyStore({ now: () => time });
+  const { token } = store.reserve('a', 'fa', 100);
+  assert.match(token, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.deepStrictEqual(store.reserve('a', 'fa', 100), {
+    record: { state: 'pending', fingerprint: 'fa' },
+  });
+  store.complete('a', token, { fingerprint: 'fa', receipt: sent('ra') }, 1000);
+  // Kept for its time, not for the lease of its reservation.
+  time = 999;
+  assert.deepStrictEqual(store.reserve('a', 'fa', 100), {
+    record: { state: 'done', fingerprint: 'fa', receipt: sent('ra') },
+  });
+  time = 1000;
+  const again = store.reserve('a', 'fa', 100);
+  assert.notStrictEqual(again.token, token);
+  store.release('a', again.token);
+  assert.notStrictEqual(store.reserve('a', 'fa', 100).token, undefined);
+  // A key whose lease passed and that no one took is still completed.
+  time = 2000;
+  store.complete('b', 'unknown', { fingerprint: 'fb', receipt: sent('rb') }, 1000);
+  assert.strictEqual(store.reserve('b', 'fb', 100).record.receipt.messageId, 'rb');
+  assert.throws(() => createMemoryIdempotencyStore({ maxEntries: 0 }), /maxEntries/);
+});
+
+test('Idempotency: a late complete or release under a stale token leaves the key alone', () => {
+  let time = 0;
+  const store = createMemoryIdempotencyStore({ now: () => time });
+  const stale = store.reserve('k', 'f', 100).token;
+  time = 100;
+  const owner = store.reserve('k', 'f', 100).token;
+  store.complete('k', stale, { fingerprint: 'f', receipt: sent('stale') }, 1000);
+  store.release('k', stale);
+  assert.deepStrictEqual(store.reserve('k', 'f', 100), {
+    record: { state: 'pending', fingerprint: 'f' },
+  });
+  store.complete('k', owner, { fingerprint: 'f', receipt: sent('owner') }, 1000);
+  store.complete('k', stale, { fingerprint: 'f', receipt: sent('stale') }, 1000);
+  store.release('k', stale);
+  // A done key is not released, by its own token either.
+  store.release('k', owner);
+  assert.strictEqual(store.reserve('k', 'f', 100).record.receipt.messageId, 'owner');
+});
+
+test('Idempotency: the memory store makes room with expired keys, then done ones, never pending', () => {
   let time = 0;
   const store = createMemoryIdempotencyStore({ maxEntries: 2, now: () => time });
-  assert.strictEqual(store.reserve('a', 'fa', 100), undefined);
-  assert.deepStrictEqual(store.reserve('a', 'fa', 100), {
-    state: 'pending',
-    fingerprint: 'fa',
-    receipt: undefined,
-  });
-  store.complete('a', { fingerprint: 'fa', receipt: sent('ra') }, 100);
-  assert.strictEqual(store.reserve('a', 'fa', 100).receipt.messageId, 'ra');
+  store.reserve('pending', 'fp', 1000);
+  const { token } = store.reserve('done', 'fd', 1000);
+  store.complete('done', token, { fingerprint: 'fd', receipt: sent('rd') }, 5000);
+  // Three keys for two places: the done one goes, though the pending one is
+  // older; unemail dropped the pending one, and its message could go twice.
+  store.reserve('new', 'fn', 1000);
+  const pending = { record: { state: 'pending', fingerprint: 'fp' } };
+  assert.deepStrictEqual(store.reserve('pending', 'fp', 1000), pending);
+  // While more sends than maxEntries are in flight, it holds every key.
+  assert.notStrictEqual(store.reserve('done', 'fd', 1000).token, undefined);
+  assert.deepStrictEqual(store.reserve('pending', 'fp', 1000), pending);
+  assert.strictEqual(store.reserve('new', 'fn', 1000).record.state, 'pending');
+  // Expired keys go before a done one still within its time.
+  const kept = createMemoryIdempotencyStore({ maxEntries: 2, now: () => time });
+  kept.reserve('old', 'fo', 100);
+  const keptToken = kept.reserve('kept', 'fk', 1000).token;
+  kept.complete('kept', keptToken, { fingerprint: 'fk', receipt: sent('rk') }, 5000);
   time = 100;
-  assert.strictEqual(store.reserve('a', 'fa', 100), undefined);
-  store.reserve('b', 'fb', 1000);
-  store.reserve('c', 'fc', 1000);
-  // Three keys for two places: the oldest, a, goes.
-  assert.strictEqual(store.reserve('a', 'fa', 100), undefined);
-  assert.notStrictEqual(store.reserve('c', 'fc', 1000), undefined);
-  store.release('c');
-  assert.strictEqual(store.reserve('c', 'fc', 1000), undefined);
-  assert.throws(() => createMemoryIdempotencyStore({ maxEntries: 0 }), /maxEntries/);
+  kept.reserve('third', 'ft', 1000);
+  assert.strictEqual(kept.reserve('kept', 'fk', 1000).record.receipt.messageId, 'rk');
 });

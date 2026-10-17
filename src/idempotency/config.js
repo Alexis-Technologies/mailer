@@ -6,6 +6,11 @@ const { checkOptionalFunction, checkPositiveNumber } = require('../internal/opti
 const { createMemoryIdempotencyStore } = require('./memory-store.js');
 
 const STORE_METHODS = ['reserve', 'complete', 'release'];
+// Longer than a send with all its attempts takes, so that a second send does
+// not find the key free while the first is still out; short enough that a
+// key a crash left reserved is taken again within minutes.
+const DEFAULT_LEASE_MS = 10 * 60 * 1000;
+const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Resolves the options of the idempotency decorator.
@@ -29,7 +34,8 @@ const createIdempotencyConfig = (config = {}, transportId) => {
   }
   return {
     store,
-    ttlMs: checkPositiveNumber(config.ttlMs ?? 24 * 60 * 60 * 1000, 'ttlMs'),
+    leaseMs: checkPositiveNumber(config.leaseMs ?? DEFAULT_LEASE_MS, 'leaseMs'),
+    ttlMs: checkPositiveNumber(config.ttlMs ?? DEFAULT_TTL_MS, 'ttlMs'),
     key: checkOptionalFunction(config.key, 'key'),
     namespace,
   };

@@ -98,8 +98,10 @@ additive but the defaults listed below.
   refused.
 - **`./idempotency`:** a key reserved in a store before the send, so a repeat is answered with
   the first receipt, a send in flight as of unknown delivery, and the same key for another
-  message refused. `createMemoryIdempotencyStore` is the in-process store; a shared one implements
-  `reserve`, `complete` and `release`.
+  message refused. A reservation lasts `leaseMs` (10 minutes), so a key a crash left reserved is
+  free again, and its token fences it: only its owner completes or releases it; the receipt is
+  kept `ttlMs` (a day). `createMemoryIdempotencyStore` is the in-process store; a shared one
+  implements `reserve`, `complete` and `release` with the token.
 - **`./hooks`:** `beforeSend` may replace or refuse a message, `afterSend`, `onRetry` and
   `onError` hear each send, with a context made for each.
 - **`./tee`:** mirrors each message to other transports, with one Message-ID, each with a

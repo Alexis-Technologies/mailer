@@ -26,28 +26,55 @@ export interface IdempotencyRecord {
 }
 
 /**
- * Where idempotency keys are kept.  A store shared by several processes, such
- * as one on Redis or MongoDB, must make `reserve` atomic: of two calls for a
- * free key, one reserves it and the other gets the record.
+ * What `reserve` resolves to: `{ token }` when the key was free and is now
+ * reserved under that token, or `{ record }` with what holds the key.  Any
+ * other answer, both or neither, fails the message as
+ * `idempotency.store_failed`.
+ */
+export type IdempotencyReservation =
+  | { readonly token: string; readonly record?: undefined }
+  | { readonly record: IdempotencyRecord; readonly token?: undefined };
+
+/**
+ * Where idempotency keys are kept.  A reservation is fenced by its token:
+ * `reserve` gives a free key a new token, and `complete` and `release` act on
+ * the key only while that token holds it.  Once the lease of a `pending` key
+ * has passed, another `reserve` may take it under a new token, and a late
+ * `complete` or `release` of the first then leaves it alone.
+ *
+ * A store shared by several processes, such as one on Redis or MongoDB, makes
+ * each method one atomic step: of two `reserve` calls for a free key, one
+ * reserves it and the other gets the record; `complete` and `release` check
+ * the token and write in the same step.
  */
 export interface IdempotencyStore {
   /**
-   * Reserves a key for `ttlMs`: `undefined` (or `null`) when it was free and
-   * is now `pending`, or the record that holds it.
+   * Reserves a key: when no record holds it within its time, holds it
+   * `pending` for `leaseMs` under a new token that cannot be guessed, and
+   * resolves to `{ token }`; otherwise resolves to `{ record }`: its
+   * `state`, its `fingerprint`, and the `receipt` of a `done` one.
    */
   reserve(
     key: string,
     fingerprint: string,
-    ttlMs: number,
-  ): IdempotencyRecord | undefined | null | Promise<IdempotencyRecord | undefined | null>;
-  /** Keeps a key `done` with the receipt of its send, for `ttlMs`. */
+    leaseMs: number,
+  ): IdempotencyReservation | Promise<IdempotencyReservation>;
+  /**
+   * Keeps a key `done` with the receipt of its send, for `ttlMs`, when
+   * `token` holds it or nothing does; a key another token holds, `pending` or
+   * `done` within its time, is left alone.
+   */
   complete(
     key: string,
+    token: string,
     record: { readonly fingerprint: string; readonly receipt: Receipt },
     ttlMs: number,
   ): void | Promise<void>;
-  /** Frees a key whose send failed and may be made again. */
-  release(key: string): void | Promise<void>;
+  /**
+   * Frees a key whose send failed and may be made again, when `token` holds
+   * it `pending`; anything else is left alone.
+   */
+  release(key: string, token: string): void | Promise<void>;
 }
 
 /**
@@ -60,7 +87,14 @@ export interface IdempotencyConfig {
    */
   readonly store?: IdempotencyStore;
   /**
-   * How long a key is kept, in milliseconds.
+   * How long a key stays reserved for a send, in milliseconds: longer than a
+   * send takes with all its attempts, as after it another send under the key
+   * may go.  A key a crash left reserved is free again after it.
+   * @default 600000
+   */
+  readonly leaseMs?: number;
+  /**
+   * How long the receipt of a send is kept under its key, in milliseconds.
    * @default 86400000
    */
   readonly ttlMs?: number;
@@ -82,6 +116,7 @@ export interface IdempotencyConfig {
  */
 export interface ResolvedIdempotencyConfig {
   readonly store: IdempotencyStore;
+  readonly leaseMs: number;
   readonly ttlMs: number;
   readonly key?: (message: Message | RawMessage) => string | undefined;
   readonly namespace: string;
@@ -92,7 +127,9 @@ export interface ResolvedIdempotencyConfig {
  */
 export interface MemoryIdempotencyStoreOptions {
   /**
-   * The most keys kept, the oldest dropped first.
+   * The most keys kept.  Expired keys are dropped first, then the oldest
+   * `done` ones, still within their time; a `pending` key is never dropped
+   * before its lease ends.
    * @default 100000
    */
   readonly maxEntries?: number;
@@ -102,7 +139,9 @@ export interface MemoryIdempotencyStoreOptions {
 
 /**
  * Makes a store of idempotency keys in this process: shared by the transports
- * given it, not by other processes, and lost on a restart.
+ * given it, not by other processes, and lost on a restart.  Its tokens come
+ * from `crypto.randomUUID()`.  Over `maxEntries` it drops `done` keys before
+ * their time, after which a message sent again under one goes again.
  *
  * @throws {TypeError} If an option is invalid.
  */
@@ -116,8 +155,11 @@ export declare function createMemoryIdempotencyStore(
  * the first, or, while the first is in flight, with a receipt of unknown
  * delivery (code `idempotency.in_flight`); the same key for another message
  * is refused (`idempotency.key_reused`).  A send that failed frees its key, one
- * of unknown delivery keeps it; a store that fails fails the message it was
- * asked about alone (`idempotency.store_failed`, retryable).
+ * of unknown delivery keeps it; a key stays reserved for `leaseMs` at most,
+ * its receipt is kept for `ttlMs`.  A store that fails fails the message it
+ * was asked about alone (`idempotency.store_failed`, retryable).  The
+ * receipts it makes, except `key_reused` (`validation`), are of the category
+ * `unknown`, which a circuit breaker does not count against the provider.
  *
  * @example
  * ```js

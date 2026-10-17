@@ -7,8 +7,10 @@
 // before and wrote it after, and two concurrent sends both went; a key used
 // again for another message is refused, where unemail answered with the
 // first's receipt; a delivery of unknown outcome keeps the key, where unemail
-// remembered successes only and a retry sent again; and a store that fails
-// fails the message it was asked about alone.
+// remembered successes only and a retry sent again; a reservation lasts a
+// lease shorter than the time a record is kept, and only the token it was
+// given completes or releases it; and a store that fails fails the message it
+// was asked about alone.
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
@@ -19,6 +21,9 @@ const { createIdempotencyConfig } = require('./config.js');
 const { fingerprintOf } = require('./fingerprint.js');
 
 const STORE_FAILED = 'MAILER_IDEMPOTENCY_STORE_FAILED';
+
+const isToken = (value) => typeof value === 'string' && value !== '';
+const isRecord = (value) => typeof value === 'object' && value !== null;
 
 const isAbortOf = (error, signal) =>
   signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
@@ -41,7 +46,7 @@ class IdempotencyTransport {
 
   /**
    * @param transport The transport to guard.
-   * @param config `store`, `ttlMs`, `key` and `namespace`.
+   * @param config `store`, `leaseMs`, `ttlMs`, `key` and `namespace`.
    * @throws {TypeError} If an option is invalid.
    */
   constructor(transport, config) {
@@ -126,20 +131,28 @@ class IdempotencyTransport {
     return receipt;
   }
 
-  // Reserves the key of a message: `{ key, fingerprint }` to send under it,
-  // `{}` for a message without one, or `{ receipt }` to answer with.
+  // Reserves the key of a message: `{ key, fingerprint, token }` to send
+  // under it, `{}` for a message without one, or `{ receipt }` to answer with.
   async #reserve(message) {
     const key = this.config.key === undefined ? message.idempotencyKey : this.config.key(message);
     if (key === undefined || key === null || key === '') return {};
     const storeKey = `${this.config.namespace}:${key}`;
     const fingerprint = fingerprintOf(message);
-    let record;
+    let reservation;
     try {
-      record = await this.config.store.reserve(storeKey, fingerprint, this.config.ttlMs);
+      reservation = await this.config.store.reserve(storeKey, fingerprint, this.config.leaseMs);
     } catch (error) {
       return { receipt: this.#storeFailure(error) };
     }
-    if (record === undefined || record === null) return { key: storeKey, fingerprint };
+    const token = reservation?.token;
+    const record = reservation?.record;
+    // Neither or both is a store that does not keep the contract; sending
+    // could send twice, so the message fails as when the store is down.
+    if (isToken(token) === isRecord(record)) {
+      const error = new TypeError('reserve must resolve to { token } or { record }.');
+      return { receipt: this.#storeFailure(error) };
+    }
+    if (isToken(token)) return { key: storeKey, fingerprint, token };
     return { receipt: this.#replyOf(record, fingerprint, key) };
   }
 
@@ -156,18 +169,28 @@ class IdempotencyTransport {
       );
     }
     if (record.state === 'done' && record.receipt !== undefined) return record.receipt;
+    // The category is given, as the words of the text, which hold the key,
+    // would otherwise choose one (a key `order-timeout-1` made it a timeout,
+    // which a circuit breaker counts against the provider).
     return createFailedReceipt(
       `A message with the idempotency key ${key} is being sent; this one was not sent again.`,
-      { provider: this.id, deliveryUnknown: true, code: 'idempotency.in_flight' },
+      {
+        provider: this.id,
+        category: 'unknown',
+        deliveryUnknown: true,
+        code: 'idempotency.in_flight',
+      },
     );
   }
 
+  // Retryable, but not a failure of the provider, which a circuit breaker
+  // would count.
   #storeFailure(error) {
     return createFailedReceipt(
       `The idempotency store failed: ${error instanceof Error ? error.message : String(error)}`,
       {
         provider: this.id,
-        category: 'service-unavailable',
+        category: 'unknown',
         retryable: true,
         code: 'idempotency.store_failed',
       },
@@ -182,14 +205,15 @@ class IdempotencyTransport {
       if (receipt.successful || receipt.deliveryUnknown === true) {
         await this.config.store.complete(
           entry.key,
+          entry.token,
           { fingerprint: entry.fingerprint, receipt },
           this.config.ttlMs,
         );
       } else {
-        await this.config.store.release(entry.key);
+        await this.config.store.release(entry.key, entry.token);
       }
     } catch (error) {
-      // The receipt stands; the key stays reserved until it expires.
+      // The receipt stands; the key stays reserved until its lease ends.
       warnThrown('The idempotency store', error, STORE_FAILED);
     }
   }
@@ -202,7 +226,12 @@ class IdempotencyTransport {
     if (isAbortOf(error, signal)) {
       const receipt = createFailedReceipt(
         'The send was aborted after it began; whether the message went is not known.',
-        { provider: this.id, deliveryUnknown: true, code: 'idempotency.aborted' },
+        {
+          provider: this.id,
+          category: 'unknown',
+          deliveryUnknown: true,
+          code: 'idempotency.aborted',
+        },
       );
       await this.#settle(entry, receipt);
       return;
@@ -213,7 +242,7 @@ class IdempotencyTransport {
   async #release(entry) {
     if (entry.key === undefined) return;
     try {
-      await this.config.store.release(entry.key);
+      await this.config.store.release(entry.key, entry.token);
     } catch (error) {
       warnThrown('The idempotency store', error, STORE_FAILED);
     }
