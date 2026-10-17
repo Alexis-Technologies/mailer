@@ -7,6 +7,7 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  VerifiableTransport,
 } from '../../index.js';
 
 /**
@@ -109,7 +110,7 @@ export type ResolvedResendConfig = Required<Omit<ResendConfig, keyof TransportDe
  * }
  * ```
  */
-export declare class ResendTransport implements Transport<'resend'> {
+export declare class ResendTransport implements Transport<'resend'>, VerifiableTransport<'resend'> {
   readonly id = 'resend';
   /**
    * The resolved Resend configuration used by this transport.
@@ -156,6 +157,11 @@ export declare class ResendTransport implements Transport<'resend'> {
    *          failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<'resend'>>;
+  /**
+   * Verifies the API key with `GET /domains`; a key that may only send is
+   * verified too.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends multiple email messages efficiently via Resend API.
    *

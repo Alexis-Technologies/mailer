@@ -3,6 +3,7 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createResendConfig } = require('./config.js');
+const { verifyByRequest } = require('../internal/verify.js');
 const { ResendApiError, ResendHttpClient } = require('./http-client.js');
 const {
   convertMessage,
@@ -76,6 +77,27 @@ class ResendTransport {
    */
   [INSPECT](_depth, options, inspect) {
     return inspectRedacted(this, options, inspect);
+  }
+
+  /**
+   * Verifies the API key with `GET /domains`.  A key that may only send,
+   * which Resend answers with `restricted_api_key`, is verified too.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Resend refuses the key or cannot be reached.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    await verifyByRequest({
+      provider: 'Resend',
+      send: (signal) =>
+        this.httpClient.fetchWithAuth(`${this.config.baseUrl}/domains`, { method: 'GET' }, signal),
+      check: (status, body) => status === 401 && isRestrictedKey(body),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
   }
 
   /**
@@ -341,6 +363,15 @@ const isAbortError = (error) => {
 
 const isCallerAbort = (error, signal) => {
   return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
+};
+
+// Resend answers a key that may only send with `restricted_api_key`.
+const isRestrictedKey = (body) => {
+  try {
+    return JSON.parse(body).name === 'restricted_api_key';
+  } catch {
+    return false;
+  }
 };
 
 module.exports = { ResendTransport };

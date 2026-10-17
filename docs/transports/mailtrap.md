@@ -183,3 +183,10 @@ for await (const receipt of transport.sendMany(messages)) {
 - `retries`: Number of retry attempts for transient failures. Default: `3`.
 
 - `headers`: Additional HTTP headers to include with every request.
+
+## Verification
+
+This transport has no `verify()`: Mailtrap offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

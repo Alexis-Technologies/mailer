@@ -4,6 +4,7 @@
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createSendGridConfig } = require('./config.js');
+const { verifyByRequest } = require('../internal/verify.js');
 const { SendGridApiError, SendGridHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
@@ -69,6 +70,39 @@ class SendGridTransport {
    */
   [INSPECT](_depth, options, inspect) {
     return inspectRedacted(this, options, inspect);
+  }
+
+  /**
+   * Verifies the API key with the scopes it has (`GET /v3/scopes`), and that
+   * one of them is `mail.send`.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If SendGrid refuses the key, or the key may not send.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    await verifyByRequest({
+      provider: 'SendGrid',
+      send: (signal) =>
+        this.httpClient.fetchWithAuth(`${this.config.baseUrl}/scopes`, { method: 'GET' }, signal),
+      check: (status, body) => {
+        if (status < 200 || status > 299) return false;
+        let scopes;
+        try {
+          scopes = JSON.parse(body).scopes;
+        } catch {
+          scopes = undefined;
+        }
+        if (!Array.isArray(scopes) || !scopes.includes('mail.send')) {
+          throw new Error('The SendGrid API key has no mail.send scope, so it may not send mail.');
+        }
+        return true;
+      },
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
   }
 
   /**

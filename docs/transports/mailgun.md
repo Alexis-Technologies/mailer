@@ -248,6 +248,13 @@ while retry configuration determines how many times to retry failed requests.
 The transport uses exponential backoff for retries, reducing load on Mailgun's
 servers during temporary outages.
 
+## Verifying the configuration
+
+`verify()` reads the sending domain (`GET /v3/domains/<domain>`), so it checks the
+key, the region and the domain.  A domain sending key, which may not read the
+domain (403), is verified too; a domain the account does not have fails with
+404.
+
 ## Development and testing
 
 For development and testing, you can use Mailgun's [sandbox domain] or configure

@@ -227,3 +227,10 @@ const receipt = await transport.send(message, {
   signal: controller.signal,
 });
 ```
+
+## Verification
+
+This transport has no `verify()`: Maileroo offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

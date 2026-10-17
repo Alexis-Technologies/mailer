@@ -378,6 +378,13 @@ configuration determines how many times to retry failed requests. The transport
 uses exponential backoff for retries, reducing load on SES during temporary
 issues and improving overall reliability.
 
+## Verifying the configuration
+
+`verify()` reads the account with GetAccount, signed as a send is, so it checks
+the credentials and the region.  A key whose policy allows sending but not
+`ses:GetAccount` gets AccessDenied, and is verified too: the signature it made was
+accepted.  It throws an error with the `statusCode` of the answer otherwise.
+
 ## Development and testing
 
 For development and testing, you can configure the SES transport for testing

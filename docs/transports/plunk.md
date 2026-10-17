@@ -301,3 +301,10 @@ delivery without affecting production systems.
 > sending test emails to real users. For self-hosted instances, consider
 > setting up separate testing environments with isolated email delivery
 > to prevent accidental sends to production email addresses.
+
+## Verification
+
+This transport has no `verify()`: Plunk offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

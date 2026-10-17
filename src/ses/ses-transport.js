@@ -10,6 +10,7 @@ const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
+const { verifyByRequest } = require('../internal/verify.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -80,6 +81,26 @@ class SesTransport {
    */
   [INSPECT](_depth, options, inspect) {
     return inspectRedacted(this, options, inspect);
+  }
+
+  /**
+   * Verifies the credentials and the region with GetAccount.  A key that may
+   * send but not read the account (AccessDenied) is verified too.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If SES refuses the credentials or cannot be reached.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const url = `https://email.${this.config.region}.amazonaws.com/v2/email/account`;
+    await verifyByRequest({
+      provider: 'SES',
+      send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
   }
 
   /**

@@ -210,6 +210,12 @@ while retry configuration determines how many times to retry failed requests.
 The transport uses exponential backoff for retries, reducing load on Resend's
 servers during temporary outages and improving overall reliability.
 
+## Verifying the configuration
+
+`verify()` reads the domains of the account (`GET /domains`).  A key restricted to
+sending, which Resend answers with `restricted_api_key`, is verified too; an
+invalid key throws an error with the `statusCode` of the answer.
+
 ## Development and testing
 
 For development and testing, you can configure the Resend transport for

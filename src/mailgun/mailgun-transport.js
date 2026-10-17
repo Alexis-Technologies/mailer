@@ -3,6 +3,7 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailgunConfig } = require('./config.js');
+const { verifyByRequest } = require('../internal/verify.js');
 const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
@@ -69,6 +70,27 @@ class MailgunTransport {
    */
   [INSPECT](_depth, options, inspect) {
     return inspectRedacted(this, options, inspect);
+  }
+
+  /**
+   * Verifies the API key and the sending domain with `GET /v3/domains/<domain>`.
+   * A key of that domain that may only send (403) is verified too; a domain
+   * the account does not have fails.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Mailgun refuses the key or knows no such domain.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const url = `${this.config.baseUrl}/domains/${encodeURIComponent(this.config.domain)}`;
+    await verifyByRequest({
+      provider: 'Mailgun',
+      send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
   }
 
   /**

@@ -207,6 +207,13 @@ while retry configuration determines how many times to retry failed requests.
 The transport uses exponential backoff for retries, reducing load on SendGrid's
 servers during temporary outages and improving overall reliability.
 
+## Verifying the configuration
+
+`verify()` reads the scopes of the API key (`GET /v3/scopes`) and checks that one
+of them is `mail.send`, so a restricted key that may not send fails before the
+first message.  It throws an error with the `statusCode` of the answer when
+SendGrid refuses the key.
+
 ## Development and testing
 
 For development and testing, you can configure the SendGrid transport for
