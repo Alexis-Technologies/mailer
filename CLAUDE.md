@@ -723,7 +723,8 @@ change. **This file wins** if they ever disagree.
   real provider in `pnpm test`.
 - **Opt-in suites**, outside the gates: `tests/mailpit/` (`pnpm test:mailpit`, serial, as the
   inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
-  `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
+  `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`, plus `MAILPIT_SENDMAIL="docker exec -i mailer-mailpit
+  /mailpit sendmail"` for the sendmail case) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
   until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply

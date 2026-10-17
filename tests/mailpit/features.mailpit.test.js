@@ -100,3 +100,82 @@ test(
     assert.equal(delivered.Attachments[0].FileName, 'data.csv');
   },
 );
+
+test('Mailpit: a message goes through an HTTP CONNECT proxy', { skip }, async (t) => {
+  const http = require('node:http');
+  const net = require('node:net');
+  const { createHttpProxyConnector } = require('../../src/smtp/index.js');
+  const tunnels = new Set();
+  let connects = 0;
+  const proxy = http.createServer();
+  proxy.on('connect', (request, client, head) => {
+    connects++;
+    tunnels.add(client);
+    const [host, port] = [
+      request.url.slice(0, request.url.lastIndexOf(':')),
+      request.url.slice(request.url.lastIndexOf(':') + 1),
+    ];
+    const upstream = net.connect(Number(port), host, () => {
+      client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      if (head.length > 0) upstream.write(head);
+      upstream.pipe(client);
+      client.pipe(upstream);
+    });
+    upstream.on('error', () => client.destroy());
+    client.on('error', () => upstream.destroy());
+  });
+  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    for (const tunnel of tunnels) tunnel.destroy();
+    proxy.close();
+  });
+  const { delivered } = await deliver(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 'Through a proxy',
+      content: { text: 'Tunneled' },
+    }),
+    { connect: createHttpProxyConnector({ url: `http://127.0.0.1:${proxy.address().port}` }) },
+  );
+  assert.equal(connects, 1);
+  assert.equal(delivered.Text.trim(), 'Tunneled');
+});
+
+// MAILPIT_SENDMAIL, such as "docker exec -i mailer-mailpit /mailpit sendmail",
+// runs Mailpit's own sendmail in its container.
+const sendmailCommand = process.env.MAILPIT_SENDMAIL;
+
+test(
+  'Mailpit: sendmail delivers through mailpit sendmail',
+  { skip: skip || !sendmailCommand },
+  async () => {
+    const childProcess = require('node:child_process');
+    const { SendmailTransport } = require('../../src/sendmail/index.js');
+    const [command, ...prefix] = sendmailCommand.split(' ');
+    const transport = new SendmailTransport({
+      spawn: (path, args, options) => childProcess.spawn(command, [...prefix, ...args], options),
+    });
+    const config = getTestConfig();
+    const client = new MailpitClient(config.mailpit);
+    await client.deleteAllMessages();
+    const receipt = await transport.send(
+      createMessage({
+        from: 'app@example.com',
+        to: 'user@example.com',
+        bcc: 'archive@example.com',
+        subject: 'Through sendmail',
+        content: { text: 'Piped' },
+      }),
+    );
+    assert.ok(receipt.successful, JSON.stringify(receipt));
+    const delivered = await waitForMailpitDelivery(client, { subject: 'Through sendmail' });
+    assert.equal(delivered.Text.trim(), 'Piped');
+    assert.deepEqual(
+      delivered.Bcc.map((address) => address.Address),
+      ['archive@example.com'],
+    );
+    // Mailpit writes a Bcc field of its own into what it stores, from the
+    // envelope; that the message has none is a unit test of ./sendmail.
+  },
+);
