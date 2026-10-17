@@ -63,3 +63,30 @@ test('Gate: the queue keeps its order across its compaction', () => {
   queue.push(5000);
   assert.strictEqual(queue.shift(), 4000);
 });
+
+test('Gate: what a transport reading ahead was handed is abandoned on a break', async () => {
+  // Before: neither settle nor fail heard of it, so a decorator kept its
+  // state for it: a reserved key, a probe, a hook never called.
+  const inner = fakeTransport((message) => sent(String(message)), { readAhead: 3 });
+  const abandoned = [];
+  const gate = {
+    admit: (n) => ({ message: n }),
+    settle: (receipt) => receipt,
+    abandon: (admitted) => {
+      abandoned.push(admitted.message);
+    },
+  };
+  for await (const receipt of gatedSendMany(inner, [1, 2, 3, 4, 5, 6], undefined, gate)) {
+    if (receipt.messageId === '1') break;
+  }
+  assert.deepStrictEqual(abandoned, [2, 3, 4]);
+  // A transport that answers fewer messages than it read abandons the rest.
+  const short = {
+    async *sendMany(messages) {
+      for await (const message of messages) if (message === 2) return;
+    },
+  };
+  abandoned.length = 0;
+  assert.deepStrictEqual(await collect(gatedSendMany(short, [1, 2], undefined, gate)), []);
+  assert.deepStrictEqual(abandoned, [1, 2]);
+});

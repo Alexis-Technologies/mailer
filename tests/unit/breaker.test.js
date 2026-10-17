@@ -256,3 +256,31 @@ test('Breaker: a listener that throws is a warning, and the options are checked'
   assert.strictEqual(defaults.config.resetTimeoutMs, 30_000);
   assert.strictEqual(defaults.id, 'fake');
 });
+
+test('Breaker: a probe a batch left before its answer frees its place', async () => {
+  // Before: a probe admitted while the wrapped transport read ahead, and left
+  // unanswered when the caller stopped reading, kept the circuit probing: it
+  // refused every send for good.
+  const time = clock();
+  const inner = fakeTransport(
+    (_message, index) => (index === 0 ? failed('network') : sent(`m${index}`)),
+    { readAhead: 1 },
+  );
+  const breaker = new CircuitBreakerTransport(inner, {
+    failureThreshold: 1,
+    resetTimeoutMs: 1,
+    now: time.now,
+  });
+  const iterator = breaker
+    .sendMany([message('a'), message('b'), message('c')])
+    [Symbol.asyncIterator]();
+  assert.strictEqual((await iterator.next()).value.successful, false);
+  // The circuit is open; once its timeout passes, the next message read is the probe.
+  time.advance(1);
+  assert.strictEqual((await iterator.next()).value.successful, true);
+  await iterator.return();
+  assert.strictEqual(breaker.state, 'half-open');
+  const receipt = await breaker.send(message('d'));
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(breaker.state, 'closed');
+});

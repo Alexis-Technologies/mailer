@@ -156,8 +156,11 @@ export declare function createMemoryIdempotencyStore(
  * delivery (code `idempotency.in_flight`); the same key for another message
  * is refused (`idempotency.key_reused`).  A send that failed frees its key, one
  * of unknown delivery keeps it; a key stays reserved for `leaseMs` at most,
- * its receipt is kept for `ttlMs`.  A store that fails fails the message it
- * was asked about alone (`idempotency.store_failed`, retryable).  The
+ * its receipt is kept for `ttlMs`.  A message of a batch the caller stopped
+ * reading before its answer, which a transport reading ahead may have sent,
+ * keeps its key as of unknown delivery (`idempotency.abandoned`) for `leaseMs`
+ * alone.  A store that fails fails the message it was asked about alone
+ * (`idempotency.store_failed`, retryable).  The
  * receipts it makes, except `key_reused` (`validation`), are of the category
  * `unknown`, which a circuit breaker does not count against the provider.
  *

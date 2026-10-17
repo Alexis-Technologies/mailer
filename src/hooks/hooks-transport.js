@@ -104,6 +104,9 @@ class HooksTransport {
         return receipt;
       },
       fail: (error, admitted) => this.#error(error, admitted.message, admitted.context),
+      // A message the batch was left before it was answered ends with an
+      // error, so that each send that began hears of its end.
+      abandon: (admitted) => this.#error(abandonedError(), admitted.message, admitted.context),
     });
   }
 
@@ -202,5 +205,11 @@ class HooksTransport {
     }
   }
 }
+
+const abandonedError = () =>
+  new DOMException(
+    'The batch was left before the message was answered; it may have been sent.',
+    'AbortError',
+  );
 
 module.exports = { HooksTransport };

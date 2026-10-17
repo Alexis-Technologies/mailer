@@ -100,6 +100,7 @@ class IdempotencyTransport {
         return receipt;
       },
       fail: (error, admitted) => this.#thrown(admitted.entry, error, options?.signal),
+      abandon: (admitted) => this.#abandon(admitted.entry),
     });
   }
 
@@ -199,7 +200,7 @@ class IdempotencyTransport {
 
   // A sent or possibly sent message keeps its key with its receipt; one that
   // failed to go frees it for another attempt.
-  async #settle(entry, receipt) {
+  async #settle(entry, receipt, ttlMs = this.config.ttlMs) {
     if (entry.key === undefined) return;
     try {
       if (receipt.successful || receipt.deliveryUnknown === true) {
@@ -207,7 +208,7 @@ class IdempotencyTransport {
           entry.key,
           entry.token,
           { fingerprint: entry.fingerprint, receipt },
-          this.config.ttlMs,
+          ttlMs,
         );
       } else {
         await this.config.store.release(entry.key, entry.token);
@@ -216,6 +217,23 @@ class IdempotencyTransport {
       // The receipt stands; the key stays reserved until its lease ends.
       warnThrown('The idempotency store', error, STORE_FAILED);
     }
+  }
+
+  // A message handed to a transport that reads ahead, and left before it was
+  // answered, may have gone or not: its key is kept as of unknown delivery
+  // for the lease alone, so that a send of it in the next minutes is not
+  // made twice, and one after them goes.
+  async #abandon(entry) {
+    const receipt = createFailedReceipt(
+      'The batch was left before the message was answered; whether it went is not known.',
+      {
+        provider: this.id,
+        category: 'unknown',
+        deliveryUnknown: true,
+        code: 'idempotency.abandoned',
+      },
+    );
+    await this.#settle(entry, receipt, this.config.leaseMs);
   }
 
   // A send the caller aborted may have gone, so its key is kept as of unknown

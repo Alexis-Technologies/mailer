@@ -58,7 +58,11 @@ export interface Hooks {
    * the context of its send (that of the batch for `sendMany()`).
    */
   readonly onRetry?: (event: RetryEvent, context: HookContext) => void;
-  /** When the wrapped transport throws, before the error goes on. */
+  /**
+   * When the wrapped transport throws, before the error goes on; and, with an
+   * `AbortError`, for a message of a batch the caller stopped reading before
+   * its answer, which a transport reading ahead may have sent.
+   */
   readonly onError?: (
     error: unknown,
     message: Message | RawMessage,

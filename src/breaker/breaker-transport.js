@@ -109,6 +109,11 @@ class CircuitBreakerTransport {
         return receipt;
       },
       fail: (error, admitted) => this.#thrown(error, options?.signal, admitted.probe),
+      // Nothing is learned of a message left unanswered, but a probe frees
+      // its place, or the circuit would refuse every send for good.
+      abandon: (admitted) => {
+        if (admitted.probe) this.#probing = false;
+      },
     });
   }
 

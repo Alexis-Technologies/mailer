@@ -473,3 +473,26 @@ test('Idempotency: the memory store makes room with expired keys, then done ones
   kept.reserve('third', 'ft', 1000);
   assert.strictEqual(kept.reserve('kept', 'fk', 1000).record.receipt.messageId, 'rk');
 });
+
+test('Idempotency: a key a batch left before its answer is held for the lease alone', async () => {
+  // Before: the key of a message handed to a transport that reads ahead, and
+  // left unanswered on a break, stayed pending, answered in_flight, until it
+  // expired.
+  let time = 0;
+  const store = createMemoryIdempotencyStore({ now: () => time });
+  const inner = fakeTransport(undefined, { readAhead: 1 });
+  const idempotent = new IdempotencyTransport(inner, { store, leaseMs: 1000 });
+  for await (const receipt of idempotent.sendMany([
+    message({ idempotencyKey: 'k-1' }),
+    message({ idempotencyKey: 'k-2', subject: 'Second' }),
+  ])) {
+    if (receipt.successful) break;
+  }
+  const again = await idempotent.send(message({ idempotencyKey: 'k-2', subject: 'Second' }));
+  assert.strictEqual(again.successful, false);
+  assert.strictEqual(again.errors[0].code, 'idempotency.abandoned');
+  assert.strictEqual(again.deliveryUnknown, true);
+  time = 1000;
+  const later = await idempotent.send(message({ idempotencyKey: 'k-2', subject: 'Second' }));
+  assert.strictEqual(later.successful, true);
+});

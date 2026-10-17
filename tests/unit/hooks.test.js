@@ -220,3 +220,18 @@ test('Hooks: sendRaw, verify, dispose and the options', async () => {
     /already/,
   );
 });
+
+test('Hooks: a message a batch left before its answer ends with onError', async () => {
+  // Before: neither afterSend nor onError heard of it.
+  const errors = [];
+  const hooks = new HooksTransport(fakeTransport(undefined, { readAhead: 2 }), {
+    onError: (error, sentMessage) => errors.push([error.name, sentMessage.subject]),
+  });
+  for await (const receipt of hooks.sendMany([message('a'), message('b'), message('c')])) {
+    if (receipt.successful) break;
+  }
+  assert.deepStrictEqual(errors, [
+    ['AbortError', 'b'],
+    ['AbortError', 'c'],
+  ]);
+});

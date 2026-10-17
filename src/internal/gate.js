@@ -49,12 +49,14 @@ const iteratorOf = (messages) =>
  * runs, a run ending at a message answered in place, and each receipt goes
  * through `gate.settle(receipt, admitted)` before it is yielded.  When the
  * wrapped `sendMany()` throws, `gate.fail(error, admitted)` hears of each
- * message still waiting for its receipt.
+ * message still waiting for its receipt; when the caller stops reading, or
+ * the wrapped `sendMany()` ends short, `gate.abandon(admitted)` does, as a
+ * transport that reads ahead may have sent them or not.
  *
  * @param transport The wrapped transport.
  * @param messages The messages, sync or async.
  * @param options The caller's options, passed on.
- * @param gate `admit`, and optional `settle` and `fail`.
+ * @param gate `admit`, and optional `settle`, `fail` and `abandon`.
  * @returns The receipts, one per message, in order.
  * @internal
  */
@@ -107,16 +109,24 @@ const feedRun = async function* (run, gate) {
 };
 
 const sendRun = async function* (transport, run, options, gate) {
+  let failed = false;
   try {
     for await (const receipt of transport.sendMany(feedRun(run, gate), options)) {
       const admitted = run.fed.shift();
       yield gate.settle === undefined ? receipt : await gate.settle(receipt, admitted);
     }
   } catch (error) {
+    failed = true;
     if (gate.fail !== undefined) {
       while (run.fed.size > 0) await gate.fail(error, run.fed.shift());
     }
     throw error;
+  } finally {
+    // The caller stopped reading, or the transport answered fewer messages
+    // than it was handed: those it was handed are neither settled nor failed.
+    if (!failed && gate.abandon !== undefined) {
+      while (run.fed.size > 0) await gate.abandon(run.fed.shift());
+    }
   }
 };
 
