@@ -579,6 +579,13 @@ fails on upstream's behavior):
   result waited for the slowest mirror, and a mirror that hung held the send for as long as it
   hung. `./tee` gives each mirror a timeout of its own and by default does not await it, bounds
   the copies in flight, and awaits them, bounded, only with `awaitMirrors`.
+- U14. unemail (`src/render/_html.ts`, `src/render/react.ts`): `htmlToText` threw a RangeError on
+  a numeric reference past U+10FFFF (`&#99999999;`), left comments and the doctype in the text
+  (React Email writes `<!--$-->` into every body), read an `href` in double quotes only, and its
+  lazy patterns rescanned the rest of the input for each unclosed `<a` or `<script`, quadratic in
+  its length (reproduced); the React renderer imported `@react-email/render` itself and hid a
+  failed plain-text pass. `./render` reads HTML in one linear pass (`html-to-text.js`), decodes
+  an invalid number as U+FFFD, takes `render` as an option and lets its failure through.
 
 ## Repository layout
 
