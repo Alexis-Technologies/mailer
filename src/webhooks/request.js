@@ -309,6 +309,54 @@ const jsonRecordOf = (text) => {
   }
 };
 
+const METADATA_HEADER = /^x-metadata-(.+)$/i;
+
+/**
+ * The metadata the transports send as `X-Metadata-<key>` header fields, from
+ * the headers an event carries: a record, or a list of `{ name | key, value }`.
+ *
+ * @internal
+ */
+const metadataFromHeaders = (headers) => {
+  const metadata = Object.create(null);
+  const add = (name, value) => {
+    const match = typeof name === 'string' ? METADATA_HEADER.exec(name) : null;
+    if (match !== null && typeof value === 'string') metadata[match[1]] = value;
+  };
+  if (Array.isArray(headers)) {
+    for (const header of headers) add(header?.name ?? header?.key, header?.value);
+  } else if (isRecord(headers)) {
+    for (const name in headers) add(name, headers[name]);
+  }
+  return metadata;
+};
+
+/**
+ * Checks the token a webhook is configured with: `Authorization: Bearer
+ * <token>`, or the value of a custom header field, in constant time.
+ *
+ * @internal
+ */
+const tokenCheckOf = (options, label) => {
+  if (typeof options.token !== 'string' || options.token === '') {
+    throw new TypeError(
+      `token is required: ${label} signs nothing, so its webhook carries a token.`,
+    );
+  }
+  const header = options.header ?? 'authorization';
+  if (typeof header !== 'string' || header === '') throw new TypeError('header is a field name.');
+  const expected = Buffer.from(
+    header.toLowerCase() === 'authorization' ? `Bearer ${options.token}` : options.token,
+    'utf8',
+  );
+  return (request) => {
+    const given = headerOf(request, header);
+    if (given === undefined || !equalBytes(Buffer.from(given.trim(), 'utf8'), expected)) {
+      throw new WebhookVerificationError('credentials', 'The webhook token does not match.');
+    }
+  };
+};
+
 const NUMBERED_TAG = /^tag(\d+)$/;
 
 /**
@@ -349,10 +397,12 @@ module.exports = {
   headerOf,
   isRecord,
   jsonRecordOf,
+  metadataFromHeaders,
   parseJsonOf,
   resolveCommonOptions,
   splitNamedTags,
   stringOf,
   stringRecordOf,
   stringsOf,
+  tokenCheckOf,
 };

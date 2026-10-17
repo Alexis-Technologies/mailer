@@ -196,3 +196,82 @@ campaign the tag and its event payload the metadata; SparkPost's message id is
 the transmission's, and a bounce is hard for the classes 10, 30 and 90,
 undetermined for 1, soft for the others. As for Postmark, nothing holds a
 request to a window or takes it once.
+
+## Lettermint and Maileroo
+
+```js
+const lettermint = createLettermintWebhookVerifier({ secret: process.env.LETTERMINT_WEBHOOK_SECRET });
+const maileroo = createMailerooWebhookVerifier({ secret: process.env.MAILEROO_WEBHOOK_SECRET });
+```
+
+Lettermint signs the time and the body: `X-Lettermint-Signature: t=…,v1=…`, the
+HMAC-SHA256 of `t.body` with the secret as it is given, `whsec_` and all; a
+request is taken within five minutes and once by the `id` its retries keep.
+Maileroo signs the body alone, in `x-maileroo-signature`, so each event is
+taken once by its `event_id`, kept a day and an hour; its message id is the
+reference of the message, the receipt's id, and an event names its recipients,
+one event each.
+
+## SMTP2GO
+
+```js
+// The webhook URL in SMTP2GO: https://hook:s3cret@example.com/webhooks/smtp2go
+const smtp2go = createSmtp2goWebhookVerifier({ username: 'hook', password: 's3cret' });
+```
+
+SMTP2GO signs nothing, so its webhook URL carries Basic credentials, which the
+verifier requires. The body may be JSON or a form, as the webhook is set up.
+The message id is the `email_id` of the receipt; the metadata comes back from
+`X-Metadata-<key>` fields when the webhook adds the headers of the email to its
+payload.
+
+## Azure Communication Services
+
+```js
+const azure = createAzureWebhookVerifier({ token: process.env.EVENT_GRID_TOKEN });
+
+app.post('/webhooks/azure', express.raw({ type: '*/*' }), async (req, res) => {
+  const { events, validation } = await azure.verify({ body: req.body, headers: req.headers });
+  if (validation) return res.json({ validationResponse: validation.validationCode });
+  for (const event of events) await deliveries.record(event);
+  res.sendStatus(200);
+});
+```
+
+The email events of Azure come through an Event Grid subscription to the
+Communication Services resource, in the Event Grid schema. Event Grid signs
+nothing, so give the subscription a secret delivery property: `Authorization`
+with `Bearer <token>`, or a header of your own with `header`. Every
+notification must carry it; each event is taken once by its id. The
+validation of a new subscription carries no event and is handed back for the
+application to answer. Delivery reports are `delivered`, `bounced`,
+`rejected` (Suppressed) or `deferred` (Quarantined); engagement reports
+`opened` or `clicked`. The message id is that of the send operation, the
+receipt's.
+
+## Scaleway
+
+```js
+const trustChain = fs.readFileSync('scaleway-sns-trust-chain.pem', 'utf8');
+const scaleway = createScalewayWebhookVerifier({
+  topicArns: ['arn:scw:sns:fr-par:project-…:tem-events'],
+  trustChain,
+});
+```
+
+Scaleway's Topics and Events posts the events of Transactional Email as SNS
+messages, verified as those of SES are, from a listed topic, within an hour and
+once, but with a certificate on a Scaleway host that must have been issued by
+Scaleway's SNS trust chain. Download that chain once, from
+`https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem`, and pass
+it as `trustChain`: the verifier trusts no certificate the chain did not issue.
+A subscription confirmation is handed back, as for SES.
+
+## Providers without a verifier
+
+- **ZeptoMail:** its documentation mentions a webhook authentication key
+  without describing for ZeptoMail how a request is signed, so there is no
+  verifier yet.
+- **Plunk:** Plunk posts no events of the messages it sends.
+- **Cloudflare:** Email Service publishes its events to a Cloudflare Queue,
+  which a Worker or an HTTP pull consumer reads, not to a webhook.

@@ -334,3 +334,134 @@ export declare function createMailjetWebhookVerifier(
 export declare function createSparkPostWebhookVerifier(
   options: BasicWebhookVerifierOptions,
 ): WebhookVerifier<WebhookResult<'sparkpost'>>;
+
+/**
+ * The options of {@link createScalewayWebhookVerifier}.
+ */
+export interface ScalewayWebhookVerifierOptions extends WebhookVerifierOptions {
+  /** The topics of Topics and Events taken; a message of another is refused. */
+  readonly topicArns: readonly string[];
+  /**
+   * The PEM of Scaleway's SNS trust chain, which issued the certificate a
+   * message is signed with.
+   */
+  readonly trustChain: string;
+  /** The fetch the signing certificates are read with. */
+  readonly fetch?: typeof globalThis.fetch;
+  /**
+   * How far from now a message may have been published.
+   * @default 3600000
+   */
+  readonly toleranceMs?: number;
+}
+
+/**
+ * What the Scaleway verifier reads: the events of a notification, or the
+ * confirmation of a subscription.
+ */
+export interface ScalewayWebhookResult extends WebhookResult<'scaleway'> {
+  readonly confirmation?: SnsConfirmation;
+}
+
+/**
+ * Makes the verifier of the events of Scaleway Transactional Email, which
+ * Topics and Events posts as SNS messages: from a listed topic, signed with a
+ * certificate on a Scaleway host that the pinned trust chain issued, within an
+ * hour, taken once.  The metadata comes back from the `X-Metadata-<key>`
+ * fields of the email, as `./scaleway` sends it.
+ *
+ * @throws {TypeError} If an option is invalid.
+ */
+export declare function createScalewayWebhookVerifier(
+  options: ScalewayWebhookVerifierOptions,
+): WebhookVerifier<ScalewayWebhookResult>;
+
+/**
+ * The options of {@link createLettermintWebhookVerifier}.
+ */
+export interface LettermintWebhookVerifierOptions extends WebhookVerifierOptions {
+  /** The signing secret of the webhook, `whsec_…`, used as it is. */
+  readonly secret: string;
+}
+
+/**
+ * Makes the verifier of Lettermint's webhooks: the HMAC-SHA256 of the time
+ * and body in `X-Lettermint-Signature` (`t=…,v1=…`), within five minutes, its
+ * delivery id taken once.
+ *
+ * @throws {TypeError} If the secret is missing.
+ */
+export declare function createLettermintWebhookVerifier(
+  options: LettermintWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'lettermint'>>;
+
+/**
+ * Makes the verifier of Maileroo's webhooks: the HMAC-SHA256 of the body, in
+ * hexadecimal in `x-maileroo-signature`, each event taken once.  The message
+ * id is the reference of the message, the receipt's.
+ *
+ * @throws {TypeError} If the secret is missing.
+ */
+export declare function createMailerooWebhookVerifier(
+  options: SignedBodyWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'maileroo'>>;
+
+/**
+ * Makes the verifier of SMTP2GO's webhooks, whose URL carries Basic
+ * credentials, as SMTP2GO signs nothing; a body of JSON or of a form.
+ *
+ * @throws {TypeError} If a credential is missing.
+ */
+export declare function createSmtp2goWebhookVerifier(
+  options: BasicWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'smtp2go'>>;
+
+/**
+ * The options of {@link createAzureWebhookVerifier}.
+ */
+export interface AzureWebhookVerifierOptions {
+  /** The token the Event Grid subscription sends as a secret delivery property. */
+  readonly token: string;
+  /**
+   * The header field of the token: `authorization`, as `Bearer <token>`, or a
+   * custom one with the token as its value.
+   * @default "authorization"
+   */
+  readonly header?: string;
+  /** The ids already taken; an in-process store by default, `null` for none. */
+  readonly replayStore?: ReplayStore | null;
+  /**
+   * The longest body taken, in bytes.
+   * @default 5242880
+   */
+  readonly maxBodyBytes?: number;
+}
+
+/**
+ * The validation of a new Event Grid subscription, which the application
+ * answers with `{ validationResponse: validationCode }`.
+ */
+export interface EventGridValidation {
+  readonly validationCode: string;
+  readonly validationUrl?: string;
+}
+
+/**
+ * What the Azure verifier reads: the events of a notification, or the
+ * validation of a subscription.
+ */
+export interface AzureWebhookResult extends WebhookResult<'azure'> {
+  readonly validation?: EventGridValidation;
+}
+
+/**
+ * Makes the verifier of the email events of Azure Communication Services,
+ * delivered by Event Grid in its own schema: the delivery reports and the
+ * engagement reports.  Event Grid signs nothing, so every notification must
+ * carry the token of the subscription; each event is taken once by its id.
+ *
+ * @throws {TypeError} If the token is missing.
+ */
+export declare function createAzureWebhookVerifier(
+  options: AzureWebhookVerifierOptions,
+): WebhookVerifier<AzureWebhookResult>;

@@ -13,14 +13,13 @@ const {
   bodyBytesOf,
   createEvent,
   dateOf,
-  equalBytes,
-  headerOf,
   isRecord,
   jsonRecordOf,
   parseJsonOf,
   resolveCommonOptions,
   stringOf,
   stringsOf,
+  tokenCheckOf,
 } = require('./request.js');
 
 const TYPES = new Map([
@@ -48,27 +47,6 @@ const TYPES = new Map([
   ['unique_click', 'clicked'],
 ]);
 const HARD = new Set(['hard_bounce', 'hardBounce']);
-
-const tokenCheckOf = (options) => {
-  if (typeof options.token !== 'string' || options.token === '') {
-    throw new TypeError(
-      'token is required: Brevo signs nothing, so its webhook carries a token (auth or a header).',
-    );
-  }
-  const header = options.header ?? 'authorization';
-  if (typeof header !== 'string' || header === '') throw new TypeError('header is a field name.');
-  // The auth token of a webhook comes as `Authorization: Bearer <token>`.
-  const expected = Buffer.from(
-    header.toLowerCase() === 'authorization' ? `Bearer ${options.token}` : options.token,
-    'utf8',
-  );
-  return (request) => {
-    const given = headerOf(request, header);
-    if (given === undefined || !equalBytes(Buffer.from(given.trim(), 'utf8'), expected)) {
-      throw new WebhookVerificationError('credentials', 'The webhook token does not match.');
-    }
-  };
-};
 
 const eventOf = (record) => {
   const type = TYPES.get(record.event) ?? 'unknown';
@@ -109,7 +87,7 @@ const eventOf = (record) => {
  * @throws {TypeError} If an option is invalid.
  */
 const createBrevoWebhookVerifier = (options = {}) => {
-  const checkToken = tokenCheckOf(options);
+  const checkToken = tokenCheckOf(options, 'Brevo');
   const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
   return {
     async verify(request) {

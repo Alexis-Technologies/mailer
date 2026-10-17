@@ -8,6 +8,12 @@ const { sign } = require('node:crypto');
 const FIXTURES = path.join(__dirname, '..', '..', 'fixtures', 'webhooks');
 const certificate = readFileSync(path.join(FIXTURES, 'sns-cert.pem'), 'utf8');
 const privateKey = readFileSync(path.join(FIXTURES, 'sns-key.pem'), 'utf8');
+// Scaleway's: a certificate a test CA issued, and that CA as the trust chain.
+const scaleway = {
+  certificate: readFileSync(path.join(FIXTURES, 'scaleway-cert.pem'), 'utf8'),
+  privateKey: readFileSync(path.join(FIXTURES, 'scaleway-key.pem'), 'utf8'),
+  trustChain: readFileSync(path.join(FIXTURES, 'scaleway-ca.pem'), 'utf8'),
+};
 
 const TOPIC = 'arn:aws:sns:eu-west-1:123456789012:ses-events';
 const CERT_URL = 'https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-abc.pem';
@@ -24,7 +30,7 @@ const SUBSCRIPTION = [
   'Type',
 ];
 
-const signSns = (message, version = '2') => {
+const signSns = (message, version = '2', key = privateKey) => {
   const fields = message.Type === 'Notification' ? NOTIFICATION : SUBSCRIPTION;
   let text = '';
   for (const field of fields) {
@@ -35,7 +41,7 @@ const signSns = (message, version = '2') => {
     ...message,
     SignatureVersion: version,
     SigningCertURL: message.SigningCertURL ?? CERT_URL,
-    Signature: sign(algorithm, Buffer.from(text, 'utf8'), privateKey).toString('base64'),
+    Signature: sign(algorithm, Buffer.from(text, 'utf8'), key).toString('base64'),
   };
 };
 
@@ -50,13 +56,21 @@ const notification = (record, fields = {}) =>
   });
 
 // A fetch that serves the test certificate, and counts its requests.
-const certificateFetch = () => {
+const certificateFetch = (served = certificate) => {
   const requests = [];
   const fetch = async (url, init) => {
     requests.push({ url: String(url), init });
-    return new Response(certificate, { status: 200 });
+    return new Response(served, { status: 200 });
   };
   return { fetch, requests };
 };
 
-module.exports = { CERT_URL, TOPIC, certificate, certificateFetch, notification, signSns };
+module.exports = {
+  CERT_URL,
+  TOPIC,
+  certificate,
+  certificateFetch,
+  notification,
+  scaleway,
+  signSns,
+};

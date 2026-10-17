@@ -610,6 +610,11 @@ fails on upstream's behavior):
   MailerSend, Mailtrap, Mailjet and SparkPost, which sently and unemail lack, are verified from
   their documentation: an HMAC of the body (MailerSend, Mailtrap; no time is signed, so each
   event is taken once by its id for a day and an hour), Basic credentials (Mailjet, SparkPost).
+  So are Lettermint (HMAC of the time and body), Maileroo (HMAC of the body), SMTP2GO (Basic),
+  Azure (Event Grid, a token in a secret delivery property, the validation handed back) and
+  Scaleway (SNS messages of Topics and Events, the certificate checked against the trust chain
+  the application pins). ZeptoMail, whose signing is not documented, Plunk, which posts no
+  events, and Cloudflare, whose events go to a Queue, have none.
 
 ## Repository layout
 

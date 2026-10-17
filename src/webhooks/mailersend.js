@@ -10,6 +10,7 @@ const {
   createEvent,
   dateOf,
   isRecord,
+  metadataFromHeaders,
   parseJsonOf,
   resolveCommonOptions,
   stringOf,
@@ -33,24 +34,6 @@ const TYPES = new Map([
   ['activity.clicked', 'clicked'],
   ['activity.clicked_unique', 'clicked'],
 ]);
-const METADATA_HEADER = /^x-metadata-(.+)$/i;
-
-// The metadata `./mailersend` sends as `X-Metadata-<key>` header fields, when
-// the event carries the headers of the email.
-const metadataOf = (headers) => {
-  const metadata = Object.create(null);
-  const add = (name, value) => {
-    const match = typeof name === 'string' ? METADATA_HEADER.exec(name) : null;
-    if (match !== null && typeof value === 'string') metadata[match[1]] = value;
-  };
-  if (Array.isArray(headers)) {
-    for (const header of headers) add(header?.name, header?.value);
-  } else if (isRecord(headers)) {
-    for (const name in headers) add(name, headers[name]);
-  }
-  return metadata;
-};
-
 // MailerSend has written its activity both flat (`data.recipient`) and nested
 // (`data.email.recipient.email`); both are read.
 const eventOf = (payload) => {
@@ -85,7 +68,7 @@ const eventOf = (payload) => {
     reason: stringOf(meta.reason) ?? stringOf(meta.bounce_reason),
     url: stringOf(meta.url),
     tags: stringsOf(data.tags ?? email.tags),
-    metadata: metadataOf(email.headers ?? data.headers),
+    metadata: metadataFromHeaders(email.headers ?? data.headers),
     raw: payload,
   });
 };

@@ -2,7 +2,10 @@ import { expectAssignable, expectError, expectType } from 'tsd';
 import type { DeliveryEvent } from '../../index.js';
 import {
   WebhookVerificationError,
+  createAzureWebhookVerifier,
   createBrevoWebhookVerifier,
+  createLettermintWebhookVerifier,
+  createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailgunWebhookVerifier,
   createMailjetWebhookVerifier,
@@ -10,8 +13,10 @@ import {
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   createResendWebhookVerifier,
+  createScalewayWebhookVerifier,
   createSendGridWebhookVerifier,
   createSesWebhookVerifier,
+  createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
   type ReplayStore,
   type SesWebhookResult,
@@ -64,3 +69,16 @@ expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
 );
 expectError(createBrevoWebhookVerifier({}));
 expectError(createMailtrapWebhookVerifier({ secret: 's', toleranceMs: 1 }));
+
+const scaleway = createScalewayWebhookVerifier({
+  topicArns: ['arn:scw:sns:fr-par:p:t'],
+  trustChain: '-----BEGIN CERTIFICATE-----',
+});
+expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
+createLettermintWebhookVerifier({ secret: 'whsec_x', toleranceMs: 60_000 });
+createMailerooWebhookVerifier({ secret: 's' });
+createSmtp2goWebhookVerifier({ username: 'u', password: 'p' });
+const azure = createAzureWebhookVerifier({ token: 't', header: 'x-webhook-token' });
+expectType<string | undefined>((await azure.verify({ body: '' })).validation?.validationCode);
+expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));
+expectError(createAzureWebhookVerifier({}));
