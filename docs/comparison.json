@@ -1,5 +1,5 @@
 {
-  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README; the column of @alexify/mailer is this repository as of 2026-10-17.",
+  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README; the column of @alexify/mailer is this repository as of 2026-10-18.",
   "groups": [
     {
       "title": "Runtimes (from imports and CI, not run)",
@@ -281,12 +281,13 @@
           "text": "≥22, CI on 22 and 24"
         },
         "deno": {
-          "mark": "❌",
-          "text": "not a target"
+          "mark": "✅",
+          "text": "CI: unit and runtime suites",
+          "note": "Through `npm:@alexify/mailer`. Deno’s `fetch` sends a request again when a reused connection closes before its answer, so the docs give it a `fetch` of its own ([known issues](/guide/known-issues#deno))."
         },
         "bun": {
-          "mark": "❌",
-          "text": "not a target"
+          "mark": "✅",
+          "text": "CI: unit and runtime suites"
         },
         "edge": {
           "mark": "❌",
@@ -301,23 +302,24 @@
           "text": "PIPELINING, SIZE, DSN"
         },
         "sendmail": {
-          "mark": "❌"
+          "mark": "✅",
+          "text": "`./sendmail`, exit codes classified"
         },
         "jmap": {
           "mark": "✅",
           "text": "RFC 8620/8621"
         },
         "httpProviders": {
-          "text": "8"
+          "text": "18"
         },
         "failover": {
           "mark": "✅",
-          "text": "RR, weighted, priority; no health yet",
+          "text": "RR, weighted, priority, circuit breaker",
           "note": "A failure after which the provider may have taken the message is marked `deliveryUnknown`: `./retry` does not retry it and `./pool` does not fail over with it."
         },
         "smtpPool": {
           "mark": "✅",
-          "text": "on by default, 5"
+          "text": "on by default, 5, 100 messages each"
         },
         "retry": {
           "mark": "✅",
@@ -325,13 +327,12 @@
           "note": "A failure after which the provider may have taken the message is marked `deliveryUnknown`: `./retry` does not retry it and `./pool` does not fail over with it."
         },
         "rateLimit": {
-          "mark": "⚠️",
-          "text": "`sendMany` concurrency; token bucket planned"
+          "mark": "✅",
+          "text": "token bucket per key, FIFO"
         },
         "circuitBreaker": {
-          "mark": "🔜",
-          "text": "one probe in half-open",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "✅",
+          "text": "one probe in half-open"
         },
         "timeout": {
           "mark": "✅",
@@ -343,62 +344,62 @@
           "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
         },
         "attachments": {
-          "mark": "⚠️",
-          "text": "bytes, Promise, Blob, chunk factory"
+          "mark": "✅",
+          "text": "path, URL, data URI, stream, bytes, Blob",
+          "note": "Nothing is read implicitly: `fromPath` and `fromUrl` are called by the application, `fromUrl` checks every redirect against `allowUrl` (no private address by default) and bounds time and bytes."
         },
         "streaming": {
           "mark": "⚠️",
-          "text": "SMTP; HTTP providers buffer"
+          "text": "SMTP, sendmail; HTTP providers buffer"
         },
         "inline": {
           "mark": "✅",
           "text": "multipart/related"
         },
         "rawMime": {
-          "mark": "⚠️",
-          "text": "SMTP/JMAP only"
+          "mark": "✅",
+          "text": "SMTP, sendmail, JMAP, SES, Mailgun, SparkPost, Cloudflare"
         },
         "ical": {
           "mark": "✅",
           "text": "every METHOD"
         },
         "unicode": {
-          "mark": "⚠️",
-          "text": "SMTPUTF8, no automatic punycode"
+          "mark": "✅",
+          "text": "punycode + SMTPUTF8"
         },
         "listUnsubscribe": {
-          "mark": "⚠️",
-          "text": "manual header; one-click planned"
+          "mark": "✅",
+          "text": "RFC 8058 one-click, DKIM-signed"
         },
         "templates": {
-          "mark": "❌",
-          "text": "none, by design"
+          "mark": "⚠️",
+          "text": "`Renderer` interface, no engine by design"
         },
         "reactEmail": {
-          "mark": "🔜",
-          "text": "optional adapter",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "✅",
+          "text": "`render` passed in"
         },
         "batch": {
           "mark": "✅",
-          "text": "native: Resend, Mailtrap, JMAP; concurrency elsewhere"
+          "text": "native: Resend, Postmark, Mailjet, Mailtrap, JMAP; concurrency elsewhere"
         },
         "scheduled": {
-          "mark": "🔜",
-          "text": "a delay in the queue",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "⚠️",
+          "text": "native in 8 providers; queue delay planned",
+          "note": "A transport that cannot schedule refuses the message before sending it, rather than sending it at once."
         },
         "tags": {
-          "mark": "⚠️",
-          "text": "tags in 7 providers"
+          "mark": "✅",
+          "text": "metadata in 17 providers, tags in 13"
         },
         "tracking": {
-          "mark": "⚠️",
-          "text": "config only"
+          "mark": "✅",
+          "text": "per message in 10 providers"
         },
         "idempotency": {
-          "mark": "⚠️",
-          "text": "Resend, Lettermint, Maileroo; outbox key planned"
+          "mark": "✅",
+          "text": "decorator with reserved keys + 5 providers"
         },
         "dkim": {
           "mark": "✅",
@@ -415,12 +416,13 @@
           "mark": "✅"
         },
         "proxy": {
-          "mark": "⚠️",
-          "text": "HTTP through an injected `fetch`; SMTP no"
+          "mark": "✅",
+          "text": "SMTP: HTTP CONNECT or any `connect`; HTTP: `fetch`"
         },
         "verify": {
-          "mark": "⚠️",
-          "text": "SMTP/JMAP only"
+          "mark": "✅",
+          "text": "SMTP, sendmail, JMAP, 13 HTTP providers",
+          "note": "The other five have no request that checks a sending key without sending a message."
         },
         "smtpAuth": {
           "text": "PLAIN, LOGIN, XOAUTH2, OAUTHBEARER"
@@ -430,9 +432,9 @@
           "text": "`requireTls`, SNI, CA, cert, `minVersion`"
         },
         "webhooks": {
-          "mark": "🔜",
-          "text": "SES (SNS) first, signature required",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "✅",
+          "text": "15 providers, verified before parsing",
+          "note": "A signature where the provider signs (SNS, Svix, ECDSA, HMAC), its Basic credentials or token where it does not; a window of time and a replay store."
         },
         "inbound": {
           "mark": "❌",
@@ -466,8 +468,8 @@
           "text": "decorator: spans + metrics"
         },
         "hooks": {
-          "mark": "⚠️",
-          "text": "decorators, `onRetry`, a pino-like logger"
+          "mark": "✅",
+          "text": "`./hooks`, decorators, a pino-like logger"
         },
         "mock": {
           "mark": "✅",
@@ -498,7 +500,7 @@
           "text": "2026-10 (this release)"
         },
         "tests": {
-          "text": "126 / ~1440"
+          "text": "167 / ~2340"
         },
         "maintainer": {
           "text": "1 author, Alexis Technologies"

@@ -1,21 +1,28 @@
 # @alexify/mailer
 
-> Zero-dependency email for Node.js, maintained by Alexis Technologies. Its own SMTP client, MIME
-> builder, DKIM signing and HTTP providers (starting with Amazon SES v2), with a reliability layer
-> on top that none of the common Node.js email libraries has: a persistent queue and outbox, an
-> audit log, one model of delivery events, suppression and idempotency.
+> Zero-dependency email for Node.js, Bun and Deno, maintained by Alexis Technologies. Its own SMTP
+> client, sendmail, MIME builder, DKIM signing, eighteen HTTP providers and JMAP, with a
+> reliability layer on top that none of the common Node.js email libraries has: one model of
+> delivery events from verified webhooks and idempotency today, a persistent queue and outbox, an
+> audit log and suppression next.
 
 Key facts:
-- Status: 1.0 is the transport layer, ported from upyo 0.7.0 (MIT); the reliability layer
-  (queue, audit log, delivery events) is being designed and is not released yet
+- Status: 1.0 is the transport layer, ported from upyo 0.7.0 (MIT); 1.1 ports what nodemailer,
+  unemail and sently did better and adds delivery events with verified webhooks; the queue and
+  the audit log are being designed and are not released yet
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
-- Node.js >= 22 only; CommonJS with ESM named-import interop; hand-written d.ts per entry
+- Node.js >= 22, tested on Bun and Deno too; CommonJS with ESM named-import interop;
+  hand-written d.ts per entry
 - Zero runtime dependencies: the transports are built on `node:*` modules and `fetch`; the
-  OpenTelemetry providers, the logger and the drivers of a queue or a database are passed in
+  OpenTelemetry providers, the logger, React Email's `render` and the drivers of a queue or a
+  database are passed in
 - Root entry `@alexify/mailer`: `createMessage`, the `Transport` contract, receipts,
-  attachments, calendar parts, Message-ID helpers
-- Subpaths: `/mime` (MIME, DKIM), `/smtp`, `/jmap`, `/ses`, `/resend`, `/sendgrid`, `/mailgun`,
-  `/mailtrap`, `/maileroo`, `/lettermint`, `/plunk`, `/pool`, `/retry`, `/otel`, `/logger`, `/mock`
+  attachments, calendar parts, Message-ID helpers, the `DeliveryEvent` types
+- Subpaths: `/mime` (MIME, DKIM), `/attachments`, `/render`, `/webhooks`; transports `/smtp`,
+  `/sendmail`, `/jmap`, `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`,
+  `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`,
+  `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk`, `/mock`; decorators
+  `/pool`, `/retry`, `/breaker`, `/ratelimit`, `/idempotency`, `/hooks`, `/tee`, `/otel`, `/logger`
 - Guide: https://mailerat.vercel.app/guide/getting-started
 - API: https://mailerat.vercel.app/api/exports
 - Comparison with 14 alternatives (Nodemailer, emailjs, Upyo, unemail, sently, provider SDKs):

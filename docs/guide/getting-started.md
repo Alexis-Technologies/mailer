@@ -2,8 +2,9 @@
 
 ::: tip Status
 Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo)
-0.7.0: messages, SMTP, eight HTTP providers, JMAP and the decorators. The reliability
-layer (queue, audit log, delivery events) is still being designed.
+0.7.0; 1.1 adds sendmail, ten more HTTP providers, verified webhooks into delivery
+events, and decorators for circuit breaking, rate limits, idempotency, hooks and
+mirroring. The queue and the audit log are still being designed.
 :::
 
 ## Installation
@@ -67,25 +68,31 @@ Each transport implements the same `Transport` contract of the root entry, so th
 can be swapped without changing the code that builds messages:
 
 - [SMTP](/transports/smtp) (`@alexify/mailer/smtp`): universal email protocol, works
-  with any SMTP server; DKIM signing, pooling, STARTTLS, DSN.
-- [Amazon SES](/transports/ses) (`@alexify/mailer/ses`): cost-effective email
-  service for AWS users.
-- [Resend](/transports/resend) (`@alexify/mailer/resend`): developer-friendly API,
-  batch sending.
-- [SendGrid](/transports/sendgrid) (`@alexify/mailer/sendgrid`): popular email API
-  with a deliverability focus.
-- [Mailgun](/transports/mailgun) (`@alexify/mailer/mailgun`): HTTP API with US and
-  EU regions.
-- [Mailtrap](/transports/mailtrap) (`@alexify/mailer/mailtrap`): Email API and Email
-  Sandbox for production delivery and test inbox capture.
-- [Maileroo](/transports/maileroo) (`@alexify/mailer/maileroo`): JSON email API with
-  attachments, tags, custom headers and tracking.
-- [Lettermint](/transports/lettermint) (`@alexify/mailer/lettermint`): transactional
-  email API with routes, metadata, idempotency and batch sending.
-- [Plunk](/transports/plunk) (`@alexify/mailer/plunk`): cloud or self-hosted
-  transactional email.
+  with any SMTP server; DKIM signing, pooling, STARTTLS, DSN, an HTTP CONNECT proxy.
+- [Sendmail](/transports/sendmail) (`@alexify/mailer/sendmail`): the sendmail command
+  of the system (Postfix, Exim, msmtp).
 - [JMAP](/transports/jmap) (`@alexify/mailer/jmap`): RFC 8620/8621 mail servers
   such as Stalwart or Fastmail.
+- HTTP providers, one subpath each:
+  [Amazon SES](/transports/ses) (`ses`, SES v2 with SigV4),
+  [Resend](/transports/resend) (`resend`),
+  [SendGrid](/transports/sendgrid) (`sendgrid`),
+  [Mailgun](/transports/mailgun) (`mailgun`),
+  [Postmark](/transports/postmark) (`postmark`),
+  [Brevo](/transports/brevo) (`brevo`),
+  [Mailjet](/transports/mailjet) (`mailjet`),
+  [MailerSend](/transports/mailersend) (`mailersend`),
+  [SparkPost](/transports/sparkpost) (`sparkpost`),
+  [Mailtrap](/transports/mailtrap) (`mailtrap`),
+  [Maileroo](/transports/maileroo) (`maileroo`),
+  [Lettermint](/transports/lettermint) (`lettermint`),
+  [ZeptoMail](/transports/zeptomail) (`zeptomail`),
+  [SMTP2GO](/transports/smtp2go) (`smtp2go`),
+  [Azure Communication Services](/transports/azure) (`azure`),
+  [Scaleway](/transports/scaleway) (`scaleway`),
+  [Cloudflare](/transports/cloudflare) (`cloudflare`) and
+  [Plunk](/transports/plunk) (`plunk`). Each page lists what the provider takes of a
+  message: tags, metadata, tracking, a schedule, raw MIME.
 - [Mock](/transports/mock) (`@alexify/mailer/mock`): captures emails without
   sending, for tests.
 
@@ -95,10 +102,24 @@ And the decorators, which wrap any transport:
   a strategy, with failover.
 - [Retry](/transports/retry) (`@alexify/mailer/retry`): retries with backoff, jitter
   and `Retry-After`.
+- [Circuit breaker](/transports/breaker) (`@alexify/mailer/breaker`): stops sending
+  to a failing provider, then lets one probe through.
+- [Rate limit](/transports/ratelimit) (`@alexify/mailer/ratelimit`): a token bucket
+  per key, waiting or refusing.
+- [Idempotency](/transports/idempotency) (`@alexify/mailer/idempotency`): a key
+  reserved before each send, so a repeat is answered, not sent.
+- [Hooks](/transports/hooks) (`@alexify/mailer/hooks`): before and after each send,
+  on each retry and error.
+- [Tee](/transports/tee) (`@alexify/mailer/tee`): mirrors each message to other
+  transports, without waiting for them.
 - [OpenTelemetry](/transports/otel) (`@alexify/mailer/otel`): spans and metrics,
   with your providers.
 - [Logger](/transports/logger) (`@alexify/mailer/logger`): the delivery lifecycle,
   logged through your pino-like logger.
+
+What happens after a send comes back through the provider's webhooks:
+[`@alexify/mailer/webhooks`](/guide/webhooks) verifies them and reads their events
+into one model of delivery events.
 
 If none of these fit your needs, you can also
 [create a custom transport](/transports/custom).
@@ -162,8 +183,8 @@ const transport = new ResendTransport({
 });
 ```
 
-The JMAP transport streams its raw uploads, so its `fetch` must take a body
-stream with `duplex: 'half'`, as undici's does.
+The JMAP transport streams a raw message whose size it does not know, so its
+`fetch` must take a body stream with `duplex: 'half'`, as undici's does.
 
 Every transport also takes a pino-like `logger` for what happens inside it and
 its receipts do not tell: the retries of an HTTP request at `debug` (with the
@@ -178,8 +199,8 @@ and the message ID of a receipt the provider gave none for. See
 [identifiers of your own](/messages/compose#identifiers-of-your-own).
 
 From here, see [composing messages](/messages/compose) for HTML content, multiple
-recipients and threading, [attachments](/messages/attachments), and
-[calendar invitations](/messages/calendar).
+recipients, threading and List-Unsubscribe, [attachments](/messages/attachments),
+[rendering templates](/messages/render) and [calendar invitations](/messages/calendar).
 
 See [Why @alexify/mailer?](/guide/why) for what the library is built to do, and the
 [API](/api/exports) for every entry point.

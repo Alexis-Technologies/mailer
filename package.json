@@ -1,7 +1,7 @@
 {
   "name": "@alexify/mailer",
   "version": "1.0.0",
-  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM, Amazon SES and seven more HTTP providers, JMAP, failover, retries and OpenTelemetry; a reliability layer (persistent queue, audit log, delivery events) is next",
+  "description": "Zero-dependency email for Node.js, Bun and Deno: its own SMTP client, sendmail, MIME builder and DKIM, eighteen HTTP providers and JMAP, verified webhooks into one model of delivery events, and decorators for failover, retries, circuit breaking, rate limits, idempotency and OpenTelemetry; a persistent queue and audit log are next",
   "license": "MIT",
   "type": "commonjs",
   "author": "Alex Dolid <dolid.sasha@gmail.com>",
@@ -227,7 +227,13 @@
     "suppression",
     "bounce",
     "deliverability",
-    "zero-dependency"
+    "zero-dependency",
+    "sendmail",
+    "circuit-breaker",
+    "rate-limit",
+    "react-email",
+    "bun",
+    "deno"
   ],
   "devDependencies": {
     "@opentelemetry/api": "^1.9.1",

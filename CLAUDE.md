@@ -10,18 +10,24 @@ Nodemailer, emailjs or Upyo, made of two parts:
 1. **The transport,** ported from upyo 0.7.0 (see "Code ported from upyo"): the message model,
    its own SMTP client, MIME builder and DKIM signing, Amazon SES v2 and seven more HTTP providers
    on `fetch`, JMAP, and the pool, retry, mock, OpenTelemetry and logger decorators, one subpath
-   each.
+   each. 1.1 adds what nodemailer, unemail and sently did better (see "Code ported from
+   nodemailer, unemail and sently"): sendmail, an injected `connect` and an HTTP CONNECT proxy for
+   SMTP, ten more HTTP providers, attachments from paths and URLs, List-* fields with one-click,
+   templates with React Email passed in, and the circuit breaker, rate limit, hooks and tee
+   decorators.
 2. **A reliability layer on top of it,** which none of the fourteen libraries in
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
-   of delivery events, suppression, idempotency and failover between providers.
+   of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
+   of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
+   idempotency decorator whose store interface the outbox is to implement (`./idempotency`).
 
 It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
 Node compatibility (see "Platform"; no browser entry).
 
-**Status: 1.0.0 is the ported transport, the reliability layer is being designed.** The root
-entry exports the message model and the transport contract of upyo, each transport and decorator
-is a subpath, and their API is under semver from 1.0.0. The reliability layer (queue, audit log, delivery events) has no API yet; its direction
-is in "Roadmap" below.
+**Status: 1.1 is the transport and the first parts of the reliability layer.** The root entry
+exports the message model and the transport contract of upyo, with the delivery events of 1.1;
+each transport, decorator and helper is a subpath, and their API is under semver from 1.0.0. The
+queue, the audit log and suppression have no API yet; their direction is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -637,10 +643,13 @@ src/
   index.js          public barrel (explicit named exports)
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
-  internal/         private modules shared by subpaths, not in the exports map (redact.js,
-                    redact-addresses.js, unsent.js, delivery-unknown.js, http.js,
-                    config.js, loopback.js, body.js, sleep.js, log.js, base64.js,
-                    headers.js, provider.js, batch.js, validate-ssl.js)
+  internal/         private modules shared by subpaths, not in the exports map: the request
+                    layer (http.js, api.js for the providers of 1.1, body.js, unsent.js,
+                    delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
+                    receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
+                    schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
+                    the decorators of 1.1 (gate.js, callback.js, options.js), and redact.js,
+                    redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock
@@ -705,9 +714,10 @@ model of states and events. `tenantId` is in the context from the start.
 **Phase 1, reliable sending (P0).**
 
 - **The transport of its own** (done, ported from upyo 0.7.0; its known bugs are on the list of
-  "Code ported from upyo"): the MIME builder; the SMTP client (pool, STARTTLS with `requireTls`, not RFC 8689 REQUIRETLS,
-  AUTH PLAIN/LOGIN/XOAUTH2, DSN, PIPELINING); DKIM (RSA-SHA256, Ed25519); SES v2 over `fetch` with
-  SigV4; seven more HTTP providers and JMAP.
+  "Code ported from upyo"): the MIME builder; the SMTP client (pool, STARTTLS with `requireTls`,
+  not RFC 8689 REQUIRETLS, AUTH PLAIN/LOGIN/XOAUTH2, DSN, PIPELINING); DKIM (RSA-SHA256, Ed25519);
+  SES v2 over `fetch` with SigV4; seven more HTTP providers and JMAP. 1.1 added sendmail and ten
+  providers.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
@@ -716,7 +726,8 @@ model of states and events. `tenantId` is in the context from the start.
 - **Idempotency:** a deterministic key (tenant + purpose + recipient + window) deduplicated in the
   outbox. At least once with deduplication, never a promise of exactly once. A provider without an
   idempotency key (SES) leads to `delivery_unknown` and reconciliation from events, not to a blind
-  retry.
+  retry. `./idempotency` (1.1) reserves keys in a store of `reserve`, `complete` and `release`,
+  which the outbox is to implement.
 - **Errors classified:** permanent (5xx, rejected address) are not retried; temporary ones are,
   with jitter and `Retry-After`, under an attempt limit.
 - **The correctness suite:** golden `.eml` files, DKIM checked by an independent verifier in CI,
@@ -725,19 +736,20 @@ model of states and events. `tenantId` is in the context from the start.
   wrong result).
 
 **Phase 2, a closed loop (P1).** Webhooks of the providers into the one event model, with the
-signature mandatory and replay protection, starting with SES (SNS) and one HTTP provider; a
+signature mandatory and replay protection (done in 1.1: `./webhooks`, fifteen providers); a
 suppression list per tenant and stream, checked before a message is queued, with a bypass policy
 for transactional mail (password reset, MFA); failover over a pool of providers with health, a
 circuit breaker with a single probe in half-open, and no switch after an ambiguous "submitted"
-without an idempotency key (`./pool` of the port has strategies and failover, not yet health or a
-breaker); OpenTelemetry spans and metrics (time in queue, attempts, failure rate per provider,
-outbox size; `./otel` of the port covers sends); token-bucket rate limits per provider and per
-tenant (SES quotas).
+without an idempotency key (`./pool` has strategies and failover, `./breaker` of 1.1 takes a
+failing provider out of it; no health checks yet); OpenTelemetry spans and metrics (time in
+queue, attempts, failure rate per provider, outbox size; `./otel` covers sends); token-bucket rate
+limits per provider and per tenant (SES quotas; `./ratelimit` of 1.1, by any key).
 
 **Phase 3, multi-tenant (P1–P2).** Provider credentials per tenant (bring your own SES), domains
-and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058) and the split between
-transactional and bulk mail; scheduled sending as a queue delay; a `Renderer` interface with an
-optional React Email adapter (no template engine of its own); more providers.
+and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058, done in 1.1) and the split
+between transactional and bulk mail; scheduled sending as a queue delay (1.1 schedules through the
+providers that can); a `Renderer` interface with an optional React Email adapter (no template
+engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
 
 **Decisions:**
 
@@ -793,9 +805,9 @@ differs on them, as of those versions:
   trust, as Node and Deno do, so the tests that pass `ca` use `tests/fixtures/tls`.
 
 There is no `browser.js` and no `browser` field: sending from a browser would expose the
-credentials, and SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not a target for
-now; if they become one, the transport over `fetch` and the core would move behind a separate
-entry with no `node:*`, and a platform test would enforce it as in protoarray.
+credentials, and SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not
+a target for now; if they become one, the transport over `fetch` and the core would move behind a
+separate entry with no `node:*`, and a platform test would enforce it as in protoarray.
 
 ## Conventions (oxlint/oxfmt + review)
 
@@ -918,8 +930,10 @@ published to npm, and lint/format do not cover it.
 - **The guides of upyo are adapted, not generated:** `docs/messages/` (compose, attachments,
   calendar, MIME) and `docs/transports/` (one page per subpath, plus custom transports), with
   examples in CommonJS on `@alexify/mailer/<subpath>`. `/transports/logger` is new (pino-like
-  logger) and `/transports/otel` passes the providers in. One sidebar (`guide` in
-  `config.mts`) covers the guide, the messages and the transports.
+  logger) and `/transports/otel` passes the providers in. The pages of 1.1 are new:
+  `/messages/render`, `/guide/webhooks`, a page per provider and decorator, and Bun and Deno in
+  getting started. One sidebar (`guide` in `config.mts`) covers the guide, the messages, the
+  transports and the decorators.
 - When behavior changes, update README and the matching docs page together. Keep example outputs in
   the docs true to the code.
 

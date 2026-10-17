@@ -16,12 +16,14 @@ import { SmtpTransport } from '@alexify/mailer/smtp';
 
 ## `@alexify/mailer`
 
-The message model and the transport contract, ported from `@upyo/core`.
+The message model and the transport contract, ported from `@upyo/core`, and the
+model of delivery events.
 
 - **Messages:** `createMessage`, and the `Message`, `MessageConstructor`,
-  `MessageContent`, `Address`, `Attachment` and `Priority` types; `parseAddress`,
-  `formatAddress`, `isEmailAddress`, `isAttachment`, `comparePriority`. See
-  [composing messages](/messages/compose).
+  `MessageContent`, `Address`, `Attachment` and `Priority` types, with the
+  `ListFields`, `ListUrl` and `MessageTracking` of the `list` and `tracking` fields;
+  `parseAddress`, `formatAddress`, `isEmailAddress`, `isAttachment`,
+  `comparePriority`. See [composing messages](/messages/compose).
 - **Attachments:** `readAttachmentContent`, `iterateAttachmentContent`. See
   [attachments](/messages/attachments).
 - **Calendar:** `createCalendarAttachment`, `resolveCalendarContent`,
@@ -36,6 +38,9 @@ The message model and the transport contract, ported from `@upyo/core`.
   `parseRetryAfter`.
 - **Raw messages:** the `RawMessage` type; `createRawMessagePlan`,
   `iterateRawMessage`, `analyzeRawMessage`, `RawMessageValidationError`.
+- **Delivery events:** the `DeliveryEvent`, `DeliveryEventType` and
+  `DeliveryBounce` types, which `./webhooks` gives. See
+  [webhooks and events](/guide/webhooks).
 
 ## Subpaths
 
