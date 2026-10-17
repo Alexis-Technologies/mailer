@@ -3,6 +3,7 @@ import { createMessage, type Receipt } from '../../index.js';
 import { MockTransport } from '../../src/mock/index.js';
 import {
   PoolTransport,
+  type PoolVerification,
   PriorityStrategy,
   RoundRobinStrategy,
   SelectorStrategy,
@@ -51,3 +52,7 @@ expectError(
     continueOnSuccess: true,
   }),
 );
+
+const verified = await pool.verifyAll();
+expectType<PoolVerification[]>(verified);
+expectType<'verified' | 'failed' | 'unverifiable'>(verified[0].status);

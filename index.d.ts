@@ -1272,7 +1272,8 @@ export interface TransportOptions {
    * provider that retries its own requests (`retries`), and by the `./retry`
    * decorator.  The decorators pass it on to the transport they wrap, so one
    * callback hears the retries of every level.  An error it throws rejects
-   * the send.  The JMAP transport does not call it yet.
+   * the send.  The JMAP transport calls it for the reads it retries, such as
+   * its discovery; it never sends a submission again.
    */
   readonly onRetry?: (event: RetryEvent) => void;
 }

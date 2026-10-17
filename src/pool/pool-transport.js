@@ -137,9 +137,46 @@ class PoolTransport {
   }
 
   /**
+   * Verifies every enabled transport, all at once, and tells how each did:
+   * `verified`, `failed` with its error, or `unverifiable` for one without
+   * `verify()`.  It never throws for a transport, so that a key a provider
+   * revoked shows while the others still send.
+   *
+   * @param options Optional abort signal.
+   * @returns `{ id, index, status, error? }` for each enabled transport.
+   */
+  async verifyAll(options) {
+    options?.signal?.throwIfAborted();
+    const pending = [];
+    const results = [];
+    for (let index = 0; index < this.config.transports.length; index++) {
+      const entry = this.config.transports[index];
+      if (!entry.enabled) continue;
+      const result = { id: entry.transport.id, index, status: 'unverifiable' };
+      results.push(result);
+      if (!isVerifiableTransport(entry.transport)) continue;
+      pending.push(
+        (async () => {
+          try {
+            await entry.transport.verify(options);
+            result.status = 'verified';
+          } catch (error) {
+            result.status = 'failed';
+            result.error = error;
+          }
+        })(),
+      );
+    }
+    await Promise.all(pending);
+    options?.signal?.throwIfAborted();
+    return results;
+  }
+
+  /**
    * Verifies the enabled transports that can verify, all at once: the pool
    * can send when one of them can.  It throws an `AggregateError` of their
    * errors when none verifies, and has nothing to check when none can verify.
+   * {@link PoolTransport.verifyAll} tells how each did.
    */
   async verify(options) {
     options?.signal?.throwIfAborted();

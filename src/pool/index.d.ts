@@ -157,6 +157,20 @@ export interface ResolvedTransportEntry<TProviderId extends string = string> {
  */
 
 /**
+ * How one transport of a pool did in {@link PoolTransport.verifyAll}.
+ */
+export interface PoolVerification {
+  /** The id of the transport. */
+  readonly id: string;
+  /** Its place in the pool's `transports`. */
+  readonly index: number;
+  /** `verified`, `failed`, or `unverifiable` for one without `verify()`. */
+  readonly status: 'verified' | 'failed' | 'unverifiable';
+  /** Why it failed. */
+  readonly error?: unknown;
+}
+
+/**
  * Pool transport that combines multiple transports with various load balancing
  * and failover strategies.
  *
@@ -251,9 +265,15 @@ export declare class PoolTransport<TProviderId extends string = string>
    */
   sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
   /**
-   * Verifies the enabled transports that can verify: it resolves when one of them verifies, and throws an `AggregateError` of their errors when none does; it has nothing to check when none can verify.
+   * Verifies the enabled transports that can verify: it resolves when one of them verifies, and throws an `AggregateError` of their errors when none does; it has nothing to check when none can verify.  {@link PoolTransport.verifyAll} tells how each did.
    */
   verify(options?: TransportOptions): Promise<void>;
+  /**
+   * Verifies every enabled transport, all at once, and tells how each did,
+   * for a health check: a key a provider revoked shows while the others
+   * still send.  It throws only for the caller's abort.
+   */
+  verifyAll(options?: TransportOptions): Promise<PoolVerification[]>;
   /**
    * Sends multiple email messages using the pool strategy.
    *
