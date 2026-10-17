@@ -9,6 +9,8 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { trackingSwitchOf } = require('../internal/tracking.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 /** Azure takes a request of at most 10 MB, its attachments included. */
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
@@ -28,13 +30,7 @@ const addressesOf = (addresses) => {
 // `userEngagementTrackingDisabled` turns opens and clicks off together, and
 // can only turn off what the resource has on.
 const trackingDisabledOf = (message, config) => {
-  const tracking = message.tracking;
-  if (tracking === undefined) return config.userEngagementTrackingDisabled;
-  const { opens, clicks } = tracking;
-  if (opens !== undefined && clicks !== undefined && opens !== clicks) {
-    throw new RangeError('Azure turns open and click tracking on or off together.');
-  }
-  const wanted = opens ?? clicks;
+  const wanted = trackingSwitchOf(message.tracking, 'Azure');
   return wanted === undefined ? config.userEngagementTrackingDisabled : !wanted;
 };
 
@@ -96,7 +92,7 @@ const convertMessage = async (message, config, signal) => {
   }
   const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
   if (bytes > MAX_REQUEST_BYTES) {
-    throw new RangeError(
+    throw new RefusalError(
       `The request is ${bytes} bytes; Azure takes at most ${MAX_REQUEST_BYTES}, attachments included.`,
     );
   }

@@ -8,6 +8,7 @@ const {
   createApiClient,
   providerFailure,
 } = require('../../src/internal/api.js');
+const { RefusalError } = require('../../src/internal/refusal.js');
 const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
 const { json, stubFetch } = require('../helpers/providers/fetch.js');
 
@@ -134,10 +135,13 @@ test('API: the receipt of a failure carries what the error says', () => {
 });
 
 test('API: a refusal of the converter is a non-retryable validation failure', () => {
-  const refused = providerFailure('x', new RangeError('X takes at most 5 tags.'));
+  const refused = providerFailure('x', new RefusalError('X takes at most 5 tags.'));
   assert.strictEqual(refused.errors[0].category, 'validation');
   assert.strictEqual(refused.retryable, false);
   assert.strictEqual(refused.errorMessages[0], 'X takes at most 5 tags.');
   const other = providerFailure('x', new Error('boom'));
   assert.notStrictEqual(other.errors[0].category, 'validation');
+  // Another RangeError, such as a body over its limit, keeps its own receipt.
+  const range = providerFailure('x', new RangeError('The body is over 4 MiB.'));
+  assert.notStrictEqual(range.errors[0].category, 'validation');
 });

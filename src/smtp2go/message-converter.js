@@ -8,6 +8,7 @@
 const { formatMailbox } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // "An array of names and email addresses (up to 100)", in each field.
 const MAX_RECIPIENTS = 100;
@@ -21,14 +22,14 @@ const checkLimits = (message, config) => {
     ['bccRecipients', 'bcc'],
   ]) {
     if (message[field].length > MAX_RECIPIENTS) {
-      throw new RangeError(`SMTP2GO takes at most ${MAX_RECIPIENTS} ${name} recipients.`);
+      throw new RefusalError(`SMTP2GO takes at most ${MAX_RECIPIENTS} ${name} recipients.`);
     }
   }
   if (
     message.scheduledAt !== undefined &&
     message.scheduledAt.getTime() - config.now() > SCHEDULE_WINDOW_MS
   ) {
-    throw new RangeError('SMTP2GO schedules a message at most 3 days ahead.');
+    throw new RefusalError('SMTP2GO schedules a message at most 3 days ahead.');
   }
 };
 

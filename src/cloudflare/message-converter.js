@@ -13,6 +13,7 @@ const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { rawMessageText } = require('../internal/raw.js');
 const { RawMessageValidationError } = require('../core/raw-message.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // "The combined number of addresses across to, cc, and bcc must not exceed 50."
 const MAX_RECIPIENTS = 50;
@@ -34,10 +35,10 @@ const checkLimits = (message) => {
   const total =
     message.recipients.length + message.ccRecipients.length + message.bccRecipients.length;
   if (total > MAX_RECIPIENTS) {
-    throw new RangeError(`Cloudflare takes at most ${MAX_RECIPIENTS} recipients a message.`);
+    throw new RefusalError(`Cloudflare takes at most ${MAX_RECIPIENTS} recipients a message.`);
   }
   if (message.replyRecipients.length > 1) {
-    throw new RangeError('Cloudflare takes one reply-to address.');
+    throw new RefusalError('Cloudflare takes one reply-to address.');
   }
 };
 

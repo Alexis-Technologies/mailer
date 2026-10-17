@@ -12,6 +12,7 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { parseMessageId } = require('../core/message-id.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 const LIMITS = [
   ['recipients', 'to', 50],
@@ -44,20 +45,20 @@ const addressesOf = (addresses) => {
 const checkLimits = (message, config) => {
   for (const [field, name, limit] of LIMITS) {
     if (message[field].length > limit) {
-      throw new RangeError(`MailerSend takes at most ${limit} ${name} recipients.`);
+      throw new RefusalError(`MailerSend takes at most ${limit} ${name} recipients.`);
     }
   }
   if (message.tags.length > MAX_TAGS) {
-    throw new RangeError(`MailerSend takes at most ${MAX_TAGS} tags.`);
+    throw new RefusalError(`MailerSend takes at most ${MAX_TAGS} tags.`);
   }
   if (message.replyRecipients.length > 1) {
-    throw new RangeError('MailerSend takes one reply-to address.');
+    throw new RefusalError('MailerSend takes one reply-to address.');
   }
   if (
     message.scheduledAt !== undefined &&
     message.scheduledAt.getTime() - config.now() > SCHEDULE_WINDOW_MS
   ) {
-    throw new RangeError('MailerSend schedules a message at most 72 hours ahead.');
+    throw new RefusalError('MailerSend schedules a message at most 72 hours ahead.');
   }
 };
 

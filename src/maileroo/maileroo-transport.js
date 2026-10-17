@@ -8,6 +8,7 @@ const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
+const { refusalFailure } = require('../internal/refusal.js');
 
 /**
  * Maileroo transport implementation for sending emails via Maileroo API.
@@ -143,6 +144,8 @@ const responseToReceipt = (response) => {
 };
 
 const createMailerooFailure = (message, error) => {
+  const refusal = refusalFailure('maileroo', error);
+  if (refusal !== undefined) return refusal;
   if (error instanceof MailerooApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),

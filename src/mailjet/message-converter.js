@@ -9,6 +9,7 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // "MAX RECIPIENTS: 50", across To, Cc and Bcc of the whole request.
 const MAX_RECIPIENTS = 50;
@@ -86,15 +87,15 @@ const recipientCount = (message) => {
 const checkLimits = (message) => {
   refuseScheduledAt(message, 'mailjet');
   if (message.subject.length > MAX_SUBJECT) {
-    throw new RangeError(`Mailjet takes a subject of at most ${MAX_SUBJECT} characters.`);
+    throw new RefusalError(`Mailjet takes a subject of at most ${MAX_SUBJECT} characters.`);
   }
   if (recipientCount(message) > MAX_RECIPIENTS) {
-    throw new RangeError(`Mailjet takes at most ${MAX_RECIPIENTS} recipients a message.`);
+    throw new RefusalError(`Mailjet takes at most ${MAX_RECIPIENTS} recipients a message.`);
   }
   if (message.replyRecipients.length > 1) {
-    throw new RangeError('Mailjet takes one reply-to address.');
+    throw new RefusalError('Mailjet takes one reply-to address.');
   }
-  if (message.tags.length > 1) throw new RangeError('Mailjet takes one tag per message.');
+  if (message.tags.length > 1) throw new RefusalError('Mailjet takes one tag per message.');
 };
 
 const trackingOf = (message, config, hasHtml) => {
@@ -136,7 +137,7 @@ const convertMessage = async (message, config, signal) => {
   let hasHeaders = false;
   for (const field of headerFieldsOf(message)) {
     if (FORBIDDEN_HEADERS.has(field.name.toLowerCase())) {
-      throw new RangeError(`Mailjet sets ${field.name} itself; the message cannot give it.`);
+      throw new RefusalError(`Mailjet sets ${field.name} itself; the message cannot give it.`);
     }
     headers[field.name] = field.value;
     hasHeaders = true;

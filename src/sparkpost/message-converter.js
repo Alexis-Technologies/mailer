@@ -12,6 +12,7 @@ const { formatMailbox, toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { rawMessageText } = require('../internal/raw.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // "Maximum number of tags - 10 per recipient".
 const MAX_TAGS = 10;
@@ -100,7 +101,7 @@ const contentOf = async (message, signal) => {
  */
 const convertMessage = async (message, config, signal) => {
   if (message.tags.length > MAX_TAGS) {
-    throw new RangeError(`SparkPost takes at most ${MAX_TAGS} tags.`);
+    throw new RefusalError(`SparkPost takes at most ${MAX_TAGS} tags.`);
   }
   const transmission = {
     recipients: recipientsOf(message),

@@ -11,6 +11,7 @@ const {
   visitCustomHeaders,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 const PRIORITIES = { high: '1', normal: '3', low: '5' };
 // The name and value of a Resend tag: "ASCII letters, numbers, underscores,
@@ -31,7 +32,7 @@ const tagsOf = (message) => {
     for (const key in message.metadata) {
       const value = message.metadata[key];
       if (!TAG_TEXT.test(key) || !TAG_TEXT.test(value) || names.has(key)) {
-        throw new RangeError(
+        throw new RefusalError(
           `Resend takes metadata as tags, whose name and value are ASCII letters, digits, ` +
             `_ or -, and a name other than those of the tags: ${key}`,
         );

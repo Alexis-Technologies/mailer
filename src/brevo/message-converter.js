@@ -15,6 +15,7 @@ const { generateId } = require('../core/id.js');
 const { toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { toUuid } = require('../internal/uuid.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 const addressOf = (address) => {
   const email = toAsciiAddress(address.address);
@@ -39,7 +40,7 @@ const addressesOf = (addresses) => {
  */
 const convertMessage = async (message, config, signal) => {
   if (message.replyRecipients.length > 1) {
-    throw new RangeError('Brevo takes one reply-to address.');
+    throw new RefusalError('Brevo takes one reply-to address.');
   }
   const payload = {
     sender: addressOf(message.sender),
@@ -66,7 +67,7 @@ const convertMessage = async (message, config, signal) => {
     payload.attachment = [];
     for (const item of attachments) {
       if (item.attachment.inline) {
-        throw new RangeError('Brevo cannot send an inline attachment, for a cid: URL.');
+        throw new RefusalError('Brevo cannot send an inline attachment, for a cid: URL.');
       }
       payload.attachment.push({ name: item.attachment.filename, content: item.content });
     }

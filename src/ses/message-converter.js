@@ -12,6 +12,7 @@ const {
   visitCustomHeaders,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // The header fields SES sets itself and refuses in Headers, lower-cased.
 const SES_HEADERS = new Set([
@@ -39,7 +40,7 @@ const metadataTagsOf = (metadata, tags) => {
   for (const key in metadata) {
     const value = metadata[key];
     if (!TAG_TEXT.test(key) || !TAG_TEXT.test(value) || OWN_TAGS.has(key)) {
-      throw new RangeError(
+      throw new RefusalError(
         'SES takes metadata as tags, whose name and value are ASCII letters, digits, _ or -, ' +
           `and a name other than category and priority: ${key}`,
       );
@@ -199,13 +200,13 @@ const convertHeaders = (message) => {
       if (value === '') return;
       const encoded = encodeHeaderValue(value);
       if (name.length + encoded.length > MAX_SES_HEADER_LENGTH) {
-        throw new RangeError(`SES takes a header field of at most 996 characters: ${name}`);
+        throw new RefusalError(`SES takes a header field of at most 996 characters: ${name}`);
       }
       headers.push({ Name: name, Value: encoded });
     },
   );
   if (headers.length > MAX_SES_HEADERS) {
-    throw new RangeError(
+    throw new RefusalError(
       `SES takes at most ${MAX_SES_HEADERS} custom header fields, and the message has ${headers.length}.`,
     );
   }

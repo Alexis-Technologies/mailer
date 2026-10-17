@@ -10,6 +10,7 @@ const { formatMailbox, toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // "Maximum email size (API): 2 MB, including the email and all attachments".
 const MAX_EMAIL_BYTES = 2 * 1024 * 1024;
@@ -60,7 +61,7 @@ const convertMessage = async (message, config, signal) => {
   refuseScheduledAt(message, 'scaleway');
   for (const attachment of message.attachments) {
     if (attachment.inline) {
-      throw new RangeError(
+      throw new RefusalError(
         'Scaleway cannot send an inline attachment, which it has no Content-ID for.',
       );
     }
@@ -90,7 +91,7 @@ const convertMessage = async (message, config, signal) => {
   }
   const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
   if (bytes > MAX_EMAIL_BYTES) {
-    throw new RangeError(
+    throw new RefusalError(
       `The request is ${bytes} bytes; Scaleway takes at most ${MAX_EMAIL_BYTES}, attachments included.`,
     );
   }

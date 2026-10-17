@@ -13,6 +13,7 @@ const { formatMailbox } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 const addressList = (addresses) => formatAddresses(addresses, formatMailbox).join(', ');
 
@@ -34,7 +35,7 @@ const trackingOf = (message, config) => {
  */
 const convertMessage = async (message, config, signal) => {
   refuseScheduledAt(message, 'postmark');
-  if (message.tags.length > 1) throw new RangeError('Postmark takes one tag per message.');
+  if (message.tags.length > 1) throw new RefusalError('Postmark takes one tag per message.');
   const payload = {
     From: formatMailbox(message.sender),
     To: addressList(message.recipients),

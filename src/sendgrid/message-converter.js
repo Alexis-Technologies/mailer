@@ -10,6 +10,7 @@ const {
   formatAddresses,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // `send_at` may be at most 72 hours ahead.
 const SCHEDULE_WINDOW_MS = 72 * 60 * 60 * 1000;
@@ -37,7 +38,7 @@ const convertMessage = async (message, config, signal) => {
     message.scheduledAt !== undefined &&
     message.scheduledAt.getTime() - config.now() > SCHEDULE_WINDOW_MS
   ) {
-    throw new RangeError('SendGrid schedules a message at most 72 hours ahead.');
+    throw new RefusalError('SendGrid schedules a message at most 72 hours ahead.');
   }
   const attachments = withCalendarAttachment(message);
   const personalization = {

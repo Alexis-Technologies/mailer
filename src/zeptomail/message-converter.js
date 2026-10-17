@@ -7,6 +7,7 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // At most 500 addresses in each of to, cc and bcc (TM_8001, SM_127).
 const MAX_RECIPIENTS = 500;
@@ -33,17 +34,17 @@ const checkLimits = (message) => {
     ['bccRecipients', 'bcc'],
   ]) {
     if (message[field].length > MAX_RECIPIENTS) {
-      throw new RangeError(`ZeptoMail takes at most ${MAX_RECIPIENTS} ${name} recipients.`);
+      throw new RefusalError(`ZeptoMail takes at most ${MAX_RECIPIENTS} ${name} recipients.`);
     }
   }
   if (message.attachments.length > MAX_ATTACHMENTS) {
-    throw new RangeError(`ZeptoMail takes at most ${MAX_ATTACHMENTS} attachments.`);
+    throw new RefusalError(`ZeptoMail takes at most ${MAX_ATTACHMENTS} attachments.`);
   }
   if (message.subject.length > MAX_SUBJECT) {
-    throw new RangeError(`ZeptoMail takes a subject of at most ${MAX_SUBJECT} characters.`);
+    throw new RefusalError(`ZeptoMail takes a subject of at most ${MAX_SUBJECT} characters.`);
   }
   if (message.tags.length > 1) {
-    throw new RangeError('ZeptoMail takes one tag per message, as its client_reference.');
+    throw new RefusalError('ZeptoMail takes one tag per message, as its client_reference.');
   }
 };
 

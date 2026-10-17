@@ -105,7 +105,6 @@ const providers = {
       retries: 0,
     }),
   mailtrap: () => new MailtrapTransport({ apiToken: 'token', retries: 0 }),
-  maileroo: () => new MailerooTransport({ apiKey: 'key', retries: 0 }),
   lettermint: () => new LettermintTransport({ apiToken: 'token', retries: 0 }),
   plunk: () => new PlunkTransport({ apiKey: 'key', retries: 0 }),
 };
@@ -319,6 +318,52 @@ test('Fields: SES sends metadata as tags, over the default ones, and refuses wha
     assert.strictEqual(refused.errors[0].category, 'validation');
   }
   assert.strictEqual(bodies.length, 1);
+});
+
+test('Fields: Maileroo sends scheduled_at, one tracking switch and metadata as tags', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ success: true, data: { reference_id: `ref${bodies.length}` } });
+  });
+  const transport = new MailerooTransport({
+    apiKey: 'key',
+    retries: 0,
+    tracking: true,
+    tags: { app: 'shop', tenant: 'default' },
+  });
+  const sent = await transport.send(
+    createMessage({
+      ...base,
+      tags: ['welcome'],
+      scheduledAt: tomorrow,
+      tracking: { clicks: false },
+      metadata: { orderId: '42', tenant: 'acme' },
+    }),
+  );
+  assert.strictEqual(sent.successful, true);
+  assert.strictEqual(bodies[0].scheduled_at, '2026-10-18T09:00:00.000Z');
+  assert.strictEqual(bodies[0].tracking, false);
+  assert.deepStrictEqual(bodies[0].tags, {
+    app: 'shop',
+    tenant: 'acme',
+    orderId: '42',
+    tag1: 'welcome',
+  });
+  await transport.send(createMessage(base));
+  assert.strictEqual(bodies[1].tracking, true);
+  assert.strictEqual(bodies[1].scheduled_at, undefined);
+  const refusals = [
+    [{ tracking: { opens: true, clicks: false } }, /on or off together/],
+    [{ metadata: { tag2: 'x' } }, /Maileroo takes metadata as tags/],
+    [{ metadata: { note: 'x'.repeat(769) } }, /at most 768/],
+  ];
+  for (const [fields, error] of refusals) {
+    const refused = await transport.send(createMessage({ ...base, ...fields }));
+    assert.match(refused.errorMessages[0], error);
+    assert.strictEqual(refused.errors[0].category, 'validation');
+  }
+  assert.strictEqual(bodies.length, 2);
 });
 
 const CORE = 'urn:ietf:params:jmap:core';
