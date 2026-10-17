@@ -83,7 +83,11 @@ test('Gate: what a transport reading ahead was handed is abandoned on a break', 
   // A transport that answers fewer messages than it read abandons the rest.
   const short = {
     async *sendMany(messages) {
-      for await (const message of messages) if (message === 2) return;
+      for await (const message of messages) {
+        if (message === 2) return;
+        // Never reached: the transport ends before it answers anything.
+        if (message === 0) yield sent('none');
+      }
     },
   };
   abandoned.length = 0;
