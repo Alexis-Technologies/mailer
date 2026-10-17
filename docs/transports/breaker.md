@@ -29,11 +29,13 @@ const transport = new CircuitBreakerTransport(new SesTransport(sesConfig), {
   `breaker.open`) whose `retryAfterMilliseconds` is the time left.
 - **half-open:** after `resetTimeoutMs`. One send goes through as a probe; the
   others are answered as while open until it ends. Its success closes the
-  circuit, its failure opens it again. A probe the caller aborts decides
-  nothing.
+  circuit, its failure opens it again, and so does a probe that has not
+  answered within `probeTimeoutMs`. A probe the caller aborts, or that a batch
+  is left with when its caller stops reading, decides nothing.
 
-A result counts only in the state it was sent in: a late one of a send made
-before the circuit opened changes nothing. The state is that of the instance;
+A result counts only in the period of the circuit it was sent in: a late one of
+a send made before the circuit opened, or before it closed again, changes
+nothing. A batch whose `sendMany()` throws is one failure, not one per message. The state is that of the instance;
 `breaker.state` reads it.
 
 ## With a pool and retries
@@ -60,6 +62,7 @@ const pool = new PoolTransport({
 | --- | --- | --- |
 | `failureThreshold` | `5` | The failures in a row that open the circuit. |
 | `resetTimeoutMs` | `30000` | How long it stays open before a probe. |
+| `probeTimeoutMs` | `resetTimeoutMs` | How long a probe may take before it counts as a failure. |
 | `isFailure` | the categories above | Whether a receipt counts as a failure. |
 | `onStateChange` | | Hears each change of state; one that throws becomes a process warning (`MAILER_BREAKER_LISTENER_FAILED`). |
 | `now` | `Date.now` | The clock. |

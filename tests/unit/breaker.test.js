@@ -283,3 +283,85 @@ test('Breaker: a probe a batch left before its answer frees its place', async ()
   assert.strictEqual(receipt.successful, true);
   assert.strictEqual(breaker.state, 'closed');
 });
+
+test('Breaker: a probe that does not answer in time fails, and a new one goes later', async () => {
+  // Before: a probe that hung held the circuit half-open, refusing every send.
+  const time = clock();
+  let hang = true;
+  const inner = fakeTransport((_message, index) => {
+    if (index === 0) return failed('network');
+    return hang ? new Promise(() => {}) : sent(`m${index}`);
+  });
+  const breaker = new CircuitBreakerTransport(inner, {
+    failureThreshold: 1,
+    resetTimeoutMs: 100,
+    probeTimeoutMs: 50,
+    now: time.now,
+  });
+  await breaker.send(message());
+  time.advance(100);
+  breaker.send(message()); // the probe, which hangs
+  time.advance(49);
+  assert.strictEqual((await breaker.send(message())).errors[0].code, 'breaker.open');
+  time.advance(1);
+  const reopened = await breaker.send(message());
+  assert.strictEqual(reopened.errors[0].code, 'breaker.open');
+  assert.strictEqual(reopened.errors[0].retryAfterMilliseconds, 100);
+  hang = false;
+  time.advance(100);
+  assert.strictEqual((await breaker.send(message())).successful, true);
+  assert.strictEqual(breaker.state, 'closed');
+});
+
+test('Breaker: a late result counts only in the period of the circuit it was sent in', async () => {
+  // Before: a failure of a send made before the circuit opened and closed
+  // again counted in the new closed period.
+  const time = clock();
+  let failLate;
+  const inner = fakeTransport((_message, index) => {
+    if (index === 0) return new Promise((resolve) => (failLate = () => resolve(failed('network'))));
+    return index === 1 ? failed('network') : sent(`m${index}`);
+  });
+  const breaker = new CircuitBreakerTransport(inner, {
+    failureThreshold: 1,
+    resetTimeoutMs: 10,
+    now: time.now,
+  });
+  const late = breaker.send(message('slow'));
+  await breaker.send(message('fails'));
+  assert.strictEqual(breaker.state, 'open');
+  time.advance(10);
+  await breaker.send(message('probe'));
+  assert.strictEqual(breaker.state, 'closed');
+  failLate();
+  await late;
+  assert.strictEqual(breaker.state, 'closed');
+});
+
+test('Breaker: a batch that throws is one failure, and an isFailure that throws a warning', async (t) => {
+  // Before: each message the batch held counted, and a throwing isFailure
+  // turned the send into a rejection.
+  const boom = new Error('connection lost');
+  const inner = fakeTransport(() => ({ throw: boom }), { readAhead: 3 });
+  const breaker = new CircuitBreakerTransport(inner, { failureThreshold: 2 });
+  await assert.rejects(
+    collect(breaker.sendMany([message(), message(), message(), message()])),
+    /connection lost/,
+  );
+  assert.strictEqual(breaker.state, 'closed');
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push(options.code));
+  const judged = new CircuitBreakerTransport(
+    fakeTransport(() => failed('network')),
+    {
+      failureThreshold: 1,
+      isFailure: () => {
+        throw new Error('cannot judge');
+      },
+    },
+  );
+  const receipt = await judged.send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(judged.state, 'open');
+  assert.deepStrictEqual(warnings, ['MAILER_BREAKER_LISTENER_FAILED']);
+});

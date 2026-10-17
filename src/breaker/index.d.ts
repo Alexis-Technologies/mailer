@@ -35,11 +35,19 @@ export interface CircuitBreakerConfig {
    */
   readonly resetTimeoutMs?: number;
   /**
+   * How long a probe may take before it counts as a failure, the circuit
+   * opening again, in milliseconds.
+   * @default resetTimeoutMs
+   */
+  readonly probeTimeoutMs?: number;
+  /**
    * Whether a receipt counts as a failure of the provider.  By default a
    * failed receipt counts when one of its errors is of the category
    * `network`, `timeout`, `server-error` or `service-unavailable`; a refused
    * message, a rate limit or a caller's abort says nothing of its health.
-   * A thrown error, other than the caller's abort, always counts.
+   * A thrown error, other than the caller's abort, always counts, once for
+   * a batch.  One that throws is a process warning, and the receipt is
+   * judged as by default.
    */
   readonly isFailure?: (receipt: Receipt) => boolean;
   /**
@@ -57,6 +65,7 @@ export interface CircuitBreakerConfig {
 export interface ResolvedCircuitBreakerConfig {
   readonly failureThreshold: number;
   readonly resetTimeoutMs: number;
+  readonly probeTimeoutMs: number;
   readonly isFailure?: (receipt: Receipt) => boolean;
   readonly onStateChange?: (state: CircuitState, previous: CircuitState) => void;
   readonly now: () => number;

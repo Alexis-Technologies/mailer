@@ -8,7 +8,9 @@
 // server error, unavailable), not a refused message or a caller's abort; and
 // an open circuit answers with a retryable `service-unavailable` receipt
 // carrying the time left, which `./pool` fails over with and `./retry` waits
-// for.
+// for; a probe that does not answer within `probeTimeoutMs` is a failure, a
+// result counts only in the period of the circuit it was sent in, and a
+// batch that throws counts once.
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
@@ -45,6 +47,10 @@ class CircuitBreakerTransport {
   #failures = 0;
   #openedAt = 0;
   #probing = false;
+  #probeAt = 0;
+  // Grows at each change of state: a result counts only in the period it
+  // was sent in, not in one the circuit came to since.
+  #period = 0;
 
   /**
    * @param transport The transport to guard.
@@ -65,6 +71,15 @@ class CircuitBreakerTransport {
   get state() {
     if (this.#state === 'open' && this.#remaining() <= 0) return 'half-open';
     return this.#state;
+  }
+
+  #now() {
+    try {
+      return this.config.now();
+    } catch (error) {
+      warnThrown('The now of CircuitBreakerTransport', error, 'MAILER_BREAKER_LISTENER_FAILED');
+      return Date.now();
+    }
   }
 
   /**
@@ -99,20 +114,27 @@ class CircuitBreakerTransport {
    * once, and one while it is half-open goes as its probe.
    */
   sendMany(messages, options) {
+    // One error of the wrapped sendMany fails every message it held: it is one
+    // failure of the provider, not as many as the messages.
+    let counted;
     return gatedSendMany(this.wrappedTransport, messages, options, {
       admit: (message) => {
         const entry = this.#enter();
-        return entry.refusal === undefined ? { message, probe: entry.probe } : entry.refusal;
+        return entry.refusal === undefined ? { message, ...entry } : entry.refusal;
       },
       settle: (receipt, admitted) => {
-        this.#record(this.#counts(receipt), admitted.probe);
+        this.#record(this.#counts(receipt), admitted);
         return receipt;
       },
-      fail: (error, admitted) => this.#thrown(error, options?.signal, admitted.probe),
+      fail: (error, admitted) => {
+        if (error === counted && !admitted.probe) return;
+        counted = error;
+        this.#thrown(error, options?.signal, admitted);
+      },
       // Nothing is learned of a message left unanswered, but a probe frees
       // its place, or the circuit would refuse every send for good.
       abandon: (admitted) => {
-        if (admitted.probe) this.#probing = false;
+        if (admitted.probe && admitted.period === this.#period) this.#probing = false;
       },
     });
   }
@@ -147,19 +169,27 @@ class CircuitBreakerTransport {
     try {
       receipt = await send(options);
     } catch (error) {
-      this.#thrown(error, options?.signal, entry.probe);
+      this.#thrown(error, options?.signal, entry);
       throw error;
     }
-    this.#record(this.#counts(receipt), entry.probe);
+    this.#record(this.#counts(receipt), entry);
     return receipt;
   }
 
   #remaining() {
-    return this.#openedAt + this.config.resetTimeoutMs - this.config.now();
+    return this.#openedAt + this.config.resetTimeoutMs - this.#now();
   }
 
-  // Whether a send may go now, and whether it is the probe.
+  // Whether a send may go now, whether it is the probe, and the period of the
+  // circuit it goes in.
   #enter() {
+    if (this.#state === 'half-open' && this.#probing) {
+      // A probe that has not answered in time failed: the circuit opens again.
+      if (this.#now() - this.#probeAt >= this.config.probeTimeoutMs) {
+        this.#probing = false;
+        this.#open();
+      }
+    }
     if (this.#state === 'open') {
       const remaining = this.#remaining();
       if (remaining > 0) return { refusal: this.#refusal(remaining) };
@@ -168,9 +198,10 @@ class CircuitBreakerTransport {
     if (this.#state === 'half-open') {
       if (this.#probing) return { refusal: this.#refusal(undefined) };
       this.#probing = true;
-      return { probe: true };
+      this.#probeAt = this.#now();
+      return { probe: true, period: this.#period };
     }
-    return { probe: false };
+    return { probe: false, period: this.#period };
   }
 
   #refusal(remaining) {
@@ -188,23 +219,37 @@ class CircuitBreakerTransport {
     return { receipt };
   }
 
+  // An isFailure that throws is a warning, and the receipt is judged as it
+  // would be without it, rather than lost with the send.
   #counts(receipt) {
-    return (this.config.isFailure ?? isProviderFailure)(receipt) === true;
+    if (this.config.isFailure === undefined) return isProviderFailure(receipt);
+    try {
+      return this.config.isFailure(receipt) === true;
+    } catch (error) {
+      warnThrown(
+        'The isFailure of CircuitBreakerTransport',
+        error,
+        'MAILER_BREAKER_LISTENER_FAILED',
+      );
+      return isProviderFailure(receipt);
+    }
   }
 
-  #thrown(error, signal, probe) {
+  #thrown(error, signal, entry) {
     if (isAbortOf(error, signal)) {
       // The caller gave up: nothing is learned of the provider.
-      if (probe) this.#probing = false;
+      if (entry.probe && entry.period === this.#period) this.#probing = false;
       return;
     }
-    this.#record(true, probe);
+    this.#record(true, entry);
   }
 
-  // A result counts only in the state it was sent in: a late one of a send
-  // made before the circuit opened decides nothing.
-  #record(failed, probe) {
-    if (probe) {
+  // A result counts only in the period of the circuit it was sent in: a late
+  // one of a send made before the circuit opened, or closed again, or of a
+  // probe that ran out of time, decides nothing.
+  #record(failed, entry) {
+    if (entry.period !== this.#period) return;
+    if (entry.probe) {
       this.#probing = false;
       if (failed) this.#open();
       else this.#close();
@@ -220,7 +265,7 @@ class CircuitBreakerTransport {
   }
 
   #open() {
-    this.#openedAt = this.config.now();
+    this.#openedAt = this.#now();
     this.#failures = 0;
     this.#transition('open');
   }
@@ -234,6 +279,7 @@ class CircuitBreakerTransport {
     if (this.#state === state) return;
     const previous = this.#state;
     this.#state = state;
+    this.#period++;
     try {
       this.config.onStateChange?.(state, previous);
     } catch (error) {
