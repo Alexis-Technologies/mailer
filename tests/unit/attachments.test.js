@@ -24,6 +24,9 @@ const bytesOf = (text) => new TextEncoder().encode(text);
 const textOf = async (attachment) =>
   new TextDecoder().decode(await readAttachmentContent(attachment.content));
 
+// A resolver of every name to a public address, so that no test asks DNS.
+const publicLookup = async () => [{ address: '93.184.215.14', family: 4 }];
+
 const tempDir = (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mailer-attachments-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -241,6 +244,7 @@ test('Attachments: fromUrl refuses local addresses by default, and takes an inje
   await assert.rejects(fromUrl('not a url'), /Invalid attachment URL/);
   const calls = [];
   const attachment = await fromUrl('https://cdn.example.com/a.css', {
+    lookup: publicLookup,
     fetch: async (url, init) => {
       calls.push({ url: url.href, redirect: init.redirect });
       return new Response('body{}', { headers: { 'content-type': 'text/css' } });
@@ -250,6 +254,7 @@ test('Attachments: fromUrl refuses local addresses by default, and takes an inje
   assert.strictEqual(attachment.contentType, 'text/css');
   // A segment that does not decode keeps its percent-encoding.
   const raw = await fromUrl('https://cdn.example.com/a%E0.txt', {
+    lookup: publicLookup,
     fetch: async () => new Response('x'),
   });
   assert.strictEqual(raw.filename, 'a%E0.txt');
@@ -322,6 +327,7 @@ test('Attachments: fromUrl refuses a redirect from https to http, and no other c
   calls.length = 0;
   await assert.rejects(
     fromUrl('https://cdn.example.com/a.txt', {
+      lookup: publicLookup,
       fetch: redirecting('http://cdn.example.com/b.txt'),
       headers: { authorization: 'Bearer secret' },
     }),
@@ -346,7 +352,7 @@ test('Attachments: fromUrl refuses a redirect from https to http, and no other c
     ['http://cdn.example.com/a.txt', 'http://cdn.example.com/b.txt'],
   ]) {
     calls.length = 0;
-    const attachment = await fromUrl(from, { fetch: redirecting(to) });
+    const attachment = await fromUrl(from, { lookup: publicLookup, fetch: redirecting(to) });
     assert.strictEqual(await textOf(attachment), 'body', `${from} to ${to}`);
     assert.strictEqual(calls.length, 2, `${from} to ${to}`);
   }
@@ -574,4 +580,81 @@ test('Attachments: a composed message carries them, read back by postal-mime', a
   assert.deepStrictEqual(found['attachment.csv'], ['text/csv', 'a,b', false]);
   assert.deepStrictEqual(found['s.txt'], ['text/plain', 'streamed', false]);
   assert.strictEqual(found['image-1.png'][2], true);
+});
+
+test('Attachments: fromPath holds a file to maxBytes, when made and when read', async (t) => {
+  // Before: no bound, and the whole file was buffered for a provider.
+  const file = path.join(tempDir(t), 'big.bin');
+  fs.writeFileSync(file, Buffer.alloc(16));
+  await assert.rejects(fromPath(file, { maxBytes: 8 }), /holds more than 8 bytes/);
+  await assert.rejects(fromPath(file, { maxBytes: 0 }), /maxBytes must be/);
+  const attachment = await fromPath(file, { maxBytes: 16 });
+  fs.appendFileSync(file, Buffer.alloc(1));
+  await assert.rejects(textOf(attachment), /holds more than 16 bytes/);
+});
+
+test('Attachments: fromPath reads the file that was checked, not one put in its place', async (t) => {
+  // Before: the path was checked once and opened again at each reading, so a
+  // directory renamed and replaced by a link after the check led out of root.
+  const base = tempDir(t);
+  const root = path.join(base, 'root');
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(path.join(root, 'uploads'), { recursive: true });
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(root, 'uploads', 'a.txt'), 'mine');
+  fs.writeFileSync(path.join(outside, 'a.txt'), 'secret');
+  const attachment = await fromPath(path.join(root, 'uploads', 'a.txt'), { root });
+  assert.strictEqual(await textOf(attachment), 'mine');
+  fs.renameSync(path.join(root, 'uploads'), path.join(root, 'moved'));
+  try {
+    fs.symlinkSync(outside, path.join(root, 'uploads'), 'dir');
+  } catch (error) {
+    // Windows asks for a privilege to make a link.
+    if (error.code === 'EPERM') return;
+    throw error;
+  }
+  await assert.rejects(textOf(attachment), /no longer the file it was/);
+});
+
+test('Attachments: fromUrl refuses a name that resolves to a private address', async () => {
+  // Before: only the host as written was checked, so 127.0.0.1.nip.io or
+  // metadata.google.internal reached the address their name stands for.
+  const fetched = [];
+  const fetch = async (url) => {
+    fetched.push(url.href);
+    return new Response('x');
+  };
+  const resolving =
+    (...addresses) =>
+    async (host, options) => {
+      assert.deepStrictEqual(options, { all: true, verbatim: true });
+      return addresses;
+    };
+  for (const addresses of [
+    [{ address: '127.0.0.1', family: 4 }],
+    [{ address: '169.254.169.254', family: 4 }],
+    [{ address: '::1', family: 6 }],
+    [
+      { address: '93.184.215.14', family: 4 },
+      { address: '10.0.0.7', family: 4 },
+    ],
+    [],
+  ]) {
+    await assert.rejects(
+      fromUrl('https://127.0.0.1.nip.io/a', { fetch, lookup: resolving(...addresses) }),
+      /not allowed/,
+      JSON.stringify(addresses),
+    );
+  }
+  assert.deepStrictEqual(fetched, []);
+  await fromUrl('https://cdn.example.com/a', {
+    fetch,
+    lookup: resolving({ address: '2606:4700::1', family: 6 }),
+  });
+  // An address is not resolved; an allowUrl of the application decides alone.
+  const unused = async () => assert.fail('resolved');
+  await fromUrl('http://93.184.215.14/a', { fetch, lookup: unused });
+  await fromUrl('https://intranet.local/a', { fetch, lookup: unused, allowUrl: () => true });
+  assert.strictEqual(fetched.length, 3);
+  await assert.rejects(fromUrl('https://a.example/', { lookup: 'x' }), /lookup must be a function/);
 });

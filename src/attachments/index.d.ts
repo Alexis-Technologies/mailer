@@ -33,6 +33,12 @@ export interface FromPathOptions extends AttachmentOptions {
    * the path comes from a user.
    */
   readonly root?: string;
+  /**
+   * The longest file taken, in bytes, when it is made and each time it is
+   * read.
+   * @default 26214400
+   */
+  readonly maxBytes?: number;
 }
 
 /** Options of {@link fromUrl}. */
@@ -61,14 +67,24 @@ export interface FromUrlOptions extends AttachmentOptions {
   readonly maxRedirects?: number;
   /**
    * Whether to fetch a URL, the first and each one a redirect leads to.  By
-   * default ({@link isPublicUrl}) `localhost` and IP literals in the loopback,
-   * private, link-local and other ranges it lists are refused; a host name is
-   * not resolved, so one that resolves to a private address passes, and a
-   * sender that fetches URLs from users checks them here, or passes a `fetch`
-   * that checks the address it connects to.  A redirect from https to http is
-   * refused whatever this says.
+   * default, {@link isPublicUrl} of the host as written, then every address
+   * its name resolves to through `lookup`: `localhost` and the loopback,
+   * private, link-local and other ranges it lists are refused.  A name that
+   * answers the fetch with another address than it gave the check (DNS
+   * rebinding) passes, so a sender that fetches URLs from users passes a
+   * `fetch` that checks the address it connects to.  A redirect from https to
+   * http is refused whatever this says.
    */
   readonly allowUrl?: (url: URL) => boolean | Promise<boolean>;
+  /**
+   * Resolves a host name for the default check, as `dns.promises.lookup`
+   * with `{ all: true, verbatim: true }` does.  Not called when `allowUrl` is
+   * given.
+   */
+  readonly lookup?: (
+    hostname: string,
+    options: { readonly all: true; readonly verbatim: true },
+  ) => Promise<readonly { readonly address: string; readonly family: number }[]>;
 }
 
 /** Options of {@link fromDataUri}. */
@@ -109,6 +125,9 @@ export interface InlineDataUrlsOptions {
 
 /**
  * Makes an attachment of a file, read again each time the message is read.
+ * Each reading opens the file that was checked: one that a link or a renamed
+ * directory has put in its place since, or that has grown past `maxBytes`,
+ * fails the reading.
  *
  * @example
  * ```js

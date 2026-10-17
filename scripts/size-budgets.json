@@ -1,7 +1,7 @@
 {
   ".": 10,
   "./mime": 7.5,
-  "./attachments": 4,
+  "./attachments": 4.5,
   "./render": 3,
   "./webhooks": 13,
   "./smtp": 23,

@@ -69,18 +69,17 @@ const message = createMessage({
   you pass or the global one, and holds the bytes.  It follows at most `maxRedirects`
   (5), checks every URL with `allowUrl`, and sends `headers` to the origin of the
   first URL only.  It gives up after `timeout` (30 s) or `maxBytes` (25 MiB), and
-  refuses a redirect from https to http, whatever `allowUrl` says.  By default
-  `allowUrl` is `isPublicUrl`, which looks at the host of each URL as written.  It
-  refuses `localhost`, `*.localhost` and an IP literal in a loopback, private,
-  link-local (the cloud metadata address among them), carrier-grade NAT, multicast,
-  reserved, documentation or benchmarking range, and in the IPv6 forms that carry an
-  IPv4 address (IPv4-compatible `::/96`, NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`,
-  6to4 `2002::/16`).  A host name is not resolved, so a name that resolves to a
-  private address passes, and so does one that answers with a public address to the
-  check and a private one to the fetch (DNS rebinding).  An application that fetches
-  URLs its users give must pass an `allowUrl` of its own, or a `fetch` that checks
-  the address it connects to; the default guards against a mistake, not against
-  someone who controls a name.
+  refuses a redirect from https to http, whatever `allowUrl` says.  Without an
+  `allowUrl`, each URL is checked as `isPublicUrl` checks its host as written, and
+  then by every address its host name resolves to (through `lookup`,
+  `dns.promises.lookup` by default): `localhost`, `*.localhost` and an address in
+  a loopback, private, link-local (the cloud metadata address among them),
+  carrier-grade NAT, multicast, reserved, documentation or benchmarking range, or
+  in the IPv6 forms that carry an IPv4 address (IPv4-compatible `::/96`, NAT64
+  `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4 `2002::/16`), are refused.  A name
+  that answers the fetch with another address than it gave the check (DNS
+  rebinding) passes, so an application that fetches URLs its users give passes a
+  `fetch` that checks the address it connects to.
 - **`fromDataUri(uri, options)`** decodes a base64 or percent-encoded `data:` URI
   (RFC 2397) up to `maxBytes`, and refuses one that does not parse.
 - **`fromStream(source, options)`** reads a Node.js `Readable`, a web

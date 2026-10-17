@@ -9,6 +9,7 @@
 // whatever `allowUrl` says.  nodemailer's own client followed five redirects
 // with none of these checks, whatever the address.
 
+const dns = require('node:dns');
 const net = require('node:net');
 const { readBytes } = require('../internal/body.js');
 const { checkMaxBytes, createAttachment, mediaTypeOf } = require('./attachment.js');
@@ -52,31 +53,55 @@ const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_REDIRECTS = 5;
 
+const hostOf = (url) => {
+  let host = url.hostname.toLowerCase();
+  if (host.startsWith('[')) host = host.slice(1, -1);
+  return host.endsWith('.') ? host.slice(0, -1) : host;
+};
+
+const isPrivateAddress = (address, family) =>
+  PRIVATE.check(address, family === 6 || family === 'IPv6' ? 'ipv6' : 'ipv4');
+
 /**
- * The check of a URL when `allowUrl` is not given.  It reads the host of the
- * URL as written: no `localhost`, and no IP literal in a loopback, private,
+ * The check of the host of a URL as written, the first of those `fromUrl`
+ * makes when no `allowUrl` is given: no `localhost`, and no IP literal in a loopback, private,
  * link-local, multicast, reserved or documentation range, or in an IPv6 range
  * that carries an IPv4 address (IPv4-compatible, NAT64, 6to4).  The URL parser
  * has already written an address such as `0x7f.1` or `2130706433` as
  * `127.0.0.1`.
  *
- * A host name is not resolved, so one that resolves to such an address passes,
- * and so does one that resolves to a public address when it is checked and to
- * a private one when it is fetched (DNS rebinding).  A sender that fetches URLs
- * its users give passes an `allowUrl` of its own, or a `fetch` that checks the
- * address it connects to.
+ * It resolves no name: `fromUrl`, when no `allowUrl` is given, also checks
+ * every address a host name resolves to, but a name that answers the fetch
+ * otherwise than it answered the check (DNS rebinding) passes.  A sender that
+ * fetches URLs its users give passes a `fetch` that checks the address it
+ * connects to.
  *
  * @param url The URL to fetch.
  * @returns Whether to fetch it.
  */
 const isPublicUrl = (url) => {
-  let host = url.hostname.toLowerCase();
-  if (host.startsWith('[')) host = host.slice(1, -1);
-  if (host.endsWith('.')) host = host.slice(0, -1);
+  const host = hostOf(url);
   if (host === 'localhost' || host.endsWith('.localhost')) return false;
   const family = net.isIP(host);
-  if (family === 0) return true;
-  return !PRIVATE.check(host, family === 4 ? 'ipv4' : 'ipv6');
+  return family === 0 || !isPrivateAddress(host, family);
+};
+
+// The check `fromUrl` makes when no `allowUrl` is given: `isPublicUrl`, then
+// every address a host name resolves to, so that a name of a private address
+// (`127.0.0.1.nip.io`, `metadata.google.internal`) is refused as its address
+// is.  A name that answers the fetch otherwise than it answered here (DNS
+// rebinding) is caught only by a `fetch` that checks the address it connects
+// to.
+const resolvesPublic = async (url, lookup) => {
+  if (!isPublicUrl(url)) return false;
+  const host = hostOf(url);
+  if (net.isIP(host) !== 0) return true;
+  const addresses = await lookup(host, { all: true, verbatim: true });
+  if (!Array.isArray(addresses) || addresses.length === 0) return false;
+  for (const entry of addresses) {
+    if (isPrivateAddress(entry.address, entry.family)) return false;
+  }
+  return true;
 };
 
 const parseHttpUrl = (value) => {
@@ -157,7 +182,9 @@ const fromUrl = async (input, options = {}) => {
   if (!Number.isSafeInteger(maxRedirects) || maxRedirects < 0) {
     throw new TypeError(`maxRedirects must be a whole number: ${maxRedirects}`);
   }
-  const allowUrl = options.allowUrl ?? isPublicUrl;
+  const lookup = options.lookup ?? dns.promises.lookup;
+  if (typeof lookup !== 'function') throw new TypeError('lookup must be a function.');
+  const allowUrl = options.allowUrl ?? ((url) => resolvesPublic(url, lookup));
   const signal = signalOf(checkTimeout(options.timeout), options.signal);
   const origin = parseHttpUrl(input).origin;
   let url = parseHttpUrl(input);

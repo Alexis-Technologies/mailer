@@ -40,3 +40,8 @@ createMessage({
 expectError(fromPath(42));
 expectError(fromUrl('https://example.com', { contentType: 'pdf' }));
 expectError(fromDataUri('data:,x', { inline: 'yes' }));
+await fromUrl('https://example.com/a', {
+  lookup: async () => [{ address: '93.184.215.14', family: 4 }],
+});
+await fromPath('./a.pdf', { root: '.', maxBytes: 1024 });
+expectError(fromUrl('https://example.com/a', { lookup: 'dns' }));
