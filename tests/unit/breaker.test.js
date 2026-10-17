@@ -271,9 +271,8 @@ test('Breaker: a probe a batch left before its answer frees its place', async ()
     resetTimeoutMs: 1,
     now: time.now,
   });
-  const iterator = breaker
-    .sendMany([message('a'), message('b'), message('c')])
-    [Symbol.asyncIterator]();
+  const receipts = breaker.sendMany([message('a'), message('b'), message('c')]);
+  const iterator = receipts[Symbol.asyncIterator]();
   assert.strictEqual((await iterator.next()).value.successful, false);
   // The circuit is open; once its timeout passes, the next message read is the probe.
   time.advance(1);
