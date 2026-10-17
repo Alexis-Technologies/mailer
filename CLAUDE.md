@@ -575,6 +575,10 @@ fails on upstream's behavior):
   with `console.warn` outside production and dropped in it. `./hooks` makes the context of each
   send and passes `onRetry` in the options of that send, and a hook that throws after the send
   becomes a process warning (`MAILER_HOOK_FAILED`).
+- U13. unemail (`src/drivers/tee.ts`): every leg was awaited with no bound, so the primary's
+  result waited for the slowest mirror, and a mirror that hung held the send for as long as it
+  hung. `./tee` gives each mirror a timeout of its own and by default does not await it, bounds
+  the copies in flight, and awaits them, bounded, only with `awaitMirrors`.
 
 ## Repository layout
 

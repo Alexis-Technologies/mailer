@@ -151,6 +151,10 @@
     "./hooks": {
       "types": "./src/hooks/index.d.ts",
       "default": "./src/hooks/index.js"
+    },
+    "./tee": {
+      "types": "./src/tee/index.d.ts",
+      "default": "./src/tee/index.js"
     }
   },
   "directories": {

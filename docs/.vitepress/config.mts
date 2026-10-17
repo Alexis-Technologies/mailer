@@ -110,6 +110,7 @@ const guide = [
       { text: 'Rate limit', link: '/transports/ratelimit' },
       { text: 'Idempotency', link: '/transports/idempotency' },
       { text: 'Hooks', link: '/transports/hooks' },
+      { text: 'Tee', link: '/transports/tee' },
     ],
   },
 ];

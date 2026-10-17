@@ -1,0 +1,47 @@
+# Tee
+
+`TeeTransport` sends each message through a primary transport and mirrors it
+to others: to shadow a new provider against the one in use, or to copy real mail
+into a local catcher while developing. The primary's receipt is the one
+returned, whatever the mirrors do. It comes from the tee driver of unemail.
+
+## Basic usage
+
+```js
+const { TeeTransport } = require('@alexify/mailer/tee');
+
+const transport = new TeeTransport(ses, {
+  mirrors: [postmark],
+  onMirror: ({ mirror, receipt, error, skipped }) =>
+    metrics.record('shadow', { mirror, ok: receipt?.successful === true, error, skipped }),
+});
+```
+
+## Mirrors never hold the primary
+
+Each mirror's send has a timeout of its own (`timeout`, 10 seconds), and by
+default it is not awaited: the primary's receipt comes back as soon as the
+primary answers, and the copies go on alone, not stopped by the caller's
+signal. At most `maxPending` copies are in flight; one over that is skipped and
+reported. On a runtime that freezes after the response, such as a serverless
+function, set `awaitMirrors`: the copies are then awaited, bounded by the
+timeout, and follow the caller's signal.
+
+`onMirror` hears the outcome of every copy: its `receipt`, the `error` its send
+threw, or why it was `skipped`. Without it, a failed or skipped copy becomes a
+process warning (`MAILER_TEE_MIRROR_FAILED`).
+
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `mirrors` | (required) | The transports each message is mirrored to. |
+| `timeout` | `10000` | The time a mirror's send may take, in milliseconds. |
+| `awaitMirrors` | `false` | Waits for the copies before returning. |
+| `maxPending` | `100` | The most copies in flight while not awaited. |
+| `onMirror` | | Hears every outcome of a mirror. |
+
+`sendMany()` goes through the `sendMany()` of the primary, each message mirrored
+as it is handed to it. `sendRaw()` mirrors to the mirrors that send raw
+messages and reports the others as skipped. `verify()` checks the primary
+alone, and disposal disposes of the primary and every mirror once.
