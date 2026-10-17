@@ -366,6 +366,36 @@ test('Fields: Maileroo sends scheduled_at, one tracking switch and metadata as t
   assert.strictEqual(bodies.length, 2);
 });
 
+test('Fields: Lettermint sends the metadata and tracking of the message over its settings', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ message_id: `lm${bodies.length}`, status: 'pending' }, { status: 202 });
+  });
+  const transport = new LettermintTransport({
+    apiToken: 'token',
+    retries: 0,
+    metadata: { tenant: 'default', app: 'shop' },
+    settings: { trackOpens: true, trackClicks: true },
+  });
+  const sent = await transport.send(
+    createMessage({
+      ...base,
+      tracking: { clicks: false },
+      metadata: { tenant: 'acme', orderId: '42' },
+    }),
+  );
+  assert.strictEqual(sent.successful, true);
+  assert.deepStrictEqual(bodies[0].metadata, { tenant: 'acme', app: 'shop', orderId: '42' });
+  assert.deepStrictEqual(bodies[0].settings, { track_opens: true, track_clicks: false });
+  const plain = new LettermintTransport({ apiToken: 'token', retries: 0 });
+  await plain.send(createMessage({ ...base, tracking: { opens: false } }));
+  assert.deepStrictEqual(bodies[1].settings, { track_opens: false });
+  assert.strictEqual(bodies[1].metadata, undefined);
+  await plain.send(createMessage(base));
+  assert.strictEqual(bodies[2].settings, undefined);
+});
+
 const CORE = 'urn:ietf:params:jmap:core';
 const MAIL = 'urn:ietf:params:jmap:mail';
 const SUBMISSION = 'urn:ietf:params:jmap:submission';

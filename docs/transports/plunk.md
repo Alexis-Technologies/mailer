@@ -155,6 +155,12 @@ can start and gives the receipts in the order of the messages.
 const transport = new PlunkTransport({ apiKey: process.env.PLUNK_API_KEY, concurrency: 4 });
 ```
 
+## Scheduling, metadata and tracking
+
+Plunk takes none of the three. A message with `scheduledAt` is refused as a
+`validation` failure rather than sent at once, and its `tracking` and
+`metadata` are not sent, as over SMTP.
+
 ## Advanced features and reliability
 
 The Plunk transport includes comprehensive configuration options for timeout

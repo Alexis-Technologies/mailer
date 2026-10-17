@@ -80,11 +80,13 @@ const convertMessage = async (message, config, signal) => {
     emailData.tag = config.tag;
   }
 
-  if (config.metadata != null && Object.keys(config.metadata).length > 0) {
-    emailData.metadata = { ...config.metadata };
+  // The metadata of the configuration, that of the message over it.
+  const metadata = { ...config.metadata, ...message.metadata };
+  if (Object.keys(metadata).length > 0) {
+    emailData.metadata = metadata;
   }
 
-  const settings = convertSettings(config);
+  const settings = convertSettings(config, message.tracking);
   if (settings != null) {
     emailData.settings = settings;
   }
@@ -104,17 +106,18 @@ const convertMessage = async (message, config, signal) => {
   return emailData;
 };
 
-const convertSettings = (config) => {
-  if (config.settings == null) return undefined;
-
+// The tracking of the message over the settings of the configuration.
+const convertSettings = (config, tracking) => {
   const settings = {};
 
-  if (config.settings.trackOpens !== undefined) {
-    settings.track_opens = config.settings.trackOpens;
+  const opens = tracking?.opens ?? config.settings?.trackOpens;
+  if (opens !== undefined) {
+    settings.track_opens = opens;
   }
 
-  if (config.settings.trackClicks !== undefined) {
-    settings.track_clicks = config.settings.trackClicks;
+  const clicks = tracking?.clicks ?? config.settings?.trackClicks;
+  if (clicks !== undefined) {
+    settings.track_clicks = clicks;
   }
 
   return Object.keys(settings).length > 0 ? settings : undefined;
