@@ -147,6 +147,10 @@
     "./idempotency": {
       "types": "./src/idempotency/index.d.ts",
       "default": "./src/idempotency/index.js"
+    },
+    "./hooks": {
+      "types": "./src/hooks/index.d.ts",
+      "default": "./src/hooks/index.js"
     }
   },
   "directories": {

@@ -109,6 +109,7 @@ const guide = [
       { text: 'Circuit breaker', link: '/transports/breaker' },
       { text: 'Rate limit', link: '/transports/ratelimit' },
       { text: 'Idempotency', link: '/transports/idempotency' },
+      { text: 'Hooks', link: '/transports/hooks' },
     ],
   },
 ];

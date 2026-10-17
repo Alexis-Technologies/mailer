@@ -30,5 +30,6 @@
   "./logger": 2.5,
   "./breaker": 2,
   "./ratelimit": 2.5,
-  "./idempotency": 3
+  "./idempotency": 3,
+  "./hooks": 2
 }

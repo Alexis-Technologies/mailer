@@ -569,6 +569,12 @@ fails on upstream's behavior):
   (`reserve`, `complete`, `release`), answers a send in flight as of unknown delivery, refuses a
   key whose fingerprint differs, keeps a key whose delivery is unknown, and fails only the
   message whose store call failed.
+- S4. sently (`src/mailer.ts`): `onRetry` and `onFallback` were set on the shared transport for
+  each send and unset when it ended, so of two concurrent sends one told its retries to the
+  other's hooks, and the first to end unset the hooks of the other; a hook that threw was written
+  with `console.warn` outside production and dropped in it. `./hooks` makes the context of each
+  send and passes `onRetry` in the options of that send, and a hook that throws after the send
+  becomes a process warning (`MAILER_HOOK_FAILED`).
 
 ## Repository layout
 
