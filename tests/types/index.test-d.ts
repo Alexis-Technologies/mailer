@@ -15,6 +15,9 @@ import {
   type Message,
   type RawTransport,
   type Receipt,
+  type DeliveryBounce,
+  type DeliveryEvent,
+  type DeliveryEventType,
   type ReceiptError,
   type RetryEvent,
   type Transport,
@@ -154,3 +157,12 @@ expectType<Promise<Receipt>>(
 const ulid: IdGenerator = (kind: IdKind) => `01J${kind.length}`;
 expectType<string>(generateMessageId('example.com', { generateId: ulid }));
 expectError(generateMessageId('example.com', { generateId: () => 42 }));
+
+// The events of ./webhooks: one per recipient, the type a closed union.
+const event = {} as DeliveryEvent<'ses'>;
+expectType<'ses'>(event.provider);
+expectType<DeliveryEventType>(event.type);
+expectType<'hard' | 'soft' | 'undetermined' | undefined>(event.bounce?.kind);
+expectType<readonly string[]>(event.tags);
+expectAssignable<DeliveryBounce>({ kind: 'hard', code: '5.1.1' });
+expectError<DeliveryEventType>('sent');

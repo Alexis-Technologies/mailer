@@ -1287,6 +1287,74 @@ export interface RetryEvent {
   readonly error: unknown;
 }
 /**
+ * What a provider says happened to a message, as `./webhooks` reads it from
+ * its events: `accepted` by the provider, `delivered` to the recipient's
+ * server, `deferred` while it retries, `bounced`, `rejected` without an attempt
+ * (a suppressed address, a refused message), `complained` as spam,
+ * `unsubscribed`, `opened` and `clicked`; `unknown` for an event the model
+ * has no name for, kept with its `raw` record.
+ */
+export type DeliveryEventType =
+  | 'accepted'
+  | 'delivered'
+  | 'deferred'
+  | 'bounced'
+  | 'complained'
+  | 'rejected'
+  | 'opened'
+  | 'clicked'
+  | 'unsubscribed'
+  | 'unknown';
+/**
+ * How a recipient bounced: `hard` for good (an address that does not exist),
+ * `soft` for now (a full mailbox), `undetermined` when the provider does not
+ * say.
+ */
+export interface DeliveryBounce {
+  readonly kind: 'hard' | 'soft' | 'undetermined';
+  /** The status the provider gives, such as `5.1.1` or `550`. */
+  readonly code?: string;
+  /** The reply of the recipient's server, or the provider's description. */
+  readonly diagnostic?: string;
+}
+/**
+ * One event of one message for one recipient, from a provider's webhook.
+ * An event of several recipients is as many events.
+ */
+export interface DeliveryEvent<TProviderId extends string = string> {
+  /** The provider that told it. */
+  readonly provider: TProviderId;
+  /** What happened. */
+  readonly type: DeliveryEventType;
+  /**
+   * The id of the event, the same each time the provider sends it again:
+   * the provider's own, with the place of the recipient when one event
+   * holds several.
+   */
+  readonly id: string;
+  /**
+   * The provider's id of the message, the `messageId` of its receipt, so an
+   * event finds the send it belongs to.
+   */
+  readonly messageId?: string;
+  /** The recipient, when the event names one. */
+  readonly recipient?: string;
+  /** When it happened, as the provider tells it. */
+  readonly occurredAt?: Date;
+  /** How the recipient bounced, for `bounced` and for a `deferred` bounce. */
+  readonly bounce?: DeliveryBounce;
+  /** Why, for a rejection, a deferral or a bounce, as the provider words it. */
+  readonly reason?: string;
+  /** The link of a click. */
+  readonly url?: string;
+  /** The tags of the message, as the transport sent them. */
+  readonly tags: readonly string[];
+  /** The metadata of the message, as the transport sent it. */
+  readonly metadata: Readonly<Record<string, string>>;
+  /** The provider's record the event was read from. */
+  readonly raw: unknown;
+}
+/**
  * Optional capability for delivering already serialized MIME messages.
  * Wrappers must explicitly preserve this capability to expose it themselves.
  */

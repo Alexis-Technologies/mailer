@@ -644,6 +644,11 @@ The contracts of the reliability layer, still to be designed (Phase 0):
 - **The states and events of a message:** `queued → rendered → submitted → accepted → delivered |
   bounced | complained | failed | delivery_unknown`, with correlationId, tenantId, attempt, the
   provider's message id and a hash of the payload.
+- **`DeliveryEvent`** (root types, 1.1), what `./webhooks` reads from a provider: one per message
+  and recipient, its `id` the same on every redelivery, its `messageId` that of the receipt.
+  `accepted`, `delivered`, `bounced` and `complained` are the states above; `rejected` is
+  `failed` before any attempt; `deferred` keeps a message `accepted`; `opened`, `clicked` and
+  `unsubscribed` are engagement, not states; `unknown` keeps the provider's `raw` record.
 
 ## Roadmap
 
