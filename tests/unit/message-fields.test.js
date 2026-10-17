@@ -292,6 +292,35 @@ test('Fields: Mailtrap sends the metadata of the message over that of the config
   });
 });
 
+test('Fields: SES sends metadata as tags, over the default ones, and refuses what a tag cannot hold', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ MessageId: `ses${bodies.length}` });
+  });
+  const transport = new SesTransport({
+    authentication: { type: 'credentials', accessKeyId: 'AKID', secretAccessKey: 'secret' },
+    retries: 0,
+    defaultTags: { tenant: 'default', app: 'shop' },
+  });
+  const sent = await transport.send(
+    createMessage({ ...base, tags: ['welcome'], metadata: { orderId: '42', tenant: 'acme' } }),
+  );
+  assert.strictEqual(sent.successful, true);
+  assert.deepStrictEqual(bodies[0].Tags, [
+    { Name: 'category', Value: 'welcome' },
+    { Name: 'orderId', Value: '42' },
+    { Name: 'tenant', Value: 'acme' },
+    { Name: 'app', Value: 'shop' },
+  ]);
+  for (const metadata of [{ 'order.id': '1' }, { note: 'two words' }, { category: 'x' }]) {
+    const refused = await transport.send(createMessage({ ...base, metadata }));
+    assert.match(refused.errorMessages[0], /SES takes metadata as tags/);
+    assert.strictEqual(refused.errors[0].category, 'validation');
+  }
+  assert.strictEqual(bodies.length, 1);
+});
+
 const CORE = 'urn:ietf:params:jmap:core';
 const MAIL = 'urn:ietf:params:jmap:mail';
 const SUBMISSION = 'urn:ietf:params:jmap:submission';

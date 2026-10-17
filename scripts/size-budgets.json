@@ -5,7 +5,7 @@
   "./smtp": 23,
   "./sendmail": 10.5,
   "./jmap": 12.5,
-  "./ses": 7.5,
+  "./ses": 8,
   "./resend": 6.5,
   "./sendgrid": 6.5,
   "./mailgun": 6.5,

@@ -340,6 +340,14 @@ instructions and available features.
 
 [SES Configuration Sets documentation]: https://docs.aws.amazon.com/ses/latest/dg/using-configuration-sets.html
 
+A message's `metadata` goes in its tags, which SES publishes with its events,
+after the `category` tags of its `tags` and over a `defaultTags` entry of the
+same name. A key and its value must then be ASCII letters, digits, `_` or `-`,
+fewer than 256 characters, and a key neither `category` nor `priority`; any
+other is refused before the request. Tracking is set by the configuration set,
+so a message's `tracking` is not sent, and SES cannot schedule a message, so
+`scheduledAt` is refused as `validation`.
+
 ## Advanced configuration and reliability
 
 The SES transport includes comprehensive configuration options for timeout

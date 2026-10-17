@@ -28,6 +28,26 @@ const SES_HEADERS = new Set([
   'subject',
   'to',
 ]);
+// The name and value of an SES tag: "only ASCII letters (a–z, A–Z), numbers
+// (0–9), underscores (_), or dashes (-)", fewer than 256 characters.
+const TAG_TEXT = /^[A-Za-z0-9_-]{1,255}$/;
+// The tags this converter writes of its own.
+const OWN_TAGS = new Set(['category', 'priority']);
+
+// The metadata of a message as tags, which SES returns in its events.
+const metadataTagsOf = (metadata, tags) => {
+  for (const key in metadata) {
+    const value = metadata[key];
+    if (!TAG_TEXT.test(key) || !TAG_TEXT.test(value) || OWN_TAGS.has(key)) {
+      throw new RangeError(
+        'SES takes metadata as tags, whose name and value are ASCII letters, digits, _ or -, ' +
+          `and a name other than category and priority: ${key}`,
+      );
+    }
+    tags.push({ Name: key, Value: value });
+  }
+};
+
 // The most fields SES takes in Headers, and the longest field it takes.
 const MAX_SES_HEADERS = 15;
 const MAX_SES_HEADER_LENGTH = 996;
@@ -76,8 +96,14 @@ const convertMessage = async (message, config, signal) => {
     tags.push({ Name: 'priority', Value: message.priority });
   }
 
+  if (message.metadata !== undefined) metadataTagsOf(message.metadata, tags);
+
+  // A default tag gives way to a key of the metadata.
   for (const name in config.defaultTags) {
-    if (Object.hasOwn(config.defaultTags, name)) {
+    if (
+      Object.hasOwn(config.defaultTags, name) &&
+      (message.metadata === undefined || !Object.hasOwn(message.metadata, name))
+    ) {
       tags.push({ Name: name, Value: config.defaultTags[name] });
     }
   }
