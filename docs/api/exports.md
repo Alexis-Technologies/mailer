@@ -71,6 +71,7 @@ The message model and the transport contract, ported from `@upyo/core`.
 | `@alexify/mailer/logger` | `LoggerTransport` | [Logger](/transports/logger) |
 | `@alexify/mailer/breaker` | `CircuitBreakerTransport` | [Circuit breaker](/transports/breaker) |
 | `@alexify/mailer/ratelimit` | `RateLimitTransport` | [Rate limit](/transports/ratelimit) |
+| `@alexify/mailer/idempotency` | `IdempotencyTransport`, `createMemoryIdempotencyStore` | [Idempotency](/transports/idempotency) |
 
 The types of each subpath (configurations, receipts with provider details, the
 structural `TracerProvider`, `MeterProvider` and `Logger` of the decorators) are in

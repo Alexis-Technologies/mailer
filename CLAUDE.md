@@ -562,6 +562,13 @@ fails on upstream's behavior):
   more than the capacity was cut to it and went through, over the limit. `./ratelimit` serves the
   waiters in turn from one timer and drops one whose caller aborts, refuses at once a message the
   queue ahead would hold past `maxWaitMs`, and refuses a cost over `burst`.
+- U12. unemail (`src/middleware/idempotency.ts`): the key was looked up before the send and
+  written after it, so two concurrent sends under one key both went; the same key for another
+  message was answered with the first's receipt; and only successes were kept, so a send of
+  unknown delivery went again on a retry. `./idempotency` reserves the key in the store first
+  (`reserve`, `complete`, `release`), answers a send in flight as of unknown delivery, refuses a
+  key whose fingerprint differs, keeps a key whose delivery is unknown, and fails only the
+  message whose store call failed.
 
 ## Repository layout
 

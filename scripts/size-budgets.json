@@ -29,5 +29,6 @@
   "./otel": 5,
   "./logger": 2.5,
   "./breaker": 2,
-  "./ratelimit": 2.5
+  "./ratelimit": 2.5,
+  "./idempotency": 3
 }

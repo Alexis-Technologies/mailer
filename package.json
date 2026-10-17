@@ -143,6 +143,10 @@
     "./ratelimit": {
       "types": "./src/ratelimit/index.d.ts",
       "default": "./src/ratelimit/index.js"
+    },
+    "./idempotency": {
+      "types": "./src/idempotency/index.d.ts",
+      "default": "./src/idempotency/index.js"
     }
   },
   "directories": {
