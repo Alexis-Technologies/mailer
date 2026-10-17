@@ -546,3 +546,32 @@ test('Internal: every provider that took validateSsl refuses false', () => {
     assert.ok(new Transport(config));
   }
 });
+
+test('Config: a clock that is not a function is refused where a provider takes one', () => {
+  // Before: azure, sendgrid, mailersend and smtp2go took any `now`, and
+  // failed at the first send that read it.
+  const { AzureTransport } = require('../../src/azure/index.js');
+  const { MailerSendTransport } = require('../../src/mailersend/index.js');
+  const { SendGridTransport } = require('../../src/sendgrid/index.js');
+  const { Smtp2goTransport } = require('../../src/smtp2go/index.js');
+  const key = Buffer.from('k').toString('base64');
+  const makers = [
+    () =>
+      new AzureTransport({ endpoint: 'https://a.communication.azure.com', accessKey: key, now: 1 }),
+    () => new MailerSendTransport({ apiKey: 'k', now: 1 }),
+    () => new SendGridTransport({ apiKey: 'k', now: 1 }),
+    () => new Smtp2goTransport({ apiKey: 'k', now: 1 }),
+  ];
+  for (const make of makers) assert.throws(make, /now must be a function/);
+});
+
+test('Decorators: pool and retry keep their loops to themselves', () => {
+  const { PoolTransport } = require('../../src/pool/index.js');
+  const { RetryTransport } = require('../../src/retry/index.js');
+  const inner = { id: 'x', send: async () => ({ successful: true, messageId: 'm' }) };
+  assert.strictEqual(
+    'deliver' in new PoolTransport({ strategy: 'priority', transports: [{ transport: inner }] }),
+    false,
+  );
+  assert.strictEqual('withRetries' in new RetryTransport(inner), false);
+});

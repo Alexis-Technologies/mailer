@@ -64,7 +64,7 @@ class RetryTransport {
     options?.signal?.throwIfAborted();
 
     const pinned = pinMessageId(message, this.config.generateId);
-    return this.withRetries(
+    return this.#withRetries(
       (sendOptions) => this.wrappedTransport.send(pinned, sendOptions),
       options,
     );
@@ -84,7 +84,7 @@ class RetryTransport {
   async sendRaw(message, options) {
     options?.signal?.throwIfAborted();
     if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
-    return this.withRetries(
+    return this.#withRetries(
       (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
       options,
     );
@@ -107,7 +107,7 @@ class RetryTransport {
    * @param options Optional transport options.
    * @returns The final delivery receipt.
    */
-  async withRetries(sendOnce, options) {
+  async #withRetries(sendOnce, options) {
     let lastThrownError;
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       options?.signal?.throwIfAborted();

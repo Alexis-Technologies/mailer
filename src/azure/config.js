@@ -11,6 +11,7 @@ const {
   checkRequestOptions,
   checkSecureUrl,
 } = require('../internal/config.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const { isAccessKey, parseConnectionString } = require('./sign.js');
 
 const API_VERSION = /^\d{4}-\d{2}-\d{2}(-preview)?$/;
@@ -68,7 +69,7 @@ const createAzureConfig = (config = {}) => {
     fetch: config.fetch,
     generateId: config.generateId,
     logger: config.logger,
-    now: config.now ?? Date.now,
+    now: checkOptionalFunction(config.now, 'now') ?? Date.now,
   };
   checkConcurrency(resolved.concurrency);
   checkRequestOptions(resolved.timeout, resolved.retries);

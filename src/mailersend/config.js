@@ -3,6 +3,7 @@
 // https://github.com/productdevbook/unemail — MIT, Copyright 2025 Wind
 
 const { checkCredential } = require('../internal/api.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const {
   checkConcurrency,
   checkOptionalBoolean,
@@ -32,7 +33,7 @@ const createMailerSendConfig = (config = {}) => {
     fetch: config.fetch,
     generateId: config.generateId,
     logger: config.logger,
-    now: config.now ?? Date.now,
+    now: checkOptionalFunction(config.now, 'now') ?? Date.now,
   };
   checkConcurrency(resolved.concurrency);
   checkRequestOptions(resolved.timeout, resolved.retries);

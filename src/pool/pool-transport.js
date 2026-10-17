@@ -100,7 +100,7 @@ class PoolTransport {
    */
   async send(message, options) {
     const pinned = pinMessageId(message, this.config.generateId);
-    return this.deliver(
+    return this.#deliver(
       pinned,
       this.config.transports,
       (transport, sendOptions) => transport.send(pinned, sendOptions),
@@ -128,7 +128,7 @@ class PoolTransport {
       entries.push({ ...entry, enabled: canSend, selector: undefined });
     }
     if (enabled === 0) return refuseRaw(this);
-    return this.deliver(
+    return this.#deliver(
       message,
       entries,
       (transport, sendOptions) => transport.sendRaw(message, sendOptions),
@@ -164,7 +164,7 @@ class PoolTransport {
    * Sends a message through the transports the strategy picks, one after
    * another until one sends it or failover has to stop.
    */
-  async deliver(message, entries, sendOnce, options) {
+  async #deliver(message, entries, sendOnce, options) {
     const attemptedIndices = new Set();
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
