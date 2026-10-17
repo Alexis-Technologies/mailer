@@ -4,6 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { generateKeyPairSync, sign } = require('node:crypto');
 const {
+  createMemoryReplayStore,
   createSendGridWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
@@ -24,7 +25,12 @@ const signed = (events, timestamp = '1800000000') => {
   };
 };
 const verifier = (options = {}) =>
-  createSendGridWebhookVerifier({ publicKey: PUBLIC_KEY, now: () => NOW, ...options });
+  createSendGridWebhookVerifier({
+    publicKey: PUBLIC_KEY,
+    now: () => NOW,
+    replayStore: createMemoryReplayStore({ now: () => NOW }),
+    ...options,
+  });
 const record = (event, fields = {}) => ({
   email: 'bob@example.com',
   timestamp: 1_799_999_990,
@@ -118,7 +124,9 @@ test('Webhooks SendGrid: a forged, old or repeated batch is refused', async () =
   await rejects(sendgrid.verify({ body: good.body, headers: {} }), 'signature');
   await rejects(sendgrid.verify(signed([record('delivered')], '1799999000')), 'timestamp');
   await rejects(sendgrid.verify(signed([record('delivered')], 'later')), 'timestamp');
-  assert.strictEqual((await sendgrid.verify(good)).events.length, 2);
+  const first = await sendgrid.verify(good);
+  assert.strictEqual(first.events.length, 2);
+  await first.commit();
   await rejects(sendgrid.verify(good), 'replay');
   // A batch sent again with a new event keeps the new one alone.
   const more = await sendgrid.verify(signed([record('delivered'), record('click')]));
@@ -129,9 +137,11 @@ test('Webhooks SendGrid: a forged, old or repeated batch is refused', async () =
   await rejects(sendgrid.verify(signed({ event: 'delivered' })), 'payload');
   const failing = verifier({
     replayStore: {
-      add: () => {
+      reserve: () => {
         throw new WebhookVerificationError('payload', 'store down');
       },
+      commit: () => {},
+      release: () => {},
     },
   });
   await rejects(failing.verify(signed([record('delivered')])), 'payload');
@@ -139,7 +149,11 @@ test('Webhooks SendGrid: a forged, old or repeated batch is refused', async () =
 
 test('Webhooks SendGrid: the key may be PEM, and one that is not a key is refused', async () => {
   const pem = publicKey.export({ format: 'pem', type: 'spki' });
-  const fromPem = createSendGridWebhookVerifier({ publicKey: pem, now: () => NOW });
+  const fromPem = createSendGridWebhookVerifier({
+    publicKey: pem,
+    now: () => NOW,
+    replayStore: null,
+  });
   assert.strictEqual((await fromPem.verify(signed([record('delivered')]))).events.length, 1);
   assert.throws(() => createSendGridWebhookVerifier({}), /publicKey is the verification key/);
   assert.throws(

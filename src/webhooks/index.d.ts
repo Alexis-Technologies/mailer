@@ -14,32 +14,69 @@ export interface WebhookRequest {
 }
 
 /**
- * Why a request was refused.
+ * Why a request was refused: `replay`, a request taken before; `pending`, one
+ * another delivery of it is handling now.
  */
 export type WebhookVerificationReason =
   | 'signature'
   | 'timestamp'
   | 'replay'
+  | 'pending'
   | 'payload'
   | 'certificate'
   | 'topic'
   | 'credentials';
 
 /**
- * A request a verifier refused.  Answer `replay` with a 2xx: the provider
- * delivered it before.
+ * The options of a {@link WebhookVerificationError}.
  */
-export declare class WebhookVerificationError extends Error {
-  readonly reason: WebhookVerificationReason;
-  constructor(reason: WebhookVerificationReason, message: string, options?: ErrorOptions);
+export interface WebhookVerificationErrorOptions extends ErrorOptions {
+  /** The HTTP status to answer with, when it is not that of the reason. */
+  readonly status?: number;
 }
 
 /**
- * Where the ids of the requests already taken are kept, for `ttlMs`.
+ * A request a verifier refused.  Answer the provider with `status`: 200 for
+ * a `replay`, which arrived before; 503 for a `pending` request, and for a
+ * signing certificate that could not be read, so that the provider tries
+ * again; 400 for a `payload` that cannot be read; 401 otherwise.
+ */
+export declare class WebhookVerificationError extends Error {
+  readonly reason: WebhookVerificationReason;
+  readonly status: number;
+  constructor(
+    reason: WebhookVerificationReason,
+    message: string,
+    options?: WebhookVerificationErrorOptions,
+  );
+}
+
+/**
+ * What a replay store answers when an id is reserved: `reserved` for this
+ * request, `pending` while another request holds it, `done` once one was
+ * committed.
+ */
+export type ReplayState = 'reserved' | 'pending' | 'done';
+
+/**
+ * Where the ids of the requests taken are kept.  An id is reserved while its
+ * request is handled, for `leaseMs`, and kept for `ttlMs` once the
+ * application commits it, so that a request whose handler failed is taken
+ * again on the provider's next delivery.  A store shared by several
+ * processes, on Redis or a database, makes `reserve` one atomic operation
+ * (`SET NX PX`, an insert under a unique index).
  */
 export interface ReplayStore {
-  /** Keeps an id: true when it is new, false when it was seen before. */
-  add(id: string, ttlMs: number): boolean | Promise<boolean>;
+  /**
+   * Reserves an id for `leaseMs`, unless it is held: `reserved` when it is
+   * new, its lease ran out or it was released; `pending` while another
+   * request holds it; `done` once one was committed and until its time ends.
+   */
+  reserve(id: string, leaseMs: number): ReplayState | Promise<ReplayState>;
+  /** Keeps a reserved id as taken for `ttlMs`. */
+  commit(id: string, ttlMs: number): void | Promise<void>;
+  /** Frees a reserved id that is not committed; a committed one stays. */
+  release(id: string): void | Promise<void>;
 }
 
 /**
@@ -47,7 +84,8 @@ export interface ReplayStore {
  */
 export interface MemoryReplayStoreOptions {
   /**
-   * The most ids kept, the oldest dropped first.
+   * The most ids kept, the oldest committed ones dropped first; an id still
+   * reserved is never dropped before its lease ends.
    * @default 10000
    */
   readonly maxEntries?: number;
@@ -56,7 +94,9 @@ export interface MemoryReplayStoreOptions {
 }
 
 /**
- * Makes a store of the ids of the requests already taken, in this process.
+ * Makes a store of the ids of the requests taken, in this process: for an
+ * application of one process.  Several processes, or a function that makes
+ * its verifier for each request, share a store of their own.
  *
  * @throws {TypeError} If an option is invalid.
  */
@@ -71,9 +111,18 @@ export interface WebhookVerifierOptions {
   /** How far from now a request may be signed, in milliseconds. */
   readonly toleranceMs?: number;
   /**
-   * The ids already taken; an in-process store by default, `null` for none.
+   * The ids taken: {@link createMemoryReplayStore} in one process, a store
+   * the processes share for several, or `null` for an application that
+   * deduplicates the events by their `id` itself.
    */
-  readonly replayStore?: ReplayStore | null;
+  readonly replayStore: ReplayStore | null;
+  /**
+   * How long an id stays reserved while its request is handled, in
+   * milliseconds: longer than a handler takes, shorter than the provider's
+   * first retry.
+   * @default 30000
+   */
+  readonly leaseMs?: number;
   /**
    * The longest body taken, in bytes.
    * @default 5242880
@@ -83,10 +132,22 @@ export interface WebhookVerifierOptions {
 
 /**
  * What a verifier reads from a request: its events, one per message and
- * recipient.
+ * recipient, whose ids stay reserved until the application commits them,
+ * once handled, or releases them, when handling them failed, so that the
+ * provider's next delivery is taken again.  A lease that runs out releases
+ * them too.
  */
 export interface WebhookResult<TProviderId extends string = string> {
   readonly events: readonly DeliveryEvent<TProviderId>[];
+  /**
+   * Keeps the ids of the events handled as taken, so that the provider's
+   * next delivery of them is a replay: of every event, or of those given.
+   * An id several events share, such as the SNS message of several
+   * recipients, is kept once all of them are committed.
+   */
+  commit(events?: Iterable<DeliveryEvent<TProviderId>>): Promise<void>;
+  /** Frees the ids of the events not committed. */
+  release(): Promise<void>;
 }
 
 /**
@@ -218,7 +279,8 @@ export declare function createMailgunWebhookVerifier(
 
 /**
  * The options of a verifier of a webhook whose URL carries Basic credentials,
- * as its provider signs nothing (Postmark, Mailjet, SparkPost).
+ * as its provider signs nothing (Postmark, Mailjet, SparkPost, SMTP2GO).  No
+ * id is kept: committing its delivery does nothing.
  */
 export interface BasicWebhookVerifierOptions {
   readonly username: string;
@@ -249,8 +311,13 @@ export declare function createPostmarkWebhookVerifier(
 export interface SignedBodyWebhookVerifierOptions {
   /** The signing secret of the webhook. */
   readonly secret: string;
-  /** The ids already taken; an in-process store by default, `null` for none. */
-  readonly replayStore?: ReplayStore | null;
+  /** The ids taken, as {@link WebhookVerifierOptions.replayStore}. */
+  readonly replayStore: ReplayStore | null;
+  /**
+   * How long an id stays reserved while its request is handled.
+   * @default 30000
+   */
+  readonly leaseMs?: number;
   /**
    * The longest body taken, in bytes.
    * @default 5242880
@@ -428,8 +495,13 @@ export interface AzureWebhookVerifierOptions {
    * @default "authorization"
    */
   readonly header?: string;
-  /** The ids already taken; an in-process store by default, `null` for none. */
-  readonly replayStore?: ReplayStore | null;
+  /** The ids taken, as {@link WebhookVerifierOptions.replayStore}. */
+  readonly replayStore: ReplayStore | null;
+  /**
+   * How long an id stays reserved while its request is handled.
+   * @default 30000
+   */
+  readonly leaseMs?: number;
   /**
    * The longest body taken, in bytes.
    * @default 5242880

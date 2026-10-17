@@ -8,24 +8,25 @@
 // `unsubscribed`; a temporary failure is a deferred soft bounce; and the
 // message id is that of the receipt, in angle brackets.
 
-const { createHmac } = require('node:crypto');
 const {
+  DEFAULT_TOLERANCE_MS,
   WebhookVerificationError,
   bodyBytesOf,
-  checkReplay,
-  checkTime,
+  checkHexSignature,
+  checkSignedSeconds,
+  claimDelivery,
   createEvent,
   dateOf,
-  equalBytes,
+  hmacOf,
   isRecord,
   parseJsonOf,
+  requireSecret,
   resolveCommonOptions,
   stringOf,
   stringRecordOf,
   stringsOf,
 } = require('./request.js');
 
-const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
 const TYPES = new Map([
   ['accepted', 'accepted'],
   ['delivered', 'delivered'],
@@ -35,7 +36,6 @@ const TYPES = new Map([
   ['opened', 'opened'],
   ['clicked', 'clicked'],
 ]);
-const HEX = /^[0-9a-f]+$/i;
 
 // What a failure is: a suppression or a rejection Mailgun made before any
 // attempt, a temporary failure it retries, or a bounce.
@@ -78,15 +78,16 @@ const eventOf = (data, token) => {
  * Makes the verifier of Mailgun's webhooks.
  *
  * @param options `signingKey`, the HTTP webhook signing key of the domain;
- * `now`, `toleranceMs` (five minutes), `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * `replayStore`; `now`, `toleranceMs` (five minutes), `leaseMs` and
+ * `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMailgunWebhookVerifier = (options = {}) => {
-  if (typeof options.signingKey !== 'string' || options.signingKey === '') {
-    throw new TypeError('signingKey is the HTTP webhook signing key of Mailgun.');
-  }
-  const signingKey = options.signingKey;
+  const signingKey = requireSecret(
+    options.signingKey,
+    'signingKey is the HTTP webhook signing key of Mailgun.',
+  );
   const common = resolveCommonOptions(options, DEFAULT_TOLERANCE_MS);
   return {
     async verify(request) {
@@ -96,28 +97,20 @@ const createMailgunWebhookVerifier = (options = {}) => {
       const signature = isRecord(payload) ? payload.signature : undefined;
       const timestamp = stringOf(signature?.timestamp);
       const token = stringOf(signature?.token);
-      const given = stringOf(signature?.signature);
-      if (
-        timestamp === undefined ||
-        token === undefined ||
-        given === undefined ||
-        !HEX.test(given)
-      ) {
+      if (timestamp === undefined || token === undefined) {
         throw new WebhookVerificationError('signature', 'The request has no Mailgun signature.');
       }
-      const expected = createHmac('sha256', signingKey)
-        .update(timestamp + token)
-        .digest();
-      if (!equalBytes(expected, Buffer.from(given, 'hex'))) {
-        throw new WebhookVerificationError('signature', 'The Mailgun signature does not match.');
-      }
-      checkTime(Number(timestamp) * 1000, common);
-      await checkReplay(common, `mailgun:${token}`);
+      checkHexSignature(
+        hmacOf(signingKey, [timestamp + token]),
+        stringOf(signature?.signature),
+        'Mailgun',
+      );
+      checkSignedSeconds(timestamp, common, 'Mailgun');
       const data = payload['event-data'];
       if (!isRecord(data)) {
         throw new WebhookVerificationError('payload', 'The body has no Mailgun event.');
       }
-      return { events: [eventOf(data, token)] };
+      return claimDelivery(common, [{ key: `mailgun:${token}`, events: [eventOf(data, token)] }]);
     },
   };
 };

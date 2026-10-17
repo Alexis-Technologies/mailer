@@ -7,6 +7,7 @@ const {
   createAzureWebhookVerifier,
   createLettermintWebhookVerifier,
   createMailerooWebhookVerifier,
+  createMemoryReplayStore,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
   WebhookVerificationError,
@@ -47,6 +48,7 @@ test('Webhooks Scaleway: an SNS message signed by a certificate the trust chain 
     trustChain: scaleway.trustChain,
     fetch: served.fetch,
     now: () => Date.parse('2027-01-01T12:00:30Z'),
+    replayStore: createMemoryReplayStore(),
   });
   const record = {
     id: 'ev-1',
@@ -118,6 +120,7 @@ test('Webhooks Scaleway: a certificate the trust chain did not issue, or off Sca
     trustChain: scaleway.trustChain,
     fetch: certificateFetch(certificate).fetch,
     now: () => Date.parse('2027-01-01T12:00:30Z'),
+    replayStore: null,
   });
   await rejects(
     foreign.verify({ body: JSON.stringify(scwMessage({ type: 'email_spam' })) }),
@@ -144,7 +147,11 @@ test('Webhooks Scaleway: a certificate the trust chain did not issue, or off Sca
 
 test('Webhooks Lettermint: the HMAC of the time and body, within a window, once', async () => {
   const secret = 'whsec_lettermint';
-  const verifier = createLettermintWebhookVerifier({ secret, now: () => 1_800_000_000_000 });
+  const verifier = createLettermintWebhookVerifier({
+    secret,
+    now: () => 1_800_000_000_000,
+    replayStore: createMemoryReplayStore(),
+  });
   const sign = (body, t = '1800000000') => ({
     body,
     headers: {
@@ -165,7 +172,8 @@ test('Webhooks Lettermint: the HMAC of the time and body, within a window, once'
     },
   };
   const body = JSON.stringify(payload);
-  const { events } = await verifier.verify(sign(body));
+  const taken = await verifier.verify(sign(body));
+  const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'lettermint',
     type: 'bounced',
@@ -178,6 +186,7 @@ test('Webhooks Lettermint: the HMAC of the time and body, within a window, once'
     metadata: { orderId: '42' },
     raw: payload,
   });
+  await taken.commit();
   await rejects(verifier.verify(sign(body)), 'replay');
   await rejects(verifier.verify({ body, headers: {} }), 'signature');
   await rejects(verifier.verify({ ...sign(body), body: body.replace('bob', 'eve') }), 'signature');
@@ -220,7 +229,10 @@ test('Webhooks Lettermint: the HMAC of the time and body, within a window, once'
 });
 
 test('Webhooks Maileroo: the HMAC of the body, an event per recipient, once', async () => {
-  const verifier = createMailerooWebhookVerifier({ secret: 'mr-secret' });
+  const verifier = createMailerooWebhookVerifier({
+    secret: 'mr-secret',
+    replayStore: createMemoryReplayStore(),
+  });
   const sign = (body) => ({
     body,
     headers: {
@@ -241,7 +253,8 @@ test('Webhooks Maileroo: the HMAC of the body, an event per recipient, once', as
     },
   };
   const body = JSON.stringify(payload);
-  const { events } = await verifier.verify(sign(body));
+  const taken = await verifier.verify(sign(body));
+  const { events } = taken;
   assert.strictEqual(events.length, 2);
   assert.deepStrictEqual(plain(events[1]), {
     provider: 'maileroo',
@@ -255,6 +268,7 @@ test('Webhooks Maileroo: the HMAC of the body, an event per recipient, once', as
     metadata: { orderId: '42' },
     raw: payload,
   });
+  await taken.commit();
   await rejects(verifier.verify(sign(body)), 'replay');
   const cases = [
     ['accepted', 'accepted'],
@@ -391,7 +405,10 @@ test('Webhooks SMTP2GO: Basic credentials, a body of JSON or of a form', async (
 });
 
 test('Webhooks Azure: Event Grid events with the token, and the validation handed back', async () => {
-  const verifier = createAzureWebhookVerifier({ token: 'eg-token' });
+  const verifier = createAzureWebhookVerifier({
+    token: 'eg-token',
+    replayStore: createMemoryReplayStore(),
+  });
   const validation = [
     {
       id: 'v-1',
@@ -406,10 +423,13 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
     body: JSON.stringify(validation),
     headers: { 'aeg-event-type': 'SubscriptionValidation' },
   });
-  assert.deepStrictEqual(validated, {
-    events: [],
-    validation: { validationCode: 'code-1', validationUrl: validation[0].data.validationUrl },
-  });
+  assert.deepStrictEqual(
+    { events: validated.events, validation: validated.validation },
+    {
+      events: [],
+      validation: { validationCode: 'code-1', validationUrl: validation[0].data.validationUrl },
+    },
+  );
   await rejects(
     verifier.verify({
       body: '[{"eventType":"Other"}]',
@@ -443,7 +463,8 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
   };
   const body = JSON.stringify([report, click, { eventType: 'no id' }]);
   const headers = { 'aeg-event-type': 'Notification', Authorization: 'Bearer eg-token' };
-  const { events } = await verifier.verify({ body, headers });
+  const taken = await verifier.verify({ body, headers });
+  const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'azure',
     type: 'bounced',
@@ -459,6 +480,7 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
   });
   assert.strictEqual(events[1].type, 'clicked');
   assert.strictEqual(events[1].url, 'https://e.com/a');
+  await taken.commit();
   await rejects(verifier.verify({ body, headers }), 'replay');
   await rejects(
     verifier.verify({ body, headers: { 'aeg-event-type': 'Notification' } }),
@@ -485,7 +507,11 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
     ['delivered', 'bounced', 'bounced', 'rejected', 'deferred', 'unknown', 'opened', 'unknown'],
   );
   await rejects(verifier.verify({ body: '{}', headers }), 'payload');
-  const custom = createAzureWebhookVerifier({ token: 't', header: 'x-webhook-token' });
+  const custom = createAzureWebhookVerifier({
+    token: 't',
+    header: 'x-webhook-token',
+    replayStore: null,
+  });
   const ok = await custom.verify({ body: '[]', headers: { 'x-webhook-token': 't' } });
   assert.deepStrictEqual(ok.events, []);
   assert.throws(() => createAzureWebhookVerifier({}), /token is required/);

@@ -10,8 +10,8 @@ const { checkOptionalFunction } = require('../internal/options.js');
 const {
   WebhookVerificationError,
   bodyBytesOf,
-  checkReplay,
   checkTime,
+  claimDelivery,
   isRecord,
   parseJsonOf,
   resolveCommonOptions,
@@ -74,8 +74,12 @@ const stringToSign = (message, fields) => {
   return text;
 };
 
-const certificateError = (message, cause) =>
-  new WebhookVerificationError('certificate', message, cause === undefined ? undefined : { cause });
+const certificateError = (message, cause, status) =>
+  new WebhookVerificationError('certificate', message, { cause, status });
+
+// A certificate that could not be read may be read on the provider's next
+// delivery, so the answer asks for one.
+const UNREAD = 503;
 
 const loadCertificate = async (fetchOption, url) => {
   const fetch = fetchOption ?? globalThis.fetch;
@@ -83,10 +87,14 @@ const loadCertificate = async (fetchOption, url) => {
   try {
     response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
   } catch (error) {
-    throw certificateError('The signing certificate could not be read.', error);
+    throw certificateError('The signing certificate could not be read.', error, UNREAD);
   }
   if (!response.ok) {
-    throw certificateError(`The signing certificate answered HTTP ${response.status}.`);
+    throw certificateError(
+      `The signing certificate answered HTTP ${response.status}.`,
+      undefined,
+      UNREAD,
+    );
   }
   try {
     return new X509Certificate(await readText(response, MAX_CERTIFICATE_BYTES));
@@ -156,14 +164,16 @@ const topicsOf = (topicArns) => {
 };
 
 /**
- * Makes the verification of SNS messages: `verify(request)` gives `{ message,
- * record }` for a notification, `record` its parsed message when it is a JSON
- * object, or `{ message, confirmation }` for a subscription message.
+ * Makes the verification of SNS messages: `verify(request)` gives the
+ * delivery of the events of a notification, or of the `confirmation` of a
+ * subscription message, under the id of the SNS message.
  *
  * @param options `topicArns`, `fetch`, and the options every verifier takes.
  * @param service `provider`, `defaultToleranceMs`, `isCertificateUrl` (the
- * hosts of certificates and subscriptions), and `trust(certificate)`, which
- * throws for a certificate the service did not issue.
+ * hosts of certificates and subscriptions), `trust(certificate)`, which
+ * throws for a certificate the service did not issue, and `eventsOf(message,
+ * record)`, the events of a notification, `record` its parsed message when it
+ * is a JSON object.
  * @internal
  */
 const createSnsVerifier = (options, service) => {
@@ -183,7 +193,7 @@ const createSnsVerifier = (options, service) => {
     }
     await checkSignature(message, certificateOf, service.isCertificateUrl, common);
     checkTime(Date.parse(message.Timestamp), common);
-    await checkReplay(common, `${service.provider}:${message.MessageId}`);
+    const key = `${service.provider}:${message.MessageId}`;
     if (message.Type !== 'Notification') {
       if (!service.isCertificateUrl(message.SubscribeURL)) {
         throw new WebhookVerificationError(
@@ -191,8 +201,7 @@ const createSnsVerifier = (options, service) => {
           'The subscription URL is not of the service.',
         );
       }
-      return {
-        message,
+      return claimDelivery(common, [{ key, events: [] }], {
         confirmation: {
           type: message.Type,
           topicArn: message.TopicArn,
@@ -200,7 +209,7 @@ const createSnsVerifier = (options, service) => {
           token: message.Token,
           message: message.Message,
         },
-      };
+      });
     }
     let record;
     try {
@@ -208,7 +217,8 @@ const createSnsVerifier = (options, service) => {
     } catch {
       record = undefined;
     }
-    return { message, record: isRecord(record) ? record : undefined };
+    const events = service.eventsOf(message, isRecord(record) ? record : undefined);
+    return claimDelivery(common, [{ key, events }]);
   };
 };
 

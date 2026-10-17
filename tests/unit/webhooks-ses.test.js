@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
+  createMemoryReplayStore,
   createSesWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
@@ -21,6 +22,7 @@ const verifier = (options = {}) => {
     topicArns: [TOPIC],
     fetch: served.fetch,
     now: () => NOW,
+    replayStore: createMemoryReplayStore({ now: () => NOW }),
     ...options,
   });
   return { ...made, requests: served.requests };
@@ -214,16 +216,19 @@ test('Webhooks SES: a subscription is verified and handed back, not confirmed', 
     Timestamp: '2027-01-01T12:00:00.000Z',
   });
   const result = await verify(request(message));
-  assert.deepStrictEqual(result, {
-    events: [],
-    confirmation: {
-      type: 'SubscriptionConfirmation',
-      topicArn: TOPIC,
-      subscribeUrl: message.SubscribeURL,
-      token: 'token-1',
-      message: 'You have chosen to subscribe',
+  assert.deepStrictEqual(
+    { events: result.events, confirmation: result.confirmation },
+    {
+      events: [],
+      confirmation: {
+        type: 'SubscriptionConfirmation',
+        topicArn: TOPIC,
+        subscribeUrl: message.SubscribeURL,
+        token: 'token-1',
+        message: 'You have chosen to subscribe',
+      },
     },
-  });
+  );
   // Only the certificate was fetched: the subscription is the caller's to confirm.
   assert.strictEqual(requests.length, 1);
   const elsewhere = signSns({
@@ -261,7 +266,9 @@ test('Webhooks SES: a forged, foreign, old or repeated message is refused', asyn
     ),
     'timestamp',
   );
-  assert.strictEqual((await verify(request(good))).events.length, 2);
+  const taken = await verify(request(good));
+  assert.strictEqual(taken.events.length, 2);
+  await taken.commit();
   await rejects(verify(request(good)), 'replay');
   const sha1 = signSns(
     { ...notification({ eventType: 'Send', mail: mail() }, { MessageId: 'v1' }) },
@@ -290,6 +297,7 @@ test('Webhooks SES: a certificate that cannot be read or is not valid now is ref
   const failing = createSesWebhookVerifier({
     topicArns: [TOPIC],
     now: () => NOW,
+    replayStore: null,
     fetch: async () => {
       throw new Error('offline');
     },
@@ -298,12 +306,14 @@ test('Webhooks SES: a certificate that cannot be read or is not valid now is ref
   const missing = createSesWebhookVerifier({
     topicArns: [TOPIC],
     now: () => NOW,
+    replayStore: null,
     fetch: async () => new Response('gone', { status: 404 }),
   });
   await rejects(missing.verify(request(good)), 'certificate');
   const garbage = createSesWebhookVerifier({
     topicArns: [TOPIC],
     now: () => NOW,
+    replayStore: null,
     fetch: async () => new Response('not a certificate'),
   });
   await rejects(garbage.verify(request(good)), 'certificate');
@@ -314,7 +324,11 @@ test('Webhooks SES: a certificate that cannot be read or is not valid now is ref
 test('Webhooks SES: the options are checked, and a replay store may be given or none', async () => {
   assert.throws(() => createSesWebhookVerifier({}), /topicArns must list/);
   assert.throws(() => createSesWebhookVerifier({ topicArns: [''] }), /topic ARN is a string/);
-  assert.throws(() => createSesWebhookVerifier({ topicArns: [TOPIC], fetch: 'x' }), /fetch/);
+  assert.throws(() => createSesWebhookVerifier({ topicArns: [TOPIC] }), /replayStore is required/);
+  assert.throws(
+    () => createSesWebhookVerifier({ topicArns: [TOPIC], replayStore: null, fetch: 'x' }),
+    /fetch/,
+  );
   assert.throws(
     () => createSesWebhookVerifier({ topicArns: [TOPIC], toleranceMs: 0 }),
     /toleranceMs/,
@@ -325,11 +339,22 @@ test('Webhooks SES: the options are checked, and a replay store may be given or 
   );
   const seen = [];
   const { verify } = verifier({
-    replayStore: { add: async (id, ttlMs) => seen.push([id, ttlMs]) > 0 },
+    replayStore: {
+      reserve: async (id, leaseMs) => seen.push(['reserve', id, leaseMs]) && 'reserved',
+      commit: async (id, ttlMs) => {
+        seen.push(['commit', id, ttlMs]);
+      },
+      release: async (id) => {
+        seen.push(['release', id]);
+      },
+    },
   });
   const good = notification({ eventType: 'Send', mail: mail() });
-  await verify(request(good));
-  assert.deepStrictEqual(seen, [['ses:sns-1', 2 * 60 * 60 * 1000]]);
+  await (await verify(request(good))).commit();
+  assert.deepStrictEqual(seen, [
+    ['reserve', 'ses:sns-1', 30 * 1000],
+    ['commit', 'ses:sns-1', 2 * 60 * 60 * 1000],
+  ]);
   const open = verifier({ replayStore: null });
   await open.verify(request(good));
   await open.verify(request(good));
@@ -342,7 +367,11 @@ test('Webhooks SES: the options are checked, and a replay store may be given or 
     return new Response(require('../helpers/webhooks/sns.js').certificate);
   };
   try {
-    await createSesWebhookVerifier({ topicArns: [TOPIC], now: () => NOW }).verify({
+    await createSesWebhookVerifier({
+      topicArns: [TOPIC],
+      now: () => NOW,
+      replayStore: null,
+    }).verify({
       body: Buffer.from(JSON.stringify(good)),
       headers: new Headers(),
     });

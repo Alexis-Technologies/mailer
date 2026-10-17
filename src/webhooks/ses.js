@@ -10,17 +10,13 @@
 // hard or soft; and a reject or a rendering failure is `rejected`, not
 // `bounced`.
 
-const { createEvent, dateOf, isRecord, stringOf } = require('./request.js');
+const { bounceKindOf, createEvent, dateOf, isRecord, stringOf } = require('./request.js');
 const { createSnsVerifier, isHttpsUrlOf } = require('./sns.js');
 
 // SNS retries a delivery with the time it was published, for up to an hour
 // by default.
 const DEFAULT_TOLERANCE_MS = 60 * 60 * 1000;
 const SNS_HOST = /^sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$/;
-const BOUNCE_KINDS = new Map([
-  ['Permanent', 'hard'],
-  ['Transient', 'soft'],
-]);
 // The tags SES writes itself, and the one `./ses` writes for the priority.
 const OWN_TAG = /^(ses|aws):/;
 
@@ -70,7 +66,7 @@ const onlyDestinationOf = (mail) => {
 };
 
 const bounceOf = (bounce) => {
-  const kind = BOUNCE_KINDS.get(bounce.bounceType) ?? 'undetermined';
+  const kind = bounceKindOf(bounce.bounceType);
   return recipientsOf(bounce.bouncedRecipients, (item) => {
     const recipient = stringOf(item?.emailAddress);
     if (recipient === undefined) return undefined;
@@ -188,41 +184,38 @@ const eventsOf = (record, snsMessageId) => {
 /**
  * Makes the verifier of the SNS messages of Amazon SES.
  *
- * @param options `topicArns`, the topics taken; `fetch`, for the signing
- * certificates; `now`, `toleranceMs` (an hour), `replayStore` and
+ * @param options `topicArns`, the topics taken; `replayStore`; `fetch`, for
+ * the signing certificates; `now`, `toleranceMs` (an hour), `leaseMs` and
  * `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events, confirmation? }`.
+ * @returns `{ verify(request) }`, which gives `{ events, confirmation?,
+ * commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
-const createSesWebhookVerifier = (options = {}) => {
-  const verifySns = createSnsVerifier(options, {
+const createSesWebhookVerifier = (options = {}) => ({
+  /**
+   * Verifies an SNS message and reads its events.
+   *
+   * @param request `body`, the raw body, and `headers`.
+   * @returns The delivery of its events, and `confirmation` for a
+   * subscription message.
+   * @throws {WebhookVerificationError} If the message is refused.
+   */
+  verify: createSnsVerifier(options, {
     provider: 'ses',
     defaultToleranceMs: DEFAULT_TOLERANCE_MS,
     isCertificateUrl: isSnsUrl,
-  });
-  return {
-    /**
-     * Verifies an SNS message and reads its events.
-     *
-     * @param request `body`, the raw body, and `headers`.
-     * @returns `{ events }`, and `confirmation` for a subscription message.
-     * @throws {WebhookVerificationError} If the message is refused.
-     */
-    async verify(request) {
-      const { message, record, confirmation } = await verifySns(request);
-      if (confirmation !== undefined) return { events: [], confirmation };
-      if (record === undefined) {
-        const event = createEvent({
-          provider: 'ses',
-          type: 'unknown',
-          id: `${message.MessageId}:0`,
-          raw: message,
-        });
-        return { events: [event] };
-      }
-      return { events: eventsOf(record, message.MessageId) };
-    },
-  };
-};
+    eventsOf: (message, record) =>
+      record === undefined
+        ? [
+            createEvent({
+              provider: 'ses',
+              type: 'unknown',
+              id: `${message.MessageId}:0`,
+              raw: message,
+            }),
+          ]
+        : eventsOf(record, message.MessageId),
+  }),
+});
 
 module.exports = { createSesWebhookVerifier };

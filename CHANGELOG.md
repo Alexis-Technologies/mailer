@@ -106,7 +106,12 @@ additive but the defaults listed below.
   Postmark, MailerSend, Mailtrap, Brevo, Mailjet, SparkPost, Lettermint, Maileroo, SMTP2GO, Azure
   and Scaleway. Nothing is read before it is verified: a signature where the provider signs (SNS
   with a topic allowlist, Svix, ECDSA, HMAC), its Basic credentials or token where it does not,
-  within a window of time and once by its id (`createMemoryReplayStore`, or any store).
+  within a window of time and once by its id. `verify()` reserves the id for `leaseMs` and gives
+  the events with `commit()` and `release()`: an id is kept as taken once the application has
+  handled its events, so a delivery whose handler failed is taken again, and another delivery of
+  it meanwhile is refused as `pending`. `replayStore` is required where a verifier keeps ids
+  (`createMemoryReplayStore()` in one process, a shared store of `reserve`, `commit` and
+  `release`, or `null`), and a refusal carries the `status` to answer the provider with.
 - **Bun and Deno:** CI runs the unit suite and the new `tests/runtime` (the package by its name,
   with no mock: sockets, TLS, DKIM, `fetch`, a child process) on Bun 1.4.3 and Deno 2.9.6, as
   well as on Node 22 and 24. `package.json` declares `"type": "commonjs"`, which Deno needs and

@@ -9,9 +9,10 @@ const {
   checkBasicCredentials,
   createEvent,
   dateOf,
+  deliveryOf,
   isRecord,
   metadataFromHeaders,
-  resolveCommonOptions,
+  resolveCredentialOptions,
   stringOf,
 } = require('./request.js');
 
@@ -81,12 +82,13 @@ const eventOf = (record) => {
  * `X-Metadata-<key>` fields when the webhook adds them to its payload.
  *
  * @param options `username`, `password` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`;
+ * committing does nothing, as nothing is kept.
  * @throws {TypeError} If a credential is missing.
  */
 const createSmtp2goWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'SMTP2GO');
-  const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
+  const common = resolveCredentialOptions(options);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -95,7 +97,7 @@ const createSmtp2goWebhookVerifier = (options = {}) => {
       if (!isRecord(record) || typeof record.event !== 'string') {
         throw new WebhookVerificationError('payload', 'The body is not an SMTP2GO event.');
       }
-      return { events: [eventOf(record)] };
+      return deliveryOf([eventOf(record)]);
     },
   };
 };

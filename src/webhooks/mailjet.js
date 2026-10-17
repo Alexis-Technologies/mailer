@@ -9,10 +9,11 @@ const {
   checkBasicCredentials,
   createEvent,
   dateOf,
+  deliveryOf,
   isRecord,
   jsonRecordOf,
   parseJsonOf,
-  resolveCommonOptions,
+  resolveCredentialOptions,
   stringOf,
 } = require('./request.js');
 
@@ -62,12 +63,13 @@ const eventOf = (record) => {
  * tag, the event payload the metadata, as `./mailjet` sends them.
  *
  * @param options `username`, `password` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`;
+ * committing does nothing, as nothing is kept.
  * @throws {TypeError} If a credential is missing.
  */
 const createMailjetWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'Mailjet');
-  const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
+  const common = resolveCredentialOptions(options);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -81,7 +83,7 @@ const createMailjetWebhookVerifier = (options = {}) => {
       if (events.length === 0) {
         throw new WebhookVerificationError('payload', 'The body is not a Mailjet event.');
       }
-      return { events };
+      return deliveryOf(events);
     },
   };
 };

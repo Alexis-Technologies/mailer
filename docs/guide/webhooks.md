@@ -14,29 +14,50 @@ keeps the body as a buffer.
 
 ```js
 const express = require('express');
-const { createSesWebhookVerifier, WebhookVerificationError } = require('@alexify/mailer/webhooks');
+const {
+  createMemoryReplayStore,
+  createSesWebhookVerifier,
+  WebhookVerificationError,
+} = require('@alexify/mailer/webhooks');
 
+// One process; several share a store of their own (see Time and replays).
+const replayStore = createMemoryReplayStore();
 const ses = createSesWebhookVerifier({
   topicArns: ['arn:aws:sns:eu-west-1:123456789012:ses-events'],
+  replayStore,
 });
 
 app.post('/webhooks/ses', express.raw({ type: '*/*' }), async (req, res) => {
+  let delivery;
   try {
-    const { events, confirmation } = await ses.verify({ body: req.body, headers: req.headers });
-    if (confirmation) await subscriptions.review(confirmation);
-    for (const event of events) await deliveries.record(event);
-    res.sendStatus(200);
+    delivery = await ses.verify({ body: req.body, headers: req.headers });
   } catch (error) {
     if (!(error instanceof WebhookVerificationError)) throw error;
-    // A replay was delivered before: tell the provider it arrived.
-    res.sendStatus(error.reason === 'replay' ? 200 : 401);
+    return res.sendStatus(error.status);
+  }
+  try {
+    if (delivery.confirmation) await subscriptions.review(delivery.confirmation);
+    for (const event of delivery.events) await deliveries.record(event);
+    await delivery.commit();
+    res.sendStatus(200);
+  } catch (error) {
+    // The provider delivers the request again, and it is taken again.
+    await delivery.release();
+    throw error;
   }
 });
 ```
 
-A refused request throws a `WebhookVerificationError` whose `reason` says why:
-`signature`, `timestamp`, `replay`, `payload`, `certificate`, `topic` or
-`credentials`.
+A refused request throws a `WebhookVerificationError` whose `reason` says why,
+and whose `status` is what to answer the provider with:
+
+| `reason` | `status` | |
+| --- | --- | --- |
+| `replay` | 200 | Taken before: the provider may stop. |
+| `pending` | 503 | Being handled by another delivery of it: the provider tries again. |
+| `payload` | 400 | Verified, or too long, but not a body of the provider. |
+| `certificate` | 401, or 503 | A signing certificate refused, or one that could not be read. |
+| `signature`, `timestamp`, `topic`, `credentials` | 401 | Not the provider's, or too old. |
 
 ## Events
 
@@ -63,18 +84,57 @@ has no name for, kept with its `raw` record.
 
 ## Time and replays
 
-A signed request is taken only within `toleranceMs` of now, and only once: its
-id goes into a replay store, in this process by default. A request taken before
-is refused as `replay`; answer it with a 2xx, as the provider delivered it
-before. Several processes share a store of their own, such as one on Redis,
-with `add(id, ttlMs)` that answers whether the id is new; `replayStore: null`
-turns the check off, for an application that deduplicates by the `id` of the
-events itself.
+A signed request is taken only within `toleranceMs` of now, and only once, by
+the id the provider gives it, in two steps:
+
+1. `verify()` **reserves** the id in the replay store for `leaseMs`, and gives
+   the events with `commit()` and `release()`.
+2. The application **commits** the events once it has handled them: the id is
+   then kept as taken, and a request taken before is refused as `replay`. If
+   handling them failed, it **releases** them, and the provider's next delivery
+   is taken again. A handler that died releases nothing, but its lease runs
+   out, and the delivery after it is taken.
+
+While an id is reserved, another delivery of the same request is refused as
+`pending`, with 503, so that the provider tries again later rather than lose an
+event whose first handler might still fail. Delivery is at least once: an
+application whose handler fails half-way handles the first events again, and
+deduplicates them by their `id`.
+
+`commit(events)` keeps only the events given: in a batch (SendGrid, Mailtrap,
+Azure), the events handled are taken, and the others come back on the next
+delivery. An SNS message of several recipients is kept once all its events
+are committed.
+
+`replayStore` is required where a verifier keeps ids:
+`createMemoryReplayStore()` in one process; for several processes, or a
+function that makes its verifier for each request, a store they share; `null`
+for an application that deduplicates the events by their `id` itself. A shared
+store implements three methods:
+
+```js
+// Redis, with node-redis: an atomic reservation, a commit, and a release
+// that frees a reservation only, never a committed id.
+const RELEASE = "if redis.call('get', KEYS[1]) == 'pending' then return redis.call('del', KEYS[1]) end";
+const replayStore = {
+  async reserve(id, leaseMs) {
+    if (await redis.set(id, 'pending', { NX: true, PX: leaseMs })) return 'reserved';
+    return (await redis.get(id)) === 'done' ? 'done' : 'pending';
+  },
+  async commit(id, ttlMs) {
+    await redis.set(id, 'done', { PX: ttlMs });
+  },
+  async release(id) {
+    await redis.eval(RELEASE, { keys: [id] });
+  },
+};
+```
 
 | Option | Default | |
 | --- | --- | --- |
+| `replayStore` | required | The ids taken, or `null`. |
+| `leaseMs` | 30 seconds | How long an id stays reserved while it is handled: longer than a handler takes, shorter than the provider's first retry (20 seconds for SNS). |
 | `toleranceMs` | 5 minutes (an hour for SES) | How far from now a request may be signed. |
-| `replayStore` | in this process | The ids already taken, or `null`. |
 | `maxBodyBytes` | 5 MiB | The longest body taken. |
 | `now` | `Date.now` | The clock. |
 
@@ -97,7 +157,10 @@ of the message are its `tags`, as `./ses` sends them, and its other tags its
 ## Resend
 
 ```js
-const resend = createResendWebhookVerifier({ secret: process.env.RESEND_WEBHOOK_SECRET });
+const resend = createResendWebhookVerifier({
+  secret: process.env.RESEND_WEBHOOK_SECRET,
+  replayStore,
+});
 ```
 
 Resend signs its webhooks with Svix: the HMAC-SHA256 of `svix-id`,
@@ -113,14 +176,15 @@ its metadata, as `./resend` sends them.
 ```js
 const sendgrid = createSendGridWebhookVerifier({
   publicKey: process.env.SENDGRID_WEBHOOK_PUBLIC_KEY,
+  replayStore,
 });
 ```
 
 Turn on the Signed Event Webhook in SendGrid and pass its verification key
 (base64, as SendGrid shows it, or PEM). The signature is ECDSA P-256 over the
 timestamp and the body. SendGrid posts events in batches: each event is taken
-once by its `sg_event_id`, so a batch sent again keeps only what is new, and is
-refused as `replay` when nothing is. A `bounce` is hard, a `blocked` one soft; a
+once by its `sg_event_id`, so a batch sent again keeps only what is not
+committed, and is refused as `replay` when nothing is left. A `bounce` is hard, a `blocked` one soft; a
 `dropped` message is `rejected`; an unsubscribe is `unsubscribed`. The
 categories are the tags of the message and its custom arguments its metadata;
 `messageId` is the `X-Message-Id` of the receipt, without the filter SendGrid
@@ -131,6 +195,7 @@ adds after it.
 ```js
 const mailgun = createMailgunWebhookVerifier({
   signingKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
+  replayStore,
 });
 ```
 
@@ -149,16 +214,22 @@ const postmark = createPostmarkWebhookVerifier({ username: 'hook', password: 's3
 
 Postmark signs nothing, so the URL of the webhook carries credentials, which
 the verifier requires and compares in constant time. With no time or id
-signed, nothing holds a request to a window or takes it once: deduplicate by
-the `id` of the events. A bounce is read by its type: `HardBounce` is hard,
+signed, nothing holds a request to a window or takes it once, and it needs no
+`replayStore`: deduplicate by the `id` of the events. A bounce is read by its type: `HardBounce` is hard,
 `SoftBounce` soft, `Transient` deferred, `SpamComplaint` a complaint,
 `ManuallyDeactivated` a rejection.
 
 ## MailerSend and Mailtrap
 
 ```js
-const mailersend = createMailerSendWebhookVerifier({ secret: process.env.MAILERSEND_WEBHOOK_SECRET });
-const mailtrap = createMailtrapWebhookVerifier({ secret: process.env.MAILTRAP_WEBHOOK_SECRET });
+const mailersend = createMailerSendWebhookVerifier({
+  secret: process.env.MAILERSEND_WEBHOOK_SECRET,
+  replayStore,
+});
+const mailtrap = createMailtrapWebhookVerifier({
+  secret: process.env.MAILTRAP_WEBHOOK_SECRET,
+  replayStore,
+});
 ```
 
 Both sign the raw body with HMAC-SHA256, in hexadecimal in `Signature`
@@ -200,8 +271,14 @@ request to a window or takes it once.
 ## Lettermint and Maileroo
 
 ```js
-const lettermint = createLettermintWebhookVerifier({ secret: process.env.LETTERMINT_WEBHOOK_SECRET });
-const maileroo = createMailerooWebhookVerifier({ secret: process.env.MAILEROO_WEBHOOK_SECRET });
+const lettermint = createLettermintWebhookVerifier({
+  secret: process.env.LETTERMINT_WEBHOOK_SECRET,
+  replayStore,
+});
+const maileroo = createMailerooWebhookVerifier({
+  secret: process.env.MAILEROO_WEBHOOK_SECRET,
+  replayStore,
+});
 ```
 
 Lettermint signs the time and the body: `X-Lettermint-Signature: t=…,v1=…`, the
@@ -228,12 +305,20 @@ payload.
 ## Azure Communication Services
 
 ```js
-const azure = createAzureWebhookVerifier({ token: process.env.EVENT_GRID_TOKEN });
+const azure = createAzureWebhookVerifier({ token: process.env.EVENT_GRID_TOKEN, replayStore });
 
 app.post('/webhooks/azure', express.raw({ type: '*/*' }), async (req, res) => {
-  const { events, validation } = await azure.verify({ body: req.body, headers: req.headers });
-  if (validation) return res.json({ validationResponse: validation.validationCode });
-  for (const event of events) await deliveries.record(event);
+  const delivery = await azure.verify({ body: req.body, headers: req.headers });
+  if (delivery.validation) {
+    return res.json({ validationResponse: delivery.validation.validationCode });
+  }
+  try {
+    for (const event of delivery.events) await deliveries.record(event);
+    await delivery.commit();
+  } catch (error) {
+    await delivery.release();
+    throw error;
+  }
   res.sendStatus(200);
 });
 ```
@@ -256,6 +341,7 @@ const trustChain = fs.readFileSync('scaleway-sns-trust-chain.pem', 'utf8');
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:project-…:tem-events'],
   trustChain,
+  replayStore,
 });
 ```
 

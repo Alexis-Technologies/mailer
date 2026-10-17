@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
   createBrevoWebhookVerifier,
+  createMemoryReplayStore,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createMailtrapWebhookVerifier,
@@ -24,7 +25,10 @@ const basic = (user, password) => `Basic ${Buffer.from(`${user}:${password}`).to
 const plain = (event) => ({ ...event, metadata: { ...event.metadata } });
 
 test('Webhooks MailerSend: the HMAC of the body, an event taken once', async () => {
-  const verifier = createMailerSendWebhookVerifier({ secret: 'ms-secret' });
+  const verifier = createMailerSendWebhookVerifier({
+    secret: 'ms-secret',
+    replayStore: createMemoryReplayStore(),
+  });
   const payload = {
     type: 'activity.hard_bounced',
     created_at: '2027-01-15T08:00:00.000000Z',
@@ -42,10 +46,11 @@ test('Webhooks MailerSend: the HMAC of the body, an event taken once', async () 
     },
   };
   const body = JSON.stringify(payload);
-  const { events } = await verifier.verify({
+  const delivery = await verifier.verify({
     body,
     headers: { Signature: hmac('ms-secret', body) },
   });
+  const { events } = delivery;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'mailersend',
     type: 'bounced',
@@ -59,6 +64,7 @@ test('Webhooks MailerSend: the HMAC of the body, an event taken once', async () 
     metadata: { orderId: '42' },
     raw: payload,
   });
+  await delivery.commit();
   await rejects(
     verifier.verify({ body, headers: { Signature: hmac('ms-secret', body) } }),
     'replay',
@@ -123,7 +129,10 @@ test('Webhooks MailerSend: the HMAC of the body, an event taken once', async () 
 });
 
 test('Webhooks Mailtrap: a signed batch, in JSON or JSON Lines, each event once', async () => {
-  const verifier = createMailtrapWebhookVerifier({ secret: 'mt-secret' });
+  const verifier = createMailtrapWebhookVerifier({
+    secret: 'mt-secret',
+    replayStore: createMemoryReplayStore(),
+  });
   const delivery = {
     event: 'delivery',
     message_id: 'mt-1',
@@ -143,10 +152,11 @@ test('Webhooks Mailtrap: a signed batch, in JSON or JSON Lines, each event once'
     bounce_category: 'invalid',
   };
   const body = JSON.stringify({ events: [delivery, bounce] });
-  const { events } = await verifier.verify({
+  const taken = await verifier.verify({
     body,
     headers: { 'Mailtrap-Signature': hmac('mt-secret', body) },
   });
+  const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'mailtrap',
     type: 'delivered',
@@ -164,6 +174,7 @@ test('Webhooks Mailtrap: a signed batch, in JSON or JSON Lines, each event once'
     diagnostic: '550 unknown',
   });
   assert.strictEqual(events[1].reason, 'invalid');
+  await taken.commit();
   await rejects(
     verifier.verify({ body, headers: { 'Mailtrap-Signature': hmac('mt-secret', body) } }),
     'replay',

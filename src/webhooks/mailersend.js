@@ -3,15 +3,17 @@
 // sently and unemail have no MailerSend webhook.
 
 const {
+  DAY_REPLAY_TTL_MS,
   WebhookVerificationError,
   bodyBytesOf,
   checkBodyHmac,
-  checkReplay,
+  claimDelivery,
   createEvent,
   dateOf,
   isRecord,
   metadataFromHeaders,
   parseJsonOf,
+  requireSecret,
   resolveCommonOptions,
   stringOf,
   stringsOf,
@@ -19,7 +21,6 @@ const {
 
 // MailerSend signs no time: an event id is kept a day and an hour, past the
 // retries of a delivery.
-const REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
 const TYPES = new Map([
   ['activity.sent', 'accepted'],
   ['activity.delivered', 'delivered'],
@@ -79,16 +80,16 @@ const eventOf = (payload) => {
  * MailerSend signs no time, so an event is taken once by its id, kept a day
  * and an hour.
  *
- * @param options `secret`; `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @param options `secret`; `replayStore`; `leaseMs` and `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMailerSendWebhookVerifier = (options = {}) => {
-  if (typeof options.secret !== 'string' || options.secret === '') {
-    throw new TypeError('secret is the signing secret of the MailerSend webhook.');
-  }
-  const secret = options.secret;
-  const common = resolveCommonOptions(options, REPLAY_TTL_MS);
+  const secret = requireSecret(
+    options.secret,
+    'secret is the signing secret of the MailerSend webhook.',
+  );
+  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -98,8 +99,8 @@ const createMailerSendWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not a MailerSend event.');
       }
       const event = eventOf(payload);
-      await checkReplay(common, `mailersend:${event.id}`, REPLAY_TTL_MS);
-      return { events: [event] };
+      const entries = [{ key: `mailersend:${event.id}`, events: [event] }];
+      return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
     },
   };
 };

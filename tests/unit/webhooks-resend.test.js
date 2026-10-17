@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
+  createMemoryReplayStore,
   createResendWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
@@ -10,7 +11,12 @@ const { SECRET, signSvix } = require('../helpers/webhooks/svix.js');
 
 const NOW = 1_800_000_000_000;
 const verifier = (options = {}) =>
-  createResendWebhookVerifier({ secret: SECRET, now: () => NOW, ...options });
+  createResendWebhookVerifier({
+    secret: SECRET,
+    now: () => NOW,
+    replayStore: createMemoryReplayStore({ now: () => NOW }),
+    ...options,
+  });
 const event = (type, data = {}) =>
   JSON.stringify({
     type,
@@ -33,7 +39,11 @@ const rejects = async (promise, reason) => {
 };
 
 test('Webhooks Resend: the vector of the Svix documentation verifies', async () => {
-  const resend = createResendWebhookVerifier({ secret: SECRET, now: () => 1_614_265_330_000 });
+  const resend = createResendWebhookVerifier({
+    secret: SECRET,
+    now: () => 1_614_265_330_000,
+    replayStore: null,
+  });
   const { events } = await resend.verify({
     body: '{"test": 2432232314}',
     headers: {
@@ -127,7 +137,7 @@ test('Webhooks Resend: a forged, old or repeated request is refused', async () =
   );
   await rejects(resend.verify(signSvix(body, 'msg_old', '1799999000')), 'timestamp');
   await rejects(resend.verify(signSvix(body, 'msg_bad', 'soon')), 'timestamp');
-  await resend.verify(signed);
+  await (await resend.verify(signed)).commit();
   await rejects(resend.verify(signed), 'replay');
   await rejects(resend.verify(signSvix('[1]', 'msg_array')), 'payload');
   // Standard Webhooks names its headers webhook-*.
@@ -145,5 +155,5 @@ test('Webhooks Resend: a secret that is not one is refused when the verifier is 
   assert.throws(() => createResendWebhookVerifier({}), /signing secret/);
   assert.throws(() => createResendWebhookVerifier({ secret: 'whsec_not base64!' }), /base64/);
   assert.throws(() => createResendWebhookVerifier({ secret: 'whsec_' }), /base64/);
-  assert.ok(createResendWebhookVerifier({ secret: SECRET.slice(6) }));
+  assert.ok(createResendWebhookVerifier({ secret: SECRET.slice(6), replayStore: null }));
 });

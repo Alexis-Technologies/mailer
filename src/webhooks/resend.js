@@ -10,24 +10,26 @@
 // or soft; and a failed or suppressed email is `rejected`, not `bounced` or
 // `unknown`.
 
-const { createHmac } = require('node:crypto');
 const {
+  DEFAULT_TOLERANCE_MS,
   WebhookVerificationError,
   bodyBytesOf,
-  checkReplay,
-  checkTime,
+  bounceKindOf,
+  checkSignedSeconds,
+  claimDelivery,
   createEvent,
   dateOf,
   equalBytes,
   headerOf,
+  hmacOf,
   isRecord,
   parseJsonOf,
   resolveCommonOptions,
   splitNamedTags,
+  stringListOf,
   stringOf,
 } = require('./request.js');
 
-const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const TYPES = new Map([
   ['email.sent', 'accepted'],
@@ -40,10 +42,6 @@ const TYPES = new Map([
   ['email.complained', 'complained'],
   ['email.opened', 'opened'],
   ['email.clicked', 'clicked'],
-]);
-const BOUNCE_KINDS = new Map([
-  ['Permanent', 'hard'],
-  ['Transient', 'soft'],
 ]);
 
 /**
@@ -74,10 +72,7 @@ const checkSvixSignature = (request, bytes, key, common) => {
   if (id === undefined || timestamp === undefined || header === undefined) {
     throw new WebhookVerificationError('signature', 'The request has no Svix signature.');
   }
-  const expected = createHmac('sha256', key)
-    .update(`${id}.${timestamp}.`, 'utf8')
-    .update(bytes)
-    .digest();
+  const expected = hmacOf(key, [`${id}.${timestamp}.`, bytes]);
   let matched = false;
   for (const part of header.split(' ')) {
     if (!part.startsWith('v1,')) continue;
@@ -86,21 +81,8 @@ const checkSvixSignature = (request, bytes, key, common) => {
   if (!matched) {
     throw new WebhookVerificationError('signature', 'The Svix signature does not match.');
   }
-  if (!/^\d+$/.test(timestamp)) {
-    throw new WebhookVerificationError('timestamp', 'The Svix timestamp is not a number.');
-  }
-  checkTime(Number(timestamp) * 1000, common);
+  checkSignedSeconds(timestamp, common, 'Svix');
   return id;
-};
-
-const recipientsOf = (to) => {
-  if (typeof to === 'string') return [to];
-  const recipients = [];
-  if (!Array.isArray(to)) return recipients;
-  for (const address of to) {
-    if (typeof address === 'string') recipients.push(address);
-  }
-  return recipients;
 };
 
 const eventsOf = (payload, id) => {
@@ -109,14 +91,14 @@ const eventsOf = (payload, id) => {
   const { tags, metadata } = splitNamedTags(data.tags);
   let bounce;
   if (type === 'bounced' && isRecord(data.bounce)) {
-    bounce = { kind: BOUNCE_KINDS.get(data.bounce.type) ?? 'undetermined' };
+    bounce = { kind: bounceKindOf(data.bounce.type) };
     if (stringOf(data.bounce.message) !== undefined) bounce.diagnostic = data.bounce.message;
   }
   const detail = data.bounce ?? data.failed ?? data.suppressed ?? data.delivery_delayed;
   const reason = isRecord(detail)
     ? (stringOf(detail.subType) ?? stringOf(detail.reason) ?? stringOf(detail.message))
     : undefined;
-  const recipients = recipientsOf(data.to);
+  const recipients = stringListOf(data.to);
   const list = recipients.length > 0 ? recipients : [undefined];
   const events = [];
   for (let index = 0; index < list.length; index++) {
@@ -144,8 +126,9 @@ const eventsOf = (payload, id) => {
  * Makes the verifier of the webhooks of Resend, which Svix signs.
  *
  * @param options `secret`, the signing secret of the webhook (`whsec_…`);
- * `now`, `toleranceMs` (five minutes), `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * `replayStore`; `now`, `toleranceMs` (five minutes), `leaseMs` and
+ * `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createResendWebhookVerifier = (options = {}) => {
@@ -155,12 +138,11 @@ const createResendWebhookVerifier = (options = {}) => {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
       const id = checkSvixSignature(request, bytes, key, common);
-      await checkReplay(common, `resend:${id}`);
       const payload = parseJsonOf(bytes);
       if (!isRecord(payload)) {
         throw new WebhookVerificationError('payload', 'The body is not a Resend event.');
       }
-      return { events: eventsOf(payload, id) };
+      return claimDelivery(common, [{ key: `resend:${id}`, events: eventsOf(payload, id) }]);
     },
   };
 };

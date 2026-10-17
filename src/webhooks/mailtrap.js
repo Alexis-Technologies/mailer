@@ -3,14 +3,16 @@
 // sently and unemail have no Mailtrap webhook.
 
 const {
+  DAY_REPLAY_TTL_MS,
   WebhookVerificationError,
   bodyBytesOf,
   checkBodyHmac,
-  checkReplay,
+  claimDelivery,
   createEvent,
   dateOf,
   isRecord,
   parseJsonOf,
+  requireSecret,
   resolveCommonOptions,
   stringOf,
   stringRecordOf,
@@ -18,7 +20,6 @@ const {
 
 // Mailtrap signs no time and retries for up to a day: an event id is kept a
 // day and an hour.
-const REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
 const TYPES = new Map([
   ['delivery', 'delivered'],
   ['soft bounce', 'bounced'],
@@ -98,38 +99,27 @@ const eventOf = (record) => {
  * the webhook; a body of JSON or JSON Lines.  Mailtrap signs no time, so each
  * event is taken once by its `event_id`, kept a day and an hour.
  *
- * @param options `secret`; `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @param options `secret`; `replayStore`; `leaseMs` and `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMailtrapWebhookVerifier = (options = {}) => {
-  if (typeof options.secret !== 'string' || options.secret === '') {
-    throw new TypeError('secret is the signing secret of the Mailtrap webhook.');
-  }
-  const secret = options.secret;
-  const common = resolveCommonOptions(options, REPLAY_TTL_MS);
+  const secret = requireSecret(
+    options.secret,
+    'secret is the signing secret of the Mailtrap webhook.',
+  );
+  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
       checkBodyHmac(request, bytes, 'mailtrap-signature', secret, 'Mailtrap');
-      const events = [];
-      let replayed = 0;
+      const entries = [];
       for (const record of recordsOf(bytes)) {
         if (!isRecord(record)) continue;
         const event = eventOf(record);
-        try {
-          await checkReplay(common, `mailtrap:${event.id}`, REPLAY_TTL_MS);
-        } catch (error) {
-          if (error.reason !== 'replay') throw error;
-          replayed++;
-          continue;
-        }
-        events.push(event);
+        entries.push({ key: `mailtrap:${event.id}`, events: [event] });
       }
-      if (events.length === 0 && replayed > 0) {
-        throw new WebhookVerificationError('replay', 'Every event of the batch was taken before.');
-      }
-      return { events };
+      return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
     },
   };
 };

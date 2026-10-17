@@ -66,13 +66,15 @@ const eventOf = (record, snsMessageId) => {
  * issued, published within an hour, taken once.
  *
  * @param options `topicArns`; `trustChain`, the PEM of Scaleway's SNS trust
- * chain; `fetch`, `now`, `toleranceMs`, `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events, confirmation? }`.
+ * chain; `replayStore`; `fetch`, `now`, `toleranceMs`, `leaseMs` and
+ * `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, confirmation?,
+ * commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createScalewayWebhookVerifier = (options = {}) => {
   const authorities = trustChainOf(options.trustChain);
-  const verifySns = createSnsVerifier(options, {
+  const verify = createSnsVerifier(options, {
     provider: 'scaleway',
     defaultToleranceMs: DEFAULT_TOLERANCE_MS,
     isCertificateUrl: (value) => isHttpsUrlOf(value, SCALEWAY_HOST),
@@ -82,23 +84,18 @@ const createScalewayWebhookVerifier = (options = {}) => {
       }
       throw certificateError('The signing certificate was not issued by the trust chain.');
     },
+    eventsOf: (message, record) => [
+      record === undefined
+        ? createEvent({
+            provider: 'scaleway',
+            type: 'unknown',
+            id: message.MessageId,
+            raw: message,
+          })
+        : eventOf(record, message.MessageId),
+    ],
   });
-  return {
-    async verify(request) {
-      const { message, record, confirmation } = await verifySns(request);
-      if (confirmation !== undefined) return { events: [], confirmation };
-      if (record === undefined) {
-        const event = createEvent({
-          provider: 'scaleway',
-          type: 'unknown',
-          id: message.MessageId,
-          raw: message,
-        });
-        return { events: [event] };
-      }
-      return { events: [eventOf(record, message.MessageId)] };
-    },
-  };
+  return { verify };
 };
 
 module.exports = { createScalewayWebhookVerifier };

@@ -1,60 +1,137 @@
 // Not ported: what the webhook verifiers share — the raw body, the header
 // fields of any kind of request, the error of a refusal, the window of time a
-// signed request is taken in, the store of the ids already seen, and the
-// shape of an event.  sently parsed a payload apart from its check; here
-// nothing is read before it is verified.
+// signed request is taken in, the store of the ids already taken, the
+// delivery of the events of a request, and the shape of an event.  sently
+// parsed a payload apart from its check; here nothing is read before it is
+// verified, and an id is kept as taken only once the application has handled
+// its events.
 
 const { createHmac, timingSafeEqual } = require('node:crypto');
-const { checkOptionalFunction, checkPositiveNumber } = require('../internal/options.js');
+const {
+  checkOptionalFunction,
+  checkPositiveInteger,
+  checkPositiveNumber,
+} = require('../internal/options.js');
 
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
+// Longer than an application takes to handle a request, shorter than the
+// first retry of a provider (20 s for SNS), so that a request whose handler
+// died is taken again.
+const DEFAULT_LEASE_MS = 30 * 1000;
+/**
+ * How far from now a signed request is taken unless a verifier says
+ * otherwise.
+ *
+ * @internal
+ */
+const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
+/**
+ * How long the id of an event is kept when its provider signs no time and
+ * retries for a day.
+ *
+ * @internal
+ */
+const DAY_REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
+const HEX = /^[0-9a-f]+$/i;
+const REPLAY_METHODS = ['reserve', 'commit', 'release'];
+
+// The answer a refusal asks for: a replay arrived before, so the provider
+// may stop; a request still being handled may pass later, so it should try
+// again; a body that cannot be read is the sender's; the rest is refused.
+const STATUSES = new Map([
+  ['replay', 200],
+  ['pending', 503],
+  ['payload', 400],
+]);
 
 /**
- * A request a verifier refused: `reason` says why.
+ * A request a verifier refused: `reason` says why, and `status` what to
+ * answer the provider with.
  */
 class WebhookVerificationError extends Error {
   /**
-   * @param reason `signature`, `timestamp`, `replay`, `payload`,
+   * @param reason `signature`, `timestamp`, `replay`, `pending`, `payload`,
    * `certificate`, `topic` or `credentials`.
    * @param message What failed.
-   * @param options The cause.
+   * @param options The cause, and `status` when it is not that of the
+   * reason (200 for `replay`, 503 for `pending`, 400 for `payload`, 401
+   * otherwise).
    */
   constructor(reason, message, options) {
     super(message, options);
     this.name = 'WebhookVerificationError';
     this.reason = reason;
+    this.status = options?.status ?? STATUSES.get(reason) ?? 401;
   }
 }
 
 /**
- * Makes a store of the ids of the requests already taken, in this process,
- * which holds at most `maxEntries`, the oldest dropped first.
+ * Makes a store of the ids of the requests taken, in this process: an id is
+ * `pending` for the lease of the request that reserved it, and `done` for
+ * its time once that request is committed.  It holds at most `maxEntries`
+ * ids, the oldest done ones dropped first; a pending id is never dropped
+ * before its lease ends.
  *
  * @param options `maxEntries` (10000) and `now`.
- * @returns `{ add(id, ttlMs) }`, true when the id is new.
+ * @returns `{ reserve(id, leaseMs), commit(id, ttlMs), release(id) }`.
+ * @throws {TypeError} If an option is invalid.
  */
 const createMemoryReplayStore = (options = {}) => {
-  const maxEntries = options.maxEntries ?? 10000;
-  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
-    throw new TypeError(`maxEntries must be a positive integer: ${String(maxEntries)}`);
-  }
+  const maxEntries = checkPositiveInteger(options.maxEntries ?? 10000, 'maxEntries');
   const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
-  const seen = new Map();
+  const entries = new Map();
+
+  // A Map iterates in the order of insertion, and an entry is written anew
+  // when it changes, so the first ones are the oldest.
+  const trim = (at) => {
+    for (const [id, entry] of entries) {
+      const live = entry.expiresAt > at;
+      if (live && entries.size <= maxEntries) break;
+      if (live && !entry.done) continue;
+      entries.delete(id);
+    }
+  };
+
+  const write = (id, entry, at) => {
+    entries.delete(id);
+    entries.set(id, entry);
+    trim(at);
+  };
+
   return {
-    add(id, ttlMs) {
+    reserve(id, leaseMs) {
       const at = now();
-      const expiresAt = seen.get(id);
-      if (expiresAt !== undefined && expiresAt > at) return false;
-      seen.delete(id);
-      seen.set(id, at + ttlMs);
-      for (const [key, until] of seen) {
-        if (seen.size <= maxEntries && until > at) break;
-        seen.delete(key);
-      }
-      return true;
+      const entry = entries.get(id);
+      if (entry !== undefined && entry.expiresAt > at) return entry.done ? 'done' : 'pending';
+      write(id, { done: false, expiresAt: at + leaseMs }, at);
+      return 'reserved';
+    },
+    commit(id, ttlMs) {
+      const at = now();
+      write(id, { done: true, expiresAt: at + ttlMs }, at);
+    },
+    release(id) {
+      if (entries.get(id)?.done === false) entries.delete(id);
     },
   };
+};
+
+const checkReplayStore = (store) => {
+  if (store === undefined) {
+    throw new TypeError(
+      'replayStore is required: createMemoryReplayStore() for one process, a store the ' +
+        'processes share for several, or null for an application that deduplicates the ' +
+        'events by their id itself.',
+    );
+  }
+  if (store === null) return null;
+  for (const method of REPLAY_METHODS) {
+    if (typeof store?.[method] !== 'function') {
+      throw new TypeError(`replayStore must have a ${method} method, or be null.`);
+    }
+  }
+  return store;
 };
 
 /**
@@ -62,21 +139,162 @@ const createMemoryReplayStore = (options = {}) => {
  *
  * @internal
  */
-const resolveCommonOptions = (options, defaultToleranceMs) => {
-  const replayStore =
-    options.replayStore === undefined ? createMemoryReplayStore() : options.replayStore;
-  if (replayStore !== null && typeof replayStore?.add !== 'function') {
-    throw new TypeError('replayStore must have an add method, or be null.');
+const resolveCommonOptions = (options, defaultToleranceMs) => ({
+  now: checkOptionalFunction(options.now, 'now') ?? Date.now,
+  toleranceMs: checkPositiveNumber(options.toleranceMs ?? defaultToleranceMs, 'toleranceMs'),
+  replayStore: checkReplayStore(options.replayStore),
+  leaseMs: checkPositiveNumber(options.leaseMs ?? DEFAULT_LEASE_MS, 'leaseMs'),
+  maxBodyBytes: checkPositiveNumber(options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES, 'maxBodyBytes'),
+});
+
+/**
+ * Resolves the options of a verifier of a provider that signs neither a time
+ * nor an id: its credentials stand for a request, and nothing is kept of it.
+ *
+ * @internal
+ */
+const resolveCredentialOptions = (options) =>
+  resolveCommonOptions({ ...options, replayStore: null }, DEFAULT_TOLERANCE_MS);
+
+/**
+ * The events of a verified request, whose ids stay reserved in the replay
+ * store until the application commits them, or releases them so that the
+ * provider's next delivery is taken again.  A lease that runs out releases
+ * them too.
+ */
+class WebhookDelivery {
+  events = [];
+  #store;
+  #ttlMs;
+  // The reserved ids, each with the number of its events not committed.
+  #left = new Map();
+  #keyOf = new WeakMap();
+
+  constructor(fields, store, ttlMs) {
+    for (const name in fields) {
+      if (Object.hasOwn(fields, name)) this[name] = fields[name];
+    }
+    this.#store = store;
+    this.#ttlMs = ttlMs;
   }
-  return {
-    now: checkOptionalFunction(options.now, 'now') ?? Date.now,
-    toleranceMs: checkPositiveNumber(options.toleranceMs ?? defaultToleranceMs, 'toleranceMs'),
-    replayStore,
-    maxBodyBytes: checkPositiveNumber(
-      options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
-      'maxBodyBytes',
-    ),
-  };
+
+  add(key, events) {
+    for (const event of events) this.events.push(event);
+    if (this.#store === null) return;
+    this.#left.set(key, events.length);
+    for (const event of events) this.#keyOf.set(event, key);
+  }
+
+  get reserved() {
+    return this.#left.size;
+  }
+
+  /**
+   * Keeps the ids of the events handled as taken, so that the provider's
+   * next delivery of them is a replay: of every event of the request, or of
+   * those given.  An id that several events share is kept once all of them
+   * are committed.
+   *
+   * @param events The events handled; all of them when left out.
+   */
+  async commit(events) {
+    if (this.#store === null) return;
+    if (events === undefined) {
+      for (const key of this.#left.keys()) {
+        await this.#store.commit(key, this.#ttlMs);
+        this.#left.delete(key);
+      }
+      return;
+    }
+    for (const event of events) {
+      const key = this.#keyOf.get(event);
+      const left = key === undefined ? undefined : this.#left.get(key);
+      if (left === undefined) continue;
+      this.#keyOf.delete(event);
+      if (left > 1) {
+        this.#left.set(key, left - 1);
+        continue;
+      }
+      await this.#store.commit(key, this.#ttlMs);
+      this.#left.delete(key);
+    }
+  }
+
+  /**
+   * Frees the ids of the events not committed, so that the provider's next
+   * delivery of them is taken: call it when handling the events failed.
+   */
+  async release() {
+    if (this.#store === null) return;
+    for (const key of this.#left.keys()) {
+      await this.#store.release(key);
+      this.#left.delete(key);
+    }
+  }
+}
+
+/**
+ * Reserves the ids of the records of a verified request and makes the
+ * delivery of the events of those that are new.  A record whose id was taken
+ * before, or is being taken by another request, is left out; a request with
+ * records and nothing new is refused, as `pending` while another request
+ * holds one of them and as `replay` otherwise.  A failure releases what was
+ * reserved.
+ *
+ * @param common The options of the verifier.
+ * @param entries `{ key, events }` for each record, `key` its id in the
+ * store.
+ * @param fields The other fields of the result, such as `confirmation`.
+ * @param ttlMs How long a committed id is kept: twice the window of time by
+ * default, so that a request cannot come back in it.
+ * @returns The delivery.
+ * @internal
+ */
+const claimDelivery = async (common, entries, fields = {}, ttlMs = common.toleranceMs * 2) => {
+  const store = common.replayStore;
+  const delivery = new WebhookDelivery(fields, store, ttlMs);
+  let done = 0;
+  let pending = 0;
+  try {
+    for (const entry of entries) {
+      const state = store === null ? 'reserved' : await store.reserve(entry.key, common.leaseMs);
+      if (state === 'reserved') delivery.add(entry.key, entry.events);
+      else if (state === 'pending') pending++;
+      else if (state === 'done') done++;
+      else throw new TypeError(`replayStore.reserve answered ${String(state)}.`);
+    }
+  } catch (error) {
+    await delivery.release();
+    throw error;
+  }
+  if (store === null || delivery.reserved > 0 || done + pending === 0) return delivery;
+  const single = entries.length === 1;
+  if (pending > 0) {
+    throw new WebhookVerificationError(
+      'pending',
+      single
+        ? `The request ${entries[0].key} is being handled by another delivery.`
+        : 'The events of the batch are being handled by another delivery.',
+    );
+  }
+  throw new WebhookVerificationError(
+    'replay',
+    single
+      ? `The request ${entries[0].key} was taken before.`
+      : 'Every event of the batch was taken before.',
+  );
+};
+
+/**
+ * The delivery of the events of a request whose provider gives no id to
+ * take it by: nothing is kept, and committing it does nothing.
+ *
+ * @internal
+ */
+const deliveryOf = (events, fields) => {
+  const delivery = new WebhookDelivery(fields, null, 0);
+  delivery.add(undefined, events);
+  return delivery;
 };
 
 /**
@@ -148,16 +366,16 @@ const checkTime = (atMs, common) => {
 };
 
 /**
- * Refuses a request whose id was taken before.
+ * Refuses a time a provider signs in whole seconds that is not one, or that
+ * is too far from now.
  *
  * @internal
  */
-const checkReplay = async (common, id, ttlMs = common.toleranceMs * 2) => {
-  if (common.replayStore === null) return;
-  // Kept for twice the window by default, so a request cannot come back in it.
-  if ((await common.replayStore.add(id, ttlMs)) !== true) {
-    throw new WebhookVerificationError('replay', `The request ${id} was taken before.`);
+const checkSignedSeconds = (value, common, label) => {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw new WebhookVerificationError('timestamp', `The ${label} timestamp is not a number.`);
   }
+  checkTime(Number(value) * 1000, common);
 };
 
 /**
@@ -166,6 +384,42 @@ const checkReplay = async (common, id, ttlMs = common.toleranceMs * 2) => {
  * @internal
  */
 const equalBytes = (a, b) => a.length === b.length && timingSafeEqual(a, b);
+
+/**
+ * The HMAC-SHA256 of the parts given, in order.
+ *
+ * @internal
+ */
+const hmacOf = (secret, parts) => {
+  const hmac = createHmac('sha256', secret);
+  for (const part of parts) hmac.update(part);
+  return hmac.digest();
+};
+
+/**
+ * Checks a signature given in hexadecimal against the digest expected.
+ *
+ * @internal
+ */
+const checkHexSignature = (expected, given, label) => {
+  const hex = given?.trim();
+  if (hex === undefined || !HEX.test(hex)) {
+    throw new WebhookVerificationError('signature', `The request has no ${label} signature.`);
+  }
+  if (!equalBytes(expected, Buffer.from(hex, 'hex'))) {
+    throw new WebhookVerificationError('signature', `The ${label} signature does not match.`);
+  }
+};
+
+/**
+ * A secret an option must hold: a string that is not empty.
+ *
+ * @internal
+ */
+const requireSecret = (value, message) => {
+  if (typeof value !== 'string' || value === '') throw new TypeError(message);
+  return value;
+};
 
 /**
  * A date from seconds, milliseconds or an ISO string, or `undefined`.
@@ -213,23 +467,13 @@ const isRecord = (value) => typeof value === 'object' && value !== null && !Arra
  */
 const stringOf = (value) => (typeof value === 'string' && value !== '' ? value : undefined);
 
-const HEX = /^[0-9a-f]+$/i;
-
 /**
  * Checks the HMAC-SHA256 of the raw body, in hexadecimal in a header field.
  *
  * @internal
  */
-const checkBodyHmac = (request, bytes, header, secret, label) => {
-  const given = headerOf(request, header);
-  if (given === undefined || !HEX.test(given.trim())) {
-    throw new WebhookVerificationError('signature', `The request has no ${label} signature.`);
-  }
-  const expected = createHmac('sha256', secret).update(bytes).digest();
-  if (!equalBytes(expected, Buffer.from(given.trim(), 'hex'))) {
-    throw new WebhookVerificationError('signature', `The ${label} signature does not match.`);
-  }
-};
+const checkBodyHmac = (request, bytes, header, secret, label) =>
+  checkHexSignature(hmacOf(secret, [bytes]), headerOf(request, header), label);
 
 /**
  * The credentials a webhook URL carries (`https://user:password@…`), for a
@@ -294,6 +538,26 @@ const stringsOf = (list) => {
   }
   return strings;
 };
+
+/**
+ * The strings of a value that is one string or a list of them.
+ *
+ * @internal
+ */
+const stringListOf = (value) =>
+  typeof value === 'string' && value !== '' ? [value] : stringsOf(value);
+
+const SES_BOUNCE_KINDS = new Map([
+  ['Permanent', 'hard'],
+  ['Transient', 'soft'],
+]);
+
+/**
+ * How a bounce of one of the types of SES went, which Resend passes on too.
+ *
+ * @internal
+ */
+const bounceKindOf = (type) => SES_BOUNCE_KINDS.get(type) ?? 'undetermined';
 
 /**
  * A record of JSON text, such as metadata a provider keeps as one string.
@@ -383,24 +647,35 @@ const splitNamedTags = (named) => {
 };
 
 module.exports = {
+  DAY_REPLAY_TTL_MS,
+  DEFAULT_TOLERANCE_MS,
+  WebhookDelivery,
   WebhookVerificationError,
   basicCredentialsOf,
   bodyBytesOf,
+  bounceKindOf,
   checkBasicCredentials,
   checkBodyHmac,
-  checkReplay,
+  checkHexSignature,
+  checkSignedSeconds,
   checkTime,
+  claimDelivery,
   createEvent,
   createMemoryReplayStore,
   dateOf,
+  deliveryOf,
   equalBytes,
   headerOf,
+  hmacOf,
   isRecord,
   jsonRecordOf,
   metadataFromHeaders,
   parseJsonOf,
+  requireSecret,
   resolveCommonOptions,
+  resolveCredentialOptions,
   splitNamedTags,
+  stringListOf,
   stringOf,
   stringRecordOf,
   stringsOf,

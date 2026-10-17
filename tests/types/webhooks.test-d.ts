@@ -18,6 +18,7 @@ import {
   createSesWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
+  type ReplayState,
   type ReplayStore,
   type SesWebhookResult,
   type WebhookVerificationReason,
@@ -41,10 +42,28 @@ expectError(ses.verify({ body: {} }));
 expectError(createSesWebhookVerifier({}));
 const error = new WebhookVerificationError('replay', 'seen');
 expectType<WebhookVerificationReason>(error.reason);
+expectType<number>(error.status);
+new WebhookVerificationError('pending', 'held', { status: 503, cause: error });
+expectType<Promise<void>>(result.commit());
+expectType<Promise<void>>(result.commit([result.events[0]]));
+expectType<Promise<void>>(result.release());
+expectType<ReplayState | Promise<ReplayState>>(store.reserve('id', 30_000));
+const shared: ReplayStore = {
+  reserve: async () => 'reserved' as const,
+  commit: async () => {},
+  release: async () => {},
+};
+createSesWebhookVerifier({ topicArns: ['arn'], replayStore: shared, leaseMs: 10_000 });
+expectError(createSesWebhookVerifier({ topicArns: ['arn'] }));
+expectError<ReplayStore>({ add: () => true });
 
-const resend = createResendWebhookVerifier({ secret: 'whsec_abc=', toleranceMs: 1000 });
+const resend = createResendWebhookVerifier({
+  secret: 'whsec_abc=',
+  toleranceMs: 1000,
+  replayStore: store,
+});
 expectAssignable<readonly DeliveryEvent<'resend'>[]>((await resend.verify({ body: '' })).events);
-const sendgrid = createSendGridWebhookVerifier({ publicKey: 'MFkw…' });
+const sendgrid = createSendGridWebhookVerifier({ publicKey: 'MFkw…', replayStore: store });
 expectAssignable<readonly DeliveryEvent<'sendgrid'>[]>(
   (await sendgrid.verify({ body: '' })).events,
 );
@@ -60,7 +79,8 @@ const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: n
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
   (await mailersend.verify({ body: '' })).events,
 );
-createMailtrapWebhookVerifier({ secret: 's', maxBodyBytes: 1 });
+createMailtrapWebhookVerifier({ secret: 's', maxBodyBytes: 1, replayStore: store });
+expectError(createMailtrapWebhookVerifier({ secret: 's' }));
 createBrevoWebhookVerifier({ token: 't', header: 'x-webhook-token' });
 createMailjetWebhookVerifier({ username: 'u', password: 'p' });
 const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
@@ -68,17 +88,22 @@ expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
   (await sparkpost.verify({ body: '' })).events,
 );
 expectError(createBrevoWebhookVerifier({}));
-expectError(createMailtrapWebhookVerifier({ secret: 's', toleranceMs: 1 }));
+expectError(createMailtrapWebhookVerifier({ secret: 's', replayStore: null, toleranceMs: 1 }));
 
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:p:t'],
   trustChain: '-----BEGIN CERTIFICATE-----',
+  replayStore: store,
 });
 expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
-createLettermintWebhookVerifier({ secret: 'whsec_x', toleranceMs: 60_000 });
-createMailerooWebhookVerifier({ secret: 's' });
+createLettermintWebhookVerifier({ secret: 'whsec_x', toleranceMs: 60_000, replayStore: null });
+createMailerooWebhookVerifier({ secret: 's', replayStore: store });
 createSmtp2goWebhookVerifier({ username: 'u', password: 'p' });
-const azure = createAzureWebhookVerifier({ token: 't', header: 'x-webhook-token' });
+const azure = createAzureWebhookVerifier({
+  token: 't',
+  header: 'x-webhook-token',
+  replayStore: store,
+});
 expectType<string | undefined>((await azure.verify({ body: '' })).validation?.validationCode);
 expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));
 expectError(createAzureWebhookVerifier({}));

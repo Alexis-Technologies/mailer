@@ -13,10 +13,11 @@ const {
   bodyBytesOf,
   createEvent,
   dateOf,
+  deliveryOf,
   isRecord,
   jsonRecordOf,
   parseJsonOf,
-  resolveCommonOptions,
+  resolveCredentialOptions,
   stringOf,
   stringsOf,
   tokenCheckOf,
@@ -83,12 +84,13 @@ const eventOf = (record) => {
  * or the value of a custom `header`.
  *
  * @param options `token`, `header` (`authorization`) and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`;
+ * committing does nothing, as nothing is kept.
  * @throws {TypeError} If an option is invalid.
  */
 const createBrevoWebhookVerifier = (options = {}) => {
   const checkToken = tokenCheckOf(options, 'Brevo');
-  const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
+  const common = resolveCredentialOptions(options);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -102,7 +104,7 @@ const createBrevoWebhookVerifier = (options = {}) => {
       if (events.length === 0) {
         throw new WebhookVerificationError('payload', 'The body is not a Brevo event.');
       }
-      return { events };
+      return deliveryOf(events);
     },
   };
 };

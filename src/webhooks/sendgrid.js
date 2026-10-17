@@ -10,20 +10,21 @@
 
 const { createPublicKey, verify: verifySignature } = require('node:crypto');
 const {
+  DEFAULT_TOLERANCE_MS,
   WebhookVerificationError,
   bodyBytesOf,
-  checkReplay,
-  checkTime,
+  checkSignedSeconds,
+  claimDelivery,
   createEvent,
   dateOf,
   headerOf,
   isRecord,
   parseJsonOf,
   resolveCommonOptions,
+  stringListOf,
   stringOf,
 } = require('./request.js');
 
-const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
 const SIGNATURE = 'x-twilio-email-event-webhook-signature';
 const TIMESTAMP = 'x-twilio-email-event-webhook-timestamp';
 const TYPES = new Map([
@@ -93,16 +94,6 @@ const publicKeyOf = (value) => {
   }
 };
 
-const tagsOf = (category) => {
-  if (typeof category === 'string') return [category];
-  const tags = [];
-  if (!Array.isArray(category)) return tags;
-  for (const value of category) {
-    if (typeof value === 'string') tags.push(value);
-  }
-  return tags;
-};
-
 const metadataOf = (record) => {
   const metadata = Object.create(null);
   for (const name in record) {
@@ -141,7 +132,7 @@ const eventOf = (record, index, timestamp) => {
       stringOf(record.reason) ??
       stringOf(record.response),
     url: stringOf(record.url),
-    tags: tagsOf(record.category),
+    tags: stringListOf(record.category),
     metadata: metadataOf(record),
     raw: record,
   });
@@ -151,9 +142,9 @@ const eventOf = (record, index, timestamp) => {
  * Makes the verifier of SendGrid's Signed Event Webhook.
  *
  * @param options `publicKey`, its verification key (base64 of the key, or
- * PEM); `now`, `toleranceMs` (five minutes), `replayStore` and
+ * PEM); `replayStore`; `now`, `toleranceMs` (five minutes), `leaseMs` and
  * `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createSendGridWebhookVerifier = (options = {}) => {
@@ -171,34 +162,20 @@ const createSendGridWebhookVerifier = (options = {}) => {
       if (!verifySignature('sha256', signed, key, Buffer.from(signature, 'base64'))) {
         throw new WebhookVerificationError('signature', 'The SendGrid signature does not match.');
       }
-      if (!/^\d+$/.test(timestamp)) {
-        throw new WebhookVerificationError('timestamp', 'The SendGrid timestamp is not a number.');
-      }
-      checkTime(Number(timestamp) * 1000, common);
+      checkSignedSeconds(timestamp, common, 'SendGrid');
       const payload = parseJsonOf(bytes);
       if (!Array.isArray(payload)) {
         throw new WebhookVerificationError('payload', 'The body is not a list of SendGrid events.');
       }
       // A batch SendGrid sends again keeps the ids of its events: those taken
       // before are left out, and a batch of nothing new is a replay.
-      const events = [];
-      let replayed = 0;
+      const entries = [];
       for (let index = 0; index < payload.length; index++) {
         if (!isRecord(payload[index])) continue;
         const event = eventOf(payload[index], index, timestamp);
-        try {
-          await checkReplay(common, `sendgrid:${event.id}`);
-        } catch (error) {
-          if (error.reason !== 'replay') throw error;
-          replayed++;
-          continue;
-        }
-        events.push(event);
+        entries.push({ key: `sendgrid:${event.id}`, events: [event] });
       }
-      if (events.length === 0 && replayed > 0) {
-        throw new WebhookVerificationError('replay', 'Every event of the batch was taken before.');
-      }
-      return { events };
+      return claimDelivery(common, entries);
     },
   };
 };

@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
   createMailgunWebhookVerifier,
+  createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
@@ -12,7 +13,12 @@ const {
 const KEY = 'key-mailgun-signing';
 const NOW = 1_800_000_000_000;
 const mailgun = (options = {}) =>
-  createMailgunWebhookVerifier({ signingKey: KEY, now: () => NOW, ...options });
+  createMailgunWebhookVerifier({
+    signingKey: KEY,
+    now: () => NOW,
+    replayStore: createMemoryReplayStore({ now: () => NOW }),
+    ...options,
+  });
 const signedMailgun = (data, token = 'token-1', timestamp = '1800000000') => ({
   body: JSON.stringify({
     signature: {
@@ -137,7 +143,7 @@ test('Webhooks Mailgun: a forged, old or repeated request is refused', async () 
   );
   // Changed in the port: sently took any time and any replay.
   await rejects(verifier.verify(signedMailgun(eventData(), 'old', '1799990000')), 'timestamp');
-  await verifier.verify(good);
+  await (await verifier.verify(good)).commit();
   await rejects(verifier.verify(good), 'replay');
   await rejects(verifier.verify(signedMailgun('nothing', 'no-data')), 'payload');
   await rejects(verifier.verify({ body: '"text"' }), 'signature');

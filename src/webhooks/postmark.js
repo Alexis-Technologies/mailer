@@ -15,9 +15,10 @@ const {
   checkBasicCredentials,
   createEvent,
   dateOf,
+  deliveryOf,
   isRecord,
   parseJsonOf,
-  resolveCommonOptions,
+  resolveCredentialOptions,
   stringOf,
   stringRecordOf,
 } = require('./request.js');
@@ -107,13 +108,14 @@ const eventOf = (record) => {
  *
  * @param options `username` and `password` of the webhook's URL, and
  * `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`;
+ * committing does nothing, as nothing is kept.
  * @throws {TypeError} If an option is invalid.
  */
 const createPostmarkWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'Postmark');
   // No time or id to hold a request to: the credentials alone stand for it.
-  const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
+  const common = resolveCredentialOptions(options);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -122,7 +124,7 @@ const createPostmarkWebhookVerifier = (options = {}) => {
       if (!isRecord(record) || typeof record.RecordType !== 'string') {
         throw new WebhookVerificationError('payload', 'The body is not a Postmark event.');
       }
-      return { events: [eventOf(record)] };
+      return deliveryOf([eventOf(record)]);
     },
   };
 };

@@ -3,21 +3,23 @@
 // sently and unemail have no Maileroo webhook.
 
 const {
+  DAY_REPLAY_TTL_MS,
   WebhookVerificationError,
   bodyBytesOf,
   checkBodyHmac,
-  checkReplay,
+  claimDelivery,
   createEvent,
   dateOf,
   isRecord,
   parseJsonOf,
+  requireSecret,
   resolveCommonOptions,
   splitNamedTags,
+  stringListOf,
   stringOf,
 } = require('./request.js');
 
 // Maileroo signs no time: an event id is kept a day and an hour.
-const REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
 const TYPES = new Map([
   ['accepted', 'accepted'],
   ['delivered', 'delivered'],
@@ -29,16 +31,6 @@ const TYPES = new Map([
   ['clicked', 'clicked'],
 ]);
 
-const recipientsOf = (to) => {
-  if (typeof to === 'string') return [to];
-  const recipients = [];
-  if (!Array.isArray(to)) return recipients;
-  for (const address of to) {
-    if (typeof address === 'string') recipients.push(address);
-  }
-  return recipients;
-};
-
 const eventsOf = (payload) => {
   const data = isRecord(payload.event_data) ? payload.event_data : {};
   const type = TYPES.get(payload.event_type) ?? 'unknown';
@@ -49,7 +41,7 @@ const eventsOf = (payload) => {
     if (reason !== undefined) bounce.diagnostic = reason;
   }
   const { tags, metadata } = splitNamedTags(payload.tags);
-  const recipients = recipientsOf(data.to);
+  const recipients = stringListOf(data.to);
   const list = recipients.length > 0 ? recipients : [undefined];
   const events = [];
   for (let index = 0; index < list.length; index++) {
@@ -79,16 +71,16 @@ const eventsOf = (payload) => {
  * hexadecimal in `x-maileroo-signature`.  Maileroo signs no time, so an event
  * is taken once by its id, kept a day and an hour.
  *
- * @param options `secret`; `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @param options `secret`; `replayStore`; `leaseMs` and `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`.
  * @throws {TypeError} If the secret is missing.
  */
 const createMailerooWebhookVerifier = (options = {}) => {
-  if (typeof options.secret !== 'string' || options.secret === '') {
-    throw new TypeError('secret is the signing secret of the Maileroo webhook.');
-  }
-  const secret = options.secret;
-  const common = resolveCommonOptions(options, REPLAY_TTL_MS);
+  const secret = requireSecret(
+    options.secret,
+    'secret is the signing secret of the Maileroo webhook.',
+  );
+  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -97,8 +89,8 @@ const createMailerooWebhookVerifier = (options = {}) => {
       if (!isRecord(payload) || typeof payload.event_id !== 'string') {
         throw new WebhookVerificationError('payload', 'The body is not a Maileroo event.');
       }
-      await checkReplay(common, `maileroo:${payload.event_id}`, REPLAY_TTL_MS);
-      return { events: eventsOf(payload) };
+      const entries = [{ key: `maileroo:${payload.event_id}`, events: eventsOf(payload) }];
+      return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
     },
   };
 };

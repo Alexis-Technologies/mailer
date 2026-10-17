@@ -3,11 +3,13 @@
 // sently and unemail have no Azure webhook.
 
 const {
+  DAY_REPLAY_TTL_MS,
   WebhookVerificationError,
   bodyBytesOf,
-  checkReplay,
+  claimDelivery,
   createEvent,
   dateOf,
+  deliveryOf,
   headerOf,
   isRecord,
   parseJsonOf,
@@ -18,7 +20,6 @@ const {
 
 // Event Grid retries a delivery for a day: an event id is kept a day and an
 // hour.
-const REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
 const VALIDATION = 'Microsoft.EventGrid.SubscriptionValidationEvent';
 const DELIVERY = 'Microsoft.Communication.EmailDeliveryReportReceived';
 const ENGAGEMENT = 'Microsoft.Communication.EmailEngagementTrackingReportReceived';
@@ -75,13 +76,15 @@ const eventOf = (record) => {
  * taken once by its id.  The validation of a new subscription is handed back,
  * for the application to answer `{ validationResponse: validationCode }`.
  *
- * @param options `token`, `header`; `replayStore` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events, validation? }`.
+ * @param options `token`, `header`; `replayStore`; `leaseMs` and
+ * `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events, validation?, commit,
+ * release }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createAzureWebhookVerifier = (options = {}) => {
   const checkToken = tokenCheckOf(options, 'Event Grid');
-  const common = resolveCommonOptions(options, REPLAY_TTL_MS);
+  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -93,13 +96,12 @@ const createAzureWebhookVerifier = (options = {}) => {
         if (!isRecord(first) || first.eventType !== VALIDATION || !isRecord(first.data)) {
           throw new WebhookVerificationError('payload', 'The body is not a validation event.');
         }
-        return {
-          events: [],
+        return deliveryOf([], {
           validation: {
             validationCode: first.data.validationCode,
             validationUrl: first.data.validationUrl,
           },
-        };
+        });
       }
       checkToken(request);
       const payload = parseJsonOf(bytes);
@@ -109,23 +111,12 @@ const createAzureWebhookVerifier = (options = {}) => {
           'The body is not a list of Event Grid events.',
         );
       }
-      const events = [];
-      let replayed = 0;
+      const entries = [];
       for (const record of payload) {
         if (!isRecord(record) || typeof record.id !== 'string') continue;
-        try {
-          await checkReplay(common, `azure:${record.id}`, REPLAY_TTL_MS);
-        } catch (error) {
-          if (error.reason !== 'replay') throw error;
-          replayed++;
-          continue;
-        }
-        events.push(eventOf(record));
+        entries.push({ key: `azure:${record.id}`, events: [eventOf(record)] });
       }
-      if (events.length === 0 && replayed > 0) {
-        throw new WebhookVerificationError('replay', 'Every event of the batch was taken before.');
-      }
-      return { events };
+      return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
     },
   };
 };

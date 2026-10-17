@@ -9,9 +9,10 @@ const {
   checkBasicCredentials,
   createEvent,
   dateOf,
+  deliveryOf,
   isRecord,
   parseJsonOf,
-  resolveCommonOptions,
+  resolveCredentialOptions,
   stringOf,
   stringRecordOf,
   stringsOf,
@@ -89,12 +90,13 @@ const eventOf = (inner, index) => {
  * recipient.
  *
  * @param options `username`, `password` and `maxBodyBytes`.
- * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @returns `{ verify(request) }`, which gives `{ events, commit, release }`;
+ * committing does nothing, as nothing is kept.
  * @throws {TypeError} If a credential is missing.
  */
 const createSparkPostWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'SparkPost');
-  const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
+  const common = resolveCredentialOptions(options);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
@@ -111,7 +113,7 @@ const createSparkPostWebhookVerifier = (options = {}) => {
         const inner = isRecord(payload[index]) ? innerOf(payload[index]) : undefined;
         if (inner !== undefined) events.push(eventOf(inner, index));
       }
-      return { events };
+      return deliveryOf(events);
     },
   };
 };
