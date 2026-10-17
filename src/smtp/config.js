@@ -38,6 +38,7 @@ const createSmtpConfig = (config) => {
     connect: checkConnect(config.connect),
     pool: config.pool ?? true,
     poolSize: config.poolSize ?? 5,
+    maxMessages: checkMaxMessages(config.maxMessages),
     dkim: config.dkim,
     fetch: config.fetch,
     generateId: config.generateId,
@@ -83,6 +84,17 @@ const checkLocalName = (name) => {
   return name;
 };
 
+// As nodemailer's pool, a connection sends 100 messages, then a new one is
+// opened: servers limit the messages of a connection, and answer the next
+// with an error.
+const checkMaxMessages = (value) => {
+  if (value === undefined) return 100;
+  if (value !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(value) || value < 1)) {
+    throw new TypeError(`maxMessages must be a positive whole number or Infinity: ${value}`);
+  }
+  return value;
+};
+
 // `localAddress` is an address of this machine to connect from.
 const checkLocalAddress = (address) => {
   if (address === undefined) return undefined;
@@ -118,6 +130,7 @@ module.exports = {
   checkConnect,
   checkLocalAddress,
   checkLocalName,
+  checkMaxMessages,
   createSmtpConfig,
   defaultLocalName,
 };

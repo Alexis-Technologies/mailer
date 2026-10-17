@@ -133,6 +133,15 @@ export interface SmtpConfig extends TransportDependencies {
    */
   readonly poolSize?: number;
   /**
+   * The messages a connection sends before it is closed and a new one is
+   * opened, as servers limit the messages of one connection (nodemailer's
+   * `maxMessages`).  `sendMany()` opens a new connection within a batch.
+   * `Infinity` for no limit.
+   *
+   * @default 100
+   */
+  readonly maxMessages?: number;
+  /**
    * DKIM signing configuration.
    * When provided, all outgoing emails will be signed with DKIM.
    */

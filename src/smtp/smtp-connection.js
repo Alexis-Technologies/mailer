@@ -428,6 +428,8 @@ class SmtpConnection {
   authenticating = false;
   /** Whether the connection sits in a pool and must be reset before reuse. */
   needsReset = false;
+  /** The transactions this connection has started, for `maxMessages`. */
+  messageCount = 0;
   /**
    * Whether the socket came from the `connect` of the caller, whose peer, a
    * proxy perhaps, is not the SMTP server.
@@ -436,6 +438,11 @@ class SmtpConnection {
 
   get usable() {
     return this.socket != null && !this.socket.destroyed && this.socket.writable;
+  }
+
+  /** Whether it has started as many transactions as `maxMessages` allows. */
+  get exhausted() {
+    return this.messageCount >= this.config.maxMessages;
   }
 
   observeSocket(socket) {
@@ -1133,6 +1140,7 @@ class SmtpConnection {
   async sendMessage(message, signal) {
     this.active = true;
     this.socket?.setTimeout(0);
+    this.messageCount++;
     try {
       return await this.sendPreparedMessage(message, signal);
     } finally {

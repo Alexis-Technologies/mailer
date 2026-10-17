@@ -169,6 +169,11 @@ the process alive, so a script that sends a message and returns can exit
 without `closeAllConnections()`, though closing still ends the session politely
 with QUIT.
 
+A connection sends `maxMessages` messages (100 by default, as nodemailer's pool),
+then it is closed with QUIT and the next message opens a new one, within a
+`sendMany()` batch too: servers limit the messages of one connection and answer
+the next with an error.  Pass `Infinity` to keep a connection for good.
+
 > [!NOTE]
 > Because a `SmtpTransport.sendMany()` call holds its connection until the
 > iteration ends, running more concurrent `SmtpTransport.sendMany()` calls than

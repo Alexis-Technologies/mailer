@@ -23,7 +23,13 @@ const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { checkDkimKeys } = require('../mime/dkim/sign.js');
-const { checkAuthMethod, checkConnect, checkLocalAddress, checkLocalName } = require('./config.js');
+const {
+  checkAuthMethod,
+  checkConnect,
+  checkLocalAddress,
+  checkLocalName,
+  checkMaxMessages,
+} = require('./config.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
@@ -130,6 +136,7 @@ class SmtpTransport {
     checkAuthMethod(config.auth);
     checkLocalAddress(config.localAddress);
     if (config.localName != null) checkLocalName(config.localName);
+    checkMaxMessages(config.maxMessages);
     checkConnect(config.connect);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
@@ -383,11 +390,10 @@ class SmtpTransport {
           }
         }
 
+        let receipt;
         try {
           options?.signal?.throwIfAborted();
-          const result = await connection.sendMessage(smtpMessage, options?.signal);
-
-          yield sentReceipt(result);
+          receipt = sentReceipt(await connection.sendMessage(smtpMessage, options?.signal));
         } catch (error) {
           // Cancellation rejects rather than producing a receipt.
           options?.signal?.throwIfAborted();
@@ -396,8 +402,16 @@ class SmtpTransport {
             connectionValid = false;
           }
 
-          yield failureOf(error);
+          receipt = failureOf(error);
         }
+        // A connection that has started `maxMessages` transactions is closed,
+        // and the next message of the batch takes a new one.
+        if (connectionValid && connection.exhausted) {
+          const used = connection;
+          connection = undefined;
+          await this.returnConnection(used);
+        }
+        yield receipt;
       }
     } catch (error) {
       // Error during iteration setup or while reading the messages
@@ -667,7 +681,12 @@ class SmtpTransport {
    * waiting caller.
    */
   async returnConnection(connection) {
-    if (!connection.usable || !connection.config.pool || this.closing != null) {
+    if (
+      !connection.usable ||
+      !connection.config.pool ||
+      connection.exhausted ||
+      this.closing != null
+    ) {
       await this.discardConnection(connection);
       return;
     }

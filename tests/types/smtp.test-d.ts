@@ -83,3 +83,7 @@ new SmtpTransport({
 });
 expectError(createHttpProxyConnector({}));
 expectError(new SmtpTransport({ host: 'smtp.example.com', connect: 'proxy' }));
+
+// maxMessages
+new SmtpTransport({ host: 'smtp.example.com', maxMessages: 50 });
+expectError(new SmtpTransport({ host: 'smtp.example.com', maxMessages: '50' }));
