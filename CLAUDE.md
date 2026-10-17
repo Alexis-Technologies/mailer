@@ -586,6 +586,14 @@ fails on upstream's behavior):
   its length (reproduced); the React renderer imported `@react-email/render` itself and hid a
   failed plain-text pass. `./render` reads HTML in one linear pass (`html-to-text.js`), decodes
   an invalid number as U+FFFD, takes `render` as an option and lets its failure through.
+- S5. sently (`src/webhooks/ses.ts`): the SNS message was parsed and never verified, so anyone
+  who knew the URL could post bounces and complaints; a notification of several recipients
+  became one event, of the first; a Permanent and a Transient bounce were both `bounced`; and a
+  reject or a rendering failure, which SES never attempted, was a bounce. `./webhooks` takes an
+  SNS message only from a listed topic, signed (versions 1 and 2) with the certificate of an
+  `sns.<region>.amazonaws.com` URL read through the injected `fetch`, within an hour and once;
+  it makes an event per recipient, says whether a bounce is hard or soft, makes a reject
+  `rejected`, and hands a subscription confirmation to the caller.
 
 ## Repository layout
 

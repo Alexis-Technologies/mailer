@@ -36,6 +36,10 @@
       "types": "./src/render/index.d.ts",
       "default": "./src/render/index.js"
     },
+    "./webhooks": {
+      "types": "./src/webhooks/index.d.ts",
+      "default": "./src/webhooks/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

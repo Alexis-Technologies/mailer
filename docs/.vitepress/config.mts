@@ -68,6 +68,7 @@ const guide = [
       { text: 'Composing messages', link: '/messages/compose' },
       { text: 'Attachments', link: '/messages/attachments' },
       { text: 'Rendering templates', link: '/messages/render' },
+      { text: 'Webhooks and events', link: '/guide/webhooks' },
       { text: 'Calendar invitations', link: '/messages/calendar' },
       { text: 'MIME composition', link: '/messages/mime' },
     ],
