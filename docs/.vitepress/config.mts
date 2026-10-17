@@ -90,6 +90,7 @@ const guide = [
       { text: 'MailerSend', link: '/transports/mailersend' },
       { text: 'SparkPost', link: '/transports/sparkpost' },
       { text: 'ZeptoMail', link: '/transports/zeptomail' },
+      { text: 'SMTP2GO', link: '/transports/smtp2go' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

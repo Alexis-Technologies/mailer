@@ -100,6 +100,10 @@
       "types": "./src/zeptomail/index.d.ts",
       "default": "./src/zeptomail/index.js"
     },
+    "./smtp2go": {
+      "types": "./src/smtp2go/index.d.ts",
+      "default": "./src/smtp2go/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"
