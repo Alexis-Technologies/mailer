@@ -5,6 +5,12 @@ const { Buffer } = require('node:buffer');
 const { EventEmitter } = require('node:events');
 const { createServer } = require('node:net');
 
+// What a socket reports once the client has gone: a reset (ECONNRESET), or a
+// reply written after the client closed, which is EPIPE on Linux and
+// ECONNABORTED on Windows. SmtpConnection#quit() sends QUIT and closes without
+// waiting for the 221, so the reply to QUIT can always meet one of them.
+const CLIENT_GONE = new Set(['ECONNRESET', 'EPIPE', 'ECONNABORTED']);
+
 class MockSmtpServer extends EventEmitter {
   server;
   port;
@@ -81,11 +87,11 @@ class MockSmtpServer extends EventEmitter {
       });
 
       socket.on('error', (error) => {
-        // A client may reset the connection as it leaves: macOS and Windows send
-        // an RST when a socket closes with unread data, Linux usually a FIN. That
-        // is no failure of the server, and an 'error' event nobody listens to
-        // would throw.
-        if (error.code === 'ECONNRESET' && this.listenerCount('error') === 0) return;
+        // A client may reset the connection as it leaves (macOS and Windows send
+        // an RST when a socket closes with unread data, Linux usually a FIN), or
+        // close it before a reply is written. That is no failure of the server,
+        // and an 'error' event nobody listens to would throw.
+        if (CLIENT_GONE.has(error.code) && this.listenerCount('error') === 0) return;
         this.emit('error', error);
       });
 

@@ -663,6 +663,33 @@ test('SMTP: a pooled connection whose reset fails is replaced, and an abort reje
   }
 });
 
+test('SMTP: the mock server takes a client that has gone as no failure of its own', async () => {
+  const { connect } = require('node:net');
+  const server = new MockSmtpServer();
+  const port = await server.start();
+  const client = connect(port, '127.0.0.1');
+  try {
+    while (server.connections.size === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const [socket] = server.connections;
+    const failure = (code) => Object.assign(new Error(`write ${code}`), { code });
+    // A reply written after the client closed: EPIPE on Linux, ECONNABORTED
+    // on Windows, ECONNRESET on macOS.
+    for (const code of ['ECONNRESET', 'EPIPE', 'ECONNABORTED']) {
+      assert.doesNotThrow(() => socket.emit('error', failure(code)), code);
+    }
+    assert.throws(() => socket.emit('error', failure('EACCES')), { code: 'EACCES' });
+    const heard = [];
+    server.on('error', (error) => heard.push(error.code));
+    socket.emit('error', failure('EPIPE'));
+    assert.deepStrictEqual(heard, ['EPIPE']);
+  } finally {
+    client.destroy();
+    await server.stop();
+  }
+});
+
 test('SMTP: an idle pooled connection does not keep the process alive', async () => {
   const { spawn } = require('node:child_process');
   const path = require('node:path');

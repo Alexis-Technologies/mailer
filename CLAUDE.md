@@ -645,10 +645,14 @@ change. **This file wins** if they ever disagree.
   inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
   `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
   until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
-- **Platform-dependent tests:** the mock SMTP server tolerates a client's connection reset (macOS
-  and Windows send an RST where Linux sends a FIN); the JMAP test of a 401 to a raw message of
-  unknown size, which streams, is `todo` on Node 24 (known upstream bug 14). `tests/unit/export-parity.test.js` also
-  checks that every d.ts using `AsyncDisposable` references `esnext.disposable` itself.
+- **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
+  a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
+  written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to
+  `QUIT` can always meet, as `quit()` does not wait for it; macOS reports neither, so only CI
+  catches a new one, and Docker (`node:22-bookworm-slim`) reproduces Linux. The JMAP test of a
+  401 to a raw message of unknown size, which streams, is `todo` on Node 24 (known upstream bug
+  14). `tests/unit/export-parity.test.js` also checks that every d.ts using `AsyncDisposable`
+  references `esnext.disposable` itself.
 
 ## Documentation site
 
