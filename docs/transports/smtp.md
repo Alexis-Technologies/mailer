@@ -179,6 +179,60 @@ without one, and the message ID of a receipt the server named none for (see
 is used for the token refresh of OAuth 2.0, in place of the global one, such as
 one bound to an undici `Agent` or a proxy.
 
+### Proxies and connections of your own
+
+`connect` opens each connection in place of a TCP connection to `host` and
+`port`, as nodemailer's `getSocket` does: through a proxy, a tunnel, or a socket
+from another module.  `createHttpProxyConnector()` makes one for an HTTP or HTTPS
+proxy that accepts `CONNECT`:
+
+```js
+const { SmtpTransport, createHttpProxyConnector } = require('@alexify/mailer/smtp');
+
+const transport = new SmtpTransport({
+  host: 'smtp.example.com',
+  port: 465,
+  auth: { user: 'user@example.com', pass: 'secret' },
+  connect: createHttpProxyConnector({
+    url: 'http://proxy-user:proxy-pass@proxy.internal:3128',
+    // For an https:// proxy: tls: { ca: [proxyCa] }
+  }),
+});
+```
+
+The credentials of the proxy URL go as Basic authentication, as UTF-8; `headers`
+adds fields to each CONNECT request, and `timeout` bounds its answer (30 s).  A
+SOCKS proxy is a module of your own in `connect`, which receives `{ host, port,
+localAddress, signal }` and resolves to a connected `net.Socket`, paused or with
+nothing read from it yet:
+
+```js
+const { SocksClient } = require('socks');
+
+const transport = new SmtpTransport({
+  host: 'smtp.example.com',
+  port: 587,
+  connect: async ({ host, port }) => {
+    const { socket } = await SocksClient.createConnection({
+      proxy: { host: '127.0.0.1', port: 1080, type: 5 },
+      command: 'connect',
+      destination: { host, port },
+    });
+    return socket;
+  },
+});
+```
+
+`secure: true` and STARTTLS put TLS over the socket the connector gives, checked
+against `host` as over a TCP connection, and the connection timeout and the
+cancellation of the send abort its `signal`.  Authentication in plain text, which
+the transport allows only to this machine, is allowed through a connector only
+when `host` itself is a loopback host: the peer of a tunnel is the proxy, often
+on this machine, not the server.
+
+`localAddress` names the address of this machine to connect from, on one with
+several.
+
 ### Diagnostics
 
 A `logger`, pino-like, hears what the receipts do not tell: `debug` for a

@@ -23,7 +23,7 @@ const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { checkDkimKeys } = require('../mime/dkim/sign.js');
-const { checkAuthMethod } = require('./config.js');
+const { checkAuthMethod, checkConnect, checkLocalAddress } = require('./config.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
@@ -128,6 +128,8 @@ class SmtpTransport {
     checkDkimConfig(config.dkim);
     checkDkimKeys(config.dkim);
     checkAuthMethod(config.auth);
+    checkLocalAddress(config.localAddress);
+    checkConnect(config.connect);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
     if (
@@ -512,7 +514,7 @@ class SmtpTransport {
     let pooled = this.connectionPool.pop();
     while (pooled != null) {
       if (pooled.usable) {
-        pooled.socket.ref();
+        pooled.socket.ref?.();
         if (!pooled.needsReset) return pooled;
         try {
           await pooled.reset(signal);
@@ -674,7 +676,7 @@ class SmtpTransport {
     // wait for it, and it finds a connection the server dropped while idle.
     connection.needsReset = true;
     // An idle connection does not keep the process alive.
-    connection.socket.unref();
+    connection.socket.unref?.();
 
     // The connection keeps its slot while it sits idle, so no separate check
     // against `poolSize` is needed here: at most `poolSize` connections can be

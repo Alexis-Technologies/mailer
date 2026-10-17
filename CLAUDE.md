@@ -481,6 +481,13 @@ fails on upstream's behavior):
   bytes stay bytes rather than going through `decodeURIComponent`.
 - S1. sently (`resolveAttachments`): `basePath` compared the paths as written, so a symbolic link
   inside it led out of it. `fromPath` compares the `realpath` of the file with that of `root`.
+- N4. nodemailer (`http-proxy-client.ts`): an IPv6 destination went bare into the CONNECT
+  request line and Host field (`CONNECT ::1:25`), which a proxy reads as another port; an HTTPS
+  proxy took `rejectUnauthorized` alone, no `ca` and no SNI; the credentials of the proxy URL
+  went through without percent-decoding. `createHttpProxyConnector` (`src/smtp/http-proxy.js`)
+  brackets it, passes the `tls` options and the proxy's name, decodes the credentials as UTF-8,
+  and puts back what came with the reply in the paused socket. A connection opened by `connect`
+  counts as local for plain-text AUTH only by its `host`, never by the proxy it reaches.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and

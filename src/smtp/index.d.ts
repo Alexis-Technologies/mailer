@@ -92,6 +92,22 @@ export interface SmtpConfig extends TransportDependencies {
    */
   readonly localName?: string;
   /**
+   * The local address to connect from, on a machine with several.
+   */
+  readonly localAddress?: string;
+  /**
+   * Opens the connection instead of a TCP connection to `host` and `port`:
+   * through an HTTP proxy ({@link createHttpProxyConnector}), a SOCKS proxy
+   * module of your own, or any tunnel.  It resolves to a connected socket to
+   * the server, paused or with nothing read from it yet; `secure: true` and
+   * STARTTLS put TLS over it as over a TCP connection.  It is given the
+   * connection timeout and the caller's cancellation as `signal`.
+   *
+   * Plain-text authentication is allowed only when `host` itself is a
+   * loopback host, whatever address the tunnel connects to.
+   */
+  readonly connect?: (options: SmtpConnectOptions) => SmtpSocket | Promise<SmtpSocket>;
+  /**
    * Pool connections to reuse them.
    * @default true
    */
@@ -615,6 +631,68 @@ export type SmtpReceipt =
  * }
  * ```
  */
+/**
+ * What the `connect` of {@link SmtpConfig} is given.
+ */
+export interface SmtpConnectOptions {
+  /** The SMTP server to reach. */
+  readonly host: string;
+  /** Its port. */
+  readonly port: number;
+  /** The `localAddress` of the configuration, if any. */
+  readonly localAddress?: string;
+  /** Aborts on the connection timeout and on the caller's cancellation. */
+  readonly signal: AbortSignal;
+}
+/**
+ * A connected socket: a `net.Socket` of Node.js, or a duplex stream with its
+ * methods.
+ */
+export interface SmtpSocket {
+  write(chunk: any, ...rest: any[]): boolean;
+  setTimeout(timeout: number, callback?: () => void): unknown;
+  destroy(error?: Error): unknown;
+  on(event: string, listener: (...args: any[]) => void): unknown;
+}
+/**
+ * Options of {@link createHttpProxyConnector}.
+ */
+export interface HttpProxyConnectorOptions {
+  /**
+   * The proxy, `http://` or `https://`, with the user name and password of
+   * its Basic authentication if it asks for one:
+   * `http://user:pass@proxy.example.com:3128`.
+   */
+  readonly url: string;
+  /** Header fields to add to each CONNECT request. */
+  readonly headers?: Readonly<Record<string, string>>;
+  /** TLS options of an `https://` proxy, such as its `ca`. */
+  readonly tls?: SmtpTlsOptions;
+  /**
+   * The time the proxy may take to answer CONNECT, in milliseconds; 0 or
+   * `Infinity` for none.
+   * @default 30000
+   */
+  readonly timeout?: number;
+}
+/**
+ * Makes a `connect` for {@link SmtpConfig} that opens each connection through
+ * an HTTP or HTTPS proxy with CONNECT.
+ *
+ * @example
+ * ```js
+ * const { SmtpTransport, createHttpProxyConnector } = require('@alexify/mailer/smtp');
+ * const transport = new SmtpTransport({
+ *   host: 'smtp.example.com',
+ *   port: 465,
+ *   auth: { user, pass },
+ *   connect: createHttpProxyConnector({ url: 'http://proxy.internal:3128' }),
+ * });
+ * ```
+ */
+export declare function createHttpProxyConnector(
+  options: HttpProxyConnectorOptions,
+): (options: SmtpConnectOptions) => Promise<SmtpSocket>;
 export declare class SmtpTransport
   implements RawTransport<'smtp'>, VerifiableTransport<'smtp'>, AsyncDisposable
 {

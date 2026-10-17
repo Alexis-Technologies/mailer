@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/config.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { isIP } = require('node:net');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 
 /**
@@ -29,6 +30,8 @@ const createSmtpConfig = (config) => {
     connectionTimeout: config.connectionTimeout ?? 60000,
     socketTimeout: config.socketTimeout ?? 60000,
     localName: config.localName ?? 'localhost',
+    localAddress: checkLocalAddress(config.localAddress),
+    connect: checkConnect(config.connect),
     pool: config.pool ?? true,
     poolSize: config.poolSize ?? 5,
     dkim: config.dkim,
@@ -36,6 +39,22 @@ const createSmtpConfig = (config) => {
     generateId: config.generateId,
     logger: config.logger,
   };
+};
+
+// `localAddress` is an address of this machine to connect from.
+const checkLocalAddress = (address) => {
+  if (address === undefined) return undefined;
+  if (typeof address !== 'string' || isIP(address) === 0) {
+    throw new TypeError(`localAddress must be an IP address: ${JSON.stringify(address)}`);
+  }
+  return address;
+};
+
+const checkConnect = (connect) => {
+  if (connect !== undefined && typeof connect !== 'function') {
+    throw new TypeError('connect must be a function that resolves to a connected socket.');
+  }
+  return connect;
 };
 
 // The mechanisms of each kind of credentials; an unknown one is refused when
@@ -52,4 +71,4 @@ const checkAuthMethod = (auth) => {
   }
 };
 
-module.exports = { checkAuthMethod, createSmtpConfig };
+module.exports = { checkAuthMethod, checkConnect, checkLocalAddress, createSmtpConfig };
