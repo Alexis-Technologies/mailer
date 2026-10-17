@@ -265,6 +265,33 @@ test('Fields: Mailgun sends o:deliverytime, the tracking of the message and v: v
   assert.strictEqual(forms[1].get('o:deliverytime'), null);
 });
 
+test('Fields: Mailtrap sends the metadata of the message over that of the configuration', async (t) => {
+  const bodies = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({ success: true, message_ids: [`mt${bodies.length}`] });
+  });
+  const transport = new MailtrapTransport({
+    apiToken: 'token',
+    retries: 0,
+    metadata: { tenant: 'acme', stream: 'orders' },
+  });
+  const sent = await transport.send(
+    createMessage({
+      ...base,
+      tags: ['first', 'second'],
+      metadata: { tenant: 'globex', orderId: '42' },
+    }),
+  );
+  assert.strictEqual(sent.successful, true);
+  assert.deepStrictEqual(bodies[0].custom_variables, {
+    tenant: 'globex',
+    stream: 'orders',
+    orderId: '42',
+    tag_second: 'second',
+  });
+});
+
 const CORE = 'urn:ietf:params:jmap:core';
 const MAIL = 'urn:ietf:params:jmap:mail';
 const SUBMISSION = 'urn:ietf:params:jmap:submission';

@@ -78,7 +78,7 @@ const convertMessage = async (message, config, signal) => {
     throw new RangeError('Mailtrap requires at least one of text or HTML content.');
   }
 
-  const customVariables = buildCustomVariables(message.tags, config.metadata);
+  const customVariables = buildCustomVariables(message.tags, config.metadata, message.metadata);
   if (Object.keys(customVariables).length > 0) {
     emailData.custom_variables = customVariables;
   }
@@ -104,13 +104,18 @@ const resolveCategory = (tags, fallback) => {
   return tags[0] ?? fallback;
 };
 
-const buildCustomVariables = (tags, metadata) => {
+// The metadata of the configuration, that of the message over it, then the
+// tags after the first.
+const buildCustomVariables = (tags, metadata, messageMetadata) => {
   const customVariables = {};
 
   if (metadata != null) {
     for (const [key, value] of Object.entries(metadata)) {
       customVariables[key] = value;
     }
+  }
+  if (messageMetadata !== undefined) {
+    for (const key in messageMetadata) customVariables[key] = messageMetadata[key];
   }
 
   for (const tag of tags.slice(1)) {
