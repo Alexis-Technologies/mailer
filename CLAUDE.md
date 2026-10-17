@@ -511,6 +511,11 @@ fails on upstream's behavior):
   two batches could share one. `./brevo` sends single requests, each with its own key, generated
   when the message has none, so a retry after an unknown delivery cannot send twice; Brevo's
   `duplicate_parameter` is reported as `deliveryUnknown`.
+- U6. unemail (`src/drivers/mailersend.ts`): `sendBatch` went through the bulk endpoint, which
+  answers with one `bulk_email_id` for every message and accepts what may fail later, so each
+  receipt said "sent" for a message whose fate was unknown. `./mailersend` sends single requests,
+  the id of each the `X-Message-Id` of its answer. sently's MailerSend driver dropped custom
+  headers; they are sent, with the threading fields and List-Unsubscribe in MailerSend's own.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and

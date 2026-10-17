@@ -88,6 +88,10 @@
       "types": "./src/mailjet/index.d.ts",
       "default": "./src/mailjet/index.js"
     },
+    "./mailersend": {
+      "types": "./src/mailersend/index.d.ts",
+      "default": "./src/mailersend/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"
