@@ -115,7 +115,12 @@ const isUsableHref = (href) => {
  * @internal
  */
 class TextWriter {
-  out = '';
+  // The output in pieces, none of them empty, and the length of all.  A
+  // string grown with `+=` is a rope that V8 flattens on any read of its
+  // end, so reading it for each piece was quadratic; here only the last
+  // piece is read, and a piece is trimmed or dropped at most once.
+  #chunks = [];
+  #length = 0;
   #breaks = 0;
   #prefix = '';
   #pre = 0;
@@ -129,22 +134,22 @@ class TextWriter {
 
   lineBreak() {
     this.#breaks = Math.min(this.#breaks + 1, 2);
-    if (this.out === '') this.#breaks = 0;
+    if (this.#length === 0) this.#breaks = 0;
   }
 
   text(raw) {
     let text = this.#pre > 0 ? raw.replaceAll('\r\n', '\n') : raw.replace(WHITESPACE, ' ');
     text = decodeEntities(text);
-    if (this.#pre === 0 && (this.out === '' || this.#breaks > 0 || this.out.endsWith('\n'))) {
+    if (this.#pre === 0 && (this.#length === 0 || this.#breaks > 0 || this.#endsInNewline())) {
       text = text.trimStart();
     }
     if (text === '') return;
-    if (this.#breaks > 0 && this.out !== '') {
+    if (this.#breaks > 0 && this.#length > 0) {
       this.#trimEnd();
-      this.out += this.#breaks === 2 ? '\n\n' : '\n';
+      this.#append(this.#breaks === 2 ? '\n\n' : '\n');
     }
     this.#breaks = 0;
-    this.out += this.#prefix + text;
+    this.#append(this.#prefix + text);
     this.#prefix = '';
   }
 
@@ -159,7 +164,7 @@ class TextWriter {
     }
     if (name === 'a') {
       const href = attributes?.get('href');
-      this.#links.push({ href, start: this.out.length });
+      this.#links.push({ href, start: this.#length });
     }
   }
 
@@ -178,24 +183,59 @@ class TextWriter {
     const address = href.toLowerCase().startsWith('mailto:') ? href.slice(7) : href;
     // A label much longer than the address differs from it; one this long
     // is not read, so that nested links stay linear.
-    if (this.out.length - link.start > href.length + 8) {
-      this.out += ` (${href})`;
+    if (this.#length - link.start > href.length + 8) {
+      this.#append(` (${href})`);
       return;
     }
-    const label = this.out.slice(link.start).trim();
+    const label = this.#sliceFrom(link.start).trim();
     if (label === '') this.text(address);
-    else if (label !== href && label !== address) this.out += ` (${href})`;
+    else if (label !== href && label !== address) this.#append(` (${href})`);
   }
 
+  #append(piece) {
+    this.#chunks.push(piece);
+    this.#length += piece.length;
+  }
+
+  // Only called once something is written, so there is a last piece.
+  #endsInNewline() {
+    const last = this.#chunks[this.#chunks.length - 1];
+    return last.charCodeAt(last.length - 1) === 10;
+  }
+
+  // What the output holds from index `start` on, read from its end and no
+  // further than that.
+  #sliceFrom(start) {
+    const need = this.#length - start;
+    if (need <= 0) return '';
+    let first = this.#chunks.length;
+    let covered = 0;
+    while (covered < need) covered += this.#chunks[--first].length;
+    let text = '';
+    for (let i = first; i < this.#chunks.length; i++) text += this.#chunks[i];
+    return text.slice(covered - need);
+  }
+
+  // Drops the spaces and tabs the output ends with, which are in the last
+  // pieces alone.
   #trimEnd() {
-    let end = this.out.length;
-    while (end > 0 && (this.out[end - 1] === ' ' || this.out[end - 1] === '\t')) end--;
-    if (end < this.out.length) this.out = this.out.slice(0, end);
+    while (this.#chunks.length > 0) {
+      const last = this.#chunks[this.#chunks.length - 1];
+      let end = last.length;
+      while (end > 0 && (last.charCodeAt(end - 1) === 32 || last.charCodeAt(end - 1) === 9)) end--;
+      if (end === last.length) return;
+      this.#length -= last.length - end;
+      if (end > 0) {
+        this.#chunks[this.#chunks.length - 1] = last.slice(0, end);
+        return;
+      }
+      this.#chunks.pop();
+    }
   }
 
   finish() {
     this.#trimEnd();
-    return this.out;
+    return this.#chunks.join('');
   }
 }
 

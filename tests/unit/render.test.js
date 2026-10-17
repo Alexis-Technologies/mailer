@@ -122,6 +122,42 @@ test('Render: htmlToText is linear in its input', () => {
   assert.throws(() => htmlToText(undefined), /htmlToText takes a string/);
 });
 
+test('Render: the spaces and tabs before a break are dropped, in however many pieces', () => {
+  assert.strictEqual(htmlToText('a<b> </b><p>b'), 'a\n\nb');
+  assert.strictEqual(htmlToText('x<i> </i><i>\t</i> <br>y'), 'x\ny');
+  assert.strictEqual(htmlToText('<pre>a  </pre>b'), 'a\n\nb');
+  assert.strictEqual(htmlToText('<pre> \t </pre>'), '');
+  // The break after the link's opening trims the output below where its
+  // label starts.
+  assert.strictEqual(htmlToText('x <a href="h"><p>y</p></a>'), 'x\n\ny (h)');
+  assert.strictEqual(htmlToText('<a href="h"> </a>z'), 'hz');
+});
+
+test('Render: htmlToText takes time in proportion to its input, not its square', () => {
+  // The output was a string grown with `+=` and read at its end for each
+  // piece of text (`endsWith`, an index, the `slice` of a link's label); V8
+  // flattens such a rope on every read, so a megabyte of `a <p>` took
+  // seconds.  Ratios, not limits, so that a slow machine does not fail it.
+  const bestOf = (input) => {
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const started = process.hrtime.bigint();
+      htmlToText(input);
+      best = Math.min(best, Number(process.hrtime.bigint() - started) / 1e6);
+    }
+    return best;
+  };
+  const megabyte = 1024 * 1024;
+  for (const piece of ['a <p>', '<', '<a href="h">x</a>']) {
+    const one = bestOf(piece.repeat(Math.ceil(megabyte / piece.length)));
+    if (piece === 'a <p>') assert.ok(one < 1000, `1 MB of ${piece} took ${one} ms`);
+    const two = bestOf(piece.repeat(Math.ceil((2 * megabyte) / piece.length)));
+    // Linear is about 2; the floor keeps a few milliseconds of noise from
+    // deciding it.
+    assert.ok(two <= 3 * Math.max(one, 25), `${piece}: 1 MB ${one} ms, 2 MB ${two} ms`);
+  }
+});
+
 test('Render: renderContent derives the text, or keeps the one given', async () => {
   const upper = { render: (source) => ({ html: `<p>${source.toUpperCase()}</p>` }) };
   assert.deepStrictEqual(await renderContent(upper, 'hello'), {
