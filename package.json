@@ -104,6 +104,10 @@
       "types": "./src/smtp2go/index.d.ts",
       "default": "./src/smtp2go/index.js"
     },
+    "./azure": {
+      "types": "./src/azure/index.d.ts",
+      "default": "./src/azure/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"

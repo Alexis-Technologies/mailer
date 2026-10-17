@@ -532,6 +532,14 @@ fails on upstream's behavior):
   the shared To in `header_to` and the Cc field in `content.headers`, counts the rejected ones on
   the receipt (`rejectedRecipientCount`), fails it as `rejected` when none was accepted, and
   reports an answer without an id as `deliveryUnknown`.
+- U7. unemail (`src/drivers/azure-communication.ts`): with no option the connection string came
+  from `COMMUNICATION_SERVICES_CONNECTION_STRING` of `process.env`, an endpoint could be `http:`
+  to any host, and its idempotency was the `Operation-Id`, while the API takes a repeat as one
+  only by the `Repeatability-Request-Id` and `Repeatability-First-Sent` of OASIS Repeatable
+  Requests, which it never sent; tracking with opens on and clicks off turned both on. `./azure`
+  reads only its options, holds the endpoint to HTTPS or loopback HTTP, sends both headers with
+  the key as `Operation-Id` too, reports a repeat Azure answers 409 or 412 as `deliveryUnknown`,
+  and refuses tracking it cannot express.
 
 ## Repository layout
 

@@ -91,6 +91,7 @@ const guide = [
       { text: 'SparkPost', link: '/transports/sparkpost' },
       { text: 'ZeptoMail', link: '/transports/zeptomail' },
       { text: 'SMTP2GO', link: '/transports/smtp2go' },
+      { text: 'Azure Communication Services', link: '/transports/azure' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

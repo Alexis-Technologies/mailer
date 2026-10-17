@@ -20,6 +20,7 @@
   "./sparkpost": 8,
   "./zeptomail": 7,
   "./smtp2go": 7,
+  "./azure": 8,
   "./pool": 3,
   "./retry": 3,
   "./mock": 2,
