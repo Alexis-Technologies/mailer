@@ -594,6 +594,14 @@ fails on upstream's behavior):
   `sns.<region>.amazonaws.com` URL read through the injected `fetch`, within an hour and once;
   it makes an event per recipient, says whether a bounce is hard or soft, makes a reject
   `rejected`, and hands a subscription confirmation to the caller.
+- S6. sently (`src/webhooks/{resend,sendgrid,mailgun,postmark}.ts`): `parse` was exported apart
+  from any check; SendGrid's signature and Postmark's credentials were never checked; Resend's
+  and Mailgun's signatures were, with no window of time and no replay check, and a Resend secret
+  that was not base64 threw at each request. An unsubscribe was a spam complaint (SendGrid,
+  Brevo), a drop or a suppression a bounce (SendGrid, Mailgun), a block a deferral (SendGrid), a
+  failed Resend email a bounce, and every Postmark bounce `bounced` whatever its type.
+  `./webhooks` verifies first: Svix for Resend, ECDSA P-256 for SendGrid, HMAC for Mailgun, all
+  within five minutes and once by id; Basic credentials, required, for Postmark.
 
 ## Repository layout
 

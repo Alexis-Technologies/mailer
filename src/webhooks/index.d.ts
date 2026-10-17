@@ -151,3 +151,93 @@ export interface SesWebhookResult extends WebhookResult<'ses'> {
 export declare function createSesWebhookVerifier(
   options: SesWebhookVerifierOptions,
 ): WebhookVerifier<SesWebhookResult>;
+
+/**
+ * The options of {@link createResendWebhookVerifier}.
+ */
+export interface ResendWebhookVerifierOptions extends WebhookVerifierOptions {
+  /** The signing secret of the webhook, `whsec_…`. */
+  readonly secret: string;
+}
+
+/**
+ * Makes the verifier of the webhooks of Resend, which Svix signs: the
+ * HMAC-SHA256 of `svix-id.svix-timestamp.body`, within five minutes, its id
+ * taken once.  `tag1`, `tag2`… of the email's tags are the tags of the
+ * message, the others its metadata, as `./resend` sends them.
+ *
+ * @throws {TypeError} If the secret is not one.
+ */
+export declare function createResendWebhookVerifier(
+  options: ResendWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'resend'>>;
+
+/**
+ * The options of {@link createSendGridWebhookVerifier}.
+ */
+export interface SendGridWebhookVerifierOptions extends WebhookVerifierOptions {
+  /**
+   * The verification key of the Signed Event Webhook, base64 as SendGrid
+   * shows it, or PEM.
+   */
+  readonly publicKey: string;
+}
+
+/**
+ * Makes the verifier of SendGrid's Signed Event Webhook: ECDSA P-256 over
+ * the timestamp and the body, within five minutes, each event id taken once.
+ * The categories are the tags of the message, its custom arguments its
+ * metadata.
+ *
+ * @throws {TypeError} If the key is not one.
+ */
+export declare function createSendGridWebhookVerifier(
+  options: SendGridWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'sendgrid'>>;
+
+/**
+ * The options of {@link createMailgunWebhookVerifier}.
+ */
+export interface MailgunWebhookVerifierOptions extends WebhookVerifierOptions {
+  /** The HTTP webhook signing key of the Mailgun domain. */
+  readonly signingKey: string;
+}
+
+/**
+ * Makes the verifier of Mailgun's webhooks: the HMAC-SHA256 of the
+ * timestamp and token of the body, within five minutes, the token taken
+ * once.  A permanent failure is a hard bounce, a temporary one a deferred
+ * soft bounce, a suppression `rejected`; the user variables are the
+ * metadata.
+ *
+ * @throws {TypeError} If the key is missing.
+ */
+export declare function createMailgunWebhookVerifier(
+  options: MailgunWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'mailgun'>>;
+
+/**
+ * The options of {@link createPostmarkWebhookVerifier}: the credentials of the
+ * webhook's URL, as Postmark signs nothing.
+ */
+export interface PostmarkWebhookVerifierOptions {
+  readonly username: string;
+  readonly password: string;
+  /**
+   * The longest body taken, in bytes.
+   * @default 5242880
+   */
+  readonly maxBodyBytes?: number;
+}
+
+/**
+ * Makes the verifier of Postmark's webhooks, whose URL carries Basic
+ * credentials (`https://user:password@…`), compared in constant time.
+ * Postmark signs no time or id, so nothing holds a request to a window or
+ * takes it once.  A bounce is read by its type.
+ *
+ * @throws {TypeError} If a credential is missing.
+ */
+export declare function createPostmarkWebhookVerifier(
+  options: PostmarkWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'postmark'>>;

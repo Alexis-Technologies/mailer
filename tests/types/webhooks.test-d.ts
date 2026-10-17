@@ -2,7 +2,11 @@ import { expectAssignable, expectError, expectType } from 'tsd';
 import type { DeliveryEvent } from '../../index.js';
 import {
   WebhookVerificationError,
+  createMailgunWebhookVerifier,
   createMemoryReplayStore,
+  createPostmarkWebhookVerifier,
+  createResendWebhookVerifier,
+  createSendGridWebhookVerifier,
   createSesWebhookVerifier,
   type ReplayStore,
   type SesWebhookResult,
@@ -27,3 +31,17 @@ expectError(ses.verify({ body: {} }));
 expectError(createSesWebhookVerifier({}));
 const error = new WebhookVerificationError('replay', 'seen');
 expectType<WebhookVerificationReason>(error.reason);
+
+const resend = createResendWebhookVerifier({ secret: 'whsec_abc=', toleranceMs: 1000 });
+expectAssignable<readonly DeliveryEvent<'resend'>[]>((await resend.verify({ body: '' })).events);
+const sendgrid = createSendGridWebhookVerifier({ publicKey: 'MFkw…' });
+expectAssignable<readonly DeliveryEvent<'sendgrid'>[]>(
+  (await sendgrid.verify({ body: '' })).events,
+);
+createMailgunWebhookVerifier({ signingKey: 'key', replayStore: null });
+const postmark = createPostmarkWebhookVerifier({ username: 'u', password: 'p' });
+expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
+  (await postmark.verify({ body: '' })).events,
+);
+expectError(createPostmarkWebhookVerifier({ username: 'u' }));
+expectError(createResendWebhookVerifier({}));

@@ -94,7 +94,9 @@ const tagsOf = (mail) => {
     const values = mail.tags[name];
     if (!Array.isArray(values) || OWN_TAG.test(name) || name === 'priority') continue;
     if (name === 'category') {
-      for (const value of values) if (typeof value === 'string') tags.push(value);
+      for (const value of values) {
+        if (typeof value === 'string') tags.push(value);
+      }
     } else if (typeof values[0] === 'string') {
       metadata[name] = values[0];
     }

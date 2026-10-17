@@ -93,3 +93,63 @@ confirmed for it. A bounce is `hard` when SES says Permanent, `soft` when
 Transient; a reject or a rendering failure is `rejected`. The `category` tags
 of the message are its `tags`, as `./ses` sends them, and its other tags its
 `metadata`.
+
+## Resend
+
+```js
+const resend = createResendWebhookVerifier({ secret: process.env.RESEND_WEBHOOK_SECRET });
+```
+
+Resend signs its webhooks with Svix: the HMAC-SHA256 of `svix-id`,
+`svix-timestamp` and the body, with the secret `whsec_…` of the webhook. A
+secret that is not one is refused when the verifier is made. An event names
+its recipients in `to`, one event each; a bounce is `hard` when Resend says
+Permanent, `soft` when Transient; a failed or suppressed email is `rejected`.
+`tag1`, `tag2`… of the email's tags are the tags of the message and the others
+its metadata, as `./resend` sends them.
+
+## SendGrid
+
+```js
+const sendgrid = createSendGridWebhookVerifier({
+  publicKey: process.env.SENDGRID_WEBHOOK_PUBLIC_KEY,
+});
+```
+
+Turn on the Signed Event Webhook in SendGrid and pass its verification key
+(base64, as SendGrid shows it, or PEM). The signature is ECDSA P-256 over the
+timestamp and the body. SendGrid posts events in batches: each event is taken
+once by its `sg_event_id`, so a batch sent again keeps only what is new, and is
+refused as `replay` when nothing is. A `bounce` is hard, a `blocked` one soft; a
+`dropped` message is `rejected`; an unsubscribe is `unsubscribed`. The
+categories are the tags of the message and its custom arguments its metadata;
+`messageId` is the `X-Message-Id` of the receipt, without the filter SendGrid
+adds after it.
+
+## Mailgun
+
+```js
+const mailgun = createMailgunWebhookVerifier({
+  signingKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
+});
+```
+
+The signature is the HMAC-SHA256 of the timestamp and the token of the body,
+with the HTTP webhook signing key; the token is taken once. A permanent
+failure is a hard bounce, a temporary one a deferred soft bounce, and a
+failure for a suppressed address `rejected`. The user variables are the
+metadata, and `messageId` the id of the receipt, in angle brackets.
+
+## Postmark
+
+```js
+// The webhook URL in Postmark: https://hook:s3cret@example.com/webhooks/postmark
+const postmark = createPostmarkWebhookVerifier({ username: 'hook', password: 's3cret' });
+```
+
+Postmark signs nothing, so the URL of the webhook carries credentials, which
+the verifier requires and compares in constant time. With no time or id
+signed, nothing holds a request to a window or takes it once: deduplicate by
+the `id` of the events. A bounce is read by its type: `HardBounce` is hard,
+`SoftBounce` soft, `Transient` deferred, `SpamComplaint` a complaint,
+`ManuallyDeactivated` a rejection.

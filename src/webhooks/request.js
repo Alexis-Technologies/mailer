@@ -213,6 +213,31 @@ const isRecord = (value) => typeof value === 'object' && value !== null && !Arra
  */
 const stringOf = (value) => (typeof value === 'string' && value !== '' ? value : undefined);
 
+const NUMBERED_TAG = /^tag(\d+)$/;
+
+/**
+ * The tags and metadata of a record of named tags, as the transports send
+ * them where a provider has named tags only: `tag1`, `tag2`… hold the tags of
+ * the message, in order, and the other names its metadata.
+ *
+ * @internal
+ */
+const splitNamedTags = (named) => {
+  const numbered = [];
+  const metadata = Object.create(null);
+  if (!isRecord(named)) return { tags: [], metadata };
+  for (const name in named) {
+    const value = named[name];
+    if (typeof value !== 'string') continue;
+    const match = NUMBERED_TAG.exec(name);
+    if (match === null) metadata[name] = value;
+    else numbered.push({ index: Number(match[1]), value });
+  }
+  const tags = [];
+  for (const entry of numbered.toSorted((a, b) => a.index - b.index)) tags.push(entry.value);
+  return { tags, metadata };
+};
+
 module.exports = {
   WebhookVerificationError,
   bodyBytesOf,
@@ -226,5 +251,6 @@ module.exports = {
   isRecord,
   parseJsonOf,
   resolveCommonOptions,
+  splitNamedTags,
   stringOf,
 };
