@@ -103,9 +103,36 @@ export interface MemoryReplayStoreOptions {
 export declare function createMemoryReplayStore(options?: MemoryReplayStoreOptions): ReplayStore;
 
 /**
+ * What {@link WebhookVerifierOptions.onVerify} hears of one request.
+ */
+export interface WebhookVerifyReport {
+  /** The provider of the verifier. */
+  readonly provider: string;
+  /**
+   * `taken`, `refused` (a {@link WebhookVerificationError}), or `error` for
+   * what is not a refusal: a body that is not raw, a replay store that fails.
+   */
+  readonly status: 'taken' | 'refused' | 'error';
+  /** Why it was refused. */
+  readonly reason?: WebhookVerificationReason;
+  /** The events taken. */
+  readonly events: number;
+  /** The time the verification took, in milliseconds. */
+  readonly durationMs: number;
+}
+
+/**
+ * Hears each request a verifier takes or refuses, for a metric or a log; one
+ * that throws is a process warning (`MAILER_WEBHOOK_LISTENER_FAILED`).
+ */
+export type WebhookVerifyListener = (report: WebhookVerifyReport) => void;
+
+/**
  * The options every verifier takes.
  */
 export interface WebhookVerifierOptions {
+  /** Hears each request taken or refused. */
+  readonly onVerify?: WebhookVerifyListener;
   /** The clock, in milliseconds. */
   readonly now?: () => number;
   /** How far from now a request may be signed, in milliseconds. */
@@ -304,6 +331,8 @@ export declare function createMailgunWebhookVerifier(
  * id is kept: committing its delivery does nothing.
  */
 export interface BasicWebhookVerifierOptions {
+  /** Hears each request taken or refused. */
+  readonly onVerify?: WebhookVerifyListener;
   readonly username: string;
   readonly password: string;
   /**
@@ -330,6 +359,8 @@ export declare function createPostmarkWebhookVerifier(
  * no time: an event is taken once by its id, kept a day and an hour.
  */
 export interface SignedBodyWebhookVerifierOptions {
+  /** Hears each request taken or refused. */
+  readonly onVerify?: WebhookVerifyListener;
   /** The signing secret of the webhook. */
   readonly secret: string;
   /** The ids taken, as {@link WebhookVerifierOptions.replayStore}. */
@@ -373,6 +404,8 @@ export declare function createMailtrapWebhookVerifier(
  * The options of {@link createBrevoWebhookVerifier}.
  */
 export interface BrevoWebhookVerifierOptions {
+  /** Hears each request taken or refused. */
+  readonly onVerify?: WebhookVerifyListener;
   /** The token the webhook is configured with. */
   readonly token: string;
   /**
@@ -506,6 +539,8 @@ export declare function createSmtp2goWebhookVerifier(
  * The options of {@link createAzureWebhookVerifier}.
  */
 export interface AzureWebhookVerifierOptions {
+  /** Hears each request taken or refused. */
+  readonly onVerify?: WebhookVerifyListener;
   /** The token the Event Grid subscription sends as a secret delivery property. */
   readonly token: string;
   /**

@@ -19,6 +19,7 @@ const {
   dateOf,
   headerOf,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCommonOptions,
   stringListOf,
@@ -153,7 +154,7 @@ const createSendGridWebhookVerifier = (options = {}) => {
   const key = publicKeyOf(options.publicKey);
   const common = resolveCommonOptions(options, DEFAULT_TOLERANCE_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'sendgrid', async (request) => {
       const bytes = bodyBytesOf(request, common);
       const signature = headerOf(request, SIGNATURE);
       const timestamp = headerOf(request, TIMESTAMP);
@@ -178,7 +179,7 @@ const createSendGridWebhookVerifier = (options = {}) => {
         entries.push({ key: `sendgrid:${event.id}`, events: [event] });
       }
       return claimDelivery(common, entries);
-    },
+    }),
   };
 };
 

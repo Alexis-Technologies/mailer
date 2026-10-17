@@ -11,6 +11,7 @@ const {
   createEvent,
   dateOf,
   isRecord,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,
@@ -82,7 +83,7 @@ const createMailerooWebhookVerifier = (options = {}) => {
   );
   const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'maileroo', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBodyHmac(request, bytes, 'x-maileroo-signature', secret, 'Maileroo');
       const payload = parseJsonOf(bytes);
@@ -91,7 +92,7 @@ const createMailerooWebhookVerifier = (options = {}) => {
       }
       const entries = [{ key: `maileroo:${payload.event_id}`, events: eventsOf(payload) }];
       return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
-    },
+    }),
   };
 };
 

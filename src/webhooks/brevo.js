@@ -16,6 +16,7 @@ const {
   deliveryOf,
   isRecord,
   jsonRecordOf,
+  observed,
   parseJsonOf,
   resolveCredentialOptions,
   stringOf,
@@ -92,7 +93,7 @@ const createBrevoWebhookVerifier = (options = {}) => {
   const checkToken = tokenCheckOf(options, 'Brevo');
   const common = resolveCredentialOptions(options);
   return {
-    async verify(request) {
+    verify: observed(common, 'brevo', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkToken(request);
       const payload = parseJsonOf(bytes);
@@ -105,7 +106,7 @@ const createBrevoWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not a Brevo event.');
       }
       return deliveryOf(events);
-    },
+    }),
   };
 };
 

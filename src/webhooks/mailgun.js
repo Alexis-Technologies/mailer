@@ -19,6 +19,7 @@ const {
   dateOf,
   hmacOf,
   isRecord,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,
@@ -92,7 +93,7 @@ const createMailgunWebhookVerifier = (options = {}) => {
   );
   const common = resolveCommonOptions(options, DEFAULT_TOLERANCE_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'mailgun', async (request) => {
       // The signature is a field of the body, read to find it and trusted
       // only once it matches.
       const payload = parseJsonOf(bodyBytesOf(request, common));
@@ -113,7 +114,7 @@ const createMailgunWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body has no Mailgun event.');
       }
       return claimDelivery(common, [{ key: `mailgun:${token}`, events: [eventOf(data, token)] }]);
-    },
+    }),
   };
 };
 

@@ -23,6 +23,7 @@ const {
   headerOf,
   hmacOf,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCommonOptions,
   splitNamedTags,
@@ -135,7 +136,7 @@ const createResendWebhookVerifier = (options = {}) => {
   const key = svixKeyOf(options.secret, 'secret');
   const common = resolveCommonOptions(options, DEFAULT_TOLERANCE_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'resend', async (request) => {
       const bytes = bodyBytesOf(request, common);
       const id = checkSvixSignature(request, bytes, key, common);
       const payload = parseJsonOf(bytes);
@@ -143,7 +144,7 @@ const createResendWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not a Resend event.');
       }
       return claimDelivery(common, [{ key: `resend:${id}`, events: eventsOf(payload, id) }]);
-    },
+    }),
   };
 };
 

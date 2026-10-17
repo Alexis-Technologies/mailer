@@ -17,6 +17,7 @@ const {
   dateOf,
   deliveryOf,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCredentialOptions,
   stringOf,
@@ -117,7 +118,7 @@ const createPostmarkWebhookVerifier = (options = {}) => {
   // No time or id to hold a request to: the credentials alone stand for it.
   const common = resolveCredentialOptions(options);
   return {
-    async verify(request) {
+    verify: observed(common, 'postmark', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBasicCredentials(request, expected);
       const record = parseJsonOf(bytes);
@@ -125,7 +126,7 @@ const createPostmarkWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not a Postmark event.');
       }
       return deliveryOf([eventOf(record)]);
-    },
+    }),
   };
 };
 

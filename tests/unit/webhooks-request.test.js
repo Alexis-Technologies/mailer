@@ -336,3 +336,44 @@ test('Webhooks: an event carries the Message-ID it was sent with, and its recipi
   assert.strictEqual(events[0].rfcMessageId, '<sent-1@example.com>');
   assert.strictEqual(events[0].recipient, 'Carol@example.org');
 });
+
+test('Webhooks: onVerify hears each request taken or refused, and why', async (t) => {
+  // Before: a verifier said nothing of what it refused, so a forged flood or
+  // a wrong secret did not show.
+  const reports = [];
+  const mailtrap = createMailtrapWebhookVerifier({
+    secret: 'mt',
+    replayStore: createMemoryReplayStore(),
+    onVerify: (report) => reports.push(report),
+  });
+  const request = signMailtrap(mailtrapBatch('ev-1', 'ev-2'));
+  await (await mailtrap.verify(request)).commit();
+  await assert.rejects(mailtrap.verify(request));
+  await assert.rejects(mailtrap.verify({ body: '{}', headers: {} }));
+  await assert.rejects(mailtrap.verify({ body: {} }), TypeError);
+  assert.deepStrictEqual(
+    reports.map((report) => [report.provider, report.status, report.reason, report.events]),
+    [
+      ['mailtrap', 'taken', undefined, 2],
+      ['mailtrap', 'refused', 'replay', 0],
+      ['mailtrap', 'refused', 'signature', 0],
+      ['mailtrap', 'error', undefined, 0],
+    ],
+  );
+  for (const report of reports) assert.ok(report.durationMs >= 0);
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push(options.code));
+  const postmark = createPostmarkWebhookVerifier({
+    username: 'u',
+    password: 'p',
+    onVerify: () => {
+      throw new Error('metrics down');
+    },
+  });
+  await assert.rejects(postmark.verify({ body: '{}' }), WebhookVerificationError);
+  assert.deepStrictEqual(warnings, ['MAILER_WEBHOOK_LISTENER_FAILED']);
+  assert.throws(
+    () => createMailtrapWebhookVerifier({ secret: 's', replayStore: null, onVerify: 1 }),
+    /onVerify must be a function/,
+  );
+});

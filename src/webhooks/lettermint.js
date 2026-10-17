@@ -14,6 +14,7 @@ const {
   headerOf,
   hmacOf,
   isRecord,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,
@@ -96,7 +97,7 @@ const createLettermintWebhookVerifier = (options = {}) => {
   );
   const common = resolveCommonOptions(options, DEFAULT_TOLERANCE_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'lettermint', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkSignature(request, bytes, secret, common);
       const payload = parseJsonOf(bytes);
@@ -106,7 +107,7 @@ const createLettermintWebhookVerifier = (options = {}) => {
       return claimDelivery(common, [
         { key: `lettermint:${payload.id}`, events: [eventOf(payload)] },
       ]);
-    },
+    }),
   };
 };
 

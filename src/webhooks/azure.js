@@ -12,6 +12,7 @@ const {
   deliveryOf,
   headerOf,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCommonOptions,
   stringOf,
@@ -116,7 +117,7 @@ const createAzureWebhookVerifier = (options = {}) => {
   const tokenHeader = options.header ?? 'authorization';
   const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'azure', async (request) => {
       const bytes = bodyBytesOf(request, common);
       const kind = headerOf(request, 'aeg-event-type');
       // A validation carries no event, and answering it gives nothing away;
@@ -139,7 +140,7 @@ const createAzureWebhookVerifier = (options = {}) => {
         entries.push({ key: `azure:${record.id}`, events: [eventOf(record)] });
       }
       return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
-    },
+    }),
   };
 };
 

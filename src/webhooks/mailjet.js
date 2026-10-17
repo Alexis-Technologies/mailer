@@ -12,6 +12,7 @@ const {
   deliveryOf,
   isRecord,
   jsonRecordOf,
+  observed,
   parseJsonOf,
   resolveCredentialOptions,
   stringOf,
@@ -71,7 +72,7 @@ const createMailjetWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'Mailjet');
   const common = resolveCredentialOptions(options);
   return {
-    async verify(request) {
+    verify: observed(common, 'mailjet', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBasicCredentials(request, expected);
       const payload = parseJsonOf(bytes);
@@ -84,7 +85,7 @@ const createMailjetWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not a Mailjet event.');
       }
       return deliveryOf(events);
-    },
+    }),
   };
 };
 

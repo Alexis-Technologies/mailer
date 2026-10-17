@@ -11,6 +11,7 @@ const {
   createEvent,
   dateOf,
   isRecord,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,
@@ -110,7 +111,7 @@ const createMailtrapWebhookVerifier = (options = {}) => {
   );
   const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'mailtrap', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBodyHmac(request, bytes, 'mailtrap-signature', secret, 'Mailtrap');
       const entries = [];
@@ -120,7 +121,7 @@ const createMailtrapWebhookVerifier = (options = {}) => {
         entries.push({ key: `mailtrap:${event.id}`, events: [event] });
       }
       return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
-    },
+    }),
   };
 };
 

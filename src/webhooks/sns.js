@@ -13,6 +13,7 @@ const {
   checkTime,
   claimDelivery,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCommonOptions,
 } = require('./request.js');
@@ -229,7 +230,7 @@ const createSnsVerifier = (options, service) => {
       'certificateTimeoutMs',
     ),
   );
-  return async (request) => {
+  return observed(common, service.provider, async (request) => {
     const message = parseJsonOf(bodyBytesOf(request, common));
     if (!isRecord(message) || typeof message.TopicArn !== 'string') {
       throw new WebhookVerificationError('payload', 'The body is not an SNS message.');
@@ -265,7 +266,7 @@ const createSnsVerifier = (options, service) => {
     }
     const events = service.eventsOf(message, isRecord(record) ? record : undefined);
     return claimDelivery(common, [{ key, events }]);
-  };
+  });
 };
 
 module.exports = { certificateError, createSnsVerifier, isHttpsUrlOf };

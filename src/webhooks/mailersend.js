@@ -10,9 +10,10 @@ const {
   claimDelivery,
   createEvent,
   dateOf,
-  isRecord,
   headerValueOf,
+  isRecord,
   metadataFromHeaders,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,
@@ -93,7 +94,7 @@ const createMailerSendWebhookVerifier = (options = {}) => {
   );
   const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
   return {
-    async verify(request) {
+    verify: observed(common, 'mailersend', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBodyHmac(request, bytes, 'signature', secret, 'MailerSend');
       const payload = parseJsonOf(bytes);
@@ -103,7 +104,7 @@ const createMailerSendWebhookVerifier = (options = {}) => {
       const event = eventOf(payload);
       const entries = [{ key: `mailersend:${event.id}`, events: [event] }];
       return claimDelivery(common, entries, {}, DAY_REPLAY_TTL_MS);
-    },
+    }),
   };
 };
 

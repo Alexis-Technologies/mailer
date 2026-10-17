@@ -143,6 +143,7 @@ const replayStore = {
 | `toleranceMs` | 5 minutes (an hour for SES) | How far from now a request may be signed. |
 | `maxBodyBytes` | 5 MiB | The longest body taken. |
 | `now` | `Date.now` | The clock. |
+| `onVerify` | | Hears each request: `{ provider, status, reason, events, durationMs }`, `status` being `taken`, `refused` or `error`, for a metric of refusals by `reason`. |
 
 ## Amazon SES
 

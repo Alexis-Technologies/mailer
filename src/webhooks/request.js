@@ -7,6 +7,7 @@
 // its events.
 
 const { createHmac, timingSafeEqual } = require('node:crypto');
+const { warnThrown } = require('../internal/callback.js');
 const {
   checkOptionalFunction,
   checkPositiveInteger,
@@ -144,8 +145,54 @@ const resolveCommonOptions = (options, defaultToleranceMs) => ({
   toleranceMs: checkPositiveNumber(options.toleranceMs ?? defaultToleranceMs, 'toleranceMs'),
   replayStore: checkReplayStore(options.replayStore),
   leaseMs: checkPositiveNumber(options.leaseMs ?? DEFAULT_LEASE_MS, 'leaseMs'),
+  onVerify: checkOptionalFunction(options.onVerify, 'onVerify'),
   maxBodyBytes: checkPositiveNumber(options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES, 'maxBodyBytes'),
 });
+
+const tell = (listener, report) => {
+  try {
+    listener(report);
+  } catch (error) {
+    warnThrown('The onVerify of a webhook verifier', error, 'MAILER_WEBHOOK_LISTENER_FAILED');
+  }
+};
+
+/**
+ * Tells `onVerify` of each request a verifier takes or refuses: the
+ * provider, `taken`, `refused` with its reason, or `error` for what is not a
+ * refusal (a body that is not raw, a store that fails), the events taken and
+ * the time it took.  A listener that throws is a process warning.
+ *
+ * @internal
+ */
+const observed = (common, provider, verify) => {
+  const listener = common.onVerify;
+  if (listener === undefined) return verify;
+  return async (request) => {
+    const started = performance.now();
+    let delivery;
+    try {
+      delivery = await verify(request);
+    } catch (error) {
+      const refused = error instanceof WebhookVerificationError;
+      tell(listener, {
+        provider,
+        status: refused ? 'refused' : 'error',
+        reason: refused ? error.reason : undefined,
+        events: 0,
+        durationMs: performance.now() - started,
+      });
+      throw error;
+    }
+    tell(listener, {
+      provider,
+      status: 'taken',
+      events: delivery.events.length,
+      durationMs: performance.now() - started,
+    });
+    return delivery;
+  };
+};
 
 /**
  * Resolves the options of a verifier of a provider that signs neither a time
@@ -711,6 +758,7 @@ module.exports = {
   isRecord,
   jsonRecordOf,
   metadataFromHeaders,
+  observed,
   parseJsonOf,
   requireSecret,
   resolveCommonOptions,

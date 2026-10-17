@@ -10,9 +10,10 @@ const {
   createEvent,
   dateOf,
   deliveryOf,
-  isRecord,
   headerValueOf,
+  isRecord,
   metadataFromHeaders,
+  observed,
   resolveCredentialOptions,
   stringOf,
 } = require('./request.js');
@@ -92,7 +93,7 @@ const createSmtp2goWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'SMTP2GO');
   const common = resolveCredentialOptions(options);
   return {
-    async verify(request) {
+    verify: observed(common, 'smtp2go', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBasicCredentials(request, expected);
       const record = recordOf(bytes);
@@ -100,7 +101,7 @@ const createSmtp2goWebhookVerifier = (options = {}) => {
         throw new WebhookVerificationError('payload', 'The body is not an SMTP2GO event.');
       }
       return deliveryOf([eventOf(record)]);
-    },
+    }),
   };
 };
 

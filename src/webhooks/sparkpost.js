@@ -11,6 +11,7 @@ const {
   dateOf,
   deliveryOf,
   isRecord,
+  observed,
   parseJsonOf,
   resolveCredentialOptions,
   stringOf,
@@ -98,7 +99,7 @@ const createSparkPostWebhookVerifier = (options = {}) => {
   const expected = basicCredentialsOf(options, 'SparkPost');
   const common = resolveCredentialOptions(options);
   return {
-    async verify(request) {
+    verify: observed(common, 'sparkpost', async (request) => {
       const bytes = bodyBytesOf(request, common);
       checkBasicCredentials(request, expected);
       const payload = parseJsonOf(bytes);
@@ -114,7 +115,7 @@ const createSparkPostWebhookVerifier = (options = {}) => {
         if (inner !== undefined) events.push(eventOf(inner, index));
       }
       return deliveryOf(events);
-    },
+    }),
   };
 };
 

@@ -116,3 +116,11 @@ createSesWebhookVerifier({
 expectError(
   createSesWebhookVerifier({ topicArns: ['arn'], replayStore: null, signatureVersions: ['3'] }),
 );
+createPostmarkWebhookVerifier({
+  username: 'u',
+  password: 'p',
+  onVerify: (report) => {
+    expectType<'taken' | 'refused' | 'error'>(report.status);
+    expectType<number>(report.durationMs);
+  },
+});
