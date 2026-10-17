@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { parseRetryAfter } = require('../core/receipt.js');
 const { requestWithRetry } = require('../internal/http.js');
 const { createLog } = require('../internal/log.js');
 const { readText } = require('../internal/body.js');
@@ -211,17 +212,6 @@ const withAttempts = (error, attempts) => {
     );
   }
   return Object.assign(error, { attempts });
-};
-
-const parseRetryAfter = (header) => {
-  if (header == null || header === '') return undefined;
-  const asSeconds = Number(header);
-  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
-    return Math.round(asSeconds * 1000);
-  }
-  const asDate = Date.parse(header);
-  if (Number.isNaN(asDate)) return undefined;
-  return Math.max(0, asDate - Date.now());
 };
 
 const inferSandboxRetryAfter = (message, statusCode, sandbox) => {
