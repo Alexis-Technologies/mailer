@@ -18,6 +18,7 @@ const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { chunks, readItems } = require('../internal/batch.js');
+const { schedulingRefusal } = require('../internal/schedule.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -171,6 +172,7 @@ class JmapTransport {
   async send(message, options) {
     const signal = options?.signal;
     signal?.throwIfAborted();
+    if (message.scheduledAt != null) return refuseScheduled();
 
     try {
       // Get or refresh session
@@ -372,8 +374,29 @@ class JmapTransport {
     // a batch over it would be refused as a whole.
     const limit = getMaxObjectsInSet(discovery.discovered.session);
     for await (const batch of chunks(prepend(first.value, input), limit)) {
-      yield* this.sendBatch(discovery.discovered, batch, signal);
+      yield* this.sendRuns(discovery.discovered, batch, signal);
     }
+  }
+
+  /**
+   * Sends the messages of a batch that can be sent, in runs between those
+   * it refuses, so that every receipt keeps the place of its message.
+   *
+   * @param discovered What the batches share.
+   * @param batch The messages, at most the limit of one Email/set.
+   * @param signal Cancellation signal.
+   * @returns Async iterable of receipts, one per message, in order.
+   */
+  async *sendRuns(discovered, batch, signal) {
+    let start = 0;
+    for (let i = 0; i < batch.length; i++) {
+      if (batch[i].scheduledAt == null) continue;
+      if (i > start) yield* this.sendBatch(discovered, batch.slice(start, i), signal);
+      yield refuseScheduled();
+      start = i + 1;
+    }
+    if (start === 0) yield* this.sendBatch(discovered, batch, signal);
+    else if (start < batch.length) yield* this.sendBatch(discovered, batch.slice(start), signal);
   }
 
   /**
@@ -958,6 +981,15 @@ const executeSubmission = async (client, apiUrl, request, signal) => {
     throw isUnanswered && !isUnsentRequestError(error) ? markDeliveryUnknown(error) : error;
   }
 };
+
+// JMAP holds a submission only with the FUTURERELEASE extension, which
+// this transport does not ask for.
+const refuseScheduled = () =>
+  createJmapFailure(schedulingRefusal('jmap'), undefined, {
+    category: 'validation',
+    code: 'jmap.scheduling_unsupported',
+    retryable: false,
+  });
 
 const createJmapFailure = (message, error, override = {}) => {
   const attempts = getAttemptCount(error);

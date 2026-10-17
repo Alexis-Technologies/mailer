@@ -1,5 +1,8 @@
 // Ported from upyo v0.7.0 (packages/core/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Also ported from unemail v0.7.0 (src/core/message.ts): `scheduledAt`,
+// `tracking` and `metadata`, checked here rather than by each provider.
+// https://github.com/productdevbook/unemail — MIT, Copyright 2025 Wind
 
 const { generateId } = require('./id.js');
 const { parseAddress } = require('./address.js');
@@ -38,7 +41,8 @@ const { addListHeaders } = require('./list.js');
  *                     when the calendar content is not a single well-formed
  *                     iCalendar object declaring one supported method, when a
  *                     field of `list` is invalid or also given in `headers`,
- *                     or when `generateId` returns no dot-atom-text.
+ *                     when `scheduledAt`, `tracking` or `metadata` is
+ *                     invalid, or when `generateId` returns no dot-atom-text.
  */
 const createMessage = (constructor, options) => {
   const sender = checkAddress('sender', constructor.from);
@@ -62,6 +66,9 @@ const createMessage = (constructor, options) => {
     references: checkMessageIds('references ', constructor.references),
     calendar:
       constructor.calendar == null ? undefined : resolveCalendarContent(constructor.calendar),
+    scheduledAt: checkScheduledAt(constructor.scheduledAt),
+    tracking: checkTracking(constructor.tracking),
+    metadata: checkMetadata(constructor.metadata),
   };
 };
 
@@ -215,6 +222,59 @@ const checkDate = (date) => {
     throwTypeError(`Invalid date: ${JSON.stringify(date)}`);
   }
   return new Date(time);
+};
+
+const checkScheduledAt = (date) => {
+  if (date == null) return undefined;
+  const time = date instanceof Date ? date.getTime() : Number.NaN;
+  if (Number.isNaN(time)) throwTypeError(`Invalid scheduledAt: ${JSON.stringify(date)}`);
+  return new Date(time);
+};
+
+const checkTracking = (tracking) => {
+  if (tracking == null) return undefined;
+  if (typeof tracking !== 'object' || Array.isArray(tracking)) {
+    throwTypeError('Invalid tracking: it must be an object of `opens` and `clicks`.');
+  }
+  const checked = {};
+  for (const key in tracking) {
+    if (!Object.hasOwn(tracking, key) || tracking[key] === undefined) continue;
+    if (key !== 'opens' && key !== 'clicks') throwTypeError(`Invalid tracking field: ${key}`);
+    if (typeof tracking[key] !== 'boolean') throwTypeError(`Invalid tracking.${key}: a boolean.`);
+    checked[key] = tracking[key];
+  }
+  return Object.freeze(checked);
+};
+
+// A key may become the name of a header field (`X-Metadata-<key>`) or of a
+// form field (`v:<key>`), so it holds no more than letters, digits, `_`, `-`
+// and `.`; a value no control character.
+const METADATA_KEY = /^[A-Za-z0-9_.-]{1,128}$/;
+
+const hasControl = (text) => {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+};
+
+const checkMetadata = (metadata) => {
+  if (metadata == null) return undefined;
+  if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throwTypeError('Invalid metadata: it must be an object of strings.');
+  }
+  const checked = Object.create(null);
+  for (const key in metadata) {
+    if (!Object.hasOwn(metadata, key)) continue;
+    if (!METADATA_KEY.test(key)) throwTypeError(`Invalid metadata key: ${JSON.stringify(key)}`);
+    const value = metadata[key];
+    if (typeof value !== 'string' || hasControl(value)) {
+      throwTypeError(`Invalid metadata value of ${key}: a string without control characters.`);
+    }
+    checked[key] = value;
+  }
+  return Object.freeze(checked);
 };
 
 const ensureArray = (value) => {

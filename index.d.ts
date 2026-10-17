@@ -487,6 +487,31 @@ export interface Message {
    * necessarily the scheduling semantics; see the transport's documentation.
    */
   readonly calendar?: CalendarContent;
+  /**
+   * When the provider should deliver the message.  A transport that cannot
+   * schedule it refuses the message with a non-retryable `validation`
+   * receipt rather than sending it at once.
+   */
+  readonly scheduledAt?: Date;
+  /**
+   * Open and click tracking for this message, over what the transport is
+   * configured with, where its provider takes it per message.
+   */
+  readonly tracking?: MessageTracking;
+  /**
+   * Values the provider keeps with the message and returns in its events
+   * (custom arguments, variables), where its provider takes them.
+   */
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+/**
+ * Open and click tracking of a message.
+ */
+export interface MessageTracking {
+  /** Whether the provider tracks opens, with a pixel. */
+  readonly opens?: boolean;
+  /** Whether the provider tracks clicks, by rewriting links. */
+  readonly clicks?: boolean;
 }
 /**
  * Represents the content of an email message, which can be either HTML
@@ -652,6 +677,26 @@ export interface MessageConstructor {
    * than overriding it.  Line endings are normalized to CRLF.
    */
   readonly calendar?: CalendarConstructor;
+  /**
+   * When the provider should deliver the message.  A transport that cannot
+   * schedule it (SMTP, JMAP, and every provider without a scheduling API)
+   * refuses the message with a non-retryable `validation` receipt rather
+   * than sending it at once.
+   */
+  readonly scheduledAt?: Date;
+  /**
+   * Open and click tracking for this message, over what the transport is
+   * configured with, where its provider takes it per message.  SMTP and JMAP
+   * ignore it.
+   */
+  readonly tracking?: MessageTracking;
+  /**
+   * Values the provider keeps with the message and returns in its events.
+   * A key is 1 to 128 letters, digits, `_`, `-` or `.`, as it may become the
+   * name of a header or form field; a value is a string without control
+   * characters.  SMTP and JMAP ignore it.
+   */
+  readonly metadata?: Readonly<Record<string, string>>;
 }
 /**
  * A URL of a List-* field: an `http:`, `https:` or `mailto:` URL, or a bare

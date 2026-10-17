@@ -305,7 +305,12 @@ class ResendTransport {
       // API forbids, and `sendBatch()` fails a whole chunk on one conversion
       // error.  Sending these individually keeps the failure — or the success
       // — confined to the message it belongs to.
-      if (message.attachments.length > 0 || message.tags.length > 0 || message.calendar != null) {
+      if (
+        message.attachments.length > 0 ||
+        message.tags.length > 0 ||
+        message.calendar != null ||
+        message.scheduledAt != null
+      ) {
         return false;
       }
     }

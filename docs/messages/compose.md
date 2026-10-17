@@ -241,6 +241,36 @@ described in the next section.  They differ from the fields above in that a
 custom header is still honored when the dedicated field is left unset, so the
 header form keeps working.
 
+## Scheduling, tracking and metadata
+
+Three fields ask the provider for what only some providers do:
+
+```js
+const message = createMessage({
+  from: 'shop@example.com',
+  to: 'customer@example.com',
+  subject: 'Your order has shipped',
+  content: { html: '<p>…</p>' },
+  scheduledAt: new Date('2026-10-18T09:00:00Z'),
+  tracking: { opens: false, clicks: true },
+  metadata: { orderId: '42', tenant: 'acme' },
+});
+```
+
+- `scheduledAt` is when the provider should deliver the message.  A transport
+  that cannot schedule it, SMTP and JMAP among them, refuses the message with a
+  non-retryable `validation` receipt rather than sending it at once, so `./pool`
+  does not fail over with it and `./retry` does not retry it.
+- `tracking` turns open and click tracking on or off for this message, over the
+  configuration of the transport, where the provider takes it per message.
+- `metadata` holds values the provider keeps with the message and returns in its
+  events.  A key is 1 to 128 letters, digits, `_`, `-` or `.`, since it may become
+  the name of a header or form field; a value is a string without control
+  characters.
+
+SMTP and JMAP ignore `tracking` and `metadata`, which have no meaning in the
+message itself.  Each provider's page says which of the three it takes.
+
 ## Mailing lists and one-click unsubscribe
 
 The `list` field writes the List-* header fields of [RFC 2369] and [RFC 2919],

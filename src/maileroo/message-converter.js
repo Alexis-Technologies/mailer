@@ -5,6 +5,7 @@ const { generateId } = require('../core/id.js');
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -39,6 +40,7 @@ const STANDARD_HEADERS = new Set([
  */
 const convertMessage = async (message, config, signal) => {
   signal?.throwIfAborted();
+  refuseScheduledAt(message, 'maileroo');
 
   const attachments = withCalendarAttachment(message);
 

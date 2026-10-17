@@ -474,6 +474,9 @@ fails on upstream's behavior):
   writes what `URL` serializes.
 - U2. unemail: one-click went with any `unsubscribe.url`, `http:` included, and was on by
   default. RFC 8058 §3.1 asks for an https URI; `oneClick` is opt-in and needs one.
+- U3. unemail: the keys and values of `metadata` became `X-Metadata-<key>` header fields in eight
+  drivers with no check, so a key or value with a line break added header fields. `createMessage`
+  holds a key to 1 to 128 of `[A-Za-z0-9_.-]` and a value to a string without control characters.
 
 ## Repository layout
 

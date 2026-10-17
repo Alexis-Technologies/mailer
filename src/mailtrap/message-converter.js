@@ -4,6 +4,7 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -41,6 +42,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  */
 const convertMessage = async (message, config, signal) => {
   signal?.throwIfAborted();
+  refuseScheduledAt(message, 'mailtrap');
 
   const attachments = withCalendarAttachment(message);
 

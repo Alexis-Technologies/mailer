@@ -4,6 +4,7 @@
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   collectCustomHeaders,
   convertAttachments,
@@ -29,6 +30,7 @@ const {
  * ```
  */
 const convertMessage = async (message, config, signal) => {
+  refuseScheduledAt(message, 'sendgrid');
   const attachments = withCalendarAttachment(message);
   const personalization = {
     to: formatAddresses(message.recipients, formatAddress),

@@ -11,6 +11,7 @@ import {
   type Address,
   type IdGenerator,
   type IdKind,
+  type MessageTracking,
   type Message,
   type RawTransport,
   type Receipt,
@@ -33,6 +34,29 @@ expectType<readonly Address[]>(message.recipients);
 expectError(createMessage({ from: 'alex@example.com', subject: 'Hello' }));
 expectError(createMessage({ from: 'alex', to: 'bob@example.com', subject: 'x', content: {} }));
 expectType<Address | undefined>(parseAddress('Alex <alex@example.com>'));
+
+// Scheduling, tracking and metadata.
+const fields = createMessage({
+  from: 'a@example.com',
+  to: 'b@example.com',
+  subject: 'x',
+  content: { text: 'x' },
+  scheduledAt: new Date(),
+  tracking: { opens: true },
+  metadata: { orderId: '42' },
+});
+expectType<Date | undefined>(fields.scheduledAt);
+expectType<MessageTracking | undefined>(fields.tracking);
+expectType<Readonly<Record<string, string>> | undefined>(fields.metadata);
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    metadata: { orderId: 42 },
+  }),
+);
 
 // The List-* fields of a newsletter.
 createMessage({

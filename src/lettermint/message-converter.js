@@ -5,6 +5,7 @@ const { generateId } = require('../core/id.js');
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -39,6 +40,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * @throws {RangeError} If the message has more than one tag.
  */
 const convertMessage = async (message, config, signal) => {
+  refuseScheduledAt(message, 'lettermint');
   if (message.tags.length > 1) {
     throw new RangeError('Lettermint supports at most one tag per message.');
   }

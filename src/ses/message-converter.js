@@ -5,6 +5,7 @@ const { Buffer } = require('node:buffer');
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -32,6 +33,7 @@ const MAX_SES_HEADERS = 15;
 const MAX_SES_HEADER_LENGTH = 996;
 
 const convertMessage = async (message, config, signal) => {
+  refuseScheduledAt(message, 'ses');
   const destination = {};
 
   if (message.recipients.length > 0) {

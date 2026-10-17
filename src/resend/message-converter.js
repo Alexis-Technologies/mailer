@@ -5,6 +5,7 @@ const { generateId } = require('../core/id.js');
 const { formatMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -37,6 +38,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * ```
  */
 const convertMessage = async (message, _config, options = {}) => {
+  refuseScheduledAt(message, 'resend');
   const attachments = withCalendarAttachment(message);
 
   const emailData = {
