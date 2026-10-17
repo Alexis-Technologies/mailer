@@ -27,5 +27,6 @@
   "./retry": 3,
   "./mock": 2,
   "./otel": 5,
-  "./logger": 2.5
+  "./logger": 2.5,
+  "./breaker": 2
 }

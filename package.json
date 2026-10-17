@@ -135,6 +135,10 @@
     "./logger": {
       "types": "./src/logger/index.d.ts",
       "default": "./src/logger/index.js"
+    },
+    "./breaker": {
+      "types": "./src/breaker/index.d.ts",
+      "default": "./src/breaker/index.js"
     }
   },
   "directories": {

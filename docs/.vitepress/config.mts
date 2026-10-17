@@ -106,6 +106,7 @@ const guide = [
       { text: 'Retry', link: '/transports/retry' },
       { text: 'OpenTelemetry', link: '/transports/otel' },
       { text: 'Logger', link: '/transports/logger' },
+      { text: 'Circuit breaker', link: '/transports/breaker' },
     ],
   },
 ];

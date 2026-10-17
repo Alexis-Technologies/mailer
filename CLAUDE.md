@@ -550,6 +550,12 @@ fails on upstream's behavior):
   addresses and the clock, which put the recipients into every log of a receipt and could repeat
   within a millisecond, while the answer has a `message_id`. `./cloudflare` writes the REST
   shapes and takes the `message_id`.
+- U10. unemail (`src/middleware/circuit-breaker.ts`): half-open let every send through, not one
+  probe, so a provider coming back met the whole backlog at once; any failure but a malformed
+  message counted, a rate limit and a caller's abort among them. `./breaker` lets one probe
+  through, answers the others as while open, counts only network, timeout, server and
+  unavailability failures and a thrown error that is not the caller's abort, and ignores a late
+  result of a send made in another state.
 
 ## Repository layout
 
