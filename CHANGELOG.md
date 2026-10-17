@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-18
+
 The features of three libraries of the [comparison](https://mailerat.vercel.app/guide/comparison)
 where they led this package, ported onto its contracts:
 [nodemailer](https://github.com/nodemailer/nodemailer) 10.0.16 (MIT-0, © 2011-2023 Andris
@@ -560,5 +562,6 @@ for code written against upyo 0.7:
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0
