@@ -28,6 +28,10 @@
       "types": "./src/mime/index.d.ts",
       "default": "./src/mime/index.js"
     },
+    "./attachments": {
+      "types": "./src/attachments/index.d.ts",
+      "default": "./src/attachments/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

@@ -468,6 +468,19 @@ fails on upstream's behavior):
   `List-Unsubscribepost`), and the default DKIM `h=` of neither nodemailer nor unemail covered it
   or `List-Unsubscribe`, as RFC 8058 §4 requires. `oneClick` of `list` writes it, and the default
   `h=` of `./mime` ends with `list-unsubscribe:list-unsubscribe-post`.
+- N2. nodemailer: any `path` or `href` of an attachment (and of `html` and `text`) was read, a
+  file from disk or a URL through its own HTTP client, unless `disableFileAccess` and
+  `disableUrlAccess` were set; the client followed five redirects to any address, cloud metadata
+  included, with no bound on the body. In `./attachments` nothing is read but through `fromPath`
+  and `fromUrl`, which the application calls; `fromUrl` goes through the injected `fetch` with
+  `redirect: 'manual'`, checks each URL with `allowUrl` (by default `isPublicUrl`: no
+  `localhost`, loopback, private or link-local address), sends `headers` to the first origin
+  only, and bounds time and bytes.
+- N3. nodemailer: a data URL over 50 MB became an empty attachment, and one that did not parse
+  was read as a file path. `fromDataUri` refuses both and checks base64, and percent-encoded
+  bytes stay bytes rather than going through `decodeURIComponent`.
+- S1. sently (`resolveAttachments`): `basePath` compared the paths as written, so a symbolic link
+  inside it led out of it. `fromPath` compares the `realpath` of the file with that of `root`.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and

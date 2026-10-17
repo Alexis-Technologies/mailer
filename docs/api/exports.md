@@ -42,6 +42,7 @@ The message model and the transport contract, ported from `@upyo/core`.
 | Subpath | Exports | Page |
 | --- | --- | --- |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
+| `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/smtp` | `SmtpTransport` and its error classes (`SmtpResponseError`, `SmtpAuthError`, …), `isSmtpResponseProviderDetails` | [SMTP](/transports/smtp) |
 | `@alexify/mailer/ses` | `SesTransport` | [Amazon SES](/transports/ses) |
 | `@alexify/mailer/resend` | `ResendTransport` | [Resend](/transports/resend) |
