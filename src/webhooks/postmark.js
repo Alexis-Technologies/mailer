@@ -10,15 +10,16 @@
 
 const {
   WebhookVerificationError,
+  basicCredentialsOf,
   bodyBytesOf,
+  checkBasicCredentials,
   createEvent,
   dateOf,
-  equalBytes,
-  headerOf,
   isRecord,
   parseJsonOf,
   resolveCommonOptions,
   stringOf,
+  stringRecordOf,
 } = require('./request.js');
 
 // What a bounce of Postmark is, by its Type.
@@ -49,29 +50,6 @@ const TYPES = new Map([
   ['Click', 'clicked'],
 ]);
 
-const credentialsOf = (options) => {
-  for (const name of ['username', 'password']) {
-    if (typeof options[name] !== 'string' || options[name] === '') {
-      throw new TypeError(
-        `${name} is required: Postmark signs nothing, so its webhook URL carries credentials.`,
-      );
-    }
-  }
-  return Buffer.from(`${options.username}:${options.password}`, 'utf8');
-};
-
-const checkCredentials = (request, expected) => {
-  const header = headerOf(request, 'authorization');
-  const space = header === undefined ? -1 : header.indexOf(' ');
-  if (space < 0 || header.slice(0, space).toLowerCase() !== 'basic') {
-    throw new WebhookVerificationError('credentials', 'The request has no Basic credentials.');
-  }
-  const given = Buffer.from(header.slice(space + 1).trim(), 'base64');
-  if (!equalBytes(given, expected)) {
-    throw new WebhookVerificationError('credentials', 'The credentials do not match.');
-  }
-};
-
 const describeRecord = (record) => {
   if (record.RecordType === 'Bounce') {
     const known = BOUNCES.get(record.Type) ?? { type: 'bounced', kind: 'undetermined' };
@@ -97,15 +75,6 @@ const describeRecord = (record) => {
   };
 };
 
-const metadataOf = (values) => {
-  const metadata = Object.create(null);
-  if (!isRecord(values)) return metadata;
-  for (const name in values) {
-    if (typeof values[name] === 'string') metadata[name] = values[name];
-  }
-  return metadata;
-};
-
 const eventOf = (record) => {
   const described = describeRecord(record);
   const recipient = stringOf(record.Recipient) ?? stringOf(record.Email);
@@ -127,7 +96,7 @@ const eventOf = (record) => {
     reason: described.reason,
     url: stringOf(record.OriginalLink),
     tags: tag === undefined ? [] : [tag],
-    metadata: metadataOf(record.Metadata),
+    metadata: stringRecordOf(record.Metadata),
     raw: record,
   });
 };
@@ -142,13 +111,13 @@ const eventOf = (record) => {
  * @throws {TypeError} If an option is invalid.
  */
 const createPostmarkWebhookVerifier = (options = {}) => {
-  const expected = credentialsOf(options);
+  const expected = basicCredentialsOf(options, 'Postmark');
   // No time or id to hold a request to: the credentials alone stand for it.
   const common = resolveCommonOptions({ ...options, replayStore: null }, 5 * 60 * 1000);
   return {
     async verify(request) {
       const bytes = bodyBytesOf(request, common);
-      checkCredentials(request, expected);
+      checkBasicCredentials(request, expected);
       const record = parseJsonOf(bytes);
       if (!isRecord(record) || typeof record.RecordType !== 'string') {
         throw new WebhookVerificationError('payload', 'The body is not a Postmark event.');

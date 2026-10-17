@@ -21,6 +21,8 @@ const {
   parseJsonOf,
   resolveCommonOptions,
   stringOf,
+  stringRecordOf,
+  stringsOf,
 } = require('./request.js');
 
 const DEFAULT_TOLERANCE_MS = 5 * 60 * 1000;
@@ -34,28 +36,6 @@ const TYPES = new Map([
   ['clicked', 'clicked'],
 ]);
 const HEX = /^[0-9a-f]+$/i;
-
-const tagsOf = (list) => {
-  const tags = [];
-  if (!Array.isArray(list)) return tags;
-  for (const tag of list) {
-    if (typeof tag === 'string') tags.push(tag);
-  }
-  return tags;
-};
-
-const metadataOf = (variables) => {
-  const metadata = Object.create(null);
-  if (!isRecord(variables)) return metadata;
-  for (const name in variables) {
-    const value = variables[name];
-    if (typeof value === 'string') metadata[name] = value;
-    else if (typeof value === 'number' || typeof value === 'boolean') {
-      metadata[name] = String(value);
-    }
-  }
-  return metadata;
-};
 
 // What a failure is: a suppression or a rejection Mailgun made before any
 // attempt, a temporary failure it retries, or a bounce.
@@ -88,8 +68,8 @@ const eventOf = (data, token) => {
     bounce: failure?.bounce,
     reason: failure?.reason ?? (isRecord(data.reject) ? stringOf(data.reject.reason) : undefined),
     url: stringOf(data.url),
-    tags: tagsOf(data.tags),
-    metadata: metadataOf(data['user-variables']),
+    tags: stringsOf(data.tags),
+    metadata: stringRecordOf(data['user-variables']),
     raw: data,
   });
 };

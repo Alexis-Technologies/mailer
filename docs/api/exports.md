@@ -44,7 +44,7 @@ The message model and the transport contract, ported from `@upyo/core`.
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
-| `@alexify/mailer/webhooks` | `createSesWebhookVerifier`, `createResendWebhookVerifier`, `createSendGridWebhookVerifier`, `createMailgunWebhookVerifier`, `createPostmarkWebhookVerifier`, `createMemoryReplayStore`, `WebhookVerificationError` | [Webhooks](/guide/webhooks) |
+| `@alexify/mailer/webhooks` | `createSesWebhookVerifier`, `createResendWebhookVerifier`, `createSendGridWebhookVerifier`, `createMailgunWebhookVerifier`, `createPostmarkWebhookVerifier`, `createMailerSendWebhookVerifier`, `createMailtrapWebhookVerifier`, `createBrevoWebhookVerifier`, `createMailjetWebhookVerifier`, `createSparkPostWebhookVerifier`, `createMemoryReplayStore`, `WebhookVerificationError` | [Webhooks](/guide/webhooks) |
 | `@alexify/mailer/smtp` | `SmtpTransport` and its error classes (`SmtpResponseError`, `SmtpAuthError`, …), `isSmtpResponseProviderDetails`, `createHttpProxyConnector` | [SMTP](/transports/smtp) |
 | `@alexify/mailer/sendmail` | `SendmailTransport` | [Sendmail](/transports/sendmail) |
 | `@alexify/mailer/ses` | `SesTransport` | [Amazon SES](/transports/ses) |

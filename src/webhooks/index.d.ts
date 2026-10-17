@@ -217,10 +217,10 @@ export declare function createMailgunWebhookVerifier(
 ): WebhookVerifier<WebhookResult<'mailgun'>>;
 
 /**
- * The options of {@link createPostmarkWebhookVerifier}: the credentials of the
- * webhook's URL, as Postmark signs nothing.
+ * The options of a verifier of a webhook whose URL carries Basic credentials,
+ * as its provider signs nothing (Postmark, Mailjet, SparkPost).
  */
-export interface PostmarkWebhookVerifierOptions {
+export interface BasicWebhookVerifierOptions {
   readonly username: string;
   readonly password: string;
   /**
@@ -239,5 +239,98 @@ export interface PostmarkWebhookVerifierOptions {
  * @throws {TypeError} If a credential is missing.
  */
 export declare function createPostmarkWebhookVerifier(
-  options: PostmarkWebhookVerifierOptions,
+  options: BasicWebhookVerifierOptions,
 ): WebhookVerifier<WebhookResult<'postmark'>>;
+
+/**
+ * The options of a verifier of a webhook signed with an HMAC of its body and
+ * no time: an event is taken once by its id, kept a day and an hour.
+ */
+export interface SignedBodyWebhookVerifierOptions {
+  /** The signing secret of the webhook. */
+  readonly secret: string;
+  /** The ids already taken; an in-process store by default, `null` for none. */
+  readonly replayStore?: ReplayStore | null;
+  /**
+   * The longest body taken, in bytes.
+   * @default 5242880
+   */
+  readonly maxBodyBytes?: number;
+}
+
+/**
+ * Makes the verifier of MailerSend's webhooks: the HMAC-SHA256 of the body,
+ * in hexadecimal in `Signature`.  The metadata is read from the
+ * `X-Metadata-<key>` header fields of the email, when the event carries them.
+ *
+ * @throws {TypeError} If the secret is missing.
+ */
+export declare function createMailerSendWebhookVerifier(
+  options: SignedBodyWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'mailersend'>>;
+
+/**
+ * Makes the verifier of Mailtrap's sending webhooks: the HMAC-SHA256 of the
+ * body, in hexadecimal in `Mailtrap-Signature`; a body of JSON or JSON Lines.
+ * The category and the `tag_` variables are the tags, the other custom
+ * variables the metadata, as `./mailtrap` sends them.
+ *
+ * @throws {TypeError} If the secret is missing.
+ */
+export declare function createMailtrapWebhookVerifier(
+  options: SignedBodyWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'mailtrap'>>;
+
+/**
+ * The options of {@link createBrevoWebhookVerifier}.
+ */
+export interface BrevoWebhookVerifierOptions {
+  /** The token the webhook is configured with. */
+  readonly token: string;
+  /**
+   * The header field that carries it: `authorization`, as `Bearer <token>`
+   * for the `auth` token of the webhook, or a custom header with the token
+   * as its value.
+   * @default "authorization"
+   */
+  readonly header?: string;
+  /**
+   * The longest body taken, in bytes.
+   * @default 5242880
+   */
+  readonly maxBodyBytes?: number;
+}
+
+/**
+ * Makes the verifier of Brevo's transactional webhooks, which carry the token
+ * they are configured with, as Brevo signs nothing; compared in constant
+ * time.  The metadata is read from `X-Mailin-custom`, as `./brevo` sends it.
+ *
+ * @throws {TypeError} If the token is missing.
+ */
+export declare function createBrevoWebhookVerifier(
+  options: BrevoWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'brevo'>>;
+
+/**
+ * Makes the verifier of Mailjet's Event API, whose callback URL carries Basic
+ * credentials, as Mailjet signs nothing.  The message id is the MessageUUID
+ * of the receipt; the custom campaign is the tag, the event payload the
+ * metadata.
+ *
+ * @throws {TypeError} If a credential is missing.
+ */
+export declare function createMailjetWebhookVerifier(
+  options: BasicWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'mailjet'>>;
+
+/**
+ * Makes the verifier of SparkPost's webhooks, configured with Basic
+ * authentication, as SparkPost signs nothing.  The message id is that of the
+ * transmission, the receipt's; the tags and metadata are the recipient's.
+ *
+ * @throws {TypeError} If a credential is missing.
+ */
+export declare function createSparkPostWebhookVerifier(
+  options: BasicWebhookVerifierOptions,
+): WebhookVerifier<WebhookResult<'sparkpost'>>;

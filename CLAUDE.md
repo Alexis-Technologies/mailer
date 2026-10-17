@@ -602,6 +602,14 @@ fails on upstream's behavior):
   failed Resend email a bounce, and every Postmark bounce `bounced` whatever its type.
   `./webhooks` verifies first: Svix for Resend, ECDSA P-256 for SendGrid, HMAC for Mailgun, all
   within five minutes and once by id; Basic credentials, required, for Postmark.
+- S7. sently (`src/webhooks/brevo.ts`): any request was parsed, Brevo signing nothing; a blocked
+  or invalid address and a soft bounce were all `bounced`, and an unsubscribe a complaint.
+  `./webhooks` requires the token the webhook is configured with (`Authorization: Bearer` or a
+  custom header), compared in constant time; a blocked or invalid address is `rejected`, a soft
+  bounce soft, and the metadata comes back from `X-Mailin-custom`, as `./brevo` sends it.
+  MailerSend, Mailtrap, Mailjet and SparkPost, which sently and unemail lack, are verified from
+  their documentation: an HMAC of the body (MailerSend, Mailtrap; no time is signed, so each
+  event is taken once by its id for a day and an hour), Basic credentials (Mailjet, SparkPost).
 
 ## Repository layout
 

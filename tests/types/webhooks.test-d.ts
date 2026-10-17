@@ -2,12 +2,17 @@ import { expectAssignable, expectError, expectType } from 'tsd';
 import type { DeliveryEvent } from '../../index.js';
 import {
   WebhookVerificationError,
+  createBrevoWebhookVerifier,
+  createMailerSendWebhookVerifier,
   createMailgunWebhookVerifier,
+  createMailjetWebhookVerifier,
+  createMailtrapWebhookVerifier,
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   createResendWebhookVerifier,
   createSendGridWebhookVerifier,
   createSesWebhookVerifier,
+  createSparkPostWebhookVerifier,
   type ReplayStore,
   type SesWebhookResult,
   type WebhookVerificationReason,
@@ -45,3 +50,17 @@ expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
 );
 expectError(createPostmarkWebhookVerifier({ username: 'u' }));
 expectError(createResendWebhookVerifier({}));
+
+const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: null });
+expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
+  (await mailersend.verify({ body: '' })).events,
+);
+createMailtrapWebhookVerifier({ secret: 's', maxBodyBytes: 1 });
+createBrevoWebhookVerifier({ token: 't', header: 'x-webhook-token' });
+createMailjetWebhookVerifier({ username: 'u', password: 'p' });
+const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
+expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
+  (await sparkpost.verify({ body: '' })).events,
+);
+expectError(createBrevoWebhookVerifier({}));
+expectError(createMailtrapWebhookVerifier({ secret: 's', toleranceMs: 1 }));

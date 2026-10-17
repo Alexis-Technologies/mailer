@@ -4,7 +4,7 @@
 // shape of an event.  sently parsed a payload apart from its check; here
 // nothing is read before it is verified.
 
-const { timingSafeEqual } = require('node:crypto');
+const { createHmac, timingSafeEqual } = require('node:crypto');
 const { checkOptionalFunction, checkPositiveNumber } = require('../internal/options.js');
 
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -152,10 +152,10 @@ const checkTime = (atMs, common) => {
  *
  * @internal
  */
-const checkReplay = async (common, id) => {
+const checkReplay = async (common, id, ttlMs = common.toleranceMs * 2) => {
   if (common.replayStore === null) return;
-  // Kept for twice the window, so a request cannot come back in it.
-  if ((await common.replayStore.add(id, common.toleranceMs * 2)) !== true) {
+  // Kept for twice the window by default, so a request cannot come back in it.
+  if ((await common.replayStore.add(id, ttlMs)) !== true) {
     throw new WebhookVerificationError('replay', `The request ${id} was taken before.`);
   }
 };
@@ -213,6 +213,102 @@ const isRecord = (value) => typeof value === 'object' && value !== null && !Arra
  */
 const stringOf = (value) => (typeof value === 'string' && value !== '' ? value : undefined);
 
+const HEX = /^[0-9a-f]+$/i;
+
+/**
+ * Checks the HMAC-SHA256 of the raw body, in hexadecimal in a header field.
+ *
+ * @internal
+ */
+const checkBodyHmac = (request, bytes, header, secret, label) => {
+  const given = headerOf(request, header);
+  if (given === undefined || !HEX.test(given.trim())) {
+    throw new WebhookVerificationError('signature', `The request has no ${label} signature.`);
+  }
+  const expected = createHmac('sha256', secret).update(bytes).digest();
+  if (!equalBytes(expected, Buffer.from(given.trim(), 'hex'))) {
+    throw new WebhookVerificationError('signature', `The ${label} signature does not match.`);
+  }
+};
+
+/**
+ * The credentials a webhook URL carries (`https://user:password@…`), for a
+ * provider that signs nothing.
+ *
+ * @internal
+ */
+const basicCredentialsOf = (options, label) => {
+  for (const name of ['username', 'password']) {
+    if (typeof options[name] !== 'string' || options[name] === '') {
+      throw new TypeError(
+        `${name} is required: ${label} signs nothing, so its webhook URL carries credentials.`,
+      );
+    }
+  }
+  return Buffer.from(`${options.username}:${options.password}`, 'utf8');
+};
+
+/**
+ * Checks the Basic credentials of a request in constant time.
+ *
+ * @internal
+ */
+const checkBasicCredentials = (request, expected) => {
+  const header = headerOf(request, 'authorization');
+  const space = header === undefined ? -1 : header.indexOf(' ');
+  if (space < 0 || header.slice(0, space).toLowerCase() !== 'basic') {
+    throw new WebhookVerificationError('credentials', 'The request has no Basic credentials.');
+  }
+  const given = Buffer.from(header.slice(space + 1).trim(), 'base64');
+  if (!equalBytes(given, expected)) {
+    throw new WebhookVerificationError('credentials', 'The credentials do not match.');
+  }
+};
+
+/**
+ * The string values of a record, numbers and booleans as text.
+ *
+ * @internal
+ */
+const stringRecordOf = (values) => {
+  const record = Object.create(null);
+  if (!isRecord(values)) return record;
+  for (const name in values) {
+    const value = values[name];
+    if (typeof value === 'string') record[name] = value;
+    else if (typeof value === 'number' || typeof value === 'boolean') record[name] = String(value);
+  }
+  return record;
+};
+
+/**
+ * The strings of a list.
+ *
+ * @internal
+ */
+const stringsOf = (list) => {
+  const strings = [];
+  if (!Array.isArray(list)) return strings;
+  for (const item of list) {
+    if (typeof item === 'string' && item !== '') strings.push(item);
+  }
+  return strings;
+};
+
+/**
+ * A record of JSON text, such as metadata a provider keeps as one string.
+ *
+ * @internal
+ */
+const jsonRecordOf = (text) => {
+  if (typeof text !== 'string' || text === '') return Object.create(null);
+  try {
+    return stringRecordOf(JSON.parse(text));
+  } catch {
+    return Object.create(null);
+  }
+};
+
 const NUMBERED_TAG = /^tag(\d+)$/;
 
 /**
@@ -240,7 +336,10 @@ const splitNamedTags = (named) => {
 
 module.exports = {
   WebhookVerificationError,
+  basicCredentialsOf,
   bodyBytesOf,
+  checkBasicCredentials,
+  checkBodyHmac,
   checkReplay,
   checkTime,
   createEvent,
@@ -249,8 +348,11 @@ module.exports = {
   equalBytes,
   headerOf,
   isRecord,
+  jsonRecordOf,
   parseJsonOf,
   resolveCommonOptions,
   splitNamedTags,
   stringOf,
+  stringRecordOf,
+  stringsOf,
 };

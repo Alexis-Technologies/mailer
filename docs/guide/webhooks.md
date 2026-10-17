@@ -153,3 +153,46 @@ signed, nothing holds a request to a window or takes it once: deduplicate by
 the `id` of the events. A bounce is read by its type: `HardBounce` is hard,
 `SoftBounce` soft, `Transient` deferred, `SpamComplaint` a complaint,
 `ManuallyDeactivated` a rejection.
+
+## MailerSend and Mailtrap
+
+```js
+const mailersend = createMailerSendWebhookVerifier({ secret: process.env.MAILERSEND_WEBHOOK_SECRET });
+const mailtrap = createMailtrapWebhookVerifier({ secret: process.env.MAILTRAP_WEBHOOK_SECRET });
+```
+
+Both sign the raw body with HMAC-SHA256, in hexadecimal in `Signature`
+(MailerSend) or `Mailtrap-Signature`. Neither signs a time, so no window holds
+a request; each event is taken once by its id instead, kept a day and an hour,
+past Mailtrap's retries of a day. Mailtrap posts JSON or JSON Lines, both read.
+MailerSend's metadata comes back from the `X-Metadata-<key>` fields of the email
+when the event carries them; Mailtrap's category and `tag_` variables are the
+tags and its other custom variables the metadata, as `./mailtrap` sends them.
+
+## Brevo
+
+```js
+const brevo = createBrevoWebhookVerifier({ token: process.env.BREVO_WEBHOOK_TOKEN });
+```
+
+Brevo signs nothing: give the webhook a token, its `auth` token, which comes as
+`Authorization: Bearer <token>`, or a custom header with `header: 'x-webhook-token'`.
+The verifier requires it and compares it in constant time. A blocked or invalid
+address is `rejected`, a soft bounce soft, and the metadata comes back from
+`X-Mailin-custom`, as `./brevo` sends it.
+
+## Mailjet and SparkPost
+
+```js
+// The callback URL in Mailjet: https://hook:s3cret@example.com/webhooks/mailjet
+const mailjet = createMailjetWebhookVerifier({ username: 'hook', password: 's3cret' });
+const sparkpost = createSparkPostWebhookVerifier({ username: 'hook', password: 's3cret' });
+```
+
+Neither signs its events, so their webhooks carry Basic credentials (in
+Mailjet's callback URL, SparkPost's `auth_type: basic`), which the verifiers
+require. Mailjet's message id is the MessageUUID of the receipt, its custom
+campaign the tag and its event payload the metadata; SparkPost's message id is
+the transmission's, and a bounce is hard for the classes 10, 30 and 90,
+undetermined for 1, soft for the others. As for Postmark, nothing holds a
+request to a window or takes it once.

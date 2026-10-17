@@ -1,0 +1,124 @@
+// Not ported: the events of MailerSend's webhooks, signed with an HMAC of
+// the raw body (https://developers.mailersend.com/api/v1/webhooks.html).
+// sently and unemail have no MailerSend webhook.
+
+const {
+  WebhookVerificationError,
+  bodyBytesOf,
+  checkBodyHmac,
+  checkReplay,
+  createEvent,
+  dateOf,
+  isRecord,
+  parseJsonOf,
+  resolveCommonOptions,
+  stringOf,
+  stringsOf,
+} = require('./request.js');
+
+// MailerSend signs no time: an event id is kept a day and an hour, past the
+// retries of a delivery.
+const REPLAY_TTL_MS = 25 * 60 * 60 * 1000;
+const TYPES = new Map([
+  ['activity.sent', 'accepted'],
+  ['activity.delivered', 'delivered'],
+  ['activity.deferred', 'deferred'],
+  ['activity.soft_bounced', 'bounced'],
+  ['activity.hard_bounced', 'bounced'],
+  ['activity.suppressed', 'rejected'],
+  ['activity.spam_complaint', 'complained'],
+  ['activity.unsubscribed', 'unsubscribed'],
+  ['activity.opened', 'opened'],
+  ['activity.opened_unique', 'opened'],
+  ['activity.clicked', 'clicked'],
+  ['activity.clicked_unique', 'clicked'],
+]);
+const METADATA_HEADER = /^x-metadata-(.+)$/i;
+
+// The metadata `./mailersend` sends as `X-Metadata-<key>` header fields, when
+// the event carries the headers of the email.
+const metadataOf = (headers) => {
+  const metadata = Object.create(null);
+  const add = (name, value) => {
+    const match = typeof name === 'string' ? METADATA_HEADER.exec(name) : null;
+    if (match !== null && typeof value === 'string') metadata[match[1]] = value;
+  };
+  if (Array.isArray(headers)) {
+    for (const header of headers) add(header?.name, header?.value);
+  } else if (isRecord(headers)) {
+    for (const name in headers) add(name, headers[name]);
+  }
+  return metadata;
+};
+
+// MailerSend has written its activity both flat (`data.recipient`) and nested
+// (`data.email.recipient.email`); both are read.
+const eventOf = (payload) => {
+  const data = isRecord(payload.data) ? payload.data : {};
+  const email = isRecord(data.email) ? data.email : {};
+  let meta = {};
+  if (isRecord(data.meta)) meta = data.meta;
+  else if (isRecord(data.morph)) meta = data.morph;
+  const type = TYPES.get(payload.type) ?? 'unknown';
+  let bounce;
+  if (type === 'bounced') {
+    bounce = { kind: payload.type === 'activity.hard_bounced' ? 'hard' : 'soft' };
+    if (meta.bounce_code !== undefined && meta.bounce_code !== null) {
+      bounce.code = String(meta.bounce_code);
+    }
+    const diagnostic = stringOf(meta.bounce_reason) ?? stringOf(meta.reason);
+    if (diagnostic !== undefined) bounce.diagnostic = diagnostic;
+  }
+  const recipient =
+    stringOf(data.recipient) ??
+    (isRecord(email.recipient) ? stringOf(email.recipient.email) : undefined);
+  const messageId =
+    stringOf(data.message_id) ?? (isRecord(email.message) ? stringOf(email.message.id) : undefined);
+  return createEvent({
+    provider: 'mailersend',
+    type,
+    id: `${stringOf(data.id) ?? stringOf(payload.created_at)}:${payload.type}`,
+    messageId,
+    recipient,
+    occurredAt: dateOf(data.created_at ?? payload.created_at),
+    bounce,
+    reason: stringOf(meta.reason) ?? stringOf(meta.bounce_reason),
+    url: stringOf(meta.url),
+    tags: stringsOf(data.tags ?? email.tags),
+    metadata: metadataOf(email.headers ?? data.headers),
+    raw: payload,
+  });
+};
+
+/**
+ * Makes the verifier of MailerSend's webhooks: the HMAC-SHA256 of the body,
+ * in hexadecimal in `Signature`, with the signing secret of the webhook.
+ * MailerSend signs no time, so an event is taken once by its id, kept a day
+ * and an hour.
+ *
+ * @param options `secret`; `replayStore` and `maxBodyBytes`.
+ * @returns `{ verify(request) }`, which gives `{ events }`.
+ * @throws {TypeError} If an option is invalid.
+ */
+const createMailerSendWebhookVerifier = (options = {}) => {
+  if (typeof options.secret !== 'string' || options.secret === '') {
+    throw new TypeError('secret is the signing secret of the MailerSend webhook.');
+  }
+  const secret = options.secret;
+  const common = resolveCommonOptions(options, REPLAY_TTL_MS);
+  return {
+    async verify(request) {
+      const bytes = bodyBytesOf(request, common);
+      checkBodyHmac(request, bytes, 'signature', secret, 'MailerSend');
+      const payload = parseJsonOf(bytes);
+      if (!isRecord(payload) || typeof payload.type !== 'string') {
+        throw new WebhookVerificationError('payload', 'The body is not a MailerSend event.');
+      }
+      const event = eventOf(payload);
+      await checkReplay(common, `mailersend:${event.id}`, REPLAY_TTL_MS);
+      return { events: [event] };
+    },
+  };
+};
+
+module.exports = { createMailerSendWebhookVerifier };

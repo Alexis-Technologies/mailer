@@ -173,7 +173,7 @@ test('Webhooks Postmark: credentials are required, and compared', async () => {
       recipient: 'bob@example.com',
       occurredAt: new Date('2027-01-15T08:00:00Z'),
       tags: ['welcome'],
-      metadata: { orderId: '42' },
+      metadata: { orderId: '42', n: '1' },
       raw: record,
     },
   );
