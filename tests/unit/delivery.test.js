@@ -12,6 +12,16 @@ const { ResendTransport } = require('../../src/resend/index.js');
 const { SendGridTransport } = require('../../src/sendgrid/index.js');
 const { SesTransport } = require('../../src/ses/index.js');
 const { JmapTransport } = require('../../src/jmap/index.js');
+const { AzureTransport } = require('../../src/azure/index.js');
+const { BrevoTransport } = require('../../src/brevo/index.js');
+const { CloudflareTransport } = require('../../src/cloudflare/index.js');
+const { MailerSendTransport } = require('../../src/mailersend/index.js');
+const { MailjetTransport } = require('../../src/mailjet/index.js');
+const { PostmarkTransport } = require('../../src/postmark/index.js');
+const { ScalewayTransport } = require('../../src/scaleway/index.js');
+const { Smtp2goTransport } = require('../../src/smtp2go/index.js');
+const { SparkPostTransport } = require('../../src/sparkpost/index.js');
+const { ZeptoMailTransport } = require('../../src/zeptomail/index.js');
 
 const message = () =>
   createMessage({
@@ -21,10 +31,12 @@ const message = () =>
     content: { text: 'Hi' },
   });
 
-// One retry: a provider that resends shows two requests, as Resend and Lettermint do with
-// the idempotency key they always send.
+// One retry: a provider that resends shows two requests, as Resend, Lettermint, Brevo and
+// Azure do with the idempotency key they always send.
 const options = { retries: 1 };
-const expectedRequests = (name) => (name === 'Resend' || name === 'Lettermint' ? 2 : 1);
+const WITH_KEYS = new Set(['Resend', 'Lettermint', 'Brevo', 'Azure']);
+const expectedRequests = (name) => (WITH_KEYS.has(name) ? 2 : 1);
+const AZURE_KEY = Buffer.from('azure-access-key').toString('base64');
 const providers = [
   [
     'SES',
@@ -53,6 +65,60 @@ const providers = [
   ],
   ['Plunk', 200, (extra) => new PlunkTransport({ ...options, ...extra, apiKey: 'key' })],
 ];
+// The providers of 1.1, on the shared client of src/internal/api.js: the same
+// contracts, every one of them.
+const providersOf11 = [
+  [
+    'Postmark',
+    200,
+    (extra) => new PostmarkTransport({ ...options, ...extra, serverToken: 'token' }),
+  ],
+  ['Brevo', 201, (extra) => new BrevoTransport({ ...options, ...extra, apiKey: 'key' })],
+  [
+    'Mailjet',
+    200,
+    (extra) => new MailjetTransport({ ...options, ...extra, apiKey: 'a', apiSecret: 'b' }),
+  ],
+  ['MailerSend', 202, (extra) => new MailerSendTransport({ ...options, ...extra, apiKey: 'key' })],
+  ['SparkPost', 200, (extra) => new SparkPostTransport({ ...options, ...extra, apiKey: 'key' })],
+  ['ZeptoMail', 201, (extra) => new ZeptoMailTransport({ ...options, ...extra, token: 'token' })],
+  ['SMTP2GO', 200, (extra) => new Smtp2goTransport({ ...options, ...extra, apiKey: 'key' })],
+  [
+    'Azure',
+    202,
+    (extra) =>
+      new AzureTransport({
+        ...options,
+        ...extra,
+        connectionString: `endpoint=https://contoso.communication.azure.com/;accesskey=${AZURE_KEY}`,
+      }),
+  ],
+  [
+    'Scaleway',
+    200,
+    (extra) =>
+      new ScalewayTransport({
+        ...options,
+        ...extra,
+        secretKey: 'key',
+        projectId: '11111111-2222-4333-8444-555555555555',
+      }),
+  ],
+  [
+    'Cloudflare',
+    200,
+    (extra) =>
+      new CloudflareTransport({
+        ...options,
+        ...extra,
+        accountId: '023e105f4ecef8ad9ca31a8372d0c353',
+        apiToken: 'token',
+      }),
+  ],
+];
+// The clients ported from upyo, which expose sendMessage of their own.
+const portedProviders = providers.slice();
+for (const provider of providersOf11) providers.push(provider);
 
 // A 2xx whose body cannot be read: the connection broke after the headers.
 const unreadable = (status) =>
@@ -218,7 +284,7 @@ test('Delivery: the failure of fetch stays the cause of the provider error', asy
   t.mock.method(globalThis, 'fetch', async () => {
     throw refused;
   });
-  for (const [name, , create] of providers) {
+  for (const [name, , create] of portedProviders) {
     const body = name === 'Mailgun' ? new FormData() : {};
     const error = await create({ retries: 0 })
       .httpClient.sendMessage(body, undefined)
