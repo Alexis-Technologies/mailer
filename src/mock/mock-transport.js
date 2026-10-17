@@ -29,6 +29,7 @@ class MockTransport {
   config;
 
   sentMessages = [];
+  sentRawMessages = [];
   nextResponse = null;
   messageIdCounter = 1;
 
@@ -66,6 +67,37 @@ class MockTransport {
     const response = this.getResponse();
 
     return response;
+  }
+
+  /**
+   * Takes serialized MIME as `send()` takes a message: it is kept, apart from
+   * the messages, and answered with the next response.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Transport options including abort signal.
+   * @returns The receipt.
+   */
+  async sendRaw(message, options) {
+    options?.signal?.throwIfAborted();
+    await this.applyDelay(options?.signal);
+    this.sentRawMessages.push(message);
+    return this.getResponse();
+  }
+
+  /**
+   * Has nothing to verify, and resolves, unless the signal is aborted.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+  }
+
+  /**
+   * The raw messages sent through {@link sendRaw}, in order.
+   *
+   * @returns A copy of the list.
+   */
+  getSentRawMessages() {
+    return [...this.sentRawMessages];
   }
 
   /**
@@ -121,6 +153,7 @@ class MockTransport {
    */
   clearSentMessages() {
     this.sentMessages = [];
+    this.sentRawMessages = [];
   }
 
   /**

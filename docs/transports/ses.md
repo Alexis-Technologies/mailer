@@ -295,6 +295,14 @@ It reads `batchSize` messages (50 by default) at a time and sends them
 together before it reads more, so an endless or very long iterable costs one
 batch of memory.
 
+## Raw MIME
+
+`sendRaw()` sends serialized MIME as the Raw content of SendEmail, to the
+recipients of its envelope and from its sender (none for a null sender), with
+the configuration set and the default tags of the transport.  The message is
+checked line by line as the SMTP transport checks it, then read into memory;
+composition and DKIM are bypassed, so sign the message before.
+
 ## Configuration sets and tracking
 
 Amazon SES provides configuration sets for advanced tracking, reputation

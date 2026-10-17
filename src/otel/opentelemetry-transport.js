@@ -5,6 +5,8 @@ const { createOpenTelemetryConfig, defaultErrorClassifier } = require('./config.
 const { MetricsCollector } = require('./metrics.js');
 const { TracingCollector } = require('./tracing.js');
 const { estimateMessageSize } = require('./message-size.js');
+const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { refuseRaw } = require('../internal/capabilities.js');
 
 // How many error messages of a failed batch its span keeps; the count says how
 // many there were in all.
@@ -144,6 +146,54 @@ class OpenTelemetryTransport {
     this.metricsCollector?.recordSendStart(this.transportName);
     this.metricsCollector?.recordMessage(message, this.transportName, messageSize);
 
+    return this.observe(
+      { startTime, span, messageSize, priority: message.priority },
+      (sendOptions) => this.wrappedTransport.send(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the wrapped transport, in a span of its own
+   * (`send_raw`) and in the metrics of a send.  A wrapped transport without
+   * `sendRaw()` gives a failed receipt of the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options including abort signal.
+   * @returns The receipt of the wrapped transport.
+   */
+  async sendRaw(message, options) {
+    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const startTime = performance.now();
+    const messageSize = message?.content instanceof Uint8Array ? message.content.byteLength : 0;
+    const span = this.tracingCollector?.createRawSendSpan(
+      message,
+      this.extractNetworkAttributes(),
+      messageSize,
+    );
+    this.metricsCollector?.recordSendStart(this.transportName);
+    return this.observe(
+      { startTime, span, messageSize, priority: 'normal' },
+      (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Verifies the wrapped transport, which has nothing to check when it
+   * cannot verify.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  }
+
+  /**
+   * Runs one send in its span and metrics: the custom attributes, the
+   * outcome, the error and the end.
+   */
+  async observe(context, deliver, options) {
+    const { startTime, span, messageSize, priority } = context;
     try {
       // Apply custom attributes if configured
       if (this.config.attributeExtractor && span) {
@@ -157,16 +207,9 @@ class OpenTelemetryTransport {
       }
 
       // Delegate to wrapped transport
-      const receipt = await this.wrappedTransport.send(
-        message,
-        this.withRetryRecording(options, span),
-      );
+      const receipt = await deliver(this.withRetryRecording(options, span));
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
-      this.metricsCollector?.recordMessageOutcome(
-        this.transportName,
-        message.priority,
-        receipt.successful,
-      );
+      this.metricsCollector?.recordMessageOutcome(this.transportName, priority, receipt.successful);
 
       // Record success/failure
       if (receipt.successful) {

@@ -3,7 +3,17 @@
 
 /// <reference lib="esnext.disposable" />
 
-import { IdOptions, Logger, Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import {
+  IdOptions,
+  Logger,
+  Message,
+  RawMessage,
+  RawTransport,
+  Receipt,
+  Transport,
+  TransportOptions,
+  VerifiableTransport,
+} from '../../index.js';
 
 /**
  * Result of transport selection by a strategy.
@@ -199,7 +209,10 @@ export interface ResolvedTransportEntry<TProviderId extends string = string> {
  * ```
  */
 export declare class PoolTransport<TProviderId extends string = string>
-  implements Transport<TProviderId | 'pool'>, AsyncDisposable
+  implements
+    RawTransport<TProviderId | 'pool'>,
+    VerifiableTransport<TProviderId | 'pool'>,
+    AsyncDisposable
 {
   readonly id = 'pool';
   /**
@@ -225,6 +238,17 @@ export declare class PoolTransport<TProviderId extends string = string>
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
+  /**
+   * Sends serialized MIME through the transports that send raw messages,
+   * with the strategy and the failover of `send()`; a selector is not asked,
+   * as it judges a `Message`.  With no such transport, the receipt is a
+   * failure of the category `configuration`.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
+  /**
+   * Verifies the enabled transports that can verify: it resolves when one of them verifies, and throws an `AggregateError` of their errors when none does; it has nothing to check when none can verify.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends multiple email messages using the pool strategy.
    *

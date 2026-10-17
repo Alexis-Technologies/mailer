@@ -7,6 +7,8 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  RawMessage,
+  RawTransport,
 } from '../../index.js';
 
 /**
@@ -150,7 +152,7 @@ type ResolvedMailgunConfig = Required<Omit<MailgunConfig, keyof TransportDepende
  * }
  * ```
  */
-export declare class MailgunTransport implements Transport<'mailgun'> {
+export declare class MailgunTransport implements RawTransport<'mailgun'> {
   readonly id = 'mailgun';
   /**
    * The resolved Mailgun configuration used by this transport.
@@ -196,6 +198,12 @@ export declare class MailgunTransport implements Transport<'mailgun'> {
    *          failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<'mailgun'>>;
+  /**
+   * Sends serialized MIME through the `messages.mime` endpoint, to the recipients of its
+   * envelope.  It is checked as SMTP checks it and read into memory;
+   * composition is bypassed.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<'mailgun'>>;
   /**
    * Sends multiple email messages efficiently via Mailgun API.
    *

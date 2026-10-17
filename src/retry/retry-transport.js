@@ -8,6 +8,8 @@ const {
 } = require('../core/receipt.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
+const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { refuseRaw } = require('../internal/capabilities.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
 
@@ -62,13 +64,57 @@ class RetryTransport {
     options?.signal?.throwIfAborted();
 
     const pinned = pinMessageId(message, this.config.generateId);
+    return this.withRetries(
+      (sendOptions) => this.wrappedTransport.send(pinned, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the wrapped transport, retrying retryable
+   * failures as `send()` does; the content of a raw message can be read
+   * again.  A wrapped transport without `sendRaw()` gives a failed receipt of
+   * the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options.
+   * @returns The final delivery receipt.
+   * @throws {DOMException} If the operation is aborted.
+   */
+  async sendRaw(message, options) {
+    options?.signal?.throwIfAborted();
+    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    return this.withRetries(
+      (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Verifies the wrapped transport once, without retries; it has nothing to
+   * check when it cannot verify.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  }
+
+  /**
+   * Sends once, then again while the failure is retryable and attempts are
+   * left, waiting between attempts.
+   *
+   * @param sendOnce Sends the message once with the given options.
+   * @param options Optional transport options.
+   * @returns The final delivery receipt.
+   */
+  async withRetries(sendOnce, options) {
     let lastThrownError;
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       options?.signal?.throwIfAborted();
 
       let receipt;
       try {
-        receipt = await this.wrappedTransport.send(pinned, options);
+        receipt = await sendOnce(options);
       } catch (error) {
         options?.signal?.throwIfAborted();
         // A bug of the wrapped transport is not a delivery failure to retry

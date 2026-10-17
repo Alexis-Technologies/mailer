@@ -89,6 +89,31 @@ const convertMessage = async (message, config, signal) => {
   return sesMessage;
 };
 
+/**
+ * The request of a raw message: its bytes as Raw content, its envelope as the
+ * destination and the sender.
+ *
+ * @param raw The envelope and bytes of `readRawMessage`.
+ * @param config The configuration.
+ * @returns The SES v2 SendEmail request.
+ */
+const convertRawMessage = (raw, config) => {
+  const sesMessage = {
+    Destination: { ToAddresses: raw.envelope.to },
+    Content: { Raw: { Data: toBase64(raw.bytes) } },
+  };
+  if (raw.envelope.from != null) sesMessage.FromEmailAddress = raw.envelope.from;
+  if (config.configurationSetName) sesMessage.ConfigurationSetName = config.configurationSetName;
+  const tags = [];
+  for (const name in config.defaultTags) {
+    if (Object.hasOwn(config.defaultTags, name)) {
+      tags.push({ Name: name, Value: config.defaultTags[name] });
+    }
+  }
+  if (tags.length > 0) sesMessage.Tags = tags;
+  return sesMessage;
+};
+
 const createSimpleContent = async (message, signal) => {
   const content = {
     Subject: {
@@ -199,4 +224,4 @@ const convertAttachment = async (attachment, signal) => {
   return converted;
 };
 
-module.exports = { convertMessage };
+module.exports = { convertMessage, convertRawMessage };

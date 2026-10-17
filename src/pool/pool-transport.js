@@ -3,6 +3,8 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
+const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { refuseRaw } = require('../internal/capabilities.js');
 const { createLog } = require('../internal/log.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
@@ -98,6 +100,71 @@ class PoolTransport {
    */
   async send(message, options) {
     const pinned = pinMessageId(message, this.config.generateId);
+    return this.deliver(
+      pinned,
+      this.config.transports,
+      (transport, sendOptions) => transport.send(pinned, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the transports that send raw messages, with
+   * the strategy and the failover of `send()`.  A selector is not asked, as it
+   * judges a `Message`; with no such transport the receipt is a failure of
+   * the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options including abort signal.
+   * @returns The receipt of the first transport that sent it, or a failure.
+   */
+  async sendRaw(message, options) {
+    options?.signal?.throwIfAborted();
+    const entries = [];
+    let enabled = 0;
+    for (const entry of this.config.transports) {
+      const canSend = entry.enabled && isRawTransport(entry.transport);
+      if (canSend) enabled++;
+      entries.push({ ...entry, enabled: canSend, selector: undefined });
+    }
+    if (enabled === 0) return refuseRaw(this);
+    return this.deliver(
+      message,
+      entries,
+      (transport, sendOptions) => transport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Verifies the enabled transports that can verify, all at once: the pool
+   * can send when one of them can.  It throws an `AggregateError` of their
+   * errors when none verifies, and has nothing to check when none can verify.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const verifying = [];
+    for (const entry of this.config.transports) {
+      if (entry.enabled && isVerifiableTransport(entry.transport)) {
+        verifying.push(entry.transport.verify(options));
+      }
+    }
+    if (verifying.length === 0) return;
+    const results = await Promise.allSettled(verifying);
+    options?.signal?.throwIfAborted();
+    const errors = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') return;
+      errors.push(result.reason);
+    }
+    throw new AggregateError(errors, 'No transport of the pool verified.');
+  }
+
+  /**
+   * Sends a message through the transports the strategy picks, one after
+   * another until one sends it or failover has to stop.
+   */
+  async deliver(message, entries, sendOnce, options) {
     const attemptedIndices = new Set();
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
@@ -112,12 +179,12 @@ class PoolTransport {
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       options?.signal?.throwIfAborted();
-      const selection = this.strategy.select(pinned, this.config.transports, attemptedIndices);
+      const selection = this.strategy.select(message, entries, attemptedIndices);
       // No more transports available
       if (!selection) break;
       attemptedIndices.add(selection.index);
 
-      const receipt = await this.attempt(selection, pinned, options, failure);
+      const receipt = await this.attempt(selection, sendOnce, options, failure);
       if (receipt?.successful) return receipt;
       if (failure.deliveryUnknown || failure.isRejected) break;
       if (receipt !== undefined) {
@@ -148,18 +215,18 @@ class PoolTransport {
    * timeout, and records a failure.
    *
    * @param selection The selected transport and its index.
-   * @param pinned The message, with its Message-ID pinned.
+   * @param sendOnce Sends the message through a transport, once.
    * @param options The options of the caller.
    * @param failure What the failed attempts have gathered, updated in place.
    * @returns The receipt of the transport, or `undefined` when it threw.
    * @throws The caller's abort reason when the caller aborts.
    */
-  async attempt(selection, pinned, options, failure) {
+  async attempt(selection, sendOnce, options, failure) {
     const transportId = selection.entry.transport.id;
     const sendOptions = this.createSendOptions(options);
     let receipt;
     try {
-      receipt = await selection.entry.transport.send(pinned, sendOptions.options);
+      receipt = await sendOnce(selection.entry.transport, sendOptions.options);
     } catch (error) {
       if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) throw error;
       recordThrown(failure, error, transportId);

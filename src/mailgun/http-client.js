@@ -45,6 +45,19 @@ class MailgunHttpClient {
   }
 
   /**
+   * Sends serialized MIME to the `messages.mime` endpoint.
+   *
+   * @param formData The `to` fields and the `message` file.
+   * @param signal Optional AbortSignal for cancellation.
+   * @param onRetry Optional callback told of each retry.
+   * @returns Promise that resolves to the Mailgun response.
+   */
+  sendMime(formData, signal, onRetry) {
+    const url = `${this.config.baseUrl}/${encodeURIComponent(this.config.domain)}/messages.mime`;
+    return this.makeRequest(url, { method: 'POST', body: formData, signal }, onRetry);
+  }
+
+  /**
    * Makes an HTTP request to Mailgun API with retry logic.
    *
    * @param url The URL to make the request to.

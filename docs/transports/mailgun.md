@@ -150,6 +150,12 @@ Tags appear in Mailgun's analytics dashboard, allowing you to track open rates,
 click rates, and delivery statistics for specific message categories.
 This helps you understand which types of emails perform best with your audience.
 
+## Raw MIME
+
+`sendRaw()` sends serialized MIME through the `messages.mime` endpoint, to the
+recipients of its envelope.  The message is checked line by line as the SMTP
+transport checks it, then read into memory; composition is bypassed.
+
 ## Bulk email sending
 
 For sending newsletters, notifications, or other bulk emails, the Mailgun

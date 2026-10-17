@@ -5,7 +5,8 @@ const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
-const { convertMessage } = require('./message-converter.js');
+const { convertMessage, convertRawMessage } = require('./message-converter.js');
+const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
@@ -137,6 +138,33 @@ class SesTransport {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       return createSesFailure(errorMessage, error);
+    }
+  }
+
+  /**
+   * Sends serialized MIME as the Raw content of SendEmail, to the recipients
+   * of its envelope and from its sender.  The message is checked as SMTP
+   * checks it and read into memory; DKIM and composition are bypassed.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipt.
+   */
+  async sendRaw(message, options) {
+    if (message?.content instanceof Promise) message.content.catch(() => {});
+    options?.signal?.throwIfAborted();
+    try {
+      const raw = await readRawMessage(message, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        convertRawMessage(raw, this.config),
+        options?.signal,
+        options?.onRetry,
+      );
+      return { successful: true, messageId: this.extractMessageId(response), provider: 'ses' };
+    } catch (error) {
+      if (isCallerAbort(error, options?.signal)) throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return rawMessageFailure('ses', error) ?? createSesFailure(errorMessage, error);
     }
   }
 

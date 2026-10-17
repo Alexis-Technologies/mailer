@@ -3,7 +3,15 @@
 
 /// <reference lib="esnext.disposable" />
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  RawMessage,
+  RawTransport,
+  Receipt,
+  Transport,
+  TransportOptions,
+  VerifiableTransport,
+} from '../../index.js';
 
 // The parts of the OpenTelemetry API this subpath calls, as structural types:
 // the providers come from the application's own setup, and nothing here
@@ -277,7 +285,7 @@ export declare function defaultErrorClassifier(error: unknown): string;
  * ```
  */
 export declare class OpenTelemetryTransport<TProviderId extends string = string>
-  implements Transport<TProviderId>, AsyncDisposable
+  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
 {
   readonly id: TProviderId;
   /**
@@ -302,6 +310,16 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Sends serialized MIME through the wrapped transport, in a span of its own (`send_raw`) and the metrics of a send.  A wrapped
+   * transport without `sendRaw()` gives a failed receipt of the category
+   * `configuration`.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Verifies the wrapped transport; it has nothing to check when it cannot verify.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends multiple email messages with OpenTelemetry observability.
    *

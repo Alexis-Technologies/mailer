@@ -71,6 +71,24 @@ class TracingCollector {
   }
 
   /**
+   * Creates a span for the send of serialized MIME, whose envelope is all
+   * that is known of it.
+   */
+  createRawSendSpan(message, networkAttributes, messageSize) {
+    if (!this.shouldSample()) {
+      return new NoOpEmailSpan();
+    }
+    const span = this.tracer.startSpan(`${this.config.spanPrefix} send_raw`, {
+      kind: SPAN_KIND_CLIENT,
+    });
+    span.setAttributes(this.attributeExtractor.extractRawMessageAttributes(message, messageSize));
+    if (networkAttributes) {
+      span.setAttributes(networkAttributes);
+    }
+    return new LiveEmailSpan(span, this.attributeExtractor);
+  }
+
+  /**
    * Creates a span for a batch email send operation.  Its batch attributes
    * come at its end (`recordBatchTotals`), once the batch has been read.
    */

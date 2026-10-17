@@ -116,6 +116,16 @@ The outer decorator observes the complete operation performed by the inner
 transport, so choose the order according to which retries or failovers should
 appear as one logged operation.
 
+## Raw messages and verification
+
+`sendRaw()` logs the lifecycle of serialized MIME as `send()` logs a message's,
+with `operation: 'sendRaw'` and the number of recipients of its envelope; the
+envelope itself, which holds addresses, goes in the record only when
+`recordMessage` is not `false`.  Without a wrapped transport the receipt is
+synthetic, as for `send()`; with one that has no `sendRaw()`, it is a failure of
+the category `configuration`, logged as a failure.  `verify()` verifies the
+wrapped transport, and has nothing to check without one.
+
 ## Levels
 
 The lifecycle levels can be changed independently, by pino's level names

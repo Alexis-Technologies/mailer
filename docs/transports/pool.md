@@ -474,6 +474,18 @@ preventing connection leaks and ensuring graceful shutdown. Each transport is
 disposed of once, even when it is listed twice, and one that fails stops no
 other: the disposal rejects afterwards with an `AggregateError` of the failures.
 
+## Raw messages and verification
+
+`sendRaw()` sends serialized MIME through the enabled transports that have
+`sendRaw()`, with the configured strategy and failover; a selector is not asked,
+as it judges a `Message`.  With no such transport the receipt is a failure of the
+category `configuration`.
+
+`verify()` verifies the enabled transports that can verify, all at once, and
+resolves when one of them does: the pool can send when one of its transports can.
+When none does, it throws an `AggregateError` of their errors; when none can
+verify, it has nothing to check.
+
 ## Testing with pools
 
 Pool transports integrate seamlessly with testing workflows using mock

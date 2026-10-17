@@ -5,6 +5,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailgunConfig } = require('./config.js');
 const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
@@ -130,6 +131,32 @@ class MailgunTransport {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       return createMailgunFailure(errorMessage, error);
+    }
+  }
+
+  /**
+   * Sends serialized MIME through the `messages.mime` endpoint, to the
+   * recipients of its envelope.  The message is checked as SMTP checks it
+   * and read into memory; composition is bypassed.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipt.
+   */
+  async sendRaw(message, options) {
+    if (message?.content instanceof Promise) message.content.catch(() => {});
+    options?.signal?.throwIfAborted();
+    try {
+      const raw = await readRawMessage(message, options?.signal);
+      const formData = new FormData();
+      for (const address of raw.envelope.to) formData.append('to', address);
+      formData.append('message', new Blob([raw.bytes], { type: 'message/rfc822' }), 'message.mime');
+      const response = await this.httpClient.sendMime(formData, options?.signal, options?.onRetry);
+      return { successful: true, messageId: response.id, provider: 'mailgun' };
+    } catch (error) {
+      if (isCallerAbort(error, options?.signal)) throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return rawMessageFailure('mailgun', error) ?? createMailgunFailure(errorMessage, error);
     }
   }
 

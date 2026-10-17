@@ -1,7 +1,14 @@
 // Types ported from upyo v0.7.0 (packages/mock/src)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-import type { Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import type {
+  Message,
+  RawMessage,
+  RawTransport,
+  Receipt,
+  TransportOptions,
+  VerifiableTransport,
+} from '../../index.js';
 
 /**
  * Configuration interface for Mock transport.
@@ -95,7 +102,7 @@ type ResolvedMockConfig = Required<MockConfig>;
  * comprehensive testing capabilities including message verification,
  * behavior simulation, and async utilities.
  */
-export declare class MockTransport implements Transport<'mock'> {
+export declare class MockTransport implements RawTransport<'mock'>, VerifiableTransport<'mock'> {
   readonly id = 'mock';
   /**
    * The resolved configuration used by this mock transport.
@@ -119,6 +126,19 @@ export declare class MockTransport implements Transport<'mock'> {
    * @throws {DOMException} When the operation is aborted via `AbortSignal`.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<'mock'>>;
+  /**
+   * Takes serialized MIME as `send()` takes a message: it is kept apart from
+   * the messages and answered with the next response.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<'mock'>>;
+  /**
+   * Has nothing to verify, and resolves unless the signal is aborted.
+   */
+  verify(options?: TransportOptions): Promise<void>;
+  /**
+   * The raw messages sent through {@link sendRaw}, in order.
+   */
+  getSentRawMessages(): readonly RawMessage[];
   /**
    * Sends multiple email messages through the mock transport.
    *

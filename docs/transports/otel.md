@@ -494,6 +494,15 @@ Custom attributes appear in both traces and metrics, enabling you to:
  -  Track different email campaigns or types separately
  -  Add environment-specific context for debugging
 
+## Raw messages and verification
+
+`sendRaw()` goes through the wrapped transport in a span of its own,
+`email send_raw`, whose attributes are those of the envelope (`email.to.count`,
+the sender's domain or, with `recordSensitiveData`, its address) and the size of
+the content, and in the metrics of a send.  `verify()` verifies the wrapped
+transport.  A wrapped transport without `sendRaw()` gives a failure of the
+category `configuration`.
+
 ## Bulk email monitoring
 
 For applications that send large volumes of emails, the OpenTelemetry transport

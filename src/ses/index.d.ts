@@ -7,6 +7,8 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  RawMessage,
+  RawTransport,
 } from '../../index.js';
 
 /**
@@ -200,7 +202,7 @@ type ResolvedSesConfig = Required<
  * }
  * ```
  */
-export declare class SesTransport implements Transport<'ses'> {
+export declare class SesTransport implements RawTransport<'ses'> {
   readonly id = 'ses';
   /** Resolved configuration with defaults applied */
   config: ResolvedSesConfig;
@@ -238,6 +240,12 @@ export declare class SesTransport implements Transport<'ses'> {
    * @returns A promise that resolves to a receipt with the result.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<'ses'>>;
+  /**
+   * Sends serialized MIME as the Raw content of SendEmail, to the recipients of its
+   * envelope.  It is checked as SMTP checks it and read into memory;
+   * composition is bypassed.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<'ses'>>;
   /**
    * Sends multiple email messages concurrently through Amazon SES.
    *
