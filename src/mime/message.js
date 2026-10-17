@@ -1,8 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mime/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
-// Also ported from nodemailer v10.0.16 (src/mime-node/index.ts): the case of
-// a custom field name, `_normalizeHeaderKey`, and the transfer encoding of a
-// text body, `getTransferEncoding` and `_getTextEncoding`.
+// Also ported from nodemailer v10.0.16 (src/mime-node/index.ts): the transfer
+// encoding of a text body, `getTransferEncoding` and `_getTextEncoding`.
 // https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 
 const { Buffer } = require('node:buffer');
@@ -15,6 +14,7 @@ const {
   resolveThreadingHeaders,
 } = require('../core/message-id.js');
 const { resolveCalendarContent } = require('../core/calendar.js');
+const { canonicalHeaderName } = require('../internal/headers.js');
 const { createLog } = require('../internal/log.js');
 const { checkDkimConfig } = require('./dkim/types.js');
 const { resolvePrivateKey } = require('./dkim/sign.js');
@@ -246,16 +246,6 @@ const pushHeaderFields = (lines, message, generateId) => {
     lines.push(foldHeader(canonicalHeaderName(name), encodeHeaderValue(value)));
   }
 };
-
-// Each word of a field name capitalized, as nodemailer writes it, the
-// abbreviations its readers know upper-cased: `Headers` keeps names in lower
-// case, and `list-unsubscribe-post` reads as a field nobody named.
-const UPPER_CASE_PARTS =
-  /^x-smtpapi$|^(?:mime|dkim|arc|bimi)\b|^[a-z]|-(?:spf|fbl|id|md5)$|-[a-z]/g;
-const canonicalHeaderName = (name) =>
-  name === 'content-features'
-    ? 'Content-features'
-    : name.replace(UPPER_CASE_PARTS, (part) => part.toUpperCase());
 
 const encodeAddressList = (addresses) => {
   let list = '';

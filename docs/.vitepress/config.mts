@@ -84,6 +84,7 @@ const guide = [
       { text: 'Maileroo', link: '/transports/maileroo' },
       { text: 'Lettermint', link: '/transports/lettermint' },
       { text: 'Plunk', link: '/transports/plunk' },
+      { text: 'Postmark', link: '/transports/postmark' },
       { text: 'JMAP', link: '/transports/jmap' },
       { text: 'Mock', link: '/transports/mock' },
       { text: 'Custom transports', link: '/transports/custom' },

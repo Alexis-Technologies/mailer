@@ -60,4 +60,34 @@ const checkConcurrency = (concurrency) => {
   }
 };
 
-module.exports = { checkConcurrency, checkRequestOptions, checkSecureUrl };
+/**
+ * Checks an option that is a non-empty string when it is given.
+ *
+ * @internal
+ */
+const checkOptionalString = (value, name) => {
+  if (value !== undefined && (typeof value !== 'string' || value === '')) {
+    throw new TypeError(`${name} must be a non-empty string.`);
+  }
+  return value;
+};
+
+/**
+ * Checks an option that is a boolean when it is given.
+ *
+ * @internal
+ */
+const checkOptionalBoolean = (value, name) => {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new TypeError(`${name} must be a boolean.`);
+  }
+  return value;
+};
+
+module.exports = {
+  checkConcurrency,
+  checkOptionalBoolean,
+  checkOptionalString,
+  checkRequestOptions,
+  checkSecureUrl,
+};

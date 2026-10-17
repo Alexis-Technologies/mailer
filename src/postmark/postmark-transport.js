@@ -1,0 +1,142 @@
+// Ported from unemail v0.7.0 (src/drivers/postmark.ts): a transport over the
+// Postmark API, single and batch sends.
+// https://github.com/productdevbook/unemail — MIT, Copyright 2025 Wind
+// Also ported from sently v1.2.2 (src/transports/postmark.ts): `verify`, the
+// server of the token.
+// https://github.com/omqkhafi/sently — MIT, Copyright 2026 sendx contributors
+// Changed in the port: a failure in the answer of one message of a batch is
+// its receipt alone, a message that cannot be converted fails alone too, and
+// sently's JSON parse before the status check is gone with the shared client.
+
+const { createFailedReceipt } = require('../core/receipt.js');
+const { chunks } = require('../internal/batch.js');
+const { convertBatch, isCallerAbort, mergeBatch, providerFailure } = require('../internal/api.js');
+const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { verifyByRequest } = require('../internal/verify.js');
+const { createPostmarkConfig } = require('./config.js');
+const { classifyErrorCode, createPostmarkClient } = require('./http-client.js');
+const { convertMessage } = require('./message-converter.js');
+
+// The most messages one request of `/email/batch` takes.
+const MAX_BATCH_SIZE = 500;
+
+// The receipt of an answer of Postmark: an `ErrorCode` other than 0 fails it,
+// though it came in a 200.
+const receiptOf = (entry) => {
+  if (entry == null || typeof entry !== 'object') {
+    return createFailedReceipt('Postmark gave no answer for the message.', {
+      provider: 'postmark',
+      deliveryUnknown: true,
+    });
+  }
+  if (entry.ErrorCode !== 0 && entry.ErrorCode !== undefined) {
+    return createFailedReceipt(`Postmark: ${entry.Message ?? `ErrorCode ${entry.ErrorCode}`}`, {
+      provider: 'postmark',
+      ...classifyErrorCode(entry.ErrorCode),
+      code: `postmark.${entry.ErrorCode}`,
+      providerDetails: entry,
+    });
+  }
+  return { successful: true, messageId: entry.MessageID, provider: 'postmark' };
+};
+
+/**
+ * A transport over the API of Postmark (postmarkapp.com).
+ */
+class PostmarkTransport {
+  id = 'postmark';
+
+  constructor(config) {
+    this.config = createPostmarkConfig(config);
+    this.httpClient = createPostmarkClient(this.config);
+  }
+
+  toJSON() {
+    return redactSecrets(this);
+  }
+
+  [INSPECT](_depth, options, inspect) {
+    return inspectRedacted(this, options, inspect);
+  }
+
+  /**
+   * Sends one message with `/email`.
+   *
+   * @param message The message.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipt, with Postmark's MessageID.
+   * @throws The reason of the signal if it aborts.
+   */
+  async send(message, options) {
+    options?.signal?.throwIfAborted();
+    try {
+      const payload = await convertMessage(message, this.config, options?.signal);
+      options?.signal?.throwIfAborted();
+      const answer = await this.httpClient.send(payload, options);
+      return receiptOf(answer.json);
+    } catch (error) {
+      if (isCallerAbort(error, options?.signal)) throw error;
+      return providerFailure('postmark', error);
+    }
+  }
+
+  /**
+   * Sends messages with `/email/batch`, 500 a request, reading the input a
+   * batch at a time; each message has the receipt of its own answer.
+   *
+   * @param messages The messages.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipts, in the order of the messages.
+   */
+  async *sendMany(messages, options) {
+    const signal = options?.signal;
+    for await (const batch of chunks(messages, MAX_BATCH_SIZE)) {
+      signal?.throwIfAborted();
+      const converted = await convertBatch(
+        batch,
+        (message) => convertMessage(message, this.config, signal),
+        'postmark',
+        signal,
+      );
+      if (converted.payloads.length === 0) {
+        yield* mergeBatch(converted.slots, () => undefined);
+        continue;
+      }
+      let answers;
+      let failure;
+      try {
+        const answer = await this.httpClient.sendBatch(converted.payloads, options);
+        answers = Array.isArray(answer.json) ? answer.json : [];
+      } catch (error) {
+        if (isCallerAbort(error, signal)) throw error;
+        failure = providerFailure('postmark', error);
+      }
+      yield* mergeBatch(converted.slots, (index) => failure ?? receiptOf(answers[index]));
+    }
+  }
+
+  /**
+   * Verifies the server token by reading its server (`GET /server`).
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Postmark refuses the token or cannot be reached.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    await verifyByRequest({
+      provider: 'Postmark',
+      send: (signal) =>
+        this.httpClient.fetchWithAuth(
+          `${this.config.baseUrl}/server`,
+          { method: 'GET', headers: { Accept: 'application/json' } },
+          signal,
+        ),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
+  }
+}
+
+module.exports = { PostmarkTransport };

@@ -76,6 +76,10 @@
       "types": "./src/plunk/index.d.ts",
       "default": "./src/plunk/index.js"
     },
+    "./postmark": {
+      "types": "./src/postmark/index.d.ts",
+      "default": "./src/postmark/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"

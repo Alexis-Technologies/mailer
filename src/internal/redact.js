@@ -13,13 +13,17 @@ const REDACTED = '[REDACTED]';
 // The credential fields of the transports' configurations, and the header
 // names that carry credentials, compared in lower case.
 const SECRET_KEYS = new Set([
+  'accesskey',
   'accesstoken',
+  'api-key',
   'api-token',
   'apikey',
+  'apisecret',
   'apitoken',
   'authorization',
   'bearertoken',
   'clientsecret',
+  'connectionstring',
   'cookie',
   'pass',
   'password',
@@ -28,10 +32,15 @@ const SECRET_KEYS = new Set([
   'refreshtoken',
   'secret',
   'secretaccesskey',
+  'secretkey',
+  'servertoken',
   'sessiontoken',
   'token',
   'x-api-key',
+  'x-auth-token',
   'x-lettermint-token',
+  'x-postmark-server-token',
+  'x-smtp2go-api-key',
 ]);
 
 // Plain objects and class instances are copied; built-in values such as a

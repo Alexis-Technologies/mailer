@@ -496,6 +496,15 @@ fails on upstream's behavior):
   strip. `./sendmail` succeeds on an exit with 0 alone, reports a signal after the whole message
   as `deliveryUnknown`, classifies the sysexits codes, reads stderr bounded and redacted, ends the
   options with `--`, and puts blind recipients on the command line only.
+- U4. unemail (`src/drivers/_fetch.ts`), behind every HTTP driver ported: redirects were followed,
+  so `X-Postmark-Server-Token`, `api-key` and the other custom credentials went wherever one
+  pointed; the body was read whole, with no bound; and a timeout or a 5xx after which the
+  provider may have taken the message was retried by the middleware. The providers of 1.1 go
+  through `createApiClient` (`src/internal/api.js`) on `requestWithRetry`, as the ported ones do.
+- S2. sently (`src/transports/postmark.ts`): an inline part went with its Content-ID alone, while
+  Postmark wants `cid:` before it, and the JSON of an answer was parsed before its status, so a
+  non-JSON 5xx failed with a `SyntaxError` and no status. `./postmark` writes `cid:`, and the
+  shared client reads the status first.
 - U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
   after the check for line breaks in header values, so a CR or LF in the URL added header fields.
   `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and
