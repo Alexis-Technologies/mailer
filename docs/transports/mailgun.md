@@ -150,6 +150,28 @@ Tags appear in Mailgun's analytics dashboard, allowing you to track open rates,
 click rates, and delivery statistics for specific message categories.
 This helps you understand which types of emails perform best with your audience.
 
+## Scheduling, metadata and tracking
+
+`scheduledAt` is Mailgun's `o:deliverytime`; how far ahead depends on the plan
+(three days, or seven), and Mailgun refuses a later one. `metadata` goes in
+`v:<key>` variables, which Mailgun returns in its events as user variables. A
+message's `tracking` sets `o:tracking-opens` and `o:tracking-clicks` over
+`openTracking` and `clickTracking` of the configuration.
+
+```js
+const receipt = await transport.send(
+  createMessage({
+    from: 'shop@example.com',
+    to: 'user@example.com',
+    subject: 'Your order has shipped',
+    content: { html: '<p>On its way.</p>' },
+    scheduledAt: new Date(Date.now() + 60 * 60 * 1000),
+    tracking: { clicks: false },
+    metadata: { orderId: '42' },
+  }),
+);
+```
+
 ## Raw MIME
 
 `sendRaw()` sends serialized MIME through the `messages.mime` endpoint, to the

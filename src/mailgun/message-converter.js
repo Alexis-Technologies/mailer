@@ -4,7 +4,6 @@
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { visitCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
-const { refuseScheduledAt } = require('../internal/schedule.js');
 
 const PRIORITIES = { high: '1', normal: '3', low: '5' };
 
@@ -26,7 +25,6 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * ```
  */
 const convertMessage = async (message, config, signal) => {
-  refuseScheduledAt(message, 'mailgun');
   const formData = new FormData();
   const attachments = withCalendarAttachment(message);
 
@@ -89,17 +87,29 @@ const convertMessage = async (message, config, signal) => {
     await appendAttachment(formData, attachment, signal);
   }
 
-  // Tracking options
+  // Tracking options, those of the message over those of the configuration
   if (config.tracking !== undefined) {
     formData.append('o:tracking', config.tracking ? 'yes' : 'no');
   }
 
-  if (config.clickTracking !== undefined) {
-    formData.append('o:tracking-clicks', config.clickTracking ? 'yes' : 'no');
+  const clicks = message.tracking?.clicks ?? config.clickTracking;
+  if (clicks !== undefined) {
+    formData.append('o:tracking-clicks', clicks ? 'yes' : 'no');
   }
 
-  if (config.openTracking !== undefined) {
-    formData.append('o:tracking-opens', config.openTracking ? 'yes' : 'no');
+  const opens = message.tracking?.opens ?? config.openTracking;
+  if (opens !== undefined) {
+    formData.append('o:tracking-opens', opens ? 'yes' : 'no');
+  }
+
+  // Scheduled delivery, as an RFC 2822 date
+  if (message.scheduledAt !== undefined) {
+    formData.append('o:deliverytime', message.scheduledAt.toUTCString());
+  }
+
+  // Metadata, as variables Mailgun returns in its events
+  if (message.metadata !== undefined) {
+    for (const key in message.metadata) formData.append(`v:${key}`, message.metadata[key]);
   }
 
   return formData;

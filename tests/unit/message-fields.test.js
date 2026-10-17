@@ -104,7 +104,6 @@ const providers = {
       authentication: { type: 'credentials', accessKeyId: 'AKID', secretAccessKey: 'secret' },
       retries: 0,
     }),
-  mailgun: () => new MailgunTransport({ apiKey: 'key', domain: 'mg.example.com', retries: 0 }),
   mailtrap: () => new MailtrapTransport({ apiToken: 'token', retries: 0 }),
   maileroo: () => new MailerooTransport({ apiKey: 'key', retries: 0 }),
   lettermint: () => new LettermintTransport({ apiToken: 'token', retries: 0 }),
@@ -231,6 +230,39 @@ test('Fields: SendGrid sends send_at, the tracking of the message and custom_arg
   assert.match(late.errorMessages[0], /at most 72 hours ahead/);
   assert.strictEqual(late.errors[0].category, 'validation');
   assert.strictEqual(bodies.length, 2);
+});
+
+test('Fields: Mailgun sends o:deliverytime, the tracking of the message and v: variables', async (t) => {
+  const forms = [];
+  t.mock.method(globalThis, 'fetch', async (_input, init) => {
+    forms.push(init.body);
+    return Response.json({ id: `<mg${forms.length}@mg.example.com>`, message: 'Queued' });
+  });
+  const transport = new MailgunTransport({
+    apiKey: 'key',
+    domain: 'mg.example.com',
+    retries: 0,
+    clickTracking: true,
+  });
+  const sent = await transport.send(
+    createMessage({
+      ...base,
+      scheduledAt: tomorrow,
+      tracking: { opens: false, clicks: false },
+      metadata: { orderId: '42', tenant: 'acme' },
+    }),
+  );
+  assert.strictEqual(sent.successful, true);
+  const [form] = forms;
+  assert.strictEqual(form.get('o:deliverytime'), 'Sun, 18 Oct 2026 09:00:00 GMT');
+  assert.strictEqual(form.get('o:tracking-opens'), 'no');
+  assert.strictEqual(form.get('o:tracking-clicks'), 'no');
+  assert.strictEqual(form.get('v:orderId'), '42');
+  assert.strictEqual(form.get('v:tenant'), 'acme');
+  await transport.send(createMessage(base));
+  assert.strictEqual(forms[1].get('o:tracking-clicks'), 'yes');
+  assert.strictEqual(forms[1].get('o:tracking-opens'), 'yes');
+  assert.strictEqual(forms[1].get('o:deliverytime'), null);
 });
 
 const CORE = 'urn:ietf:params:jmap:core';
