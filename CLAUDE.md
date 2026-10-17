@@ -662,9 +662,12 @@ published to npm, and lint/format do not cover it.
   between `<!-- comparison:start -->` and `<!-- comparison:end -->` is rendered by
   `pnpm docs:comparison` from `docs/comparison.json` (`legend`, `groups[].rows[]`,
   `libraries[].cells[rowId] = { mark, text, note? }`). Edit the data, never the table; CI fails on
-  a diff. The page takes the full width through `.VPDoc:has(.ml-matrix)` in `custom.css`. The
-  findings in cells come from reading the code and, except for emailjs, were not reproduced; the
-  page says so, and a bug claim should be reproduced before it is made stronger.
+  a diff. The first library of the data is @alexify/mailer itself (this repository, with 🔜 for
+  the roadmap), which `custom.css` tints in the brand teal as the second column and pins beside
+  the features from 768px up; keep its cells true to the code when behavior changes. The page
+  takes the full width through `.VPDoc:has(.ml-matrix)` in `custom.css`. The findings in cells
+  come from reading the code and, except for emailjs, were not reproduced; the page says so, and
+  a bug claim should be reproduced before it is made stronger.
 - The brand is a teal "envelope" mark (`#0D6B63`, `#4CC2B5` on dark; a placeholder until a final
   logo): `docs/public/logo-mark*.svg`, `favicon.svg` (follows `prefers-color-scheme`),
   `favicon.png` and `logo.png` (the 1200×630 og:image, rendered from SVG with `rsvg-convert`).

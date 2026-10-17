@@ -79,7 +79,8 @@ fixed ones below.
   Mailpit (`pnpm test:mailpit`) and real providers (`pnpm test:e2e`).
 - **CI** on GitHub Actions and a VitePress documentation site at
   [mailerat.vercel.app](https://mailerat.vercel.app/), with a comparison of 14 Node.js email
-  libraries generated from `docs/comparison.json`.
+  libraries generated from `docs/comparison.json`, @alexify/mailer in its first column, tinted
+  in the brand teal and pinned beside the features.
 
 ### Security
 

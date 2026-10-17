@@ -1,5 +1,5 @@
 {
-  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README.",
+  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README; the column of @alexify/mailer is this repository as of 2026-10-17.",
   "groups": [
     {
       "title": "Runtimes (from imports and CI, not run)",
@@ -270,6 +270,241 @@
     }
   ],
   "libraries": [
+    {
+      "id": "mailer",
+      "name": "@alexify/mailer",
+      "direction": "unified + reliability",
+      "url": "https://github.com/Alexis-Technologies/mailer",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥22, CI on 22 and 24"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not a target"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not a target"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "not a target yet"
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "by design"
+        },
+        "smtp": {
+          "mark": "✅",
+          "text": "PIPELINING, SIZE, DSN"
+        },
+        "sendmail": {
+          "mark": "❌"
+        },
+        "jmap": {
+          "mark": "✅",
+          "text": "RFC 8620/8621"
+        },
+        "httpProviders": {
+          "text": "8"
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "RR, weighted, priority; no health yet",
+          "note": "A failure after which the provider may have taken the message is marked `deliveryUnknown`: `./retry` does not retry it and `./pool` does not fail over with it."
+        },
+        "smtpPool": {
+          "mark": "✅",
+          "text": "on by default, 5"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "jitter, `Retry-After`, no blind resend",
+          "note": "A failure after which the provider may have taken the message is marked `deliveryUnknown`: `./retry` does not retry it and `./pool` does not fail over with it."
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "`sendMany` concurrency; token bucket planned"
+        },
+        "circuitBreaker": {
+          "mark": "🔜",
+          "text": "one probe in half-open",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`signal` + timeout over the body"
+        },
+        "queue": {
+          "mark": "🔜",
+          "text": "MongoDB outbox, BullMQ driver",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "attachments": {
+          "mark": "⚠️",
+          "text": "bytes, Promise, Blob, chunk factory"
+        },
+        "streaming": {
+          "mark": "⚠️",
+          "text": "SMTP; HTTP providers buffer"
+        },
+        "inline": {
+          "mark": "✅",
+          "text": "multipart/related"
+        },
+        "rawMime": {
+          "mark": "⚠️",
+          "text": "SMTP/JMAP only"
+        },
+        "ical": {
+          "mark": "✅",
+          "text": "every METHOD"
+        },
+        "unicode": {
+          "mark": "⚠️",
+          "text": "SMTPUTF8, no automatic punycode"
+        },
+        "listUnsubscribe": {
+          "mark": "⚠️",
+          "text": "manual header; one-click planned"
+        },
+        "templates": {
+          "mark": "❌",
+          "text": "none, by design"
+        },
+        "reactEmail": {
+          "mark": "🔜",
+          "text": "optional adapter",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "native: Resend, Mailtrap, JMAP; concurrency elsewhere"
+        },
+        "scheduled": {
+          "mark": "🔜",
+          "text": "a delay in the queue",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "tags": {
+          "mark": "⚠️",
+          "text": "tags in 7 providers"
+        },
+        "tracking": {
+          "mark": "⚠️",
+          "text": "config only"
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "Resend, Lettermint, Maileroo; outbox key planned"
+        },
+        "dkim": {
+          "mark": "✅",
+          "text": "RSA + Ed25519, streaming, over-signing"
+        },
+        "oauth2": {
+          "mark": "✅",
+          "text": "refresh, OAUTHBEARER"
+        },
+        "arc": {
+          "mark": "❌"
+        },
+        "dsn": {
+          "mark": "✅"
+        },
+        "proxy": {
+          "mark": "⚠️",
+          "text": "HTTP through an injected `fetch`; SMTP no"
+        },
+        "verify": {
+          "mark": "⚠️",
+          "text": "SMTP/JMAP only"
+        },
+        "smtpAuth": {
+          "text": "PLAIN, LOGIN, XOAUTH2, OAUTHBEARER"
+        },
+        "tlsPolicy": {
+          "mark": "✅",
+          "text": "`requireTls`, SNI, CA, cert, `minVersion`"
+        },
+        "webhooks": {
+          "mark": "🔜",
+          "text": "SES (SNS) first, signature required",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "inbound": {
+          "mark": "❌",
+          "text": "out of scope"
+        },
+        "suppression": {
+          "mark": "🔜",
+          "text": "per tenant, before the queue",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "domains": {
+          "mark": "❌",
+          "text": "out of scope"
+        },
+        "addressValidation": {
+          "mark": "⚠️",
+          "text": "RFC 5322/6531 syntax"
+        },
+        "providerLogs": {
+          "mark": "—"
+        },
+        "apiCoverage": {
+          "mark": "—"
+        },
+        "multiChannel": {
+          "mark": "❌",
+          "text": "out of scope"
+        },
+        "otel": {
+          "mark": "✅",
+          "text": "decorator: spans + metrics"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "decorators, `onRetry`, a pino-like logger"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`./mock`"
+        },
+        "auditLog": {
+          "mark": "🔜",
+          "text": "append-only, crypto-shredding",
+          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+        },
+        "types": {
+          "mark": "✅",
+          "text": "hand-written, tsd"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "CJS, ESM `import`"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "0.0.1 (unreleased)"
+        },
+        "lastCommit": {
+          "text": "2026-10 (in development)"
+        },
+        "tests": {
+          "text": "126 / ~1440"
+        },
+        "maintainer": {
+          "text": "1 author, Alexis Technologies"
+        }
+      }
+    },
     {
       "id": "nodemailer",
       "name": "Nodemailer 10",
