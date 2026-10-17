@@ -6,12 +6,16 @@
 // request line and Host field, which nodemailer wrote bare; an HTTPS proxy
 // takes `ca` and the other TLS options and is sent its name for SNI, where
 // nodemailer passed `rejectUnauthorized` alone; the credentials of the proxy URL
-// are percent-decoded and encoded as UTF-8; and the socket is paused with what
-// came after the reply put back, so a greeting sent at once is not lost.
+// are percent-decoded and encoded as UTF-8, and go to an `http:` proxy only on
+// this machine unless the application allows them in clear; the socket is
+// paused with what came after the reply put back, so a greeting sent at once
+// is not lost; and `timeout` bounds the whole exchange, where a socket timeout
+// bounded only each wait for a byte.
 
 const { Buffer } = require('node:buffer');
 const net = require('node:net');
 const tls = require('node:tls');
+const { isLoopbackHost } = require('../internal/loopback.js');
 
 // The most bytes of the reply to CONNECT before its blank line, so a proxy
 // that never ends its header fields cannot fill the memory of the sender.
@@ -95,9 +99,12 @@ const proxyError = (status, target) => {
  *
  * @param options `url` of the proxy, with credentials for Basic authentication
  * if it needs them; `headers` to add to each CONNECT; `tls` options for an
- * HTTPS proxy; `timeout` of the CONNECT exchange (30 s, 0 for none).
+ * HTTPS proxy; `timeout` of the CONNECT exchange (30 s, 0 for none); and
+ * `allowPlaintextCredentials`, to send credentials to an `http:` proxy that is
+ * not on this machine.
  * @returns The connector.
- * @throws {TypeError} If the URL is not http or https, or a header is invalid.
+ * @throws {TypeError} If the URL is not http or https, a header is invalid, or
+ * credentials would go in clear.
  */
 const createHttpProxyConnector = (options) => {
   if (options == null || typeof options !== 'object') {
@@ -110,10 +117,25 @@ const createHttpProxyConnector = (options) => {
     throwTypeError(`Invalid proxy timeout: ${timeout}`);
   }
   const isHttps = url.protocol === 'https:';
+  const proxyHost = url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname;
+  // Basic credentials are the password itself: over plain HTTP, anyone on the
+  // way to the proxy reads them, as the providers' keys are refused over it.
+  const hasCredentials = url.username !== '' || url.password !== '';
+  if (
+    hasCredentials &&
+    !isHttps &&
+    !isLoopbackHost(proxyHost) &&
+    options.allowPlaintextCredentials !== true
+  ) {
+    throwTypeError(
+      'The credentials of an http:// proxy would go in clear: use an https:// proxy, or set ' +
+        'allowPlaintextCredentials for a network where that is accepted.',
+    );
+  }
   const defaultPort = isHttps ? 443 : 80;
   const proxy = {
     isHttps,
-    host: url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname,
+    host: proxyHost,
     port: url.port === '' ? defaultPort : Number(url.port),
     tls: options.tls,
   };
@@ -147,14 +169,14 @@ const tunnel = (socket, isHttps, request, target, timeout, signal) =>
     let received = 0;
     let tail = '';
 
+    let timer;
     const cleanup = () => {
       socket.off(connected, onConnect);
       socket.off('data', onData);
       socket.off('error', fail);
       socket.off('close', onClose);
-      socket.off('timeout', onTimeout);
       signal?.removeEventListener('abort', onAbort);
-      socket.setTimeout(0);
+      clearTimeout(timer);
     };
     const fail = (error) => {
       cleanup();
@@ -196,10 +218,9 @@ const tunnel = (socket, isHttps, request, target, timeout, signal) =>
     socket.on('data', onData);
     socket.once('error', fail);
     socket.once('close', onClose);
-    if (timeout > 0 && timeout !== Number.POSITIVE_INFINITY) {
-      socket.setTimeout(timeout);
-      socket.once('timeout', onTimeout);
-    }
+    // The whole exchange, not each wait for a byte: a proxy that answers a
+    // byte at a time would hold a socket timeout off forever.
+    if (timeout > 0 && timeout !== Number.POSITIVE_INFINITY) timer = setTimeout(onTimeout, timeout);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 

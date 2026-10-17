@@ -204,14 +204,17 @@ const transport = new SmtpTransport({
   port: 465,
   auth: { user: 'user@example.com', pass: 'secret' },
   connect: createHttpProxyConnector({
-    url: 'http://proxy-user:proxy-pass@proxy.internal:3128',
-    // For an https:// proxy: tls: { ca: [proxyCa] }
+    url: 'https://proxy-user:proxy-pass@proxy.internal:3129',
+    tls: { ca: [proxyCa] },
   }),
 });
 ```
 
-The credentials of the proxy URL go as Basic authentication, as UTF-8; `headers`
-adds fields to each CONNECT request, and `timeout` bounds its answer (30 s).  A
+The credentials of the proxy URL go as Basic authentication, as UTF-8, which is
+the password itself: they go to an `http://` proxy only on this machine, and to
+another only with `allowPlaintextCredentials: true`, for a network where that is
+accepted. `headers` adds fields to each CONNECT request, and `timeout` bounds the
+whole exchange, from the connection to the answer (30 s).  A
 SOCKS proxy is a module of your own in `connect`, which receives `{ host, port,
 localAddress, signal }` and resolves to a connected `net.Socket`, paused or with
 nothing read from it yet:

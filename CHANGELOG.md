@@ -73,7 +73,8 @@ additive but the defaults listed below.
   `htmlToText`, linear in the length of its input.
 - **`./smtp` connects through what you give it:** `connect` opens each connection (a proxy, a
   tunnel, a socket of another module) with implicit TLS or STARTTLS over it;
-  `createHttpProxyConnector` makes one for an HTTP or HTTPS proxy; `localAddress` picks the address
+  `createHttpProxyConnector` makes one for an HTTP or HTTPS proxy, whose credentials go in clear
+  to an `http://` proxy only on this machine or with `allowPlaintextCredentials`; `localAddress` picks the address
   to connect from.
 - **`./sendmail`:** the sendmail command of the system (Postfix, Exim, msmtp), one process per
   message, composed by `./mime` with DKIM; `sendRaw` and `verify`. Only an exit with 0 succeeds, a

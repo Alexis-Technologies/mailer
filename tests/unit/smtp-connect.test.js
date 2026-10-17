@@ -314,3 +314,35 @@ test('SMTP proxy: the options and the destination are checked', async () => {
   await assert.rejects(connector({ host: 'a\r\nb', port: 25 }), /destination host/);
   await assert.rejects(connector({ host: 'smtp.example.com', port: 0 }), /destination port/);
 });
+
+test('SMTP proxy: credentials go to an http proxy only on this machine, unless allowed', () => {
+  // Before: Basic credentials of the proxy URL went in clear to any host.
+  assert.throws(
+    () => createHttpProxyConnector({ url: 'http://user:pass@proxy.example.com:3128' }),
+    /would go in clear/,
+  );
+  assert.throws(() => createHttpProxyConnector({ url: 'http://:pass@10.0.0.2:3128' }), /in clear/);
+  assert.ok(createHttpProxyConnector({ url: 'http://user:pass@127.0.0.1:3128' }));
+  assert.ok(createHttpProxyConnector({ url: 'http://user:pass@localhost:3128' }));
+  assert.ok(createHttpProxyConnector({ url: 'https://user:pass@proxy.example.com' }));
+  assert.ok(createHttpProxyConnector({ url: 'http://proxy.example.com:3128' }));
+  assert.ok(
+    createHttpProxyConnector({
+      url: 'http://user:pass@proxy.example.com:3128',
+      allowPlaintextCredentials: true,
+    }),
+  );
+});
+
+test('SMTP proxy: the timeout bounds the whole CONNECT, not each wait for a byte', async (t) => {
+  // Before: a socket timeout, which a proxy writing a byte at a time never let fire.
+  const trickle = (request, client) => {
+    const timer = setInterval(() => client.write('H'), 20);
+    client.on('close', () => clearInterval(timer));
+  };
+  const proxy = await proxyServer(t, { reply: trickle });
+  const connector = createHttpProxyConnector({ url: proxy.url, timeout: 150 });
+  const started = Date.now();
+  await assert.rejects(connector({ host: 'smtp.example.com', port: 25 }), /timed out on CONNECT/);
+  assert.ok(Date.now() - started < 1000);
+});

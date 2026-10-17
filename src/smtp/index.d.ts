@@ -681,11 +681,18 @@ export interface HttpProxyConnectorOptions {
   /** TLS options of an `https://` proxy, such as its `ca`. */
   readonly tls?: SmtpTlsOptions;
   /**
-   * The time the proxy may take to answer CONNECT, in milliseconds; 0 or
-   * `Infinity` for none.
+   * The time the proxy may take to connect and answer CONNECT, in all, in
+   * milliseconds; 0 or `Infinity` for none.
    * @default 30000
    */
   readonly timeout?: number;
+  /**
+   * Sends the credentials of an `http://` proxy that is not on this machine,
+   * in clear, which is refused otherwise: for a network where that is
+   * accepted.  An `https://` proxy needs no such thing.
+   * @default false
+   */
+  readonly allowPlaintextCredentials?: boolean;
 }
 /**
  * Makes a `connect` for {@link SmtpConfig} that opens each connection through
