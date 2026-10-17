@@ -8,7 +8,10 @@
 // alone, where nodemailer took a process killed by a signal (code null) for
 // success and handed the code of `close` on as an error; what sendmail writes
 // to stderr is read, bounded, into the failure; line endings are LF by
-// default; an abort kills the process; and `spawn` is passed in.
+// default; an abort or the timeout kills the process, with SIGKILL after a
+// grace; no more than `maxConcurrent` processes run at once; an exit with 0
+// before the whole message was read is of unknown delivery; and `spawn` is
+// passed in.
 
 const childProcess = require('node:child_process');
 const { once } = require('node:events');
@@ -27,11 +30,15 @@ const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { abortReason } = require('../internal/sleep.js');
+const { Fifo } = require('../internal/gate.js');
 const { composeMessage } = require('../mime/index.js');
 const { createSendmailConfig } = require('./config.js');
 
 const MAX_STDERR_BYTES = 4096;
 const CR = 0x0d;
+// How long a process asked to stop with SIGTERM has before SIGKILL.
+const KILL_GRACE_MS = 5000;
 
 // sysexits.h: the category of a failure by the exit status of sendmail, and
 // whether a later attempt may pass.  A status sendmail gives says it did not
@@ -133,27 +140,46 @@ const collectStderr = (stream) => {
   return () => Buffer.concat(chunks, size).toString('utf8').trim();
 };
 
+// Asks the process to stop, and makes it if it does not within the grace.
+const terminate = (child) => {
+  child.kill('SIGTERM');
+  const timer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+  timer.unref?.();
+  child.once('close', () => clearTimeout(timer));
+};
+
 /**
- * Runs sendmail on a message and waits for it to exit.
+ * Runs sendmail on a message and waits for it to exit, or for `timeout`.
  *
- * @returns `{ code, signal, stderr, written, error, contentError }`.
+ * @returns `{ code, signal, stderr, written, timedOut, error, contentError }`.
  */
-const run = (child, chunks, newline, abort) =>
+const run = (child, chunks, newline, abort, timeout) =>
   new Promise((resolve, reject) => {
-    const outcome = { written: false };
+    const outcome = { written: false, timedOut: false };
     const stderrOf = collectStderr(child.stderr);
     child.stdin?.on('error', () => {});
     const onAbort = () => {
-      child.kill();
-      reject(abort.reason);
+      terminate(child);
+      reject(abortReason(abort));
     };
     abort?.addEventListener('abort', onAbort, { once: true });
-    child.once('error', (error) => {
+    const timer =
+      timeout === Number.POSITIVE_INFINITY
+        ? undefined
+        : setTimeout(() => {
+            outcome.timedOut = true;
+            terminate(child);
+          }, timeout);
+    const done = () => {
+      clearTimeout(timer);
       abort?.removeEventListener('abort', onAbort);
+    };
+    child.once('error', (error) => {
+      done();
       resolve({ ...outcome, error });
     });
     child.once('close', (code, killSignal) => {
-      abort?.removeEventListener('abort', onAbort);
+      done();
       resolve({ ...outcome, code, signal: killSignal, stderr: stderrOf() });
     });
     writeMessage(child.stdin, chunks, newline).then(
@@ -180,10 +206,26 @@ const receiptOf = (result, path, messageId) => {
     });
   }
   if (result.contentError !== undefined) return failureOf(result.contentError);
-  if (result.code === 0 && result.signal == null) {
-    return { successful: true, messageId, provider: 'sendmail' };
-  }
   const said = result.stderr === '' ? '' : `: ${redactAddresses(result.stderr)}`;
+  if (result.timedOut) {
+    // Stopped once it had the whole message, it may have queued it.
+    return createFailedReceipt(`sendmail did not exit in time${said}`, {
+      provider: 'sendmail',
+      category: 'timeout',
+      retryable: !result.written,
+      deliveryUnknown: result.written,
+    });
+  }
+  if (result.code === 0 && result.signal == null) {
+    if (result.written) return { successful: true, messageId, provider: 'sendmail' };
+    // It took a part of the message, or none, and said it was done: what it
+    // queued, if anything, is not the message.
+    return createFailedReceipt(`sendmail exited before it read the whole message${said}`, {
+      provider: 'sendmail',
+      category: 'server-error',
+      deliveryUnknown: true,
+    });
+  }
   if (result.code == null) {
     // Killed once it had the whole message, it may have queued it.
     return createFailedReceipt(`sendmail was killed by ${result.signal}${said}`, {
@@ -227,6 +269,8 @@ const findCommand = async (command) => {
 class SendmailTransport {
   id = 'sendmail';
   #log;
+  #running = 0;
+  #waiting = new Fifo();
 
   constructor(config = {}) {
     this.config = createSendmailConfig(config);
@@ -311,19 +355,34 @@ class SendmailTransport {
 
   async deliver(envelope, chunks, messageId, signal) {
     let args;
-    let child;
     try {
       args = argsOf(this.config, envelope);
+    } catch (error) {
+      return failureOf(error);
+    }
+    await this.#acquire(signal);
+    let child;
+    try {
       const spawn = this.config.spawn ?? childProcess.spawn;
       child = spawn(this.config.path, args, {
         stdio: ['pipe', 'ignore', 'pipe'],
         windowsHide: true,
       });
     } catch (error) {
+      this.#release();
       return failureOf(error);
     }
+    // The place is the process's until it has exited, an aborted one too.
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.#release();
+    };
+    child.once('close', release);
+    child.once('error', release);
     this.#log.write('debug', () => ({ recipients: envelope.to.length }), 'sendmail started');
-    const result = await run(child, chunks, this.config.newline, signal);
+    const result = await run(child, chunks, this.config.newline, signal, this.config.timeout);
     const receipt = receiptOf(result, this.config.path, messageId);
     this.#log.write(
       'debug',
@@ -331,6 +390,42 @@ class SendmailTransport {
       'sendmail exited',
     );
     return receipt;
+  }
+
+  // Waits for a place among the `maxConcurrent` processes, first come first
+  // served; an abort leaves the queue.
+  #acquire(signal) {
+    if (this.#running < this.config.maxConcurrent) {
+      this.#running++;
+      return undefined;
+    }
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(abortReason(signal));
+        return;
+      }
+      const waiter = { resolve, cancelled: false, signal, onAbort: undefined };
+      if (signal !== undefined) {
+        waiter.onAbort = () => {
+          waiter.cancelled = true;
+          reject(abortReason(signal));
+        };
+        signal.addEventListener('abort', waiter.onAbort, { once: true });
+      }
+      this.#waiting.push(waiter);
+    });
+  }
+
+  // Hands the place on to the next waiter, or frees it.
+  #release() {
+    while (this.#waiting.size > 0) {
+      const next = this.#waiting.shift();
+      if (next.cancelled) continue;
+      next.signal?.removeEventListener('abort', next.onAbort);
+      next.resolve();
+      return;
+    }
+    this.#running--;
   }
 }
 

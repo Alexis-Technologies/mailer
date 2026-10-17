@@ -2,7 +2,8 @@
 // options of the sendmail transport, `path`, `args` and `newline`.
 // https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 // Changed in the port: checked when the transport is made, with `spawn` passed
-// in, LF line endings by default, and DKIM from ./mime.
+// in, LF line endings by default, DKIM from ./mime, and a timeout and a bound
+// on the processes at once, which nodemailer had not.
 
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 
@@ -10,6 +11,23 @@ const NEWLINES = new Set(['lf', 'crlf']);
 
 const throwTypeError = (message) => {
   throw new TypeError(message);
+};
+
+// 0 and Infinity mean none, as for the other transports.
+const checkTimeout = (value) => {
+  if (value === undefined) return 60_000;
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    throwTypeError(`timeout must be a non-negative number: ${value}`);
+  }
+  return value === 0 ? Number.POSITIVE_INFINITY : value;
+};
+
+const checkMaxConcurrent = (value) => {
+  if (value === undefined) return 10;
+  if (value !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(value) || value < 1)) {
+    throwTypeError(`maxConcurrent must be a positive whole number or Infinity: ${value}`);
+  }
+  return value;
 };
 
 // An argument goes to the process as it is; only a NUL cannot.
@@ -47,6 +65,8 @@ const createSendmailConfig = (config = {}) => {
     path,
     args: checkArgs(config.args),
     newline,
+    timeout: checkTimeout(config.timeout),
+    maxConcurrent: checkMaxConcurrent(config.maxConcurrent),
     spawn: config.spawn,
     dkim: config.dkim,
     generateId: config.generateId,

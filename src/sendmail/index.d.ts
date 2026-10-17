@@ -53,6 +53,20 @@ export interface SendmailConfig {
    */
   readonly newline?: 'lf' | 'crlf';
   /**
+   * How long a process may take, in milliseconds, 0 or `Infinity` for none:
+   * it is then stopped (SIGTERM, then SIGKILL five seconds on), and the
+   * receipt is a `timeout`, of unknown delivery once the whole message was
+   * written.
+   * @default 60000
+   */
+  readonly timeout?: number;
+  /**
+   * The most processes run at once; a send waits for a place, first come
+   * first served.
+   * @default 10
+   */
+  readonly maxConcurrent?: number;
+  /**
    * Starts the process, `child_process.spawn` by default: pass your own to run
    * sendmail in a container or under another user.
    */

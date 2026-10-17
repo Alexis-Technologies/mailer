@@ -47,6 +47,8 @@ command line only: the message has no Bcc field for sendmail to strip.
 | `path` | `'sendmail'` | The command, a path or a name on PATH. |
 | `args` | | Arguments in place of `-f <sender>`: `<path> -i <args…> -- <recipients…>`. |
 | `newline` | `'lf'` | `'lf'`, which every sendmail takes, or `'crlf'`. |
+| `timeout` | `60000` | How long a process may take; it is stopped then (SIGTERM, then SIGKILL), of unknown delivery once it had the whole message. 0 or `Infinity` for none. |
+| `maxConcurrent` | `10` | The most processes at once; a send waits for a place. |
 | `spawn` | `child_process.spawn` | Starts the process: pass your own to run sendmail in a container or as another user. |
 | `dkim` | | A DKIM configuration, as for [SMTP](/transports/smtp#dkim-signing). |
 | `generateId` | | Makes the left half of a Message-ID, and the id of a raw receipt. |
@@ -54,8 +56,8 @@ command line only: the message has no Bcc field for sendmail to strip.
 
 ## Receipts
 
-A send succeeds when sendmail exits with code 0, and the receipt carries the
-Message-ID of the message.  Any other end is a failed receipt, with what sendmail
+A send succeeds when sendmail exits with code 0 having read the whole message,
+and the receipt carries the Message-ID of the message.  Any other end is a failed receipt, with what sendmail
 wrote to stderr (its first 4 KiB, addresses replaced by `[REDACTED]`):
 
 | Exit | Category | Retryable |
@@ -66,9 +68,13 @@ wrote to stderr (its first 4 KiB, addresses replaced by `[REDACTED]`):
 | 64, 77, 78, 126, 127, command not found | `configuration` | no |
 | any other code | `server-error` | no |
 | killed by a signal | `server-error` | before it had the whole message; after, `deliveryUnknown` |
+| past `timeout` | `timeout` | before it had the whole message; after, `deliveryUnknown` |
+| 0 before it read the whole message | `server-error` | no, `deliveryUnknown` |
 
-An abort of the `signal` kills the process.  A message whose content cannot be
-read (an attachment that fails) kills it with SIGINT, so that no part of it is
+An abort of the `signal` stops the process, SIGTERM then SIGKILL five seconds
+on, and its place among the `maxConcurrent` is free once it has exited.  A
+message whose content cannot be read (an attachment that fails) kills it with
+SIGINT, so that no part of it is
 delivered.  `scheduledAt` is refused as `unsupported`, as sendmail cannot schedule.
 
 ## Raw messages and verification

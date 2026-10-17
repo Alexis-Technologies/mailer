@@ -5,7 +5,7 @@
   "./render": 3,
   "./webhooks": 13.5,
   "./smtp": 23,
-  "./sendmail": 10.5,
+  "./sendmail": 11.5,
   "./jmap": 13,
   "./ses": 8,
   "./resend": 6.5,

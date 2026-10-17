@@ -388,3 +388,98 @@ test('Sendmail: the options are checked when the transport is made', () => {
   }
   assert.strictEqual(new SendmailTransport().id, 'sendmail');
 });
+
+test('Sendmail: a process that does not exit in time is stopped, of unknown delivery', async () => {
+  // Before: a sendmail that hung held the send for good, unless the caller
+  // passed a signal.
+  const { spawn, calls } = fakeSpawn({ hang: true });
+  const transport = new SendmailTransport({ spawn, timeout: 20 });
+  const receipt = await transport.send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.errors[0].category, 'timeout');
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.deepStrictEqual(calls[0].child.killed, ['SIGTERM']);
+  assert.throws(() => new SendmailTransport({ timeout: -1 }), /timeout/);
+  assert.throws(() => new SendmailTransport({ maxConcurrent: 0 }), /maxConcurrent/);
+});
+
+test('Sendmail: a process that ignores SIGTERM gets SIGKILL after a grace', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+  const children = [];
+  const spawn = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stderr = new PassThrough();
+    child.killed = [];
+    child.kill = (signal) => {
+      child.killed.push(signal);
+      if (signal === 'SIGKILL') setImmediate(() => child.emit('close', null, signal));
+      return true;
+    };
+    children.push(child);
+    return child;
+  };
+  const controller = new AbortController();
+  const sending = new SendmailTransport({ spawn }).send(message(), { signal: controller.signal });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(new Error('stop'));
+  await assert.rejects(sending, /stop/);
+  assert.deepStrictEqual(children[0].killed, ['SIGTERM']);
+  t.mock.timers.tick(5000);
+  assert.deepStrictEqual(children[0].killed, ['SIGTERM', 'SIGKILL']);
+});
+
+test('Sendmail: an exit with 0 before the whole message was read is not a success', async () => {
+  // Before: code 0 was success whatever had been written.
+  const spawn = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => true;
+    // It closes its input at once, and exits with 0.
+    setImmediate(() => {
+      child.stdin.destroy();
+      setImmediate(() => child.emit('close', 0, null));
+    });
+    return child;
+  };
+  const big = message({ content: { text: 'x'.repeat(4 * 1024 * 1024) } });
+  const receipt = await new SendmailTransport({ spawn }).send(big);
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.match(receipt.errorMessages[0], /before it read the whole message/);
+});
+
+test('Sendmail: no more than maxConcurrent processes run at once', async () => {
+  // Before: every concurrent send spawned its process.
+  let running = 0;
+  let most = 0;
+  const spawn = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => true;
+    running++;
+    most = Math.max(most, running);
+    child.stdin.resume();
+    child.stdin.on('end', () =>
+      setTimeout(() => {
+        running--;
+        child.emit('close', 0, null);
+      }, 5),
+    );
+    return child;
+  };
+  const transport = new SendmailTransport({ spawn, maxConcurrent: 2 });
+  const receipts = await Promise.all([1, 2, 3, 4, 5].map(() => transport.send(message())));
+  assert.ok(receipts.every((receipt) => receipt.successful));
+  assert.strictEqual(most, 2);
+  // A send that waits for a place leaves the queue when it is aborted.
+  const controller = new AbortController();
+  const held = [transport.send(message()), transport.send(message())];
+  const queued = transport.send(message(), { signal: controller.signal });
+  controller.abort(new Error('gone'));
+  await assert.rejects(queued, /gone/);
+  await Promise.all(held);
+});
