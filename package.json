@@ -96,6 +96,10 @@
       "types": "./src/sparkpost/index.d.ts",
       "default": "./src/sparkpost/index.js"
     },
+    "./zeptomail": {
+      "types": "./src/zeptomail/index.d.ts",
+      "default": "./src/zeptomail/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"

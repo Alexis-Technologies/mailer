@@ -18,6 +18,7 @@
   "./mailjet": 8,
   "./mailersend": 7,
   "./sparkpost": 8,
+  "./zeptomail": 7,
   "./pool": 3,
   "./retry": 3,
   "./mock": 2,
