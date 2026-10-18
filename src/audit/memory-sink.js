@@ -23,13 +23,17 @@ const createMemoryAuditSink = (options = {}) => {
     }
     return found;
   };
+  const append = (event) => {
+    if (typeof event?.id !== 'string') throw new TypeError('An audit event has an id.');
+    // An event told again is written once, where it was first.
+    if (events.has(event.id)) return;
+    events.set(event.id, Object.freeze({ ...event }));
+    if (events.size > maxEvents) events.delete(events.keys().next().value);
+  };
   return {
-    append(event) {
-      if (typeof event?.id !== 'string') throw new TypeError('An audit event has an id.');
-      // An event told again is written once, where it was first.
-      if (events.has(event.id)) return;
-      events.set(event.id, Object.freeze({ ...event }));
-      if (events.size > maxEvents) events.delete(events.keys().next().value);
+    append,
+    appendMany(batch) {
+      for (const event of batch) append(event);
     },
     has: (id) => events.has(id),
     get events() {

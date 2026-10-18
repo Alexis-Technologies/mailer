@@ -55,6 +55,29 @@ const createMongoAuditSink = (options = {}) => {
         { ...sessionOf(context?.transaction), upsert: true },
       );
     },
+    // A batch in one round trip, each event written once by its id.
+    async appendMany(events, context) {
+      const operations = [];
+      for (const event of events) {
+        if (typeof event?.id !== 'string') throw new TypeError('An audit event has an id.');
+        operations.push({
+          updateOne: {
+            filter: { _id: event.id },
+            update: { $setOnInsert: documentOfEvent(event) },
+            upsert: true,
+          },
+        });
+      }
+      if (operations.length === 0) return;
+      if (typeof collection.bulkWrite !== 'function') {
+        for (const event of events) await this.append(event, context);
+        return;
+      }
+      await collection.bulkWrite(operations, {
+        ...sessionOf(context?.transaction),
+        ordered: false,
+      });
+    },
     eventsOf,
     stateOf: async (correlationId) => stateOf(await eventsOf(correlationId)),
     async ensureIndexes() {

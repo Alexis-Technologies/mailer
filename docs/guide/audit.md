@@ -43,7 +43,9 @@ comes after a `delivered`. `isFinalState` is true for `delivered`, `bounced`,
 An event holds no recipient: the message is found by its `correlationId`. Its
 `id` is the same however often it is told, and a sink that can tell whether it
 holds one (`has(id)`: the memory and MongoDB sinks, and combined sinks when one
-of them can) lets a worker know a run that submitted before it died.
+of them can) lets a worker know a run that submitted before it died. `appendMany(events)`
+writes a batch in one call where a sink can (the MongoDB sink in one
+`bulkWrite`); `enqueueMany` tells the sink its batch so.
 
 ## Sinks
 

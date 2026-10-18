@@ -17,19 +17,29 @@ const combineAuditSinks = (...sinks) => {
   // `has`, when a sink can tell: an event any of them holds was written.
   let readable = false;
   for (const sink of sinks) readable ||= typeof sink.has === 'function';
-  const combined = {
-    async append(event, context) {
-      const errors = [];
-      for (const sink of sinks) {
-        try {
-          await sink.append(event, context);
-        } catch (error) {
-          errors.push(error);
-        }
+  // Tells each sink, whatever another threw, then throws what they threw.
+  const tellEach = async (tell) => {
+    const errors = [];
+    for (const sink of sinks) {
+      try {
+        await tell(sink);
+      } catch (error) {
+        errors.push(error);
       }
-      if (errors.length === 1) throw errors[0];
-      if (errors.length > 1) throw new AggregateError(errors, 'Audit sinks failed.');
-    },
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, 'Audit sinks failed.');
+  };
+  const combined = {
+    append: (event, context) => tellEach((sink) => sink.append(event, context)),
+    appendMany: (events, context) =>
+      tellEach(async (sink) => {
+        if (typeof sink.appendMany === 'function') {
+          await sink.appendMany(events, context);
+          return;
+        }
+        for (const event of events) await sink.append(event, context);
+      }),
   };
   if (readable) {
     combined.has = async (id) => {

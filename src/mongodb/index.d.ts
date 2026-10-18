@@ -44,6 +44,10 @@ export interface MongoCollectionLike {
   createIndex(spec: any, options?: any): Promise<string>;
   /** For `changeStream: true`, on a replica set. */
   watch?(pipeline?: any[], options?: any): MongoChangeStreamLike;
+  /** For `fairness: 'tenant'`. */
+  distinct?(field: string, filter?: any): Promise<unknown[]>;
+  /** For the batches of the audit sink. */
+  bulkWrite?(operations: any[], options?: any): Promise<unknown>;
 }
 
 /** The options of {@link createMongoOutbox}. */
@@ -127,6 +131,11 @@ export interface MongoAuditSinkOptions {
 /** An audit sink in a collection. */
 export interface MongoAuditSink extends AuditSink {
   append(event: AuditEvent, context?: { readonly transaction?: unknown }): Promise<void>;
+  /** A batch in one bulkWrite (one call per event without it). */
+  appendMany(
+    events: readonly AuditEvent[],
+    context?: { readonly transaction?: unknown },
+  ): Promise<void>;
   has(id: string): Promise<boolean>;
   eventsOf(correlationId: string): Promise<readonly AuditEvent[]>;
   stateOf(correlationId: string): Promise<MessageState | undefined>;

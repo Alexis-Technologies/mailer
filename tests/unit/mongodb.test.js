@@ -573,3 +573,32 @@ test('MongoDB: a change stream that fails is opened again, later each time', asy
   await settle();
   assert.strictEqual(collection.streams.length, 0);
 });
+
+test('MongoDB: the audit sink writes a batch in one bulkWrite, each event once', async () => {
+  const collection = fakeCollection();
+  const sink = createMongoAuditSink({ collection });
+  const event = (id) => ({
+    id,
+    state: 'queued',
+    at: '2026-10-18T09:00:00.000Z',
+    source: 'producer',
+    correlationId: id,
+    attempt: 0,
+  });
+  await sink.appendMany([event('e1'), event('e2')], { transaction: 'session' });
+  await sink.appendMany([event('e1'), event('e3')]);
+  await sink.appendMany([]);
+  assert.deepStrictEqual(
+    collection.calls.filter((call) => call[0] === 'bulkWrite'),
+    [
+      ['bulkWrite', 2, { session: 'session', ordered: false }],
+      ['bulkWrite', 2, { ordered: false }],
+    ],
+  );
+  assert.strictEqual(collection.documents.size, 3);
+  // A collection without bulkWrite is written one event at a time.
+  const plain = fakeCollection();
+  plain.bulkWrite = undefined;
+  await createMongoAuditSink({ collection: plain }).appendMany([event('e1'), event('e2')]);
+  assert.strictEqual(plain.documents.size, 2);
+});

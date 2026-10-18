@@ -241,3 +241,16 @@ test('Audit: a sink tells whether it holds an event, combined ones if any can', 
   const combined = combineAuditSinks(blind, memory);
   assert.deepStrictEqual([await combined.has('e1'), await combined.has('e2')], [true, false]);
 });
+
+test('Audit: a batch goes to each sink, in one call where it can', async () => {
+  const memory = createMemoryAuditSink();
+  const appended = [];
+  const single = { append: (event) => appended.push(event.id) };
+  const event = (id) => ({ id, state: 'queued', correlationId: id });
+  await combineAuditSinks(memory, single).appendMany([event('e1'), event('e2')]);
+  assert.deepStrictEqual(
+    memory.events.map((e) => e.id),
+    ['e1', 'e2'],
+  );
+  assert.deepStrictEqual(appended, ['e1', 'e2']);
+});

@@ -46,7 +46,8 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   not take every worker down in turn for ever. `redelivered: 'delivery_unknown'` makes a run again
   of an attempt whose run before died `delivery_unknown` rather than a second send, unless the
   audit sink tells (`has`, new on the memory, MongoDB and combined sinks) that it died before
-  its submit. The fields of a job of version 1 are fixed:
+  its submit. `AuditSink.appendMany` (memory, MongoDB in one `bulkWrite`, combined) writes the
+  `queued` events of an `enqueueMany` in one call. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`, given back with its attempts not spent, for a week or until it
   expires) rather than fail its hash during a rolling deploy.

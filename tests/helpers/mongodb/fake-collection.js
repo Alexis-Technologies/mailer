@@ -219,6 +219,17 @@ const fakeCollection = (options = {}) => {
       };
       return cursor;
     },
+    async bulkWrite(operations, opts = {}) {
+      calls.push(['bulkWrite', operations.length, opts]);
+      let upsertedCount = 0;
+      for (const { updateOne } of operations) {
+        const result = await collection.updateOne(updateOne.filter, updateOne.update, {
+          upsert: updateOne.upsert,
+        });
+        upsertedCount += result.upsertedCount;
+      }
+      return { upsertedCount };
+    },
     async distinct(field, filter = {}) {
       calls.push(['distinct', field, filter]);
       const values = [];

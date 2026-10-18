@@ -326,3 +326,49 @@ test('Queue: without a transaction, a strict sink that fails refuses the enqueue
   assert.deepStrictEqual(order, ['audit:queued', 'enqueue', 'audit:queued', 'enqueue']);
   assert.strictEqual(sink.eventsOf(first.correlationId).length, 1);
 });
+
+test('Queue: enqueueMany tells the sink its batch in one write where it can', async () => {
+  const batches = [];
+  const sink = createMemoryAuditSink();
+  const batching = {
+    append: (event) => sink.append(event),
+    appendMany: (events, context) => {
+      batches.push([events.length, context.transaction]);
+      sink.appendMany(events);
+    },
+  };
+  const { queue } = setup({ audit: batching });
+  const answers = await queue.enqueueMany([
+    resetJob({ idempotencyKey: 'a' }),
+    resetJob({ idempotencyKey: 'b' }),
+    resetJob({ idempotencyKey: 'c' }),
+  ]);
+  assert.deepStrictEqual(batches, [[3, undefined]]);
+  assert.strictEqual(sink.stateOf(answers[2].correlationId), 'queued');
+  // In the transaction of an outbox, the jobs it took are told in it, once.
+  const told = [];
+  const transactional = {
+    id: 'outbox',
+    transactional: true,
+    enqueue: async (request) => ({ id: request.id, duplicate: false }),
+    enqueueMany: async (requests) =>
+      requests.map((request, index) => ({ id: request.id, duplicate: index === 1 })),
+    consume: () => ({ close: async () => {} }),
+  };
+  await createMailQueue({
+    driver: transactional,
+    audit: {
+      append: () => {},
+      appendMany: (events, context) => told.push([events.length, context.transaction]),
+    },
+  }).enqueueMany(
+    [
+      resetJob({ idempotencyKey: 'x' }),
+      resetJob({ idempotencyKey: 'y' }),
+      resetJob({ idempotencyKey: 'z' }),
+    ],
+    { transaction: 'session' },
+  );
+  // The duplicate is not told again.
+  assert.deepStrictEqual(told, [[2, 'session']]);
+});

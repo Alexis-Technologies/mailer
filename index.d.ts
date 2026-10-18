@@ -1465,6 +1465,8 @@ export interface AuditContext {
 /** Where audit events go: append-only, an event written once by its `id`. */
 export interface AuditSink {
   append(event: AuditEvent, context?: AuditContext): void | Promise<void>;
+  /** Appends several events in one write where it can (a bulk write): a queue's batch. */
+  appendMany?(events: readonly AuditEvent[], context?: AuditContext): void | Promise<void>;
   /**
    * Whether an event of this id was written: lets a worker tell a run that
    * submitted its message before it died (the ids are deterministic).

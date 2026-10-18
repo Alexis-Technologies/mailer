@@ -55,10 +55,17 @@ const keyReused = (jobIds, answers) =>
 // the job is enqueued, so that a strict sink that fails refuses the enqueue
 // rather than reports a job enqueued as failed, enqueued again on a retry;
 // the event is written once by its id, a duplicate's with it.
-const appendQueued = async (queue, { data, request }, transaction) => {
-  if (queue.audit === undefined) return;
+const appendQueued = async (queue, jobs, transaction) => {
+  if (queue.audit === undefined || jobs.length === 0) return;
+  const events = [];
+  for (const { data, request } of jobs) events.push(queuedEventOf(data, request));
   try {
-    await queue.audit.append(queuedEventOf(data, request), { transaction });
+    // A batch in one write where the sink can, such as one bulkWrite.
+    if (events.length > 1 && typeof queue.audit.appendMany === 'function') {
+      await queue.audit.appendMany(events, { transaction });
+    } else {
+      for (const event of events) await queue.audit.append(event, { transaction });
+    }
   } catch (error) {
     if (queue.auditStrict) throw error;
     warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
@@ -78,10 +85,9 @@ const transactionOf = (driver, enqueueOptions) => {
   return transaction;
 };
 
-// What an enqueue gives. A first one is told to the sink in the transaction
-// of the store when there is one; a job enqueued again is not, and one
+// What an enqueue gives: a job enqueued again is a duplicate, and one
 // enqueued again for another message is refused.
-const afterEnqueue = async (queue, prepared, result, transaction) => {
+const answerOf = (queue, prepared, result) => {
   const { data, request } = prepared;
   const answer = { id: request.id, correlationId: data.correlationId, messageId: data.messageId };
   if (result?.duplicate === true) {
@@ -91,7 +97,6 @@ const afterEnqueue = async (queue, prepared, result, transaction) => {
     queue.log.write('debug', () => ({ jobId: request.id }), 'queue.duplicate');
     return { ...answer, duplicate: true };
   }
-  if (transaction !== undefined) await appendQueued(queue, prepared, transaction);
   queue.log.write(
     'debug',
     () => ({ jobId: request.id, priority: request.priority, template: data.template }),
@@ -165,18 +170,24 @@ const createMailQueue = (options = {}) => {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
       const prepared = await prepare(input);
-      if (transaction === undefined) await appendQueued(queue, prepared, undefined);
-      const result = await driver.enqueue(prepared.request, enqueueOptions);
-      return afterEnqueue(queue, prepared, result, transaction);
+      if (transaction === undefined) await appendQueued(queue, [prepared], undefined);
+      const answer = answerOf(
+        queue,
+        prepared,
+        await driver.enqueue(prepared.request, enqueueOptions),
+      );
+      // In the transaction of the store, a first enqueue is told with it.
+      if (transaction !== undefined && answer.duplicate !== true) {
+        await appendQueued(queue, [prepared], transaction);
+      }
+      return answer;
     },
     async enqueueMany(inputs, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
       const prepared = [];
       for (const input of inputs) prepared.push(await prepare(input));
-      if (transaction === undefined) {
-        for (const job of prepared) await appendQueued(queue, job, undefined);
-      }
+      if (transaction === undefined) await appendQueued(queue, prepared, undefined);
       let results;
       if (typeof driver.enqueueMany === 'function') {
         const requests = [];
@@ -190,14 +201,18 @@ const createMailQueue = (options = {}) => {
       // another message refused once all are.
       const answers = [];
       const reused = [];
+      const firsts = [];
       for (let index = 0; index < prepared.length; index++) {
         try {
-          answers.push(await afterEnqueue(queue, prepared[index], results[index], transaction));
+          const answer = answerOf(queue, prepared[index], results[index]);
+          answers.push(answer);
+          if (answer.duplicate !== true) firsts.push(prepared[index]);
         } catch (error) {
           if (error?.code !== 'queue.key_reused') throw error;
           reused.push(prepared[index].request.id);
         }
       }
+      if (transaction !== undefined) await appendQueued(queue, firsts, transaction);
       if (reused.length > 0) throw keyReused(reused, answers);
       return answers;
     },
