@@ -35,14 +35,13 @@ const DEFAULT_OPERATOR_DELAY_MS = 5 * 60_000;
 const DEFAULT_MAX_REDELIVERIES = 3;
 // The errors of a template that fails again the same way.
 const TEMPLATE_CODES = new Set(['MAILER_TEMPLATE_NOT_FOUND', 'MAILER_TEMPLATE_RENDER']);
-// The jobs this worker cannot read yet: of a later version, or sealed for a
-// codec it lacks or that fails. They wait for a worker that can.
-const WAITING_CODES = new Set([
-  'queue.unsupported_version',
-  'queue.codec_missing',
-  'queue.codec_failed',
-]);
-
+// The jobs this worker cannot read yet, written by a later version or sealed
+// for a codec it lacks: they are given back, their attempts not spent, for a
+// worker that can, as during a rolling deploy.
+const LATER_CODES = new Set(['queue.unsupported_version', 'queue.codec_missing']);
+// How long such a job waits for its worker before it is given up: a week,
+// the time a failed job is kept.
+const MAX_WAIT_FOR_WORKER_MS = 7 * 24 * 60 * 60 * 1000;
 const checkBackoff = (given) => {
   const backoff = { ...DEFAULT_BACKOFF, ...given };
   for (const name of ['baseDelayMilliseconds', 'maxDelayMilliseconds']) {
@@ -443,37 +442,51 @@ const attempt = async (run) => {
   return sendStep(run, message);
 };
 
-// A codec that says its failure is for good (a ciphertext that does not
-// authenticate) fails the job; any other failure may be an outage of its key.
-const isWaiting = (error) =>
-  WAITING_CODES.has(error?.code) &&
-  !(error.code === 'queue.codec_failed' && error.cause?.retryable === false);
+// Whether a job waiting for a worker that can read it has waited enough: past
+// its `expiresAt`, when that can be read, or a week after it was enqueued.
+const isOverdue = (config, job) => {
+  const now = config.now();
+  const expiresAt = typeof job.data?.expiresAt === 'string' ? Date.parse(job.data.expiresAt) : NaN;
+  if (Number.isFinite(expiresAt) && now > expiresAt) return true;
+  return job.enqueuedAt !== undefined && now - job.enqueuedAt > MAX_WAIT_FOR_WORKER_MS;
+};
+
+// What the queue does with a job this worker cannot read.
+const unreadOutcome = (config, job, error) => {
+  const code = error?.code ?? 'queue.invalid_job';
+  const reason = reasonOf(messageOf(error));
+  if (LATER_CODES.has(code) && !isOverdue(config, job)) {
+    config.log.write(
+      'warn',
+      () => ({ jobId: job.id, attempt: job.attempt, code }),
+      'queue.job.released',
+    );
+    return { type: 'release', delayMilliseconds: config.operatorDelayMilliseconds };
+  }
+  // A codec that fails may be an outage of its key: retried, its attempts
+  // spent, unless it says the failure is for good (a ciphertext that does not
+  // authenticate).
+  const retryable =
+    code === 'queue.codec_failed' &&
+    error.cause?.retryable !== false &&
+    job.attempt < job.maxAttempts;
+  config.log.write(
+    retryable ? 'warn' : 'error',
+    () => ({ jobId: job.id, attempt: job.attempt, code }),
+    retryable ? 'queue.job.retrying' : 'queue.job.failed',
+  );
+  if (retryable) {
+    return { type: 'retry', delayMilliseconds: config.operatorDelayMilliseconds, code, reason };
+  }
+  return { type: 'fail', code, reason };
+};
 
 const readJob = async (config, job) => {
   try {
     const data = await openMailJob(job.data, config.codec);
     return { data: parseMailJob(data, { signingKeys: config.signingKeys }) };
   } catch (error) {
-    const code = error?.code ?? 'queue.invalid_job';
-    const later = isWaiting(error) && job.attempt < job.maxAttempts;
-    config.log.write(
-      later ? 'warn' : 'error',
-      () => ({ jobId: job.id, attempt: job.attempt, code }),
-      later ? 'queue.job.retrying' : 'queue.job.failed',
-    );
-    // A job a later version wrote waits for a worker of that version, and a
-    // sealed one for a worker with its codec.
-    if (later) {
-      return {
-        outcome: {
-          type: 'retry',
-          delayMilliseconds: config.operatorDelayMilliseconds,
-          code,
-          reason: reasonOf(error.message),
-        },
-      };
-    }
-    return { outcome: { type: 'fail', code, reason: reasonOf(messageOf(error)) } };
+    return { outcome: unreadOutcome(config, job, error) };
   }
 };
 

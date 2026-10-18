@@ -334,11 +334,21 @@ test('Queue: a job that is not one, or of a later version, or expired, is not se
   const tampered = jobOf();
   tampered.data.to = [{ address: 'evil@example.com' }];
   assert.strictEqual((await run(handler, tampered)).code, 'queue.hash_mismatch');
+  // A job of a later version is given back for a worker of it, its attempts
+  // not spent, until it expires or has waited a week.
   const later = { ...jobOf(), data: { ...jobOf().data, v: 2 } };
-  assert.deepStrictEqual(
-    [(await run(handler, later)).type, (await run(handler, { ...later, attempt: 5 })).type],
-    ['retry', 'fail'],
-  );
+  assert.deepStrictEqual(await run(handler, { ...later, attempt: 5 }), {
+    type: 'release',
+    delayMilliseconds: 300_000,
+  });
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const stale = await run(handler, { ...later, enqueuedAt: NOW - week - 1 });
+  assert.deepStrictEqual([stale.type, stale.code], ['fail', 'queue.unsupported_version']);
+  const lapsed = await run(handler, {
+    ...later,
+    data: { ...later.data, expiresAt: new Date(NOW - 1).toISOString() },
+  });
+  assert.strictEqual(lapsed.type, 'fail');
   const expired = jobOf({ expiresAt: new Date(NOW - 1) });
   assert.strictEqual((await run(handler, expired)).code, 'queue.expired');
   // A retry that would come after the job expires fails it now.

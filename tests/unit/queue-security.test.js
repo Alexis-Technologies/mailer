@@ -206,10 +206,14 @@ test('Queue: a sealed job waits for a worker with its codec, and fails one that 
   const sealed = queue.driver.list()[0].data;
   const transport = fakeTransport();
   const plain = createMailJobHandler({ transport, now: () => NOW });
-  const waiting = await plain(runOf(sealed), new AbortController().signal);
-  assert.deepStrictEqual([waiting.type, waiting.code], ['retry', 'queue.codec_missing']);
-  const last = await plain(runOf(sealed, { attempt: 5 }), new AbortController().signal);
-  assert.deepStrictEqual([last.type, last.code], ['fail', 'queue.codec_missing']);
+  // Given back for a worker with the codec, its attempts not spent, for a week.
+  const waiting = await plain(runOf(sealed, { attempt: 5 }), new AbortController().signal);
+  assert.strictEqual(waiting.type, 'release');
+  const stale = await plain(
+    runOf(sealed, { enqueuedAt: Date.now() - 8 * 24 * 60 * 60 * 1000 }),
+    new AbortController().signal,
+  );
+  assert.deepStrictEqual([stale.type, stale.code], ['fail', 'queue.codec_missing']);
   // Another key: the ciphertext does not authenticate, which may be an outage of the key...
   const other = createMailJobHandler({ transport, codec: aesCodec(Buffer.alloc(32, 1)) });
   const outage = await other(runOf(sealed), new AbortController().signal);

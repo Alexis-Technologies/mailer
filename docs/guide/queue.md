@@ -146,10 +146,10 @@ const queue = createMailQueue({ driver, codec, signingKeys });
 
 A sealed job keeps in clear only `v`, `hash` (a duplicate is still told by
 it), `enqueuedAt`, `kid`, `mac` and `trace`; the rest is `enc`. Its workers
-take the queue's codec. A worker without it, or whose codec throws (a key out
-of reach), gives the job back for a worker that can open it
-(`queue.codec_missing`, `queue.codec_failed`); a codec that throws an error
-with `retryable: false` fails it. Encryption is not a signature: a writer who
+take the queue's codec. A worker without it gives the job back, its attempts
+not spent, for a worker that can open it (`queue.codec_missing`); one whose
+codec throws (a key out of reach) retries it (`queue.codec_failed`), and a
+codec that throws an error with `retryable: false` fails it. Encryption is not a signature: a writer who
 can seal can still forge, so seal with `signingKeys` too.
 
 ## Once per key
@@ -191,7 +191,7 @@ rotated, as another secret makes other ids and the same message another job.
 | an outage of the template loader or of `resolveAttachment` | retried | `queued` |
 | a bug: a `TypeError` thrown by the transport | failed at once (`queue.thrown`), logged with its stack | `failed` |
 | a job past `expiresAt`, or whose retry would come after it | failed (`queue.expired`) | `failed` |
-| a job written by a later version of the worker | retried, for a worker of that version | `queued` |
+| a job written by a later version of the worker, or sealed for a codec it lacks | given back, its attempts not spent, for a worker that reads it; failed once it expires or has waited a week | — |
 | the worker stops before the send | given back, its attempt not spent | — |
 | a job whose runs ended unsettled more than `maxRedeliveries` times (3): it kills or blocks its worker | failed before it renders (`queue.redelivery_exhausted`) | `delivery_unknown` |
 

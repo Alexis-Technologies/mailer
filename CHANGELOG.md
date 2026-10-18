@@ -43,14 +43,15 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   past `maxRedeliveries` (3) as `delivery_unknown`, so a job that kills or blocks its worker does
   not take every worker down in turn for ever. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
-  it (`queue.unsupported_version`) rather than fail its hash during a rolling deploy.
+  it (`queue.unsupported_version`, given back with its attempts not spent, for a week or until it
+  expires) rather than fail its hash during a rolling deploy.
   `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends
   no job they did not sign (`queue.signature_invalid`): the SHA-256 of a job tells a change, but
   whoever writes to the store can recompute it. The first key signs and each verifies, for
   rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the application's key) seals the
   fields of each job in its store, its addresses, context and attachments, leaving the version,
-  hash, signature and trace context in clear; a worker that cannot open a sealed job gives it
-  back (`queue.codec_missing`, `queue.codec_failed`). `idSecret` derives the id of a job from its
+  hash, signature and trace context in clear; a worker without the codec gives a sealed job back
+  (`queue.codec_missing`), and one whose codec fails retries it (`queue.codec_failed`). `idSecret` derives the id of a job from its
   key with an HMAC, so an id that goes into the audit and the logs cannot be traced back to a key
   that names a person.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
