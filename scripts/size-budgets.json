@@ -4,7 +4,7 @@
   "./attachments": 4.5,
   "./render": 3,
   "./webhooks": 15.5,
-  "./smtp": 23,
+  "./smtp": 23.5,
   "./sendmail": 11.5,
   "./jmap": 13,
   "./ses": 8,
@@ -12,7 +12,7 @@
   "./sendgrid": 7.5,
   "./mailgun": 7.5,
   "./mailtrap": 7.5,
-  "./maileroo": 7,
+  "./maileroo": 7.5,
   "./lettermint": 7,
   "./plunk": 7,
   "./postmark": 7.5,
@@ -34,5 +34,5 @@
   "./ratelimit": 3.5,
   "./idempotency": 4,
   "./hooks": 2.5,
-  "./tee": 3
+  "./tee": 3.5
 }

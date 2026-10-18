@@ -18,7 +18,7 @@ const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
 const { warnLimited } = require('../internal/warn.js');
 const { createLog } = require('../internal/log.js');
-const { abortReason, sleep } = require('../internal/sleep.js');
+const { abortReason, sleep, timerMs } = require('../internal/sleep.js');
 const { createRateLimitConfig } = require('./config.js');
 
 /**
@@ -266,7 +266,7 @@ class RateLimitTransport {
       }
       if (head.cost > bucket.tokens) {
         const delay = Math.max(1, Math.ceil((head.cost - bucket.tokens) / this.#refillPerMs));
-        bucket.timer = setTimeout(() => this.#pump(bucket), delay);
+        bucket.timer = setTimeout(() => this.#pump(bucket), timerMs(delay));
         return;
       }
       bucket.waiters.shift();

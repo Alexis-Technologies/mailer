@@ -20,6 +20,7 @@ const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.
 const { chunks, readItems } = require('../internal/batch.js');
 const { schedulingRefusal } = require('../internal/schedule.js');
 const { certificateFailure } = require('../internal/refusal.js');
+const { timerMs } = require('../internal/sleep.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -1060,7 +1061,7 @@ const verificationOperation = async (timeout, operation, signal) => {
   let onAbort;
   const timer = setTimeout(
     () => controller.abort(new JmapApiError('JMAP verification timed out.')),
-    timeout,
+    timerMs(timeout),
   );
   try {
     combined.signal.throwIfAborted();

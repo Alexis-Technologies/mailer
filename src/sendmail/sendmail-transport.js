@@ -30,7 +30,7 @@ const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
-const { abortReason } = require('../internal/sleep.js');
+const { abortReason, timerMs } = require('../internal/sleep.js');
 const { Fifo } = require('../internal/gate.js');
 const { composeMessage } = require('../mime/index.js');
 const { createSendmailConfig } = require('./config.js');
@@ -169,7 +169,7 @@ const run = (child, chunks, newline, abort, timeout) =>
         : setTimeout(() => {
             outcome.timedOut = true;
             terminate(child);
-          }, timeout);
+          }, timerMs(timeout));
     const done = () => {
       clearTimeout(timer);
       abort?.removeEventListener('abort', onAbort);

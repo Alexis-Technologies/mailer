@@ -27,6 +27,7 @@ const {
 const { prepareMessageStream } = require('./message-stream.js');
 const { prepareOnSocket, writeMessageData } = require('./data-stream.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
+const { timerMs } = require('../internal/sleep.js');
 
 // RFC 5321 §4.5.3.1.5 limits a reply line to 512 octets, but servers send
 // longer text; these bound the memory a broken or hostile server can take
@@ -485,7 +486,7 @@ class SmtpConnection {
       const timer = setTimeout(() => {
         onError(new TypeError('Connection timeout.'));
         this.socket?.destroy();
-      }, this.config.connectionTimeout);
+      }, timerMs(this.config.connectionTimeout));
 
       const cleanup = () => {
         clearTimeout(timer);
@@ -526,7 +527,7 @@ class SmtpConnection {
 
       try {
         this.socket = this.openSocket();
-        this.socket.setTimeout(this.config.socketTimeout);
+        this.socket.setTimeout(timerMs(this.config.socketTimeout));
         this.observeSocket(this.socket);
         this.socket.once(establishedEvent, onConnect);
         this.socket.once('error', onError);
@@ -578,7 +579,7 @@ class SmtpConnection {
     const timeout = new AbortController();
     const timer = setTimeout(
       () => timeout.abort(new TypeError('Connection timeout.')),
-      this.config.connectionTimeout,
+      timerMs(this.config.connectionTimeout),
     );
     const combined = signal == null ? timeout.signal : AbortSignal.any([timeout.signal, signal]);
     let tunnel;
@@ -599,7 +600,7 @@ class SmtpConnection {
       combined.throwIfAborted();
       this.tunneled = true;
       this.socket = this.config.secure ? this.wrapInTls(tunnel) : tunnel;
-      this.socket.setTimeout(this.config.socketTimeout);
+      this.socket.setTimeout(timerMs(this.config.socketTimeout));
       this.observeSocket(this.socket);
       if (this.config.secure) await secureConnectOf(this.socket, combined);
       this.log.write(
@@ -749,7 +750,7 @@ class SmtpConnection {
       const collector = createReplyCollector();
       const timer = setTimeout(() => {
         onError(new Error('Greeting timeout.'));
-      }, this.config.socketTimeout);
+      }, timerMs(this.config.socketTimeout));
 
       // Only complete lines count: a final line still waiting for its CRLF
       // could be cut short.
@@ -899,7 +900,7 @@ class SmtpConnection {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => fail(new Error('STARTTLS upgrade timeout.')),
-        this.config.connectionTimeout,
+        timerMs(this.config.connectionTimeout),
       );
       const cleanup = () => {
         clearTimeout(timer);
@@ -920,7 +921,7 @@ class SmtpConnection {
       const onClose = () => fail(new TypeError('SMTP connection closed during STARTTLS.'));
       const onSecureConnect = () => {
         cleanup();
-        tlsSocket.setTimeout(this.config.socketTimeout);
+        tlsSocket.setTimeout(timerMs(this.config.socketTimeout));
         this.log.write('debug', () => ({ protocol: tlsSocket.getProtocol() }), 'SMTP upgraded');
         resolve();
       };
@@ -1145,7 +1146,7 @@ class SmtpConnection {
       return await this.sendPreparedMessage(message, signal);
     } finally {
       this.active = false;
-      if (this.usable) this.socket?.setTimeout(this.config.socketTimeout);
+      if (this.usable) this.socket?.setTimeout(timerMs(this.config.socketTimeout));
     }
   }
 

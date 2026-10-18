@@ -575,3 +575,48 @@ test('Decorators: pool and retry keep their loops to themselves', () => {
   );
   assert.strictEqual('withRetries' in new RetryTransport(inner), false);
 });
+
+test('Internal: a timeout past what a timer keeps is a long one, not one of 1 ms', async (t) => {
+  // Before: a timeout over 2^31 - 1 ms went to setTimeout as it was, which
+  // fires such a delay at once, so every request of a provider with
+  // timeout: 3e9 timed out, and AbortSignal.timeout past 2^32 - 1 threw.
+  const { timerMs } = require('../../src/internal/sleep.js');
+  assert.strictEqual(timerMs(1000), 1000);
+  assert.strictEqual(timerMs(0), 0);
+  assert.strictEqual(timerMs(3e9), 2_147_483_647);
+  assert.strictEqual(timerMs(Number.POSITIVE_INFINITY), 2_147_483_647);
+  const { createMessage } = require('../../index.js');
+  const { PostmarkTransport } = require('../../src/postmark/index.js');
+  t.mock.method(globalThis, 'fetch', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return Response.json({ MessageID: 'pm-1', ErrorCode: 0 });
+  });
+  const postmark = new PostmarkTransport({ serverToken: 'token', timeout: 3e9, retries: 0 });
+  const receipt = await postmark.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  );
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join());
+  const { TeeTransport } = require('../../src/tee/index.js');
+  const { fakeTransport, sent } = require('../helpers/decorators/fake.js');
+  const outcomes = [];
+  const tee = new TeeTransport(fakeTransport(), {
+    mirrors: [fakeTransport(async () => sent('m'))],
+    timeout: 5e9,
+    awaitMirrors: true,
+    onMirror: (outcome) => outcomes.push(outcome.receipt?.successful ?? outcome.error?.message),
+  });
+  await tee.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  );
+  assert.deepStrictEqual(outcomes, [true]);
+});

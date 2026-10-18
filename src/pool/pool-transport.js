@@ -12,6 +12,7 @@ const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
 const { WeightedStrategy } = require('./strategies/weighted-strategy.js');
 const { PriorityStrategy } = require('./strategies/priority-strategy.js');
 const { SelectorStrategy } = require('./strategies/selector-strategy.js');
+const { timerMs } = require('../internal/sleep.js');
 
 /**
  * Pool transport that combines multiple transports with various load balancing
@@ -394,7 +395,7 @@ class PoolTransport {
     const timeoutId = setTimeout(() => {
       abortSource ??= 'timeout';
       timeoutController.abort(createAbortError());
-    }, this.config.timeout);
+    }, timerMs(this.config.timeout));
     let cleanupAbortSource = noop;
     let signal = timeoutController.signal;
     let cleanupCombinedSignal = noop;

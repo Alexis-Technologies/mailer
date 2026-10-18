@@ -16,6 +16,7 @@ const { Buffer } = require('node:buffer');
 const net = require('node:net');
 const tls = require('node:tls');
 const { isLoopbackHost } = require('../internal/loopback.js');
+const { timerMs } = require('../internal/sleep.js');
 
 // The most bytes of the reply to CONNECT before its blank line, so a proxy
 // that never ends its header fields cannot fill the memory of the sender.
@@ -220,7 +221,9 @@ const tunnel = (socket, isHttps, request, target, timeout, signal) =>
     socket.once('close', onClose);
     // The whole exchange, not each wait for a byte: a proxy that answers a
     // byte at a time would hold a socket timeout off forever.
-    if (timeout > 0 && timeout !== Number.POSITIVE_INFINITY) timer = setTimeout(onTimeout, timeout);
+    if (timeout > 0 && timeout !== Number.POSITIVE_INFINITY) {
+      timer = setTimeout(onTimeout, timerMs(timeout));
+    }
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 

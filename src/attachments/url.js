@@ -14,6 +14,7 @@ const net = require('node:net');
 const { readBytes } = require('../internal/body.js');
 const { checkMaxBytes, createAttachment, mediaTypeOf } = require('./attachment.js');
 const { DEFAULT_TYPE, extensionOfType, typeOfFilename } = require('./mime-types.js');
+const { timerMs } = require('../internal/sleep.js');
 
 // The addresses no attachment of a sender's message should come from: this
 // network, the private ranges, CGNAT, loopback, link-local (where cloud
@@ -130,7 +131,7 @@ const signalOf = (timeout, signal) => {
   const timer =
     timeout === 0 || timeout === Number.POSITIVE_INFINITY
       ? undefined
-      : AbortSignal.timeout(timeout);
+      : AbortSignal.timeout(timerMs(timeout));
   if (timer === undefined) return signal;
   return signal == null ? timer : AbortSignal.any([timer, signal]);
 };

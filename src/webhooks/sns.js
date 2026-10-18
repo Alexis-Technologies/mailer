@@ -17,6 +17,7 @@ const {
   parseJsonOf,
   resolveCommonOptions,
 } = require('./request.js');
+const { timerMs } = require('../internal/sleep.js');
 
 const MAX_CERTIFICATE_BYTES = 64 * 1024;
 const MAX_CERTIFICATES = 32;
@@ -93,7 +94,10 @@ const loadCertificate = async (fetchOption, url, timeoutMs) => {
   const fetch = fetchOption ?? globalThis.fetch;
   let response;
   try {
-    response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
+    response = await fetch(url, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(timerMs(timeoutMs)),
+    });
   } catch (error) {
     throw certificateError('The signing certificate could not be read.', error, UNREAD);
   }

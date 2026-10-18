@@ -6,7 +6,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
-const { abortReason, sleep } = require('./sleep.js');
+const { abortReason, sleep, timerMs } = require('./sleep.js');
 const { redactAddresses } = require('./redact-addresses.js');
 
 const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
@@ -59,7 +59,7 @@ const startDeadline = (timeoutMs, signal) => {
   const controller = new AbortController();
   const timer =
     timeoutMs > 0 && Number.isFinite(timeoutMs)
-      ? setTimeout(() => controller.abort(), timeoutMs)
+      ? setTimeout(() => controller.abort(), timerMs(timeoutMs))
       : undefined;
   const combined = combineSignals(controller.signal, signal);
   return {

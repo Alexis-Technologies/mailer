@@ -7,6 +7,7 @@ const { parseRetryAfter } = require('../core/receipt.js');
 const { JmapApiError } = require('./errors.js');
 const { readJson, readText } = require('../internal/body.js');
 const { Buffer } = require('node:buffer');
+const { timerMs } = require('../internal/sleep.js');
 
 /** Runs a raw operation with a progress-resettable deadline through response parsing. @internal */
 const rawOperation = async (timeout, operation, signal) => {
@@ -19,7 +20,7 @@ const rawOperation = async (timeout, operation, signal) => {
     clearTimeout(timer);
     timer = setTimeout(
       () => controller.abort(new JmapApiError('Raw JMAP operation timed out.')),
-      timeout,
+      timerMs(timeout),
     );
   };
   let abort;

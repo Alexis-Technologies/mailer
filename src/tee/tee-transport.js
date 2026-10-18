@@ -19,6 +19,7 @@ const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createTeeConfig } = require('./config.js');
+const { timerMs } = require('../internal/sleep.js');
 
 const describe = (outcome) => {
   if (outcome.skipped !== undefined) return outcome.skipped;
@@ -33,7 +34,7 @@ const withDeadline = (sending, timeout, mirror) => {
   const deadline = new Promise((resolve, reject) => {
     timer = setTimeout(
       () => reject(new Error(`The mirror ${mirror} did not answer within ${timeout} ms.`)),
-      timeout,
+      timerMs(timeout),
     );
     // A detached send does not keep the process alive; disposal waits for it.
     timer.unref?.();
@@ -163,7 +164,7 @@ class TeeTransport {
       return;
     }
     // A detached mirror outlives the caller's signal; an awaited one follows it.
-    const timeout = AbortSignal.timeout(this.config.timeout);
+    const timeout = AbortSignal.timeout(timerMs(this.config.timeout));
     const mirrorSignal =
       detached || signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
     if (detached) this.#pending++;

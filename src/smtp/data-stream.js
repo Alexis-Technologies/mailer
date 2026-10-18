@@ -3,6 +3,7 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { Buffer } = require('node:buffer');
+const { timerMs } = require('../internal/sleep.js');
 
 /** Races preparation against source inactivity and remote socket termination. */
 /**
@@ -69,7 +70,10 @@ const prepareOnSocket = async (socket, timeoutMs, prepare, signal) => {
   let timer;
   const progress = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => fail(new TypeError('SMTP message preparation timeout.')), timeoutMs);
+    timer = setTimeout(
+      () => fail(new TypeError('SMTP message preparation timeout.')),
+      timerMs(timeoutMs),
+    );
   };
   socket.on('error', fail);
   socket.on('close', closed);
@@ -257,7 +261,7 @@ const writeMessageData = async (socket, source, timeoutMs, checkSize, signal) =>
   let timer;
   const progress = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => fail(new TypeError('SMTP DATA timeout.')), timeoutMs);
+    timer = setTimeout(() => fail(new TypeError('SMTP DATA timeout.')), timerMs(timeoutMs));
   };
   const data = createDataReplyReader(
     () => terminated,
