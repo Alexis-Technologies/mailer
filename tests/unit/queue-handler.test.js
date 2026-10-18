@@ -656,3 +656,54 @@ test('Queue: a rate limit makes the job’s tenant wait under rateLimitScope ten
   const alone = await run(handler, jobOf({ idempotencyKey: 'n' }));
   assert.strictEqual(alone.scope, 'job');
 });
+
+test('Queue: what escapes the steps is told, and each outcome logged with its duration', async (t) => {
+  const warnings = [];
+  const listener = (warning) => warnings.push(warning.code);
+  process.on('warning', listener);
+  t.after(() => process.off('warning', listener));
+  const records = [];
+  const logger = {
+    error: (record, message) => records.push([message, record]),
+    warn: (record, message) => records.push([message, record]),
+    info: (record, message) => records.push([message, record]),
+  };
+  let clock = NOW;
+  const failing = fakeTransport(() => failure('server-error', { retryable: true }));
+  const { handler: retrying } = handlerOf({
+    transport: failing,
+    logger,
+    now: () => (clock += 250),
+  });
+  await run(retrying, jobOf());
+  const retried = records.find(([message]) => message === 'queue.job.retrying');
+  assert.ok(retried[1].durationMs > 0);
+  const { handler: refusing } = handlerOf({
+    transport: fakeTransport(() => failure('rejected')),
+    logger,
+    now: () => (clock += 250),
+  });
+  await run(refusing, jobOf({ idempotencyKey: 'r' }));
+  const failed = records.find(([message]) => message === 'queue.job.failed');
+  assert.ok(failed[1].durationMs > 0);
+  const broken = await run(
+    createMailJobHandler({
+      transport: fakeTransport(() => failure('server-error', { retryable: true })),
+      renderer: templates,
+      logger,
+      now: () => clock,
+      classify: () => {
+        throw new Error('classify broke');
+      },
+    }),
+    jobOf({ idempotencyKey: 'b' }),
+  );
+  assert.deepStrictEqual([broken.type, broken.code], ['fail', 'queue.thrown']);
+  assert.ok(
+    records.some(
+      ([message, record]) => message === 'queue.worker.error' && record.reason === 'classify broke',
+    ),
+  );
+  await new Promise(setImmediate);
+  assert.ok(warnings.includes('MAILER_QUEUE_WORKER_THREW'));
+});

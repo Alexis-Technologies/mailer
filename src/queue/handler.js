@@ -173,6 +173,7 @@ const logFailed = (run, code, reason, state) => {
       code,
       state,
       reason,
+      durationMs: run.config.now() - run.started,
     }),
     'queue.job.failed',
   );
@@ -218,6 +219,7 @@ const settleFailure = async (run, receipt, code) => {
         code: outcome.code,
         delayMilliseconds: outcome.delayMilliseconds,
         scope: outcome.scope,
+        durationMs: config.now() - run.started,
       }),
       'queue.job.retrying',
     );
@@ -597,8 +599,11 @@ const createMailJobHandler = (options) => {
       return await attempt(run);
     } catch (error) {
       // What escaped the steps: a bug of this worker, or a sink or logger
-      // that threw where it is not guarded.
-      return { type: 'fail', code: 'queue.thrown', reason: reasonOf(messageOf(error)) };
+      // that threw where it is not guarded. Told, not only failed.
+      const reason = reasonOf(messageOf(error));
+      warnThrown('The mail worker', error, 'MAILER_QUEUE_WORKER_THREW');
+      config.log.write('error', () => ({ jobId: job.id, reason }), 'queue.worker.error');
+      return { type: 'fail', code: 'queue.thrown', reason };
     }
   };
 };
