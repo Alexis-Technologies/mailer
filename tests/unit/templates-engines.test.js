@@ -192,6 +192,36 @@ test('Templates: Handlebars fails on a missing or dynamic partial and on bad syn
   assert.throws(() => createHandlebarsEngine({ handlebars, configure: 1 }), /configure/);
 });
 
+test(
+  'Templates: a Handlebars partial that names itself, or one that names it back, renders',
+  { timeout: 10_000 },
+  async () => {
+    // Before: loading a partial waited for the partials it names, so one that
+    // named itself waited for itself, and the render never settled.
+    const engine = createHandlebarsEngine({ handlebars });
+    const tree = {
+      'tree.hbs': '<ul>{{#each items}}{{> node}}{{/each}}</ul>',
+      'node.hbs':
+        '<li>{{name}}{{#if children}}<ul>{{#each children}}{{> node}}{{/each}}</ul>{{/if}}</li>',
+    };
+    const items = [{ name: 'a', children: [{ name: 'b', children: [{ name: 'c' }] }] }];
+    assert.strictEqual(
+      (await renderWith(engine, tree, { template: 'tree', context: { items } })).html,
+      '<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>',
+    );
+    const mutual = {
+      'count.hbs': '{{> even n=3}}',
+      'even.hbs': 'e{{n}}{{#if n}}{{> odd n=(dec n)}}{{/if}}',
+      'odd.hbs': 'o{{n}}{{#if n}}{{> even n=(dec n)}}{{/if}}',
+    };
+    const counting = createHandlebarsEngine({ handlebars, helpers: { dec: (n) => n - 1 } });
+    assert.strictEqual(
+      (await renderWith(counting, mutual, { template: 'count' })).html,
+      'e3o2e1o0',
+    );
+  },
+);
+
 test('Templates: a partial that fails to load is read again on the next render', async () => {
   let fail = true;
   const loader = {

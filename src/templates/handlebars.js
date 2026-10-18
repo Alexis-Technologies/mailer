@@ -42,6 +42,15 @@ const visit = (node, named, inline) => {
   }
 };
 
+// The partials a template names but does not define inline.
+const namesOf = (ast) => {
+  const named = new Set();
+  const inline = new Set();
+  visit(ast, named, inline);
+  for (const name of inline) named.delete(name);
+  return named;
+};
+
 /**
  * Makes the Handlebars engine.
  *
@@ -72,33 +81,40 @@ const createHandlebarsEngine = (options = {}) => {
       const env = handlebars.create();
       for (const name of Object.keys(helpers)) env.registerHelper(name, helpers[name]);
       configure?.(env);
-      environment = { env, loading: new Map() };
+      environment = { env, partials: new Map() };
       environments.set(includes, environment);
     }
     return environment;
   };
-  // Reads, compiles and registers a partial and the partials it names, once
-  // per environment however many templates name it at once.
-  const loadPartial = (environment, includes, name, from) => {
-    let loading = environment.loading.get(name);
-    if (loading === undefined) {
-      loading = (async () => {
+  // Reads, compiles and registers a partial once per environment however many
+  // templates name it at once, and gives the partials it names, which it does
+  // not wait for: a partial that names itself, or one that names it back, is
+  // registered all the same, as Handlebars finds partials when it renders.
+  const registerPartial = (environment, includes, name, from) => {
+    let entry = environment.partials.get(name);
+    if (entry === undefined) {
+      entry = (async () => {
         const found = await includes.lookup(name, from, extensions);
         const ast = environment.env.parse(found.source);
-        await loadPartials(environment, includes, ast, found.name);
         environment.env.registerPartial(name, environment.env.compile(ast, given));
+        return { from: found.name, names: namesOf(ast) };
       })();
-      environment.loading.set(name, loading);
-      loading.catch(() => environment.loading.delete(name));
+      environment.partials.set(name, entry);
+      entry.catch(() => environment.partials.delete(name));
     }
-    return loading;
+    return entry;
   };
+  // Registers the partials a template names, and those they name, each once.
   const loadPartials = async (environment, includes, ast, from) => {
-    const named = new Set();
-    const inline = new Set();
-    visit(ast, named, inline);
-    for (const name of named) {
-      if (!inline.has(name)) await loadPartial(environment, includes, name, from);
+    const pending = [{ from, names: namesOf(ast) }];
+    const seen = new Set();
+    for (let index = 0; index < pending.length; index++) {
+      const named = pending[index];
+      for (const name of named.names) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        pending.push(await registerPartial(environment, includes, name, named.from));
+      }
     }
   };
   return {
