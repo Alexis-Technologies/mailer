@@ -15,9 +15,10 @@ const {
 } = require('../internal/options.js');
 
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
-// Longer than an application takes to handle a request, shorter than the
-// first retry of a provider (20 s for SNS), so that a request whose handler
-// died is taken again.
+// Longer than an application takes to handle a request. A delivery that
+// comes back while it is held is refused as pending, and the provider's next
+// one after it is taken: SNS retries every 20 s, so a request whose handler
+// died is taken on its second retry.
 const DEFAULT_LEASE_MS = 30 * 1000;
 /**
  * How far from now a signed request is taken unless a verifier says
@@ -220,8 +221,18 @@ const resolveUntimedOptions = (options) => {
   return resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
 };
 
-const resolveCredentialOptions = (options) =>
-  resolveUntimedOptions({ ...options, replayStore: null });
+// A provider that signs no id keeps none, so an option of a store would be
+// taken and never read.
+const STORELESS = ['replayStore', 'leaseMs'];
+
+const resolveCredentialOptions = (options) => {
+  for (const name of STORELESS) {
+    if (options[name] !== undefined) {
+      throw new TypeError(`${name} is not read: the provider signs no id to keep.`);
+    }
+  }
+  return resolveUntimedOptions({ ...options, replayStore: null });
+};
 
 // The key of an id in the replay store: its provider, and a digest of the id,
 // which may name a recipient (an event of Mailtrap without an event_id).

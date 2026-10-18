@@ -386,6 +386,47 @@ test('Webhooks: a verifier of a provider that signs no time refuses a window of 
   }
 });
 
+test('Webhooks: a verifier of a provider that signs no id refuses a replay store', () => {
+  // Before: Postmark, Brevo, Mailjet, SparkPost and SMTP2GO took a replayStore
+  // and a leaseMs and never read them, so a caller believed requests were
+  // taken once.
+  const {
+    createMailjetWebhookVerifier,
+    createSparkPostWebhookVerifier,
+  } = require('../../src/webhooks/index.js');
+  const makers = [
+    (more) => createPostmarkWebhookVerifier({ username: 'u', password: 'p', ...more }),
+    (more) => createBrevoWebhookVerifier({ token: 't', ...more }),
+    (more) => createSmtp2goWebhookVerifier({ username: 'u', password: 'p', ...more }),
+    (more) => createMailjetWebhookVerifier({ username: 'u', password: 'p', ...more }),
+    (more) => createSparkPostWebhookVerifier({ username: 'u', password: 'p', ...more }),
+  ];
+  for (const make of makers) {
+    assert.throws(
+      () => make({ replayStore: createMemoryReplayStore() }),
+      /replayStore is not read/,
+    );
+    assert.throws(() => make({ leaseMs: 1000 }), /leaseMs is not read/);
+    assert.throws(() => make({ toleranceMs: 1000 }), /toleranceMs is not read/);
+  }
+});
+
+test('Webhooks: the validation URL of Azure carries no credentials', async () => {
+  // Before: a password without a user name passed the check of the URL.
+  const azure = createAzureWebhookVerifier({ token: 't', replayStore: null });
+  const body = JSON.stringify([
+    {
+      id: 'v-1',
+      eventType: 'Microsoft.EventGrid.SubscriptionValidationEvent',
+      data: { validationCode: 'c', validationUrl: 'https://:pw@rp-eu.eventgrid.azure.net/x' },
+    },
+  ]);
+  await assert.rejects(
+    azure.verify({ body, headers: { 'aeg-event-type': 'SubscriptionValidation' } }),
+    refusal('payload', 400),
+  );
+});
+
 test('Webhooks: a refusal says what to answer, a certificate not read asks for a retry', async () => {
   assert.strictEqual(new WebhookVerificationError('signature', 'x').status, 401);
   assert.strictEqual(new WebhookVerificationError('payload', 'x').status, 400);

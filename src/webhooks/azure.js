@@ -100,7 +100,12 @@ const isEventGridUrl = (value) => {
   } catch {
     return false;
   }
-  return url.protocol === 'https:' && EVENT_GRID_HOST.test(url.hostname) && url.username === '';
+  return (
+    url.protocol === 'https:' &&
+    EVENT_GRID_HOST.test(url.hostname) &&
+    url.username === '' &&
+    url.password === ''
+  );
 };
 
 const validationOf = (payload) => {

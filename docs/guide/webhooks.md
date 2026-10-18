@@ -130,7 +130,7 @@ are committed.
 function that makes its verifier for each request, a store they share; `null`
 for an application that deduplicates the events by their `id` itself. A shared
 store implements three methods. The ids it is given are the provider and a
-SHA-256 of the provider's id (`mailtrap:3q2+7w…`), as some ids name a
+SHA-256 of the provider's id in base64url (`mailtrap:3q2-7w…`), as some ids name a
 recipient. The ids of a batch go to it up to 64 at a time, so a store must
 take calls that run at once, as a Redis client does by pipelining them:
 
@@ -155,7 +155,7 @@ const replayStore = {
 | Option | Default | |
 | --- | --- | --- |
 | `replayStore` | required | The ids taken, or `null`. |
-| `leaseMs` | 30 seconds | How long an id stays reserved while it is handled: longer than a handler takes, shorter than the provider's first retry (20 seconds for SNS). |
+| `leaseMs` | 30 seconds | How long an id stays reserved while it is handled: longer than a handler takes. A delivery that comes back while it is held is refused as `pending` (503), and the next one is taken: SNS retries every 20 seconds, so a request whose handler died is taken on its second retry. The verifiers of providers that sign no id (Postmark, Brevo, Mailjet, SparkPost, SMTP2GO) refuse it, and `replayStore`. |
 | `toleranceMs` | 5 minutes (an hour for SES) | How far from now a request may be signed. A verifier whose provider signs no time (Postmark, Brevo, Mailjet, SparkPost, SMTP2GO, MailerSend, Mailtrap, Maileroo, Azure) refuses it, and `now`. |
 | `maxBodyBytes` | 5 MiB | The longest body taken. |
 | `now` | `Date.now` | The clock of `toleranceMs`. |

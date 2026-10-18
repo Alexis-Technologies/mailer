@@ -149,8 +149,9 @@ export interface WebhookVerifierOptions {
   readonly replayStore: ReplayStore | null;
   /**
    * How long an id stays reserved while its request is handled, in
-   * milliseconds: longer than a handler takes, shorter than the provider's
-   * first retry.
+   * milliseconds: longer than a handler takes.  A delivery that comes back
+   * while it is held is refused as `pending`, and the next one is taken (SNS
+   * retries every 20 seconds: its second retry).
    * @default 30000
    */
   readonly leaseMs?: number;
