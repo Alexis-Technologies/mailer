@@ -186,3 +186,31 @@ test('Decorators: a logger hears the breaker, the rate limit, idempotency and th
     ['warn', 'MAILER_TEE_MIRROR_FAILED', 'tee'],
   ]);
 });
+
+test('Decorators: a jump of the time of day moves no interval of a default clock', async (t) => {
+  // Before: ratelimit, the memory stores of idempotency and of the webhooks
+  // measured on Date.now, so a correction of the system time refilled a
+  // bucket, or ended a lease, early.
+  let shift = 0;
+  const realNow = Date.now.bind(Date);
+  t.mock.method(Date, 'now', () => realNow() + shift);
+  const { RateLimitTransport } = require('../../src/ratelimit/index.js');
+  const { createMemoryIdempotencyStore } = require('../../src/idempotency/index.js');
+  const { createMemoryReplayStore } = require('../../src/webhooks/index.js');
+  const limiter = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 3_600_000,
+    mode: 'reject',
+  });
+  const one = message();
+  assert.strictEqual((await limiter.send(one)).successful, true);
+  const idempotency = createMemoryIdempotencyStore();
+  const reserved = await idempotency.reserve('k', 'f', 60_000);
+  const replay = createMemoryReplayStore();
+  assert.strictEqual(replay.reserve('r', 60_000, 't'), 'reserved');
+  shift = 2 * 3_600_000;
+  assert.strictEqual((await limiter.send(one)).successful, false);
+  assert.ok((await idempotency.reserve('k', 'f', 60_000)).record !== undefined);
+  assert.ok(reserved.token !== undefined);
+  assert.strictEqual(replay.reserve('r', 60_000, 'u'), 'pending');
+});
