@@ -328,3 +328,31 @@ test('verification follows the structured-send account and honors explicit accou
     await f.close();
   }
 });
+
+test('JMAP verification tells onRetry of a read it retries', async (t) => {
+  // Not ported: before, verify() retried its Mailbox/get and Identity/get
+  // with no onRetry, though the type says the reads it retries are told.
+  const fixture = await setup();
+  t.after(() => fixture.close());
+  t.mock.method(Math, 'random', () => 0);
+  const served = globalThis.fetch;
+  let failed = false;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (!failed && String(input).endsWith('/api') && String(init.body).includes('Mailbox/get')) {
+      failed = true;
+      return new Response('busy', { status: 503 });
+    }
+    return served(input, init);
+  });
+  const transport = new JmapTransport({
+    sessionUrl: fixture.base + '/session',
+    bearerToken: 'token',
+    identityId: 'identity',
+    baseUrl: fixture.base,
+    retries: 1,
+  });
+  const events = [];
+  await transport.verify({ onRetry: (event) => events.push(event) });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].error.statusCode, 503);
+});

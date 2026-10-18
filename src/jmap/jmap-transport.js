@@ -111,39 +111,17 @@ class JmapTransport {
           `JMAP account must be writable with mail and submission capability: ${accountId}`,
         );
       }
-      // oxlint-disable-next-line no-shadow -- upstream
-      const get = async (method, args, signal) => {
-        const response = await verificationOperation(
-          this.config.timeout,
-          (owned) =>
-            this.httpClient.executeRequest(
-              session.apiUrl,
-              {
-                using:
-                  method === 'Mailbox/get'
-                    ? [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail]
-                    : [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.submission],
-                methodCalls: [[method, { accountId, ...args }, 'verify']],
-              },
-              owned,
-            ),
-          signal,
-        );
-        return verificationResult(response, method, accountId);
-      };
-      const mailboxes = await get('Mailbox/get', { properties: ['id', 'role'] }, signal);
+      const get = (method, args) =>
+        this.#verificationGet(session.apiUrl, accountId, method, args, options);
+      const mailboxes = await get('Mailbox/get', { properties: ['id', 'role'] });
       if (findDraftsMailbox(mailboxes.list, false) === undefined) {
         throw new JmapApiError(`No drafts mailbox found in JMAP account: ${accountId}`);
       }
       const identityId = this.config.identityId;
-      const identities = await get(
-        'Identity/get',
-        {
-          ids: identityId == null ? null : [identityId],
-          properties: ['id', 'email'],
-        },
-        signal,
-      );
+      const identities = await get('Identity/get', {
+        ids: identityId == null ? null : [identityId],
+        properties: ['id', 'email'],
+      });
       if (
         identities.notFound.length > 0 ||
         identities.list.length === 0 ||
@@ -161,6 +139,28 @@ class JmapTransport {
         `JMAP verification failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  // One read of verify(), retried as a read is and told to onRetry.
+  async #verificationGet(apiUrl, accountId, method, args, options) {
+    const response = await verificationOperation(
+      this.config.timeout,
+      (owned) =>
+        this.httpClient.executeRequest(
+          apiUrl,
+          {
+            using:
+              method === 'Mailbox/get'
+                ? [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail]
+                : [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.submission],
+            methodCalls: [[method, { accountId, ...args }, 'verify']],
+          },
+          owned,
+          options?.onRetry,
+        ),
+      options?.signal,
+    );
+    return verificationResult(response, method, accountId);
   }
 
   /**
