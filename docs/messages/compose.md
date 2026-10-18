@@ -265,8 +265,9 @@ const message = createMessage({
   configuration of the transport, where the provider takes it per message.
 - `metadata` holds values the provider keeps with the message and returns in its
   events.  A key is 1 to 128 letters, digits, `_`, `-` or `.`, since it may become
-  the name of a header or form field; a value is a string without control
-  characters.
+  the name of a header or form field; a value is a string of at most 1024
+  characters without control characters; and there are at most 64 keys.  Each
+  provider has tighter limits of its own (Postmark 10 fields of 80 characters).
 
 SMTP and JMAP ignore `tracking` and `metadata`, which have no meaning in the
 message itself.  Each provider's page says which of the three it takes.

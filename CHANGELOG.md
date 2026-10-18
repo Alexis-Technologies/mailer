@@ -134,7 +134,8 @@ additive but the defaults listed below.
   URI that does not parse is refused rather than read as a path.
 - **A List-Unsubscribe URL or a metadata entry cannot add a header field:** a line break,
   whitespace or angle bracket in a URL is refused, and a metadata key is held to
-  `[A-Za-z0-9_.-]`, its value to a string without control characters.
+  `[A-Za-z0-9_.-]`, its value to a string without control characters, with at most 64 keys and
+  1024 characters to a value.
 - **A DKIM signing domain or selector with a tab, CR or LF is refused** before it reaches the
   host parser, which removed them and let the name, line break and all, into the
   `DKIM-Signature` field (the fix of 1.0 missed it).

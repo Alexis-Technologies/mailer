@@ -250,6 +250,11 @@ const checkTracking = (tracking) => {
 // form field (`v:<key>`), so it holds no more than letters, digits, `_`, `-`
 // and `.`; a value no control character.
 const METADATA_KEY = /^[A-Za-z0-9_.-]{1,128}$/;
+// Every provider bounds what it keeps (Postmark 10 fields of 80 characters,
+// SendGrid 10,000 bytes); these bounds keep a value meant for an event from
+// making a message of any size, and leave each provider's own to it.
+const MAX_METADATA_KEYS = 64;
+const MAX_METADATA_VALUE = 1024;
 
 const hasControl = (text) => {
   for (let i = 0; i < text.length; i++) {
@@ -265,12 +270,19 @@ const checkMetadata = (metadata) => {
     throwTypeError('Invalid metadata: it must be an object of strings.');
   }
   const checked = Object.create(null);
+  let count = 0;
   for (const key in metadata) {
     if (!Object.hasOwn(metadata, key)) continue;
+    if (++count > MAX_METADATA_KEYS) {
+      throwTypeError(`Invalid metadata: more than ${MAX_METADATA_KEYS} keys.`);
+    }
     if (!METADATA_KEY.test(key)) throwTypeError(`Invalid metadata key: ${JSON.stringify(key)}`);
     const value = metadata[key];
     if (typeof value !== 'string' || hasControl(value)) {
       throwTypeError(`Invalid metadata value of ${key}: a string without control characters.`);
+    }
+    if (value.length > MAX_METADATA_VALUE) {
+      throwTypeError(`Invalid metadata value of ${key}: over ${MAX_METADATA_VALUE} characters.`);
     }
     checked[key] = value;
   }

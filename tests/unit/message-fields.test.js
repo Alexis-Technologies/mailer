@@ -74,6 +74,27 @@ test('Fields: an invalid scheduledAt, tracking or metadata is refused', () => {
   }
 });
 
+test('Fields: metadata holds at most 64 keys, each value at most 1024 characters', () => {
+  // Before: any number of keys of any length went into every request, and
+  // into the header fields of the providers that write them as X-Metadata-*.
+  const many = (count) => {
+    const metadata = {};
+    for (let i = 0; i < count; i++) metadata[`k${i}`] = 'v';
+    return metadata;
+  };
+  assert.strictEqual(
+    Object.keys(createMessage({ ...base, metadata: many(64) }).metadata).length,
+    64,
+  );
+  assert.throws(() => createMessage({ ...base, metadata: many(65) }), /more than 64 keys/);
+  const longest = createMessage({ ...base, metadata: { key: 'v'.repeat(1024) } });
+  assert.strictEqual(longest.metadata.key.length, 1024);
+  assert.throws(
+    () => createMessage({ ...base, metadata: { key: 'v'.repeat(1025) } }),
+    /Invalid metadata value of key: over 1024 characters/,
+  );
+});
+
 const assertRefused = (receipt) => {
   assert.strictEqual(receipt.successful, false);
   assert.strictEqual(receipt.retryable, false);

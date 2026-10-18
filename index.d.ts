@@ -501,7 +501,9 @@ export interface Message {
   readonly tracking?: MessageTracking;
   /**
    * Values the provider keeps with the message and returns in its events
-   * (custom arguments, variables), where its provider takes them.
+   * (custom arguments, variables), where its provider takes them: at most 64
+   * keys of 1 to 128 of `[A-Za-z0-9_.-]`, each value at most 1024 characters
+   * with no control character.
    */
   readonly metadata?: Readonly<Record<string, string>>;
 }
