@@ -78,7 +78,10 @@ export interface RateLimitConfig {
    * @default 10000
    */
   readonly maxKeys?: number;
-  /** The clock, in milliseconds. */
+  /**
+   * The clock of the intervals, in milliseconds: `performance.now()` by
+   * default, which no change of the time of day moves.
+   */
   readonly now?: () => number;
   /**
    * A pino-like logger: it hears a refused send at `info` (`ratelimit.limited`) and a send that

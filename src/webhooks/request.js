@@ -80,7 +80,8 @@ class WebhookVerificationError extends Error {
  */
 const createMemoryReplayStore = (options = {}) => {
   const maxEntries = checkPositiveInteger(options.maxEntries ?? 10000, 'maxEntries');
-  const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
+  // Leases and times are intervals, on a clock no change of the time of day moves.
+  const now = checkOptionalFunction(options.now, 'now') ?? (() => performance.now());
   const entries = new Map();
 
   // A Map iterates in the order of insertion, and an entry is written anew

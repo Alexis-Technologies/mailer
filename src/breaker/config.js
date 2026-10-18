@@ -8,6 +8,9 @@ const {
   checkPositiveNumber,
 } = require('../internal/options.js');
 
+// The intervals are measured on a clock no change of the time of day moves.
+const monotonic = () => performance.now();
+
 /**
  * Resolves the options of the circuit breaker.
  *
@@ -27,7 +30,7 @@ const createBreakerConfig = (config = {}) => ({
   ),
   isFailure: checkOptionalFunction(config.isFailure, 'isFailure'),
   onStateChange: checkOptionalFunction(config.onStateChange, 'onStateChange'),
-  now: checkOptionalFunction(config.now, 'now') ?? Date.now,
+  now: checkOptionalFunction(config.now, 'now') ?? monotonic,
   logger: config.logger,
 });
 

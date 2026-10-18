@@ -56,7 +56,10 @@ export interface CircuitBreakerConfig {
    * (`MAILER_BREAKER_LISTENER_FAILED`).
    */
   readonly onStateChange?: (state: CircuitState, previous: CircuitState) => void;
-  /** The clock, in milliseconds. */
+  /**
+   * The clock of the intervals, in milliseconds: `performance.now()` by
+   * default, which no change of the time of day moves.
+   */
   readonly now?: () => number;
   /**
    * A pino-like logger: it hears a change of state, at `warn` when the circuit opens, `info`

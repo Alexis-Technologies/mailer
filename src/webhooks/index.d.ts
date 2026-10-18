@@ -89,7 +89,10 @@ export interface MemoryReplayStoreOptions {
    * @default 10000
    */
   readonly maxEntries?: number;
-  /** The clock, in milliseconds. */
+  /**
+   * The clock of the intervals, in milliseconds: `performance.now()` by
+   * default, which no change of the time of day moves.
+   */
   readonly now?: () => number;
 }
 

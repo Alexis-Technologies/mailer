@@ -15,6 +15,9 @@ const checkStore = (store) => {
   return store;
 };
 
+// The intervals are measured on a clock no change of the time of day moves.
+const monotonic = () => performance.now();
+
 /**
  * Resolves the options of the rate limiter.
  *
@@ -42,7 +45,7 @@ const createRateLimitConfig = (config = {}) => {
     key: checkOptionalFunction(config.key, 'key'),
     cost: checkOptionalFunction(config.cost, 'cost'),
     maxKeys: checkPositiveInteger(config.maxKeys ?? 10000, 'maxKeys'),
-    now: checkOptionalFunction(config.now, 'now') ?? Date.now,
+    now: checkOptionalFunction(config.now, 'now') ?? monotonic,
     logger: config.logger,
     store: checkStore(config.store),
   };

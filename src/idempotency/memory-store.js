@@ -11,6 +11,9 @@
 const { randomUUID } = require('node:crypto');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 
+// The intervals are measured on a clock no change of the time of day moves.
+const monotonic = () => performance.now();
+
 /**
  * Makes a store of idempotency keys in this process: shared by the
  * transports given it, not by other processes, and lost on a restart.  A key
@@ -29,7 +32,7 @@ const { checkOptionalFunction, checkPositiveInteger } = require('../internal/opt
  */
 const createMemoryIdempotencyStore = (options = {}) => {
   const maxEntries = checkPositiveInteger(options.maxEntries ?? 100000, 'maxEntries');
-  const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
+  const now = checkOptionalFunction(options.now, 'now') ?? monotonic;
   // A key is in one of the two.  Each Map iterates in the order of insertion
   // and an entry is written anew when it changes; as the keys of one state
   // share a lease or a time, the first of each is also the first to expire.

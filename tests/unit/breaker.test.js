@@ -365,3 +365,22 @@ test('Breaker: a batch that throws is one failure, and an isFailure that throws 
   assert.strictEqual(judged.state, 'open');
   assert.deepStrictEqual(warnings, ['MAILER_BREAKER_LISTENER_FAILED']);
 });
+
+test('Breaker: a jump of the time of day does not move the circuit', async (t) => {
+  // Before: the default clock was Date.now, so a correction of the system
+  // time half-opened a circuit early, or held it open long.
+  let shift = 0;
+  const realNow = Date.now.bind(Date);
+  t.mock.method(Date, 'now', () => realNow() + shift);
+  const breaker = new CircuitBreakerTransport(
+    fakeTransport(() => failed('network')),
+    {
+      failureThreshold: 1,
+      resetTimeoutMs: 60_000,
+    },
+  );
+  await breaker.send(message());
+  assert.strictEqual(breaker.state, 'open');
+  shift = 60 * 60 * 1000;
+  assert.strictEqual(breaker.state, 'open');
+});
