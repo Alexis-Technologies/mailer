@@ -82,8 +82,11 @@ Workers poll (`pollIntervalMilliseconds`, a second). An idle poll of a lane is
 one `findOneAndUpdate` and one read of when the next job is due: a process
 takes back the leases that ran out once a third of a lease, and reads the
 pause of the queue once a poll interval (a pause of its own at once). With `changeStream: true`,
-on a replica set, a change of the collection wakes them at once, and the poll
-is only the fallback.
+on a replica set, a change after which a job may be ready (an enqueue, a
+retry, a release, a lease taken back) wakes one lane at once, and the poll is
+only the fallback; the outbox's own leases and settlings wake none. A stream
+that fails is opened again a second later, then up to every 30 seconds
+(`queue.change_stream_failed`).
 
 ## Indexes and retention
 

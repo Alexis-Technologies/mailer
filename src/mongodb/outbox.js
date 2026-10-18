@@ -10,6 +10,7 @@ const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { sleep } = require('../internal/sleep.js');
 const {
   checkNonNegativeInteger,
   checkRetainData,
@@ -230,19 +231,75 @@ class MongoOutboxSource {
   }
 }
 
+// The changes after which a job may be ready: a job enqueued, retried, given
+// back or whose lease was taken back. The outbox's own leases, extensions and
+// settlings, most of its writes, wake no worker.
+const READY_CHANGES = [
+  {
+    $match: {
+      $or: [
+        { operationType: 'insert', 'fullDocument.state': 'ready' },
+        { operationType: 'update', 'updateDescription.updatedFields.state': 'ready' },
+        { operationType: 'replace', 'fullDocument.state': 'ready' },
+      ],
+    },
+  },
+];
+const MAX_RESUBSCRIBE_MS = 30_000;
+
+const closeStream = async (stream) => {
+  try {
+    await stream.close();
+  } catch {
+    // Closed already, or the connection is gone: nothing to close.
+  }
+};
+
 // Wakes the readers on a change of the collection, where MongoDB has change
-// streams (a replica set); the polling goes on without them.
+// streams (a replica set); the polling goes on without them. A stream that
+// fails (a failover the driver could not resume) is opened again, a second
+// later, then up to every 30 seconds.
 const subscribe = (collection, listener, config) => {
-  const stream = collection.watch(
-    [{ $match: { operationType: { $in: ['insert', 'update', 'replace'] } } }],
-    { fullDocument: 'default' },
-  );
-  stream.on('change', () => listener());
-  stream.on('error', (error) => {
-    config.log.write('warn', () => ({ error: error?.message }), 'queue.change_stream_failed');
-  });
+  const stopped = new AbortController();
+  let stream;
+  let failures = 0;
+  // Closes a stream that failed and opens another after the wait.
+  const reopen = async (current) => {
+    if (stream === current) stream = undefined;
+    await closeStream(current);
+    const delay = Math.min(MAX_RESUBSCRIBE_MS, 1000 * 2 ** failures);
+    failures += 1;
+    try {
+      await config.sleep(delay, stopped.signal);
+    } catch {
+      return;
+    }
+    open();
+  };
+  const open = () => {
+    if (stopped.signal.aborted) return;
+    const current = collection.watch(READY_CHANGES, { fullDocument: 'default' });
+    stream = current;
+    let failed = false;
+    current.on('change', () => {
+      failures = 0;
+      listener();
+    });
+    current.on('error', (error) => {
+      if (failed) return;
+      failed = true;
+      config.log.write(
+        'warn',
+        () => ({ error: error?.message, failures }),
+        'queue.change_stream_failed',
+      );
+      reopen(current);
+    });
+  };
+  open();
   return () => {
-    stream.close().catch(() => {});
+    stopped.abort();
+    if (stream !== undefined) closeStream(stream);
   };
 };
 
@@ -279,6 +336,7 @@ const createMongoOutbox = (options = {}) => {
   }
   const config = {
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
+    sleep: checkOptionalFunction(options.sleep, 'sleep') ?? sleep,
     // The polling driver checks it; the pause is read again as often.
     pauseReadMilliseconds: options.pollIntervalMilliseconds ?? 1000,
     // The lease of the workers: none of theirs runs out sooner.

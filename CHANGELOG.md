@@ -81,6 +81,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   keeping its version and hash, so a duplicate is still told and a reset link does not wait in the
   store. Every driver keeps a completed job `dedupeWindowSeconds` (a day, its window of duplicates)
   and a failed one `retainFailedSeconds` (a week); the outbox drops them by a TTL on `expireAt`.
+  An idle poll of the outbox is two round trips (leases taken back once a third of a lease, the
+  pause read once a poll interval, the next due time from its own index); its change stream wakes
+  one lane per change after which a job may be ready, and is opened again when it fails.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

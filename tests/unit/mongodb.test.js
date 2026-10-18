@@ -190,14 +190,24 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
   let woken = 0;
   const unsubscribe = outbox.source.subscribe(() => woken++);
   const [stream] = collection.streams;
+  // Only a change after which a job may be ready wakes a worker.
   assert.deepStrictEqual(stream.pipeline, [
-    { $match: { operationType: { $in: ['insert', 'update', 'replace'] } } },
+    {
+      $match: {
+        $or: [
+          { operationType: 'insert', 'fullDocument.state': 'ready' },
+          { operationType: 'update', 'updateDescription.updatedFields.state': 'ready' },
+          { operationType: 'replace', 'fullDocument.state': 'ready' },
+        ],
+      },
+    },
   ]);
   await outbox.source.enqueue(requestOf('a'));
   assert.strictEqual(woken, 1);
   stream.listeners.get('error')(new Error('not a replica set'));
   assert.deepStrictEqual(records, [['queue.change_stream_failed', 'not a replica set']]);
   unsubscribe();
+  await new Promise(setImmediate);
   assert.strictEqual(collection.streams.length, 0);
   // A close that fails goes unheard.
   const failing = outboxOf({
@@ -525,4 +535,45 @@ test('MongoDB: a reserve takes back leases once a third of a lease, and reads th
   assert.deepStrictEqual(await source.reserve(60_000), {
     nextAvailableAt: 90_000_000,
   });
+});
+
+test('MongoDB: a change stream that fails is opened again, later each time', async () => {
+  const { manualClock } = require('../helpers/queue/clock.js');
+  const clock = manualClock(0);
+  const records = [];
+  const collection = fakeCollection();
+  const outbox = createMongoOutbox({
+    collection,
+    changeStream: true,
+    now: clock.now,
+    sleep: clock.sleep,
+    logger: { warn: (record) => records.push(record.failures) },
+  });
+  let woken = 0;
+  const unsubscribe = outbox.source.subscribe(() => woken++);
+  const settle = () => new Promise(setImmediate);
+  collection.streams[0].listeners.get('error')(new Error('failover'));
+  await settle();
+  assert.strictEqual(collection.streams.length, 0);
+  clock.advance(1000);
+  await settle();
+  assert.strictEqual(collection.streams.length, 1);
+  collection.streams[0].listeners.get('error')(new Error('again'));
+  await settle();
+  clock.advance(1000);
+  await settle();
+  // The second wait is longer.
+  assert.strictEqual(collection.streams.length, 0);
+  clock.advance(1000);
+  await settle();
+  assert.strictEqual(collection.streams.length, 1);
+  assert.deepStrictEqual(records, [0, 1]);
+  // A change resets the wait, and wakes a worker.
+  collection.streams[0].listeners.get('change')({ operationType: 'insert' });
+  assert.strictEqual(woken, 1);
+  collection.streams[0].listeners.get('error')(new Error('once more'));
+  unsubscribe();
+  clock.advance(60_000);
+  await settle();
+  assert.strictEqual(collection.streams.length, 0);
 });
