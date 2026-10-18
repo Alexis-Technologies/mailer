@@ -1,8 +1,9 @@
 // Not ported: the Mustache engine of ./templates, over the `mustache` the
 // application passes in.  Each renderer has a writer of its own, whose cache
 // of parsed templates is bounded, where `mustache.render` shares one without a
-// bound for the process; and a partial that is not there fails the render,
-// where Mustache renders it as nothing.
+// bound for the process; a partial that is not there fails the render, where
+// Mustache renders it as nothing; and a partial is looked up from the
+// template it is written in, where Mustache tells its partials nothing of it.
 
 const { createCache } = require('./cache.js');
 const { perIncludes } = require('./environment.js');
@@ -10,6 +11,13 @@ const { checkEngineExtensions, checkModule } = require('./options.js');
 
 // The parsed templates a writer keeps.
 const MAX_PARSED = 1000;
+
+// The fields of a partial's token in Mustache 4: its name, and the
+// indentation of a standalone partial.
+const NAME = 1;
+const INDENTATION = 4;
+const TAG_INDEX = 5;
+const LINE_HAS_NON_SPACE = 6;
 
 const checkTags = (tags) => {
   if (tags === undefined) return undefined;
@@ -42,6 +50,18 @@ const createMustacheEngine = (options = {}) => {
   const extensions = checkEngineExtensions(options.extensions, ['.mustache']);
   const writerOf = perIncludes((includes) => {
     const writer = new mustache.Writer();
+    // Mustache's renderPartial, but for the partials it is given, which are
+    // the template they are written in: each partial renders its own with
+    // the partials of its name.
+    writer.renderPartial = function renderPartial(token, context, partials, config) {
+      const found = includes.lookupSync(token[NAME], partials.from, extensions);
+      let source = found.source;
+      if (token[TAG_INDEX] === 0 && token[INDENTATION]) {
+        source = this.indentPartial(source, token[INDENTATION], token[LINE_HAS_NON_SPACE]);
+      }
+      const tokens = this.parse(source, this.getConfigTags(config));
+      return this.renderTokens(tokens, context, { from: found.name }, source, config);
+    };
     const parsed = createCache(includes.cache ? MAX_PARSED : 0);
     // Mustache calls set and get; the renderer forgets a writer, not its cache.
     writer.templateCache = {
@@ -57,7 +77,7 @@ const createMustacheEngine = (options = {}) => {
       const writer = writerOf(context.includes);
       // Parsed now, so that a syntax error is one of the compile.
       writer.parse(source, tags);
-      const partials = (name) => context.includes.lookupSync(name, undefined, extensions).source;
+      const partials = { from: context.name };
       return (scope) => writer.render(source, scope, partials, tags);
     },
   };

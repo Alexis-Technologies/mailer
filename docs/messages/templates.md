@@ -162,8 +162,10 @@ Some engines behave a little differently here than they do on their own:
   be registered in `configure`.
 - **Liquid** escapes output by default, where liquidjs escapes nothing unless
   told. It reads own properties only.
-- **Mustache** fails on a partial that is not there, where it renders nothing.
-  Its writer, and the cache of what it parsed, are per renderer and bounded.
+- **Mustache** fails on a partial that is not there, where it renders nothing,
+  and reads `./x` against the partial it is written in, which Mustache does
+  not tell. Its writer, and the cache of what it parsed, are per renderer and
+  bounded.
 - **MJML** renders after the engine inside it (`.mjml.hbs`), once the layout is
   applied, so the layout of an MJML template is MJML too. A static `.mjml` is
   rendered once. What MJML finds wrong under `validationLevel: 'soft'` goes to

@@ -667,7 +667,11 @@ export interface MustacheEngineOptions {
   /** @default ['.mustache'] */
   readonly extensions?: readonly string[];
 }
-/** The Mustache engine: partials through the loader, from the root; a missing one fails the render. */
+/**
+ * The Mustache engine: partials through the loader, `./x` against the
+ * template it is written in, any other from the root, then the directories
+ * of partials; a missing one fails the render.
+ */
 export declare function createMustacheEngine(options: MustacheEngineOptions): TemplateEngine;
 
 /** A React Email template: its component, and its subject. */

@@ -456,6 +456,26 @@ test('Templates: Mustache fails on a missing partial, where it rendered nothing'
   assert.strictEqual((await uncached.render({ template: 'a' })).html, 'a');
 });
 
+test('Templates: a Mustache partial is read against the template it is written in', async () => {
+  // Before: Mustache tells its partials nothing of the template they are
+  // written in, so every name was read from the root.
+  const engine = createMustacheEngine({ mustache });
+  const templates = {
+    'emails/a.mustache': '{{> ./parts/b}}',
+    'emails/parts/b.mustache': 'b{{> ./c}}{{> ../d}}',
+    'emails/parts/c.mustache': 'c',
+    'emails/d.mustache': 'd',
+    'emails/c.mustache': 'wrong',
+  };
+  assert.strictEqual((await renderWith(engine, templates, { template: 'emails/a' })).html, 'bcd');
+  // A standalone partial is indented as Mustache indents it.
+  const indented = { 'list.mustache': 'list:\n  {{> item}}\nend', 'item.mustache': 'one\ntwo\n' };
+  assert.strictEqual(
+    (await renderWith(engine, indented, { template: 'list' })).html,
+    mustache.render(indented['list.mustache'], {}, { item: indented['item.mustache'] }),
+  );
+});
+
 test('Templates: Pug reads include and extends through the loader, its locals the context alone', async () => {
   const engine = createPugEngine({ pug, options: { doctype: 'html' } });
   const templates = {
