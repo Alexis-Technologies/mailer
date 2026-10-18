@@ -8,6 +8,7 @@ import {
   createErrorClassifier,
   createOpenTelemetryTransport,
   defaultErrorClassifier,
+  instrumentHandler,
   type MeterProvider,
   type OpenTelemetryConfig,
   type TracerProvider,
@@ -43,3 +44,15 @@ expectError(new OpenTelemetryTransport(new MockTransport(), { tracerProvider: 'g
 expectError(new OpenTelemetryTransport(new MockTransport(), { metrics: { samplingRate: 0.5 } }));
 // Exporters and resource attributes belong to the SDK of the application.
 expectError(createOpenTelemetryTransport(new MockTransport(), { serviceName: 'billing' }));
+
+// The worker of a queue, instrumented.
+declare const queueHandler: import('../../index.js').QueueHandler;
+expectType<import('../../index.js').QueueHandler>(
+  instrumentHandler(queueHandler, { tracing: false, metrics: false }),
+);
+expectError(instrumentHandler(queueHandler, { withSpan: 1 }));
+// The providers of @opentelemetry/api fit.
+instrumentHandler(queueHandler, {
+  tracerProvider: trace.getTracerProvider(),
+  meterProvider: metrics.getMeterProvider(),
+});

@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { OpenTelemetryTransport } = require('./opentelemetry-transport.js');
+const { instrumentHandler } = require('./handler.js');
 const { defaultErrorClassifier } = require('./config.js');
 
 /**
@@ -234,6 +235,7 @@ const createErrorClassifier = (options = {}) => {
 };
 
 module.exports = {
+  instrumentHandler,
   OpenTelemetryTransport,
   defaultErrorClassifier,
   createOpenTelemetryTransport,

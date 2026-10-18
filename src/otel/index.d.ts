@@ -5,6 +5,7 @@
 
 import type {
   Message,
+  QueueHandler,
   RawMessage,
   RawTransport,
   Receipt,
@@ -37,9 +38,24 @@ export interface Span {
   end(): void;
 }
 
+/** The context of a span another span links to: a remote one, from a `traceparent`. */
+export interface SpanContextLike {
+  traceId: string;
+  spanId: string;
+  traceFlags: number;
+  isRemote?: boolean;
+}
+
 /** A tracer of the OpenTelemetry API. */
 export interface Tracer {
-  startSpan(name: string, options?: { kind?: number; attributes?: Attributes }): Span;
+  startSpan(
+    name: string,
+    options?: {
+      kind?: number;
+      attributes?: Attributes;
+      links?: { context: SpanContextLike; attributes?: Attributes }[];
+    },
+  ): Span;
 }
 
 /** A tracer provider of the OpenTelemetry API, such as `trace.getTracerProvider()`. */
@@ -530,3 +546,37 @@ export declare function createErrorClassifier(options?: {
   readonly patterns?: Record<string, RegExp>;
   readonly fallback?: string;
 }): ErrorClassifier;
+
+/** The options of {@link instrumentHandler}. */
+export interface InstrumentHandlerOptions {
+  /** Required while `tracing` is on. */
+  readonly tracerProvider?: TracerProvider;
+  /** Required while `metrics` are on. */
+  readonly meterProvider?: MeterProvider;
+  /** @default true */
+  readonly tracing?: boolean;
+  /** @default true */
+  readonly metrics?: boolean;
+  /**
+   * Runs the handler with the span active, so that the spans of the
+   * transport are its children:
+   * `(span, run) => context.with(trace.setSpan(context.active(), span), run)`.
+   */
+  readonly withSpan?: <T>(span: Span, run: () => Promise<T>) => Promise<T>;
+  readonly now?: () => number;
+}
+
+/**
+ * Wraps a queue handler, such as `createMailJobHandler()` of `./queue`, with
+ * OpenTelemetry: a span `mailer.queue.process` per run, linked to the trace
+ * of the producer (the job's `trace`, from `traceContext` of the mail queue),
+ * and the metrics `mailer.queue.jobs` (by `outcome` and `code`),
+ * `mailer.queue.lag` (ms from the enqueue to the run), `mailer.queue.job.duration`
+ * and `mailer.queue.redeliveries`.
+ *
+ * @throws {TypeError} If a provider is missing or an option is invalid.
+ */
+export declare function instrumentHandler(
+  handler: QueueHandler,
+  options?: InstrumentHandlerOptions,
+): QueueHandler;

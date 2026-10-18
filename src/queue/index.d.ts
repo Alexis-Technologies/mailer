@@ -382,6 +382,12 @@ export interface MailQueueOptions extends Omit<MailJobOptions, 'now'> {
   readonly auditStrict?: boolean;
   /** Seals the fields of each job in the store; its workers open them. */
   readonly codec?: MailJobCodec;
+  /**
+   * The W3C `traceparent` of the producer, which each job carries as `trace`
+   * for `instrumentHandler` of `./otel` to link its span to:
+   * `() => { const carrier = {}; propagation.inject(context.active(), carrier); return carrier.traceparent; }`.
+   */
+  readonly traceContext?: () => string | undefined;
   readonly logger?: Logger;
   readonly now?: () => number;
 }

@@ -245,6 +245,11 @@ enqueued, rather than a job enqueued and reported as failed. A driver that
 writes no transaction (BullMQ, the memory queue) refuses `{ transaction }` with
 a `TypeError` rather than ignore it; the outbox is `transactional`.
 
+Spans and metrics of the worker (`mailer.queue.jobs`, `mailer.queue.lag`,
+`mailer.queue.job.duration`, `mailer.queue.redeliveries`) come from
+[`instrumentHandler`](/transports/otel#the-worker-of-a-queue) of `./otel`,
+linked to the producer's trace that `traceContext` gives each job.
+
 `logger`, pino-like, hears what the queue does, never an address: the
 enqueues and the starts at `debug`, the sends at `info`, the retries,
 redeliveries and releases at `warn`, the failures at `error` with their code,

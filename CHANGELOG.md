@@ -105,6 +105,11 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
   `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks`, `stateOf`, and
   `auditEventOfDeliveryEvent` for the events of `./webhooks`.
+- **`./otel`**: `instrumentHandler(handler, { tracerProvider, meterProvider, withSpan })`, a span
+  `mailer.queue.process` per run of a job, linked to the producer's trace (the `traceparent` the
+  mail queue's `traceContext` gives each job as `trace`), and the metrics `mailer.queue.jobs` (by
+  outcome and code), `mailer.queue.lag`, `mailer.queue.job.duration` and
+  `mailer.queue.redeliveries`.
 - **`./render`**: `RenderOutput.subject` and `renderFields(renderer, input)`, which gives
   `{ subject, content }`.
 - **The root**: the contracts of the reliability layer as types (`QueueDriver`, `QueueSource`,

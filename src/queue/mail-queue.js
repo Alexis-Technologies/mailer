@@ -4,12 +4,16 @@
 
 const { warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const { toUuid } = require('../internal/uuid.js');
 const { checkCodec, sealMailJob } = require('./envelope.js');
 const { MailQueueError } = require('./errors.js');
 const { createMailJobHandler } = require('./handler.js');
 const { checkIdSecret, prepareMailJob } = require('./job.js');
 const { keyringOf } = require('./signing.js');
+
+// A W3C traceparent, as `traceContext` gives it.
+const TRACEPARENT = /^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/;
 
 const checkDriver = (driver) => {
   if (typeof driver?.enqueue !== 'function' || typeof driver?.consume !== 'function') {
@@ -134,11 +138,25 @@ const createQueueConfig = (options) => {
     driver,
     audit,
     auditStrict,
+    traceContext: checkOptionalFunction(options.traceContext, 'traceContext'),
     codec: checkCodec(options.codec),
     now,
     jobOptions,
     log: createLog(options.logger, { component: 'queue', queue: driver.id }),
   };
+};
+
+// The job of a message: its trace, and its data sealed when the queue has a
+// codec; the driver stores the sealed data, the audit reads the clear.
+const prepareJob = async (queue, input) => {
+  const prepared = prepareMailJob(input, queue.jobOptions);
+  // The producer's trace, which the span of the worker links to; outside the
+  // hash and the signature, as it differs for the same message.
+  const trace = queue.traceContext?.();
+  if (typeof trace === 'string' && TRACEPARENT.test(trace)) prepared.data.trace = trace;
+  if (queue.codec === undefined) return prepared;
+  const data = await sealMailJob(prepared.data, queue.codec);
+  return { data: prepared.data, request: { ...prepared.request, data } };
 };
 
 /**
@@ -149,27 +167,21 @@ const createQueueConfig = (options) => {
  * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
  * and which its workers verify; `codec`, which seals the fields of each job
  * in its store and opens them in its workers; `idSecret`, under which the id
- * of a job is derived from its key; `logger`, `generateId`, `now`.
+ * of a job is derived from its key; `traceContext`, which gives the W3C
+ * traceparent of the producer each job carries; `logger`, `generateId`,
+ * `now`.
  * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMailQueue = (options = {}) => {
   const queue = createQueueConfig(options);
   const { driver, codec } = queue;
-  // The job, its data sealed when the queue has a codec: the driver stores
-  // the sealed data, the audit reads the clear.
-  const prepare = async (input) => {
-    const prepared = prepareMailJob(input, queue.jobOptions);
-    if (codec === undefined) return prepared;
-    const data = await sealMailJob(prepared.data, codec);
-    return { data: prepared.data, request: { ...prepared.request, data } };
-  };
   return {
     driver,
     async enqueue(input, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
-      const prepared = await prepare(input);
+      const prepared = await prepareJob(queue, input);
       if (transaction === undefined) await appendQueued(queue, [prepared], undefined);
       const answer = answerOf(
         queue,
@@ -186,7 +198,7 @@ const createMailQueue = (options = {}) => {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
       const prepared = [];
-      for (const input of inputs) prepared.push(await prepare(input));
+      for (const input of inputs) prepared.push(await prepareJob(queue, input));
       if (transaction === undefined) await appendQueued(queue, prepared, undefined);
       let results;
       if (typeof driver.enqueueMany === 'function') {
