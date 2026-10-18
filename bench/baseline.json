@@ -1,70 +1,86 @@
 {
   "node": "v24.14.1",
-  "date": "2026-10-18T00:04:42.115Z",
+  "date": "2026-10-18T10:17:09.248Z",
   "results": [
     {
       "name": "MIME — compose a text and HTML message",
-      "opsPerSec": 9401
+      "opsPerSec": 9370
     },
     {
       "name": "MIME — compose a message with a 1 MiB attachment",
-      "opsPerSec": 406
+      "opsPerSec": 407
     },
     {
       "name": "DKIM — compose and sign a text message (RSA-2048)",
-      "opsPerSec": 1312
+      "opsPerSec": 1359
     },
     {
       "name": "SMTP — dot-stuff and write 1 MiB of message data",
-      "opsPerSec": 745
+      "opsPerSec": 714
     },
     {
       "name": "Address — isEmailAddress",
-      "opsPerSec": 3559030
+      "opsPerSec": 3580508
     },
     {
       "name": "Receipt — classifyReceiptError of a reset",
-      "opsPerSec": 32283909
+      "opsPerSec": 31523312
     },
     {
       "name": "Pool — select by priority among 10 transports",
-      "opsPerSec": 10120402
+      "opsPerSec": 10251219
     },
     {
       "name": "MIME — compose 100 KB of Cyrillic (base64)",
-      "opsPerSec": 594
+      "opsPerSec": 596
     },
     {
       "name": "MIME — compose 100 KB of Latin (quoted-printable)",
-      "opsPerSec": 750
+      "opsPerSec": 724
     },
     {
       "name": "Render — htmlToText of 1 MB",
-      "opsPerSec": 38
+      "opsPerSec": 40
     },
     {
       "name": "Idempotency — fingerprintOf a message",
-      "opsPerSec": 74060
+      "opsPerSec": 75229
+    },
+    {
+      "name": "Idempotency — fingerprintOf 1 MiB of HTML",
+      "opsPerSec": 685
     },
     {
       "name": "Webhooks — verify a Svix (Resend) request",
-      "opsPerSec": 181926
+      "opsPerSec": 291797
     },
     {
       "name": "Webhooks — verify a SendGrid ECDSA request",
-      "opsPerSec": 12227
+      "opsPerSec": 17352
     },
     {
       "name": "Webhooks — verify a Mailtrap HMAC request",
-      "opsPerSec": 329750
+      "opsPerSec": 322455
+    },
+    {
+      "name": "Webhooks — verify an SNS RSA message, its certificate kept",
+      "opsPerSec": 43484
+    },
+    {
+      "name": "Attachments — inlineDataUrls of 1 MB with 20 images",
+      "opsPerSec": 3212
+    },
+    {
+      "name": "RateLimit — 10,000 sends waiting for one bucket",
+      "opsPerSec": 264
     },
     {
       "name": "Gate — 100 messages through five decorators",
-      "opsPerSec": 1847
+      "opsPerSec": 1859
     },
     {
       "name": "Gate — 100 messages, every tenth answered in place",
-      "opsPerSec": 15761
+      "opsPerSec": 15928
     }
   ]
 }

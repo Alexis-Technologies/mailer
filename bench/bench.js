@@ -28,6 +28,7 @@ const {
   readAttachmentContent,
 } = require('../index.js');
 const { composeMessage } = require('../src/mime/index.js');
+const { inlineDataUrls } = require('../src/attachments/index.js');
 const { htmlToText } = require('../src/render/index.js');
 const { fingerprintOf } = require('../src/idempotency/fingerprint.js');
 const { gatedSendMany } = require('../src/internal/gate.js');
@@ -35,7 +36,9 @@ const {
   createMailtrapWebhookVerifier,
   createResendWebhookVerifier,
   createSendGridWebhookVerifier,
+  createSesWebhookVerifier,
 } = require('../src/webhooks/index.js');
+const sns = require('../tests/helpers/webhooks/sns.js');
 const { CircuitBreakerTransport } = require('../src/breaker/index.js');
 const { HooksTransport } = require('../src/hooks/index.js');
 const { IdempotencyTransport } = require('../src/idempotency/index.js');
@@ -145,6 +148,17 @@ const latinMessage = createMessage({
 const megabyteHtml = '<p>Hello <a href="https://example.com/x">world</a>, &amp; more</p>'.repeat(
   16000,
 );
+// The message of a fingerprint of 1 MiB of HTML.
+const htmlMessage = createMessage({
+  from: ADDRESS,
+  to: ADDRESS,
+  subject: 'Newsletter',
+  content: { html: megabyteHtml, text: 'Newsletter' },
+});
+// 1 MB of HTML with twenty small images as data URIs.
+const IMAGE =
+  '<img alt="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==">';
+const imageHtml = `${IMAGE}${megabyteHtml.slice(0, 50_000)}`.repeat(20);
 
 // Requests signed as each provider signs them, verified without a replay store.
 const SVIX_SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
@@ -210,6 +224,14 @@ const decorated = new HooksTransport(
 );
 const hundred = Array.from({ length: 100 }, () => textMessage);
 
+// 10,000 sends waiting for one bucket, all served by the next refill.
+const queued = async () => {
+  const limiter = new RateLimitTransport(instant, { limit: 1e7, intervalMs: 1000, burst: 1 });
+  const sends = [];
+  for (let i = 0; i < 10_000; i++) sends.push(limiter.send(textMessage));
+  return (await Promise.all(sends)).length;
+};
+
 const main = async () => {
   if (!json) console.log(`Node ${process.version} | ${new Date().toISOString()}\n`);
   const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -242,6 +264,20 @@ const main = async () => {
     secret: 'mt',
     replayStore: null,
   });
+  // Signed once: the cases time the verification, not the signing.
+  const svixSigned = svixRequest();
+  const sendgridSigned = sendgridRequest();
+  // An SNS message of SES, its certificate read once and kept.
+  const ses = createSesWebhookVerifier({
+    topicArns: [sns.TOPIC],
+    fetch: sns.certificateFetch().fetch,
+    now: () => Date.parse('2027-01-01T12:00:30Z'),
+    replayStore: null,
+  });
+  const snsRequest = {
+    body: JSON.stringify(sns.notification({ eventType: 'Send', mail: { messageId: 'm' } })),
+  };
+  await ses.verify(snsRequest);
 
   const scenarios = [
     ['MIME — compose a text and HTML message', () => composeAndRead(textMessage), slow],
@@ -278,9 +314,13 @@ const main = async () => {
     ['MIME — compose 100 KB of Latin (quoted-printable)', () => composeAndRead(latinMessage), slow],
     ['Render — htmlToText of 1 MB', () => htmlToText(megabyteHtml), slow],
     ['Idempotency — fingerprintOf a message', () => fingerprintOf(textMessage)],
-    ['Webhooks — verify a Svix (Resend) request', () => resend.verify(svixRequest())],
-    ['Webhooks — verify a SendGrid ECDSA request', () => sendgrid.verify(sendgridRequest())],
+    ['Idempotency — fingerprintOf 1 MiB of HTML', () => fingerprintOf(htmlMessage), slow],
+    ['Webhooks — verify a Svix (Resend) request', () => resend.verify(svixSigned)],
+    ['Webhooks — verify a SendGrid ECDSA request', () => sendgrid.verify(sendgridSigned)],
     ['Webhooks — verify a Mailtrap HMAC request', () => mailtrap.verify(mailtrapRequest)],
+    ['Webhooks — verify an SNS RSA message, its certificate kept', () => ses.verify(snsRequest)],
+    ['Attachments — inlineDataUrls of 1 MB with 20 images', () => inlineDataUrls(imageHtml), slow],
+    ['RateLimit — 10,000 sends waiting for one bucket', queued, slow],
     [
       'Gate — 100 messages through five decorators',
       async () => {
@@ -293,14 +333,19 @@ const main = async () => {
     [
       'Gate — 100 messages, every tenth answered in place',
       async () => {
-        let n = 0;
+        // The admissions are counted apart from the receipts, so that every
+        // tenth message is answered in place.
+        let admitted = 0;
+        let sent = 0;
         for await (const receipt of gatedSendMany(instant, hundred, undefined, {
           admit: (message) =>
-            ++n % 10 === 0 ? { receipt: { successful: true, messageId: 'own' } } : { message },
+            ++admitted % 10 === 0
+              ? { receipt: { successful: true, messageId: 'own' } }
+              : { message },
         })) {
-          if (receipt.successful) n++;
+          if (receipt.successful) sent++;
         }
-        return n;
+        return sent;
       },
       slow,
     ],
