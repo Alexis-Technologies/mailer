@@ -9,7 +9,7 @@
 const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
-const { checkOptionalFunction } = require('../internal/options.js');
+const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { sleep } = require('../internal/sleep.js');
 const {
   checkNonNegativeInteger,
@@ -72,6 +72,44 @@ const jobOf = (document) => {
   };
   if (typeof document.tenantId === 'string') job.tenantId = document.tenantId;
   return job;
+};
+
+// A job as the outbox holds it, for its readers.
+const viewOf = (document) => ({
+  ...jobOf(document),
+  state: document.state,
+  priority: document.priority,
+  failure: document.failure,
+  result: document.result,
+});
+
+// What the outbox holds: its jobs by state, how long the oldest job due has
+// waited, and its pauses.
+const statsOf = async (collection, source, nowMs) => {
+  const now = new Date(nowMs);
+  const counts = {};
+  const filters = {
+    ready: { state: 'ready', availableAt: { $lte: now } },
+    delayed: { state: 'ready', availableAt: { $gt: now } },
+    active: { state: 'active' },
+    completed: { state: 'completed' },
+    failed: { state: 'failed' },
+  };
+  for (const state of Object.keys(filters)) {
+    counts[state] = await collection.countDocuments(filters[state]);
+  }
+  const oldest = await collection.findOne(filters.ready, {
+    sort: { availableAt: 1 },
+    projection: { availableAt: 1 },
+  });
+  const stats = { ...counts };
+  if (oldest?.availableAt instanceof Date) {
+    stats.oldestReadyMilliseconds = nowMs - oldest.availableAt.getTime();
+  }
+  const pauses = await source.pausesAt(nowMs);
+  if (pauses.until > nowMs) stats.pausedUntil = pauses.until;
+  if (pauses.tenants.length > 0) stats.pausedTenants = pauses.tenants;
+  return stats;
 };
 
 // The filter of a write under a lease: the job is still lent to it.
@@ -316,6 +354,17 @@ class MongoOutboxSource {
     }
   }
 
+  // The pauses in force, read now: the queue's, and the tenants'.
+  async pausesAt(now) {
+    this.#pauses.readAt = -Infinity;
+    const pauses = await this.#readPauses(now);
+    const tenants = [];
+    for (const [tenantId, until] of pauses.tenants) {
+      if (until > now) tenants.push({ tenantId, until });
+    }
+    return { until: pauses.until, tenants };
+  }
+
   async resume(scope = {}) {
     const { tenantId } = scope;
     await this.#collection.deleteOne({ _id: pauseIdOf(tenantId) });
@@ -398,22 +447,8 @@ const subscribe = (collection, listener, config) => {
   };
 };
 
-/**
- * Makes a mail queue in a collection of MongoDB.
- *
- * @param options `collection`, `db.collection('mail_outbox')`;
- * `changeStream` (false), to wake the workers on a change (a replica set);
- * `retainData` ('failed'), the finished jobs whose data is kept; `fairness`
- * ('none'), or 'tenant' for the tenants' jobs in turn;
- * `dedupeWindowSeconds` (a day), the time a completed job is kept, and so
- * the window of its duplicates; `retainFailedSeconds` (a week), that of a
- * failed one; `clockSkewToleranceMilliseconds` (5000), how
- * far the clocks of the workers may be apart; `now`, `logger`, and the
- * options of the polling driver.
- * @returns The driver, with `source`, `ensureIndexes()` and `get(id)`.
- * @throws {TypeError} If an option is invalid.
- */
-const createMongoOutbox = (options = {}) => {
+// The options of an outbox, checked.
+const createOutboxConfig = (options) => {
   const fairness = options.fairness ?? 'none';
   if (!FAIRNESS.has(fairness)) throw new TypeError("fairness must be 'none' or 'tenant'.");
   const collection = checkCollection(options.collection, 'createMongoOutbox');
@@ -435,7 +470,8 @@ const createMongoOutbox = (options = {}) => {
       'leaseMilliseconds must be more than 3 times clockSkewToleranceMilliseconds.',
     );
   }
-  const config = {
+  return {
+    collection,
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
     sleep: checkOptionalFunction(options.sleep, 'sleep') ?? sleep,
     // The polling driver checks it; the pause is read again as often.
@@ -449,6 +485,77 @@ const createMongoOutbox = (options = {}) => {
     ...retentionOf(options),
     log: createLog(options.logger, { component: 'queue', queue: 'mongodb' }),
   };
+};
+
+// What the outbox holds, for its readers: a job, the counts, the failed jobs
+// and a retry of one by hand.
+const readersOf = (collection, source, config) => ({
+  async get(id) {
+    const document = await collection.findOne({ _id: id });
+    // The pauses of the queue are no jobs.
+    if (document === null || document === undefined || id.startsWith(PAUSE_ID)) return undefined;
+    return viewOf(document);
+  },
+  stats: () => statsOf(collection, source, config.now()),
+  async failed(failedOptions = {}) {
+    const limit = checkPositiveInteger(failedOptions.limit ?? 100, 'limit');
+    const filter =
+      failedOptions.after === undefined
+        ? { state: 'failed' }
+        : { state: 'failed', _id: { $gt: failedOptions.after } };
+    const documents = await collection
+      // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
+      .find(filter)
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+    const jobs = [];
+    for (const document of documents) jobs.push(viewOf(document));
+    return jobs;
+  },
+  async retryFailed(id) {
+    const held = await collection.findOne({ _id: id }, { projection: { state: 1, data: 1 } });
+    if (held?.state !== 'failed') return false;
+    if (held.data === undefined) {
+      throw new TypeError(`The job ${id} keeps no data to send again: retainData dropped it.`);
+    }
+    const now = new Date(config.now());
+    const result = await collection.updateOne(
+      { _id: id, state: 'failed' },
+      {
+        $set: {
+          state: 'ready',
+          availableAt: now,
+          attempts: 0,
+          redeliveries: 0,
+          redelivered: false,
+          updatedAt: now,
+        },
+        $unset: { failure: '', finishedAt: '', expireAt: '' },
+      },
+    );
+    return (result?.matchedCount ?? 0) > 0;
+  },
+});
+
+/**
+ * Makes a mail queue in a collection of MongoDB.
+ *
+ * @param options `collection`, `db.collection('mail_outbox')`;
+ * `changeStream` (false), to wake the workers on a change (a replica set);
+ * `retainData` ('failed'), the finished jobs whose data is kept; `fairness`
+ * ('none'), or 'tenant' for the tenants' jobs in turn;
+ * `dedupeWindowSeconds` (a day), the time a completed job is kept, and so
+ * the window of its duplicates; `retainFailedSeconds` (a week), that of a
+ * failed one; `clockSkewToleranceMilliseconds` (5000), how
+ * far the clocks of the workers may be apart; `now`, `logger`, and the
+ * options of the polling driver.
+ * @returns The driver, with `source`, `ensureIndexes()` and `get(id)`.
+ * @throws {TypeError} If an option is invalid.
+ */
+const createMongoOutbox = (options = {}) => {
+  const config = createOutboxConfig(options);
+  const { collection } = config;
   const source = new MongoOutboxSource(collection, config);
   const driver = createPollingDriver(source, { ...options, now: config.now });
   return {
@@ -478,20 +585,7 @@ const createMongoOutbox = (options = {}) => {
         { name: 'mailer_expire', expireAfterSeconds: 0 },
       );
     },
-    async get(id) {
-      const document = await collection.findOne({ _id: id });
-      // The pause of the queue is no job.
-      // The pauses of the queue are no jobs.
-      if (document === null || document === undefined || id.startsWith(PAUSE_ID)) return undefined;
-      const job = jobOf(document);
-      return {
-        ...job,
-        state: document.state,
-        priority: document.priority,
-        failure: document.failure,
-        result: document.result,
-      };
-    },
+    ...readersOf(collection, source, config),
   };
 };
 

@@ -24,6 +24,7 @@ import {
   type MailQueue,
   type MailWorker,
   type MemoryQueue,
+  type MemoryQueueJob,
 } from '../../src/queue/index.js';
 import { createTemplateRenderer, type TemplateEngine } from '../../src/templates/index.js';
 
@@ -34,6 +35,9 @@ expectType<MemoryQueue>(driver);
 expectType<QueueSource>(driver.source);
 createMemoryQueue({ retainData: 'none', fairness: 'tenant' });
 expectType<Promise<void>>(driver.resume({ tenantId: 'acme' }));
+expectType<number>(driver.stats().ready);
+expectType<boolean>(driver.retryFailed('j'));
+expectType<readonly MemoryQueueJob[]>(driver.failed({ limit: 10 }));
 expectError(createMemoryQueue({ fairness: 'fifo' }));
 expectError(createMemoryQueue({ retainData: 'some' }));
 expectAssignable<QueueDriver>(driver);

@@ -13,7 +13,7 @@ import type {
   QueueSource,
 } from '../../index.js';
 import type { IdempotencyStore } from '../idempotency/index.js';
-import type { PollingDriverOptions } from '../queue/index.js';
+import type { MailQueueStats, PollingDriverOptions } from '../queue/index.js';
 
 /** What a write of a collection gives. */
 export interface MongoUpdateResultLike {
@@ -48,6 +48,8 @@ export interface MongoCollectionLike {
   distinct?(field: string, filter?: any): Promise<unknown[]>;
   /** For the batches of the audit sink. */
   bulkWrite?(operations: any[], options?: any): Promise<unknown>;
+  /** For `stats()`. */
+  countDocuments?(filter?: any): Promise<number>;
 }
 
 /** The options of {@link createMongoOutbox}. */
@@ -101,6 +103,19 @@ export interface MongoOutbox extends QueueDriver {
   get(id: string): Promise<MongoOutboxJob | undefined>;
   /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
   resume(scope?: { readonly tenantId?: string }): Promise<void>;
+  /** Its jobs by state, the lag of its workers and its pauses: for a dashboard or an alert. */
+  stats(): Promise<MailQueueStats>;
+  /** The failed jobs, by id, a page of `limit` (100) after `after`. */
+  failed(options?: {
+    readonly limit?: number;
+    readonly after?: string;
+  }): Promise<readonly MongoOutboxJob[]>;
+  /**
+   * A failed job back to ready, its attempts anew: false when it is not a
+   * failed job.
+   * @throws {TypeError} If its data was dropped (`retainData`).
+   */
+  retryFailed(id: string): Promise<boolean>;
 }
 
 /**

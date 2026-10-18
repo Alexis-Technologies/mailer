@@ -38,6 +38,8 @@ const nodeOf = (entry) => ({
   leaseUntil: entry.leaseUntil,
 });
 
+const isFinished = (entry) => entry.state === 'completed' || entry.state === 'failed';
+
 const isCurrent = (node, state) =>
   node.version === node.entry.version && node.entry.state === state;
 
@@ -115,14 +117,27 @@ class MemorySource {
     this.#notify();
   }
 
+  // The finished job at the head of a list, the stale places of jobs retried
+  // since dropped.
+  #finishedHead(list) {
+    for (;;) {
+      const id = headOf(list);
+      if (id === undefined) return undefined;
+      const entry = this.jobs.get(id);
+      if (entry !== undefined && isFinished(entry)) return entry;
+      dropHead(list);
+    }
+  }
+
   // Drops the finished jobs whose time is up, then the oldest beyond the
   // count kept, the memory of their keys with them.
   #sweep(now) {
     this.#expireList(this.#completed, now);
     this.#expireList(this.#failed, now);
     while (sizeOf(this.#completed) + sizeOf(this.#failed) > this.#config.retainFinished) {
-      const completed = this.jobs.get(headOf(this.#completed));
-      const failed = this.jobs.get(headOf(this.#failed));
+      const completed = this.#finishedHead(this.#completed);
+      const failed = this.#finishedHead(this.#failed);
+      if (completed === undefined && failed === undefined) return;
       const older =
         failed === undefined ||
         (completed !== undefined && completed.finishedSeq < failed.finishedSeq)
@@ -144,10 +159,42 @@ class MemorySource {
       const id = headOf(list);
       if (id === undefined) return;
       const entry = this.jobs.get(id);
+      // A job retried by hand since is open again: its place here is stale.
+      if (entry !== undefined && !isFinished(entry)) {
+        dropHead(list);
+        continue;
+      }
       if (entry !== undefined && entry.expireAt > now) return;
       this.jobs.delete(id);
       dropHead(list);
     }
+  }
+
+  // A failed job back to ready, its attempts anew: false when it is not one.
+  retryFailed(id) {
+    const entry = this.jobs.get(id);
+    if (entry === undefined || entry.state !== 'failed') return false;
+    if (entry.data === undefined) {
+      throw new TypeError(`The job ${id} keeps no data to send again: retainData dropped it.`);
+    }
+    entry.attempt = 0;
+    entry.redeliveries = 0;
+    entry.failure = undefined;
+    entry.availableAt = this.#config.now();
+    entry.expireAt = undefined;
+    this.#open += 1;
+    this.#wait(entry);
+    this.#notify();
+    return true;
+  }
+
+  // The pauses in force: the queue's, and the tenants'.
+  pausesAt(now) {
+    const tenants = [];
+    for (const [tenantId, until] of this.#tenantPauses) {
+      if (until > now) tenants.push({ tenantId, until });
+    }
+    return { until: this.#pausedUntil, tenants };
   }
 
   #holds(lease) {
@@ -478,8 +525,8 @@ const viewOf = (entry, now) => {
  * (10000), `dedupeWindowSeconds` (a day), `retainFailedSeconds` (a week),
  * `retainData` ('failed'), `fairness` ('none', or 'tenant' for the tenants'
  * jobs in turn), `logger`.
- * @returns The driver, with `source`, `list()`, `get(id)`, `drain()` and
- * `wake()`.
+ * @returns The driver, with `source`, `list()`, `get(id)`, `drain()`,
+ * `wake()`, `resume()`, `stats()`, `failed()` and `retryFailed(id)`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMemoryQueue = (options = {}) => {
@@ -513,6 +560,43 @@ const createMemoryQueue = (options = {}) => {
     },
     drain: () => source.drain(),
     resume: (scope) => source.resume(scope),
+    stats() {
+      source.prune();
+      const now = config.now();
+      const stats = { ready: 0, delayed: 0, active: 0, completed: 0, failed: 0 };
+      let oldest;
+      for (const entry of source.jobs.values()) {
+        if (entry.state !== 'waiting') {
+          stats[entry.state] += 1;
+        } else if (entry.availableAt > now) {
+          stats.delayed += 1;
+        } else {
+          stats.ready += 1;
+          if (oldest === undefined || entry.availableAt < oldest) oldest = entry.availableAt;
+        }
+      }
+      if (oldest !== undefined) stats.oldestReadyMilliseconds = now - oldest;
+      const pauses = source.pausesAt(now);
+      if (pauses.until > now) stats.pausedUntil = pauses.until;
+      if (pauses.tenants.length > 0) stats.pausedTenants = pauses.tenants;
+      return stats;
+    },
+    failed(failedOptions = {}) {
+      const limit = checkPositiveInteger(failedOptions.limit ?? 100, 'limit');
+      source.prune();
+      const ids = [];
+      for (const entry of source.jobs.values()) {
+        if (entry.state !== 'failed') continue;
+        if (failedOptions.after === undefined || entry.id > failedOptions.after) ids.push(entry.id);
+      }
+      const jobs = [];
+      for (const id of ids.toSorted()) {
+        if (jobs.length === limit) break;
+        jobs.push(viewOf(source.jobs.get(id), config.now()));
+      }
+      return jobs;
+    },
+    retryFailed: (id) => source.retryFailed(id),
     wake: () => source.wake(),
   };
 };

@@ -602,3 +602,41 @@ test('MongoDB: the audit sink writes a batch in one bulkWrite, each event once',
   await createMongoAuditSink({ collection: plain }).appendMany([event('e1'), event('e2')]);
   assert.strictEqual(plain.documents.size, 2);
 });
+
+test('MongoDB: the outbox tells what it holds, lists its failed jobs and retries one', async () => {
+  const { source, outbox, advance } = outboxOf({ start: 10_000 });
+  await source.enqueue(requestOf('r1', { enqueuedAt: 4000 }));
+  await source.enqueue(requestOf('later', { availableAt: 99_999 }));
+  for (const id of ['f2', 'f1', 'f3']) {
+    await source.enqueue(requestOf(id, { enqueuedAt: 9000, priority: 'high' }));
+  }
+  for (let index = 0; index < 3; index++) {
+    await source.fail((await source.reserve(1000)).lease, { code: 'x.rejected', reason: 'no' });
+  }
+  await source.pause(20_000, { tenantId: 'acme' });
+  const stats = await outbox.stats();
+  assert.deepStrictEqual(
+    [stats.ready, stats.delayed, stats.active, stats.completed, stats.failed],
+    [1, 1, 0, 0, 3],
+  );
+  assert.strictEqual(stats.oldestReadyMilliseconds, 6000);
+  assert.deepStrictEqual(stats.pausedTenants, [{ tenantId: 'acme', until: 20_000 }]);
+  assert.deepStrictEqual(
+    (await outbox.failed({ limit: 2 })).map((job) => job.id),
+    ['f1', 'f2'],
+  );
+  assert.deepStrictEqual(
+    (await outbox.failed({ after: 'f2' })).map((job) => job.id),
+    ['f3'],
+  );
+  assert.strictEqual(await outbox.retryFailed('f1'), true);
+  assert.strictEqual(await outbox.retryFailed('f1'), false);
+  const again = await outbox.get('f1');
+  assert.deepStrictEqual([again.state, again.attempt, again.failure], ['ready', 0, undefined]);
+  advance(1);
+  assert.strictEqual((await source.reserve(1000)).lease.job.id, 'f1');
+  const none = outboxOf({ extra: { retainData: 'none' } });
+  await none.source.enqueue(requestOf('x'));
+  await none.source.fail((await none.source.reserve(1000)).lease, { code: 'x', reason: 'y' });
+  await assert.rejects(none.outbox.retryFailed('x'), /keeps no data/);
+});

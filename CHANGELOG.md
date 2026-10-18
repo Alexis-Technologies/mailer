@@ -87,7 +87,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   one lane per change after which a job may be ready, and is opened again when it fails.
   `fairness: 'tenant'` (memory queue, outbox) takes a high job of any tenant first, then the
   tenants in turn, so one tenant's backlog holds no other's mail; `rateLimitScope: 'tenant'` pauses
-  one tenant's jobs alone, and `resume()` ends a pause early.
+  one tenant's jobs alone, and `resume()` ends a pause early. `stats()` (jobs by state, the age of
+  the oldest job due, the pauses), `failed({ limit, after })` and `retryFailed(id)` read the outbox
+  and the memory queue, so a failed job does not go unseen until its retention drops it.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

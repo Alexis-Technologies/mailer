@@ -512,6 +512,23 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
  */
 export type MailQueueRetainData = 'all' | 'failed' | 'none';
 
+/** What a store of jobs holds. */
+export interface MailQueueStats {
+  /** Due now. */
+  readonly ready: number;
+  /** Not due yet: scheduled, or waiting to be retried. */
+  readonly delayed: number;
+  readonly active: number;
+  readonly completed: number;
+  readonly failed: number;
+  /** How long the oldest job due has waited: the lag of the workers. */
+  readonly oldestReadyMilliseconds?: number;
+  /** Until when the whole queue is paused. */
+  readonly pausedUntil?: number;
+  /** The tenants whose jobs are paused, and until when. */
+  readonly pausedTenants?: readonly { readonly tenantId: string; readonly until: number }[];
+}
+
 /** The queue in memory. */
 export interface MemoryQueue extends QueueDriver {
   /** The source the polling driver reads: what a store's outbox implements, in memory. */
@@ -524,6 +541,15 @@ export interface MemoryQueue extends QueueDriver {
   wake(): void;
   /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
   resume(scope?: { readonly tenantId?: string }): Promise<void>;
+  stats(): MailQueueStats;
+  /** The failed jobs, by id, a page of `limit` (100) after `after`. */
+  failed(options?: { readonly limit?: number; readonly after?: string }): readonly MemoryQueueJob[];
+  /**
+   * A failed job back to ready, its attempts anew: false when it is not a
+   * failed job.
+   * @throws {TypeError} If its data was dropped (`retainData`).
+   */
+  retryFailed(id: string): boolean;
 }
 
 /**

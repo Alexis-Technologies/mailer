@@ -640,3 +640,45 @@ test('Queue: a retry of a tenant’s scope pauses that tenant’s jobs, not the 
   await consumer.close();
   assert.deepStrictEqual(runs.toSorted(), ['a1', 'a1', 'a2', 'b1']);
 });
+
+test('Queue: the memory queue tells what it holds, lists its failed jobs and retries one', async () => {
+  const clock = manualClock(10_000);
+  const queue = createMemoryQueue({ now: clock.now });
+  await queue.enqueue(requestOf('r1', { enqueuedAt: 4000 }));
+  await queue.enqueue(requestOf('later', { availableAt: 99_999 }));
+  for (const id of ['f2', 'f1', 'f3']) {
+    await queue.enqueue(requestOf(id, { enqueuedAt: 9000, priority: 'high' }));
+  }
+  for (let index = 0; index < 3; index++) {
+    const { lease } = await queue.source.reserve(1000);
+    await queue.source.fail(lease, { code: 'x.rejected', reason: 'no' });
+  }
+  await queue.source.pause(20_000, { tenantId: 'acme' });
+  const stats = queue.stats();
+  assert.deepStrictEqual(
+    [stats.ready, stats.delayed, stats.active, stats.completed, stats.failed],
+    [1, 1, 0, 0, 3],
+  );
+  assert.strictEqual(stats.oldestReadyMilliseconds, 6000);
+  assert.deepStrictEqual(stats.pausedTenants, [{ tenantId: 'acme', until: 20_000 }]);
+  // In the order of their ids, a page at a time.
+  assert.deepStrictEqual(
+    queue.failed({ limit: 2 }).map((job) => job.id),
+    ['f1', 'f2'],
+  );
+  assert.deepStrictEqual(
+    queue.failed({ after: 'f2' }).map((job) => job.id),
+    ['f3'],
+  );
+  assert.strictEqual(queue.retryFailed('f1'), true);
+  assert.strictEqual(queue.retryFailed('f1'), false);
+  assert.strictEqual(queue.retryFailed('r1'), false);
+  const again = queue.get('f1');
+  assert.deepStrictEqual([again.state, again.attempt, again.failure], ['waiting', 0, undefined]);
+  // A job whose data was dropped cannot go again.
+  const none = createMemoryQueue({ now: clock.now, retainData: 'none' });
+  await none.enqueue(requestOf('x'));
+  await none.source.fail((await none.source.reserve(1000)).lease, { code: 'x', reason: 'y' });
+  assert.throws(() => none.retryFailed('x'), /keeps no data/);
+  assert.throws(() => queue.failed({ limit: 0 }), /limit/);
+});

@@ -261,7 +261,8 @@ per process unless given a shared store (see
 ## The memory queue and the polling driver
 
 `createMemoryQueue()` is a queue in memory for tests and a single process,
-with `list()`, `get(id)`, `drain()` and `wake()`, and `now` and `sleep` for a
+with `list()`, `get(id)`, `drain()`, `wake()`, and `stats()`, `failed()` and
+`retryFailed(id)` as the outbox has them, and `now` and `sleep` for a
 clock of the tests. It is the polling driver over a source in memory:
 `createPollingDriver(source)` makes a driver of any `QueueSource`, a store that
 lends its jobs (`reserve`, `extend`, `ack`, `retry`, `fail`, `release`), such

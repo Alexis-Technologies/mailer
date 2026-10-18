@@ -54,6 +54,10 @@ A job BullMQ fails itself, which the handler never settled (stalled more than
 sink as `delivery_unknown` (code `queue.lost`): its run may have sent it before
 it stalled.
 
+Its jobs by state, the failed ones and a retry of one by hand are BullMQ's own
+(`queue.getJobCounts()`, `queue.getFailed()`, `job.retry()`), and a dashboard
+such as Bull Board reads them.
+
 ## The workers it makes
 
 `queue.createWorker()` makes a BullMQ `Worker` with your `workerOptions`

@@ -205,19 +205,30 @@ const fakeCollection = (options = {}) => {
     find(filter, opts = {}) {
       calls.push(['find', filter, opts]);
       let sort;
+      let limit = Infinity;
       const cursor = {
         sort(spec) {
           sort = spec;
+          return cursor;
+        },
+        limit(count) {
+          limit = count;
           return cursor;
         },
         async toArray() {
           return sortBy(
             [...documents.values()].filter((document) => matches(document, filter)),
             sort,
-          ).map(clone);
+          )
+            .slice(0, limit)
+            .map(clone);
         },
       };
       return cursor;
+    },
+    async countDocuments(filter = {}) {
+      calls.push(['countDocuments', filter]);
+      return [...documents.values()].filter((document) => matches(document, filter)).length;
     },
     async bulkWrite(operations, opts = {}) {
       calls.push(['bulkWrite', operations.length, opts]);

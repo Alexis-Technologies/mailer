@@ -296,3 +296,23 @@ test(
     assert.equal(transport.calls.length, 1);
   },
 );
+
+test(
+  'MongoDB (replica set): the outbox tells what it holds, and retries a failed job',
+  { skip },
+  async (t) => {
+    const { outbox, queue } = await setup(t);
+    const { id } = await queue.enqueue(job());
+    await queue.enqueue(job({ scheduledAt: new Date(Date.now() + 60_000) }));
+    const { lease } = await outbox.source.reserve(1000);
+    await outbox.source.fail(lease, { code: 'x.rejected', reason: 'no' });
+    const stats = await outbox.stats();
+    assert.deepEqual([stats.ready, stats.delayed, stats.failed], [0, 1, 1]);
+    assert.deepEqual(
+      (await outbox.failed()).map((failed) => failed.id),
+      [id],
+    );
+    assert.equal(await outbox.retryFailed(id), true);
+    assert.equal((await outbox.stats()).ready, 1);
+  },
+);
