@@ -12,7 +12,7 @@ const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
 const { WeightedStrategy } = require('./strategies/weighted-strategy.js');
 const { PriorityStrategy } = require('./strategies/priority-strategy.js');
 const { SelectorStrategy } = require('./strategies/selector-strategy.js');
-const { timerMs } = require('../internal/sleep.js');
+const { isAbortError, isCallerAbort, timerMs } = require('../internal/sleep.js');
 
 /**
  * Pool transport that combines multiple transports with various load balancing
@@ -449,10 +449,6 @@ const createAbortError = () => {
   return new DOMException('The operation was aborted.', 'AbortError');
 };
 
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
 // Appends the structured errors of a failed receipt, or ones made from its
 // messages, each naming the transport.
 const appendReceiptErrors = (target, receipt, provider) => {
@@ -545,10 +541,6 @@ const isFailedReceipt = (value) => {
     value.successful === false &&
     Array.isArray(value.errorMessages)
   );
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
 };
 
 // A rejection of the message itself, as opposed to one of the transport

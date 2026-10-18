@@ -16,7 +16,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, isAbortOf, verifyWrapped } = require('../internal/decorator.js');
+const { disposeOf, isCallerAbort, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createBreakerConfig } = require('./config.js');
@@ -239,7 +239,7 @@ class CircuitBreakerTransport {
   }
 
   #thrown(error, signal, entry) {
-    if (isAbortOf(error, signal)) {
+    if (isCallerAbort(error, signal)) {
       // The caller gave up: nothing is learned of the provider.
       if (entry.probe && entry.period === this.#period) this.#probing = false;
       return;

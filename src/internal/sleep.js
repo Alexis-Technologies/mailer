@@ -2,15 +2,7 @@
 // five ways, some deaf to the AbortSignal or rejecting with an error of their
 // own instead of its reason.
 
-/**
- * The reason of an aborted signal, or an `AbortError` when it has none.
- *
- * @param signal The aborted signal.
- * @returns The value to reject or throw with.
- * @internal
- */
-const abortReason = (signal) =>
-  signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+const { abortReason, isAbortError, isCallerAbort } = require('./abort.js');
 
 /**
  * Waits, and stops waiting when the signal aborts, rejecting with its reason.
@@ -52,4 +44,4 @@ const MAX_TIMER_MS = 2_147_483_647;
  */
 const timerMs = (milliseconds) => (milliseconds > MAX_TIMER_MS ? MAX_TIMER_MS : milliseconds);
 
-module.exports = { abortReason, sleep, timerMs };
+module.exports = { abortReason, isAbortError, isCallerAbort, sleep, timerMs };

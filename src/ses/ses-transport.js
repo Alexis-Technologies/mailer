@@ -12,6 +12,7 @@ const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
 const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 const { verifyByRequest } = require('../internal/verify.js');
+const { isCallerAbort } = require('../internal/sleep.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -303,14 +304,6 @@ const createSesFailure = (message, error) => {
     category,
     retryable,
   });
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
 };
 
 module.exports = { SesTransport };

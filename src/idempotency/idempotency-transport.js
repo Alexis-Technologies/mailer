@@ -16,7 +16,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, isAbortOf, messageOf, verifyWrapped } = require('../internal/decorator.js');
+const { disposeOf, isCallerAbort, messageOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { gatedSendMany } = require('../internal/gate.js');
@@ -256,7 +256,7 @@ class IdempotencyTransport {
   // frees it.
   async #thrown(entry, error, signal) {
     if (entry.key === undefined) return;
-    if (isAbortOf(error, signal)) {
+    if (isCallerAbort(error, signal)) {
       const receipt = createFailedReceipt(
         'The send was aborted after it began; whether the message went is not known.',
         {

@@ -12,6 +12,7 @@ const { isRawTransport, isVerifiableTransport } = require('../core/transport.js'
 const { refuseRaw } = require('../internal/capabilities.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
+const { abortReason } = require('../internal/sleep.js');
 
 /**
  * Transport decorator that retries transient delivery failures.
@@ -593,12 +594,12 @@ const toAsyncIterator = (values) => {
 };
 
 const raceWithAbort = (promise, signal) => {
-  if (signal.aborted) return Promise.reject(getAbortReason(signal));
+  if (signal.aborted) return Promise.reject(abortReason(signal));
 
   return new Promise((resolve, reject) => {
     const abort = () => {
       cleanup();
-      reject(getAbortReason(signal));
+      reject(abortReason(signal));
     };
     const cleanup = () => {
       signal.removeEventListener('abort', abort);
@@ -616,10 +617,6 @@ const raceWithAbort = (promise, signal) => {
       },
     );
   });
-};
-
-const getAbortReason = (signal) => {
-  return signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 };
 
 const toReceiptError = (value) => {

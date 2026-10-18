@@ -30,7 +30,7 @@ const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
-const { abortReason, timerMs } = require('../internal/sleep.js');
+const { abortReason, isCallerAbort, timerMs } = require('../internal/sleep.js');
 const { Fifo } = require('../internal/gate.js');
 const { composeMessage } = require('../mime/index.js');
 const { createSendmailConfig } = require('./config.js');
@@ -55,9 +55,6 @@ const EXIT_STATUSES = new Map([
   [126, { category: 'configuration', retryable: false }],
   [127, { category: 'configuration', retryable: false }],
 ]);
-
-const isCallerAbort = (error, signal) =>
-  signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
 
 const failureOf = (error) => {
   const refusal = refusalFailure('sendmail', error);

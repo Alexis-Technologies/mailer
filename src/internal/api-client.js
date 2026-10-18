@@ -11,6 +11,7 @@ const {
 const { readText } = require('./body.js');
 const { isDeliveryUnknown } = require('./delivery-unknown.js');
 const { isRetryableFailure, requestWithRetry } = require('./http.js');
+const { isCallerAbort } = require('./abort.js');
 const { certificateFailure, refusalFailure } = require('./refusal.js');
 const { createLog } = require('./log.js');
 
@@ -268,14 +269,6 @@ const parseAnswer = (text, invalid) => {
  */
 const truncateErrorText = (text) =>
   text.length > MAX_ERROR_TEXT ? `${text.slice(0, MAX_ERROR_TEXT)}...` : text;
-
-/**
- * Whether an error is the abort of the caller's own signal.
- *
- * @internal
- */
-const isCallerAbort = (error, signal) =>
-  signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
 
 module.exports = {
   ProviderApiError,

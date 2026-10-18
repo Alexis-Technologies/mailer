@@ -6,10 +6,8 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
-const { abortReason, sleep, timerMs } = require('./sleep.js');
+const { abortReason, isAbortError, sleep, timerMs } = require('./sleep.js');
 const { redactAddresses } = require('./redact-addresses.js');
-
-const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
 
 /**
  * The delay before retry `attempt` (from 0): one second, doubled each time.

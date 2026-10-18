@@ -3,6 +3,7 @@
 // and of what was thrown.
 
 const { isVerifiableTransport } = require('../core/transport.js');
+const { isCallerAbort } = require('./abort.js');
 
 /**
  * Disposes of a transport that supports disposal, asynchronous or not.
@@ -26,18 +27,10 @@ const verifyWrapped = async (transport, options) => {
 };
 
 /**
- * Whether an error is the abort of the caller's signal.
- *
- * @internal
- */
-const isAbortOf = (error, signal) =>
-  signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
-
-/**
  * The text of what was thrown.
  *
  * @internal
  */
 const messageOf = (error) => (error instanceof Error ? error.message : String(error));
 
-module.exports = { disposeOf, isAbortOf, messageOf, verifyWrapped };
+module.exports = { disposeOf, isCallerAbort, messageOf, verifyWrapped };
