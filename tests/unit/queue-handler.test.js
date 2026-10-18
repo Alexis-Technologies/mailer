@@ -531,3 +531,26 @@ test('Queue: the handler checks its options', () => {
   }
   assert.throws(() => createMailJobHandler(), /needs a transport/);
 });
+
+test('Queue: a job whose runs keep ending unsettled is given up, unsent', async () => {
+  const { handler, audit, transport } = handlerOf();
+  const allowed = await run(handler, jobOf({}, { redelivered: true, redeliveries: 3 }));
+  assert.strictEqual(allowed.type, 'ack');
+  const poison = await run(
+    handler,
+    jobOf({ idempotencyKey: 'p' }, { redelivered: true, redeliveries: 4 }),
+  );
+  assert.deepStrictEqual([poison.type, poison.code], ['fail', 'queue.redelivery_exhausted']);
+  assert.strictEqual(transport.calls.length, 1);
+  const last = audit.events.at(-1);
+  assert.strictEqual(last.state, 'delivery_unknown');
+  assert.strictEqual(last.error.code, 'queue.redelivery_exhausted');
+  // A source that counts nothing is never given up for it.
+  const { handler: strict } = handlerOf({ maxRedeliveries: 0 });
+  assert.strictEqual((await run(strict, jobOf({ idempotencyKey: 'q' }))).type, 'ack');
+  const once = await run(strict, jobOf({ idempotencyKey: 'r' }, { redeliveries: 1 }));
+  assert.strictEqual(once.code, 'queue.redelivery_exhausted');
+  for (const maxRedeliveries of [-1, 1.5, '3']) {
+    assert.throws(() => handlerOf({ maxRedeliveries }), /maxRedeliveries must be a whole number/);
+  }
+});

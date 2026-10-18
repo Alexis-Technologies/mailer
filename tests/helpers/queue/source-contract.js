@@ -124,6 +124,7 @@ const sourceContract = (name, makeSource, options = {}) => {
   contract('a lease that runs out lends the job again, redelivered', async (source, clock) => {
     await source.enqueue(requestOf('a'));
     const lost = (await source.reserve(LEASE)).lease;
+    assert.strictEqual(lost.job.redeliveries, 0);
     clock.advance(LEASE / 2);
     assert.strictEqual(await source.extend(lost, LEASE), true);
     clock.advance(LEASE / 2 + 1);
@@ -136,6 +137,28 @@ const sourceContract = (name, makeSource, options = {}) => {
     assert.strictEqual(again.job.redelivered, true);
     assert.notStrictEqual(again.token, lost.token);
   });
+
+  contract(
+    'the runs that end unsettled are counted, and never counted down',
+    async (source, clock) => {
+      await source.enqueue(requestOf('poison'));
+      for (let run = 0; run < 3; run++) {
+        const { lease } = await source.reserve(LEASE);
+        assert.strictEqual(lease.job.redeliveries, run);
+        // The attempt is run again: only the count of lost runs grows.
+        assert.strictEqual(lease.job.attempt, 1);
+        clock.advance(LEASE + 1);
+      }
+      const { lease } = await source.reserve(LEASE);
+      assert.strictEqual(lease.job.redeliveries, 3);
+      // A release or a retry counts nothing.
+      await source.release(lease);
+      const released = (await source.reserve(LEASE)).lease;
+      assert.strictEqual(released.job.redeliveries, 3);
+      await source.retry(released, START, { code: 'x', reason: 'y' });
+      assert.strictEqual((await source.reserve(LEASE)).lease.job.redeliveries, 3);
+    },
+  );
 
   contract('a lease lost writes nothing over the next one', async (source, clock) => {
     await source.enqueue(requestOf('a'));

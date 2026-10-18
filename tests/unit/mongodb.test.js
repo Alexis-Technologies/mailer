@@ -110,6 +110,7 @@ test('MongoDB: jobs are lent by priority, then time, their attempts counted', as
     'maxAttempts',
     'enqueuedAt',
     'redelivered',
+    'redeliveries',
   ]);
   await source.ack(lease);
   assert.deepStrictEqual(await source.reserve(1000), {});

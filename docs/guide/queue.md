@@ -183,6 +183,7 @@ rotated, as another secret makes other ids and the same message another job.
 | a job past `expiresAt`, or whose retry would come after it | failed (`queue.expired`) | `failed` |
 | a job written by a later version of the worker | retried, for a worker of that version | `queued` |
 | the worker stops before the send | given back, its attempt not spent | — |
+| a job whose runs ended unsettled more than `maxRedeliveries` times (3): it kills or blocks its worker | failed before it renders (`queue.redelivery_exhausted`) | `delivery_unknown` |
 
 The backoff is exponential with full jitter: 30 seconds, doubled per attempt,
 an hour at most (`backoff`). A `Retry-After` is a minimum, with a little jitter

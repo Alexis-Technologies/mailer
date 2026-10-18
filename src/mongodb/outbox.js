@@ -33,6 +33,8 @@ const documentOfRequest = (request, now) => ({
   state: 'ready',
   attempts: 0,
   redelivered: false,
+  // The runs that did not finish, never counted down, unlike attempts.
+  redeliveries: 0,
   token: null,
   leaseUntil: null,
   updatedAt: new Date(now),
@@ -48,6 +50,7 @@ const jobOf = (document) => {
     maxAttempts: document.maxAttempts,
     enqueuedAt: document.enqueuedAt?.getTime?.(),
     redelivered: document.redelivered === true,
+    redeliveries: document.redeliveries ?? 0,
   };
 };
 
@@ -118,7 +121,7 @@ class MongoOutboxSource {
       { state: 'active', leaseUntil: { $lte: now } },
       {
         $set: { state: 'ready', token: null, leaseUntil: null, redelivered: true },
-        $inc: { attempts: -1 },
+        $inc: { attempts: -1, redeliveries: 1 },
       },
     );
     const token = randomUUID();

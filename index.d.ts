@@ -1518,6 +1518,12 @@ export interface QueueJob {
   readonly enqueuedAt?: number;
   /** A run of this attempt before did not finish: the worker stopped, or its lease ran out. */
   readonly redelivered: boolean;
+  /**
+   * How many runs of this job did not finish, never counted down: a job that
+   * kills its worker each time is told by it. Absent from a source that does
+   * not count them.
+   */
+  readonly redeliveries?: number;
 }
 /** What a handler makes of a run of a job. */
 export type QueueOutcome =

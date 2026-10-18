@@ -101,6 +101,7 @@ deduplication. A key of the store goes when its time passes.
   state: 'ready',        // 'active', 'completed', 'failed'
   attempts: 0, availableAt: ISODate(…), enqueuedAt: ISODate(…),
   token: null, leaseUntil: null, redelivered: false,
+  redeliveries: 0,       // the runs that ended unsettled, never counted down
   failure: { code, reason },   // of the last failed attempt
   result: { provider, providerMessageId },
   finishedAt: ISODate(…),

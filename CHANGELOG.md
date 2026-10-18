@@ -33,7 +33,10 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   `createMemoryQueue()` is one in memory for tests, its jobs on heaps so a reserve costs
   O(log n) however many wait, its `source` held to the same contract as the outbox. A source's
   settling writes give `false` when the token of the lease no longer holds the job, and the driver
-  logs `queue.settle_fenced`. The fields of a job of version 1 are fixed:
+  logs `queue.settle_fenced`. A source counts the runs of a job that end unsettled
+  (`redeliveries`, never counted down, BullMQ's `stalledCounter`), and the worker gives up a job
+  past `maxRedeliveries` (3) as `delivery_unknown`, so a job that kills or blocks its worker does
+  not take every worker down in turn for ever. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`) rather than fail its hash during a rolling deploy.
   `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends

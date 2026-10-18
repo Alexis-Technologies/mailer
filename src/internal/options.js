@@ -37,4 +37,21 @@ const checkPositiveInteger = (value, name) => {
   return value;
 };
 
-module.exports = { checkOptionalFunction, checkPositiveInteger, checkPositiveNumber };
+/**
+ * Checks a whole number of zero or more.
+ *
+ * @internal
+ */
+const checkNonNegativeInteger = (value, name) => {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new TypeError(`${name} must be a whole number of zero or more: ${String(value)}`);
+  }
+  return value;
+};
+
+module.exports = {
+  checkNonNegativeInteger,
+  checkOptionalFunction,
+  checkPositiveInteger,
+  checkPositiveNumber,
+};

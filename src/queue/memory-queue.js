@@ -111,6 +111,7 @@ class MemorySource {
       const { entry } = node;
       entry.attempt -= 1;
       entry.redelivered = true;
+      entry.redeliveries += 1;
       this.#active -= 1;
       this.#wait(entry);
     }
@@ -166,6 +167,7 @@ class MemorySource {
       state: 'waiting',
       attempt: 0,
       redelivered: false,
+      redeliveries: 0,
       token: undefined,
       leaseUntil: 0,
       version: 0,
@@ -204,6 +206,7 @@ class MemorySource {
       maxAttempts: next.maxAttempts,
       enqueuedAt: next.enqueuedAt,
       redelivered: next.redelivered,
+      redeliveries: next.redeliveries,
     };
     next.redelivered = false;
     this.#notify();

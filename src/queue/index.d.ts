@@ -335,6 +335,13 @@ export interface MailWorkerOptions {
   readonly operatorDelayMilliseconds?: number;
   /** `queue`: a rate limit makes the whole queue wait, where the driver can. @default 'job' */
   readonly rateLimitScope?: 'job' | 'queue';
+  /**
+   * The runs of a job that may end unsettled (its worker killed, its event
+   * loop blocked) before the job is given up as `delivery_unknown`
+   * (`queue.redelivery_exhausted`), so that one job cannot kill every worker
+   * in turn for ever. @default 3
+   */
+  readonly maxRedeliveries?: number;
   readonly logger?: Logger;
   readonly random?: () => number;
   readonly now?: () => number;

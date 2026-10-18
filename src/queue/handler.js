@@ -14,7 +14,11 @@ const { messageOf } = require('../internal/decorator.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { fingerprintOf } = require('../internal/fingerprint.js');
 const { createLog } = require('../internal/log.js');
-const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const {
+  checkNonNegativeInteger,
+  checkOptionalFunction,
+  checkPositiveInteger,
+} = require('../internal/options.js');
 const { isCallerAbort } = require('../internal/sleep.js');
 const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');
@@ -29,6 +33,9 @@ const DEFAULT_BACKOFF = Object.freeze({
   factor: 2,
 });
 const DEFAULT_OPERATOR_DELAY_MS = 5 * 60_000;
+// The runs of a job that may end without settling (its worker killed, its
+// event loop blocked) before the job is given up.
+const DEFAULT_MAX_REDELIVERIES = 3;
 // The errors of a template that fails again the same way.
 const TEMPLATE_CODES = new Set(['MAILER_TEMPLATE_NOT_FOUND', 'MAILER_TEMPLATE_RENDER']);
 // The jobs this worker cannot read yet: of a later version, or sealed for a
@@ -88,6 +95,10 @@ const createHandlerConfig = (options = {}) => {
       'operatorDelayMilliseconds',
     ),
     rateLimitScope,
+    maxRedeliveries: checkNonNegativeInteger(
+      options.maxRedeliveries ?? DEFAULT_MAX_REDELIVERIES,
+      'maxRedeliveries',
+    ),
     random: checkOptionalFunction(options.random, 'random') ?? Math.random,
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
     log: createLog(options.logger, { component: 'queue' }),
@@ -397,6 +408,17 @@ const isExpired = (run) =>
 
 const attempt = async (run) => {
   const { config, data, job, signal } = run;
+  // A job whose runs keep ending unsettled kills its worker or blocks it: it
+  // is given up before it renders, of unknown delivery, as one of those runs
+  // may have sent it.
+  if ((job.redeliveries ?? 0) > config.maxRedeliveries) {
+    return fail(
+      run,
+      'queue.redelivery_exhausted',
+      `${job.redeliveries} runs of the job ended unsettled, more than ${config.maxRedeliveries}.`,
+      { state: 'delivery_unknown', category: 'unknown' },
+    );
+  }
   if (config.checkJob !== undefined) {
     try {
       await config.checkJob(data, job);
@@ -466,7 +488,8 @@ const readJob = async (config, job) => {
  * which opens sealed jobs;
  * `resolveAttachment(ref, { job, attachment, signal })`;
  * `checkJob(data, job)`; `classify({ receipt, job })`; `backoff`,
- * `operatorDelayMilliseconds` (5 minutes), `rateLimitScope` ('job');
+ * `operatorDelayMilliseconds` (5 minutes), `rateLimitScope` ('job'),
+ * `maxRedeliveries` (3);
  * `logger`, `random`, `now`.
  * @returns The handler: `(job, signal) => Promise<QueueOutcome>`, which does
  * not throw.
@@ -488,7 +511,7 @@ const createMailJobHandler = (options) => {
     if (job.redelivered) {
       config.log.write(
         'warn',
-        () => ({ jobId: job.id, attempt: job.attempt }),
+        () => ({ jobId: job.id, attempt: job.attempt, redeliveries: job.redeliveries }),
         'queue.job.redelivered',
       );
     }

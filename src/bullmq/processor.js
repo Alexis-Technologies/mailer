@@ -15,6 +15,7 @@ const jobOf = (job) => ({
   maxAttempts: job.opts?.attempts ?? 1,
   enqueuedAt: job.timestamp,
   redelivered: (job.stalledCounter ?? 0) > 0,
+  redeliveries: job.stalledCounter ?? 0,
 });
 
 // A job given back, by the means its version of BullMQ has.

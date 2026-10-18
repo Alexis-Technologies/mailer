@@ -334,6 +334,7 @@ test('BullMQ: the processor gives the handler the run of the job and every signa
     maxAttempts: 1,
     enqueuedAt: 1000,
     redelivered: true,
+    redeliveries: 1,
   });
   bullmqSignal.abort('bullmq');
   assert.strictEqual(runs[0].signal.reason, 'bullmq');
