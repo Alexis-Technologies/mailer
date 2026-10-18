@@ -115,14 +115,17 @@ its own. Engines that have layouts of their own (Pug's `extends`, Nunjucks's
 and Liquid's blocks, Handlebars partial blocks, Eta's `layout()`) keep them.
 
 Every include, partial and layout an engine reads goes through the loader of
-the renderer:
+the renderer, by one rule, the same in every engine:
 
 - `/x` is read from the root of the loader;
-- `./x` and `../x` against the template it is written in;
+- `./x` and `../x` against the template it is written in, a partial of a
+  partial included, where EJS, Mustache and Pug would tell otherwise;
 - any other name from the root, then from each directory of `partials`;
-- the extensions of the engine are added when the name has none.
+- the extensions of the engine are tried when the name has none of them, then
+  the name as it is.
 
-A name that leads out of the root is not found.
+A name that leads out of the root is not found. React Email has no includes:
+its components import each other. MJML's are those of the engine inside it.
 
 ## Engines
 

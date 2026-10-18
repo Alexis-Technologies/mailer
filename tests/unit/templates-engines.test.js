@@ -957,6 +957,58 @@ test('Templates: React Email components are templates, each with its subject', a
   );
 });
 
+test('Templates: every engine reads the same tree of includes by one rule', async () => {
+  // A bare name from the root, then the partials; /x from the root; ./x and
+  // ../x against the template written in, a partial of a partial included;
+  // the extensions of the engine added. React Email has no includes: its
+  // components import each other; MJML's are those of the engine inside it.
+  const hbs = createHandlebarsEngine({ handlebars });
+  const cases = [
+    [createEjsEngine({ ejs }), '.ejs', (name) => `<%- include("${name}") %>`],
+    [hbs, '.hbs', (name) => `{{> "${name}"}}`],
+    [
+      createMjmlEngine({ mjml2html: (mjml) => ({ html: mjml, errors: [] }), engine: hbs }),
+      '.mjml.hbs',
+      (name) => `{{> "${name}"}}`,
+      '.hbs',
+    ],
+    [
+      createPugEngine({ pug }),
+      '.pug',
+      (name) => `include ${name}\n`,
+      '.pug',
+      (text) => `| ${text}\n`,
+    ],
+    [createLiquidEngine({ Liquid }), '.liquid', (name) => `{% render "${name}" %}`],
+    [createNunjucksEngine({ nunjucks }), '.njk', (name) => `{% include "${name}" %}`],
+    [createEtaEngine({ Eta }), '.eta', (name) => `<%~ include("${name}") %>`],
+    [createMustacheEngine({ mustache }), '.mustache', (name) => `{{> ${name}}}`],
+  ];
+  for (const [engine, main, include, extension = main, text = (value) => value] of cases) {
+    const templates = {
+      [`emails/welcome${main}`]: include('header') + include('/legal') + include('./parts/sign'),
+      [`partials/header${extension}`]: text('H'),
+      [`legal${extension}`]: text('L'),
+      [`emails/parts/sign${extension}`]: text('S') + include('./name') + include('../footer'),
+      [`emails/parts/name${extension}`]: text('N'),
+      [`emails/footer${extension}`]: text('F'),
+      [`emails/name${extension}`]: text('wrong'),
+      [`name${extension}`]: text('wrong'),
+      [`x/broken${main}`]: include('./parts/nope'),
+    };
+    const renderer = createTemplateRenderer({
+      engine,
+      loader: createMemoryLoader(templates),
+      partials: ['partials'],
+    });
+    const output = await renderer.render({ template: `emails/welcome${main}` });
+    assert.strictEqual(output.html.replace(/\s+/g, ''), 'HLSNF', engine.name);
+    const missing = await failureOf(renderer.render({ template: `x/broken${main}` }));
+    assert.ok(missing instanceof TemplateNotFoundError, engine.name);
+    assert.match(missing.template, /nope/, engine.name);
+  }
+});
+
 test('Templates: juice and css-inline inline the CSS and fetch nothing', async () => {
   const html =
     '<html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"><style>p{color:red}</style></head><body><p>x</p></body></html>';
