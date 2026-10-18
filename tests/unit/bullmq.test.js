@@ -495,3 +495,31 @@ test('BullMQ: a job BullMQ gives up itself is told to the audit as of unknown de
   assert.strictEqual(audit.events.length, 1);
   await consumer.close();
 });
+
+test('BullMQ: enqueueMany reads its jobs back many at once to tell duplicates', async () => {
+  const bullmq = fakeBullMQ();
+  const driver = createBullMQDriver({ bullmq, detectDuplicates: 'bulk' });
+  const [queue] = bullmq.queues;
+  let inFlight = 0;
+  let most = 0;
+  const getJob = queue.getJob.bind(queue);
+  queue.getJob = async (id) => {
+    inFlight++;
+    most = Math.max(most, inFlight);
+    await new Promise(setImmediate);
+    inFlight--;
+    return getJob(id);
+  };
+  await driver.enqueue(requestOf({ id: 'held' }));
+  const requests = [];
+  for (let index = 0; index < 40; index++) requests.push(requestOf({ id: `j${index}` }));
+  requests.push(requestOf({ id: 'held', enqueuedAt: 2000 }));
+  requests.push(requestOf({ id: 'plain', unique: false }));
+  const results = await driver.enqueueMany(requests);
+  assert.strictEqual(results.length, 42);
+  assert.deepStrictEqual(results[40], { id: 'held', duplicate: true, existingHash: 'h1' });
+  assert.deepStrictEqual(results[41], { id: 'plain', duplicate: false });
+  assert.strictEqual(results[0].duplicate, false);
+  // At most 32 at once, more than one.
+  assert.ok(most > 1 && most <= 32, String(most));
+});

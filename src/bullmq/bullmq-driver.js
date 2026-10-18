@@ -35,6 +35,8 @@ const RESERVED_WORKER_OPTIONS = new Set(['connection', 'prefix', 'concurrency', 
 // BullMQ's highest priority number, 2^21 - 1.
 const MAX_PRIORITY = 2_097_151;
 const DEFAULT_PRIORITIES = Object.freeze({ high: 1, normal: 2, low: 3 });
+// The jobs of a batch read back at once to tell its duplicates.
+const DUPLICATE_READS = 32;
 
 const checkReserved = (options, reserved, what) => {
   if (options === undefined) return {};
@@ -259,9 +261,22 @@ const createBullMQDriver = (options = {}) => {
         if (!request.unique) {
           results.push({ id: request.id, duplicate: false });
         } else if (config.detectDuplicates === 'bulk') {
-          results.push(await duplicateOf(queue, request));
+          results.push(undefined);
         } else {
           results.push({ id: request.id, duplicate: undefined });
+        }
+      }
+      // The jobs read back, so many at once rather than one round trip each.
+      for (let start = 0; start < requests.length; start += DUPLICATE_READS) {
+        const reads = [];
+        const end = Math.min(start + DUPLICATE_READS, requests.length);
+        for (let index = start; index < end; index++) {
+          if (results[index] === undefined) reads.push(duplicateOf(queue, requests[index]));
+        }
+        const answers = await Promise.all(reads);
+        let next = 0;
+        for (let index = start; index < end; index++) {
+          if (results[index] === undefined) results[index] = answers[next++];
         }
       }
       return results;
