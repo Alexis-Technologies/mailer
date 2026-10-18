@@ -2,6 +2,8 @@
 // option an engine keeps for itself, such as the file name its includes are
 // read by, is refused rather than accepted and never read.
 
+const { checkExtensions } = require('./environment.js');
+
 /**
  * Checks the options passed on to an engine, and gives a copy of them.
  *
@@ -64,15 +66,9 @@ const checkEscaping = (options, given, switches, engine) => {
  */
 const checkEngineExtensions = (extensions, defaults) => {
   if (extensions === undefined) return Object.freeze([...defaults]);
-  if (!Array.isArray(extensions) || extensions.length === 0) {
-    throw new TypeError('extensions must be a list such as [".hbs"].');
-  }
-  for (const extension of extensions) {
-    if (typeof extension !== 'string' || extension.length < 2 || extension[0] !== '.') {
-      throw new TypeError(`An extension starts with its dot, such as ".hbs": ${String(extension)}`);
-    }
-  }
-  return Object.freeze([...extensions]);
+  const checked = checkExtensions(extensions, 'extensions');
+  if (checked.length === 0) throw new TypeError('extensions must name one at least.');
+  return checked;
 };
 
 /**

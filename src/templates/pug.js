@@ -6,6 +6,7 @@
 // @nestjs-modules/mailer rendered the file again on each send with the
 // options of Pug mixed into them.
 
+const { missingTemplate } = require('./environment.js');
 const { TemplateNotFoundError } = require('./errors.js');
 const { checkEngineExtensions, checkEngineOptions, checkModule } = require('./options.js');
 
@@ -49,7 +50,7 @@ const createPugEngine = (options = {}) => {
           const name = nameOf(filename);
           const found = context.includes.readSync(name);
           if (found === undefined) {
-            throw new TemplateNotFoundError(name, [name], { from: context.name });
+            throw missingTemplate(name, context.name);
           }
           return found.source;
         },

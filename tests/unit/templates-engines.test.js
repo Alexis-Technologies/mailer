@@ -240,7 +240,8 @@ test('Templates: the EJS engine refuses what it sets itself', () => {
     assert.throws(() => createEjsEngine({ ejs, options: { [name]: 1 } }), new RegExp(name));
   }
   assert.throws(() => createEjsEngine({ ejs, options: 1 }), /must be an object/);
-  assert.throws(() => createEjsEngine({ ejs, extensions: [] }), /a list/);
+  assert.throws(() => createEjsEngine({ ejs, extensions: [] }), /name one at least/);
+  assert.throws(() => createEjsEngine({ ejs, extensions: '.ejs' }), /must be an array/);
   assert.throws(() => createEjsEngine({ ejs, extensions: ['ejs'] }), /starts with its dot/);
   assert.deepStrictEqual(createEjsEngine({ ejs, extensions: ['.html'] }).extensions, ['.html']);
 });

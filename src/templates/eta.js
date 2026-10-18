@@ -3,7 +3,7 @@
 // so `include()` and `layout()` read nothing from disk, a name relative to the
 // template it is written in; output is escaped, as Eta does by default.
 
-const { TemplateNotFoundError } = require('./errors.js');
+const { missingTemplate, perIncludes } = require('./environment.js');
 const {
   checkEngineExtensions,
   checkEngineOptions,
@@ -38,21 +38,17 @@ const createEtaEngine = (options = {}) => {
   const async = options.async ?? false;
   if (typeof async !== 'boolean') throw new TypeError('async must be a boolean.');
   const extensions = checkEngineExtensions(options.extensions, ['.eta']);
-  const instances = new WeakMap();
-  const instanceOf = (includes) => {
-    let eta = instances.get(includes);
-    if (eta !== undefined) return eta;
-    eta = new Eta({ ...given, cache: includes.cache, cacheFilepaths: false });
+  const instanceOf = perIncludes((includes) => {
+    const eta = new Eta({ ...given, cache: includes.cache, cacheFilepaths: false });
     eta.resolvePath = (template, resolveOptions) =>
       includes.lookupSync(template, resolveOptions?.filepath, extensions).name;
     eta.readFile = (name) => {
       const found = includes.readSync(name);
-      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      if (found === undefined) throw missingTemplate(name);
       return found.source;
     };
-    instances.set(includes, eta);
     return eta;
-  };
+  });
   return {
     name: 'eta',
     extensions,

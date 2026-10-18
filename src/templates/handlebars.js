@@ -13,6 +13,7 @@ const {
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { perIncludes } = require('./environment.js');
 
 const PARTIALS = new Set(['PartialStatement', 'PartialBlockStatement']);
 // The options of compile that turn off its escaping.
@@ -91,20 +92,13 @@ const createHandlebarsEngine = (options = {}) => {
   checkEscaping(options, given, UNESCAPED, 'handlebars');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.hbs', '.handlebars']);
-  // The environment of each renderer, keyed by its includes: a new one after
-  // clear(), and for each render without a cache.
-  const environments = new WeakMap();
-  const environmentOf = (includes) => {
-    let environment = environments.get(includes);
-    if (environment === undefined) {
-      const env = handlebars.create();
-      for (const name of Object.keys(helpers)) env.registerHelper(name, helpers[name]);
-      configure?.(env);
-      environment = { env, partials: new Map() };
-      environments.set(includes, environment);
-    }
-    return environment;
-  };
+  // The environment of each renderer.
+  const environmentOf = perIncludes(() => {
+    const env = handlebars.create();
+    for (const name of Object.keys(helpers)) env.registerHelper(name, helpers[name]);
+    configure?.(env);
+    return { env, partials: new Map() };
+  });
   // Compiles and registers a partial once per environment however many
   // templates name it at once, under the name of its template, and gives the
   // partials it names, which it does not wait for: a partial that names

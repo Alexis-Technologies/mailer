@@ -12,6 +12,7 @@ const {
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { missingTemplate, perIncludes } = require('./environment.js');
 
 const RESERVED = new Set([
   'root',
@@ -88,13 +89,13 @@ const fileSystemOf = (includes, roots, extname) => {
     async readFile(name) {
       if (isMissing(name)) throw missing(name);
       const found = await includes.read(name);
-      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      if (found === undefined) throw missingTemplate(name);
       return found.source;
     },
     readFileSync(name) {
       if (isMissing(name)) throw missing(name);
       const found = includes.readSync(name);
-      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      if (found === undefined) throw missingTemplate(name);
       return found.source;
     },
     resolve,
@@ -131,12 +132,9 @@ const createLiquidEngine = (options = {}) => {
   const filters = checkFunctions(options.filters, 'filters');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.liquid']);
-  const instances = new WeakMap();
-  const instanceOf = (includes) => {
-    let liquid = instances.get(includes);
-    if (liquid !== undefined) return liquid;
+  const instanceOf = perIncludes((includes) => {
     const roots = ['', ...includes.partials];
-    liquid = new Liquid({
+    const liquid = new Liquid({
       outputEscape: 'escape',
       ownPropertyOnly: true,
       ...LIMITS,
@@ -151,9 +149,8 @@ const createLiquidEngine = (options = {}) => {
     });
     for (const name of Object.keys(filters)) liquid.registerFilter(name, filters[name]);
     configure?.(liquid);
-    instances.set(includes, liquid);
     return liquid;
-  };
+  });
   return {
     name: 'liquid',
     extensions,

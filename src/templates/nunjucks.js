@@ -13,6 +13,7 @@ const {
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { perIncludes } = require('./environment.js');
 
 const isRelative = (name) => name.startsWith('./') || name.startsWith('../');
 
@@ -67,10 +68,7 @@ const createNunjucksEngine = (options = {}) => {
   const filters = checkFunctions(options.filters, 'filters');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.njk', '.nunjucks']);
-  const environments = new WeakMap();
-  const environmentOf = (includes) => {
-    let state = environments.get(includes);
-    if (state !== undefined) return state;
+  const environmentOf = perIncludes((includes) => {
     // The lookups that found nothing, by name: Nunjucks is told there is no
     // such template, which it fails on itself unless `ignore missing`, and
     // its error names the template, so each render finds its own.
@@ -104,10 +102,8 @@ const createNunjucksEngine = (options = {}) => {
     const env = new nunjucks.Environment([loader], { autoescape: true, dev: true, ...given });
     for (const name of Object.keys(filters)) env.addFilter(name, filters[name]);
     configure?.(env);
-    state = { env, failures };
-    environments.set(includes, state);
-    return state;
-  };
+    return { env, failures };
+  });
   return {
     name: 'nunjucks',
     extensions,

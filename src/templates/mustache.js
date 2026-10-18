@@ -5,6 +5,7 @@
 // where Mustache renders it as nothing.
 
 const { createCache } = require('./cache.js');
+const { perIncludes } = require('./environment.js');
 const { checkEngineExtensions, checkModule } = require('./options.js');
 
 // The parsed templates a writer keeps.
@@ -39,21 +40,16 @@ const createMustacheEngine = (options = {}) => {
   );
   const tags = checkTags(options.tags);
   const extensions = checkEngineExtensions(options.extensions, ['.mustache']);
-  const writers = new WeakMap();
-  const writerOf = (includes) => {
-    let writer = writers.get(includes);
-    if (writer === undefined) {
-      writer = new mustache.Writer();
-      const parsed = createCache(includes.cache ? MAX_PARSED : 0);
-      // Mustache calls set and get; the renderer forgets a writer, not its cache.
-      writer.templateCache = {
-        set: (key, value) => parsed.set(key, value),
-        get: (key) => parsed.get(key),
-      };
-      writers.set(includes, writer);
-    }
+  const writerOf = perIncludes((includes) => {
+    const writer = new mustache.Writer();
+    const parsed = createCache(includes.cache ? MAX_PARSED : 0);
+    // Mustache calls set and get; the renderer forgets a writer, not its cache.
+    writer.templateCache = {
+      set: (key, value) => parsed.set(key, value),
+      get: (key) => parsed.get(key),
+    };
     return writer;
-  };
+  });
   return {
     name: 'mustache',
     extensions,

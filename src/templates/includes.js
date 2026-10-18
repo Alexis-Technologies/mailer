@@ -5,6 +5,7 @@
 const { isTemplateError, TemplateLoadError, TemplateNotFoundError } = require('./errors.js');
 const { checkTemplateName, isTemplateName, notTemplateName } = require('./loader.js');
 const { createCache, memoize } = require('./cache.js');
+const { hasExtension } = require('./environment.js');
 
 // The segments of a name, `.` dropped and `..` taking the one before; undefined
 // when `..` leads out of the root.
@@ -45,13 +46,6 @@ const joinName = (from, include) => {
   return normalize(`${directoryOf(from)}/${include}`.split('/'));
 };
 
-const hasAnyExtension = (name, extensions) => {
-  for (const extension of extensions) {
-    if (extension !== '' && name.endsWith(extension)) return true;
-  }
-  return false;
-};
-
 // The names an include may be: as joined, then under each partials directory
 // for a bare name; each with an extension of the engine unless it has one,
 // then as it is.
@@ -68,7 +62,7 @@ const candidatesOf = (include, from, extensions, partials) => {
   }
   const names = [];
   for (const base of bases) {
-    if (hasAnyExtension(base, extensions)) {
+    if (hasExtension(base, extensions)) {
       names.push(base);
       continue;
     }

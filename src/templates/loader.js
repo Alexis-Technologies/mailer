@@ -8,6 +8,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { isWithin } = require('../internal/path.js');
 const { checkPositiveInteger } = require('../internal/options.js');
+const { checkExtensions, hasExtension } = require('./environment.js');
 
 const NAME = /^[A-Za-z0-9_@-][A-Za-z0-9_.@/-]*$/;
 const MAX_NAME_LENGTH = 256;
@@ -55,27 +56,6 @@ const notTemplateName = (name, what) =>
 const checkTemplateName = (name, what) => {
   if (!isTemplateName(name)) throw notTemplateName(name, what);
   return name;
-};
-
-const checkExtensions = (extensions, what) => {
-  if (extensions === undefined) return undefined;
-  if (!Array.isArray(extensions)) throw new TypeError(`${what} must be an array.`);
-  const set = new Set();
-  for (const extension of extensions) {
-    if (typeof extension !== 'string' || extension.length < 2 || extension[0] !== '.') {
-      throw new TypeError(`${what} holds extensions with their dot, such as ".hbs".`);
-    }
-    set.add(extension);
-  }
-  return set;
-};
-
-const hasExtension = (name, extensions) => {
-  if (extensions === undefined) return true;
-  for (const extension of extensions) {
-    if (name.endsWith(extension)) return true;
-  }
-  return false;
 };
 
 const isMissing = (error) => error?.code === 'ENOENT' || error?.code === 'ENOTDIR';
@@ -139,6 +119,82 @@ const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
 // directory, which Windows does not open.
 const isNoFile = (error) => isMissing(error) || error?.code === 'EISDIR';
 
+// A real path under the root of the files, or a refusal.
+const checkWithin = (files, name, real) => {
+  if (!isWithin(real, files.root)) {
+    throw new RangeError(`The template ${JSON.stringify(name)} leads out of ${files.dir}.`);
+  }
+};
+
+const tooLong = (files, name) =>
+  new RangeError(`The template ${JSON.stringify(name)} holds more than ${files.maxBytes} bytes.`);
+
+const sourceOf = (files, name, real, bytes) => {
+  if (bytes.length > files.maxBytes) throw tooLong(files, name);
+  return { name, source: stripBom(bytes.toString('utf8')), path: real };
+};
+
+const accepts = (files, name) =>
+  isTemplateName(name) && (files.extensions === undefined || hasExtension(name, files.extensions));
+
+const loadFile = async (files, name, signal) => {
+  if (!accepts(files, name)) return undefined;
+  signal?.throwIfAborted();
+  files.root ??= await fsp.realpath(files.dir);
+  let real;
+  try {
+    real = await fsp.realpath(path.join(files.root, name));
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  checkWithin(files, name, real);
+  signal?.throwIfAborted();
+  let handle;
+  try {
+    handle = await fsp.open(real, OPEN_FLAGS);
+  } catch (error) {
+    if (isNoFile(error)) return undefined;
+    throw error;
+  }
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile()) return undefined;
+    if (stats.size > files.maxBytes) throw tooLong(files, name);
+    return sourceOf(files, name, real, await readAtMost(handle, stats.size, files.maxBytes + 1));
+  } finally {
+    await handle.close();
+  }
+};
+
+const loadFileSync = (files, name) => {
+  if (!accepts(files, name)) return undefined;
+  files.root ??= fs.realpathSync(files.dir);
+  let real;
+  try {
+    real = fs.realpathSync(path.join(files.root, name));
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+  checkWithin(files, name, real);
+  let fd;
+  try {
+    fd = fs.openSync(real, OPEN_FLAGS);
+  } catch (error) {
+    if (isNoFile(error)) return undefined;
+    throw error;
+  }
+  try {
+    const stats = fs.fstatSync(fd);
+    if (!stats.isFile()) return undefined;
+    if (stats.size > files.maxBytes) throw tooLong(files, name);
+    return sourceOf(files, name, real, readAtMostSync(fd, stats.size, files.maxBytes + 1));
+  } finally {
+    fs.closeSync(fd);
+  }
+};
+
 /**
  * Makes a loader of the templates in a directory.
  *
@@ -152,81 +208,20 @@ const createFileLoader = (options = {}) => {
   if (typeof dir !== 'string' || dir === '') {
     throw new TypeError('createFileLoader needs dir, the directory of the templates.');
   }
-  const extensions = checkExtensions(options.extensions, 'extensions');
-  const maxBytes = checkPositiveInteger(options.maxBytes ?? DEFAULT_MAX_BYTES, 'maxBytes');
-  // The root is resolved when it is first read, so that a loader can be made
-  // before its directory exists, and then kept.
-  let root;
-  const checkWithin = (name, real) => {
-    if (!isWithin(real, root)) {
-      throw new RangeError(`The template ${JSON.stringify(name)} leads out of ${dir}.`);
-    }
+  const files = {
+    dir,
+    extensions:
+      options.extensions === undefined
+        ? undefined
+        : checkExtensions(options.extensions, 'extensions'),
+    maxBytes: checkPositiveInteger(options.maxBytes ?? DEFAULT_MAX_BYTES, 'maxBytes'),
+    // The root is resolved when it is first read, so that a loader can be
+    // made before its directory exists, and then kept.
+    root: undefined,
   };
-  const tooLong = (name) =>
-    new RangeError(`The template ${JSON.stringify(name)} holds more than ${maxBytes} bytes.`);
-  const sourceOf = (name, real, bytes) => {
-    if (bytes.length > maxBytes) throw tooLong(name);
-    return { name, source: stripBom(bytes.toString('utf8')), path: real };
-  };
-  const accepts = (name) => isTemplateName(name) && hasExtension(name, extensions);
   return {
-    async load(name, loadOptions) {
-      if (!accepts(name)) return undefined;
-      const signal = loadOptions?.signal;
-      signal?.throwIfAborted();
-      root ??= await fsp.realpath(dir);
-      let real;
-      try {
-        real = await fsp.realpath(path.join(root, name));
-      } catch (error) {
-        if (isMissing(error)) return undefined;
-        throw error;
-      }
-      checkWithin(name, real);
-      signal?.throwIfAborted();
-      let handle;
-      try {
-        handle = await fsp.open(real, OPEN_FLAGS);
-      } catch (error) {
-        if (isNoFile(error)) return undefined;
-        throw error;
-      }
-      try {
-        const stats = await handle.stat();
-        if (!stats.isFile()) return undefined;
-        if (stats.size > maxBytes) throw tooLong(name);
-        return sourceOf(name, real, await readAtMost(handle, stats.size, maxBytes + 1));
-      } finally {
-        await handle.close();
-      }
-    },
-    loadSync(name) {
-      if (!accepts(name)) return undefined;
-      root ??= fs.realpathSync(dir);
-      let real;
-      try {
-        real = fs.realpathSync(path.join(root, name));
-      } catch (error) {
-        if (isMissing(error)) return undefined;
-        throw error;
-      }
-      checkWithin(name, real);
-      let fd;
-      try {
-        fd = fs.openSync(real, OPEN_FLAGS);
-      } catch (error) {
-        if (isNoFile(error)) return undefined;
-        throw error;
-      }
-      try {
-        const stats = fs.fstatSync(fd);
-        if (!stats.isFile()) return undefined;
-        if (stats.size > maxBytes) throw tooLong(name);
-        return sourceOf(name, real, readAtMostSync(fd, stats.size, maxBytes + 1));
-      } finally {
-        fs.closeSync(fd);
-      }
-    },
+    load: (name, loadOptions) => loadFile(files, name, loadOptions?.signal),
+    loadSync: (name) => loadFileSync(files, name),
   };
 };
 
