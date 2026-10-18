@@ -42,6 +42,8 @@ const createReactEmailEngine = (options = {}) => {
   return {
     name: 'react-email',
     extensions: [],
+    // Its HTML, text and subject at once: a renderer with a layout refuses it.
+    parts: true,
     loader: createMemoryLoader(entries),
     compile(entry, context) {
       if (context.part !== 'html') {

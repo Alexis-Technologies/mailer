@@ -1008,6 +1008,8 @@ test('Templates: React Email components are templates, each with its subject', a
     },
   });
   const renderer = createTemplateRenderer({ engine });
+  assert.strictEqual(engine.parts, true);
+  assert.throws(() => createTemplateRenderer({ engine, layout: 'main' }), /no layout wraps/);
   const en = await renderer.render({ template: 'welcome', context: { name: 'Ada' } });
   assert.match(en.html, /<p>Hi Ada<\/p>/);
   assert.strictEqual(en.text, 'Hi Ada');

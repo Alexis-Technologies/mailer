@@ -118,6 +118,8 @@ pass unnoticed. `frontMatter: false` reads none.
 context and `body`, the HTML of the template, raw. A layout has no layout of
 its own. Engines that have layouts of their own (Pug's `extends`, Nunjucks's
 and Liquid's blocks, Handlebars partial blocks, Eta's `layout()`) keep them.
+A React Email template gives its HTML whole, so a renderer with a `layout`
+refuses the React Email engine, rather than send its messages without it.
 
 Every include, partial and layout an engine reads goes through the loader of
 the renderer, by one rule, the same in every engine:

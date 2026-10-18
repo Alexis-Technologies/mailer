@@ -195,6 +195,11 @@ export interface TemplateEngine<TSource = string> {
   /** The templates of an engine whose templates are code (React Email), when the renderer has no loader. */
   readonly loader?: TemplateLoader<TSource>;
   /**
+   * Whether its templates give their parts at once, as React Email's do: a
+   * renderer with a `layout` refuses it, as no layout wraps them.
+   */
+  readonly parts?: boolean;
+  /**
    * Forgets what the engine keeps for these includes outside them, such as
    * EJS's entries in `ejs.cache`: called by the renderer's `clear()`.
    */
@@ -334,7 +339,8 @@ export interface TemplateRenderer<
  *   template: 'reset-password', context: { url }, locale: 'uk',
  * });
  * ```
- * @throws {TypeError} If an option is invalid.
+ * @throws {TypeError} If an option is invalid, or a layout is given with an
+ * engine that gives its parts at once.
  */
 export declare function createTemplateRenderer<
   TInput extends TemplateInput<any> = TemplateInput,

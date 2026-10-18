@@ -125,6 +125,7 @@ createMessage({
   content: fields.content,
 });
 createTemplateRenderer({ engines: [hbs, react], loader: createMemoryLoader({ welcome: '<p/>' }) });
+expectType<boolean | undefined>(react.parts);
 expectError(templates.render({ context: {} }));
 
 // Typed templates: each name with its own context.

@@ -138,7 +138,19 @@ const createRendererConfig = (options) => {
   const partials = options.partials ?? [];
   if (!Array.isArray(partials)) throw new TypeError('partials must be an array of names.');
   for (const directory of partials) checkTemplateName(directory, 'A directory of partials');
-  if (options.layout !== undefined) checkTemplateName(options.layout, 'layout');
+  if (options.layout !== undefined) {
+    checkTemplateName(options.layout, 'layout');
+    // A layout wraps the HTML a template gives as text: one whose engine
+    // gives its parts at once would go without it.
+    for (const engine of engines) {
+      if (engine.parts === true) {
+        throw new TypeError(
+          `The ${engine.name} engine gives its parts at once, which no layout wraps: ` +
+            'give it a renderer without one.',
+        );
+      }
+    }
+  }
   const globals = options.globals;
   if (globals !== undefined && typeof globals !== 'function' && typeof globals !== 'object') {
     throw new TypeError('globals must be an object or a function.');
@@ -590,6 +602,16 @@ const renderTemplate = async (state, checked, input, bounds) => {
     if (resolution.html === undefined) text = decodeEntities(output);
     else html = output;
   } else if (isParts(output)) {
+    if (layoutNameOf(config, main) !== undefined) {
+      throw new TemplateRenderError(
+        main.name,
+        'layout',
+        'It gave its parts, which no layout wraps.',
+        {
+          engine: main.engine.name,
+        },
+      );
+    }
     ({ html, text, subject } = output);
   } else {
     throw new TemplateRenderError(main.name, 'render', 'The template gave no string.', {

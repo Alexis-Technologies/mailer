@@ -625,7 +625,6 @@ test('Templates: an engine that renders its parts gives HTML, text and subject a
   const renderer = createTemplateRenderer({
     engine: parts,
     loader: createMemoryLoader({ welcome: 'Subject  here' }),
-    layout: 'ignored',
   });
   assert.deepStrictEqual(await renderer.render({ template: 'welcome', context: { n: 1 } }), {
     template: 'welcome',
@@ -673,6 +672,33 @@ test('Templates: an engine that renders its parts gives HTML, text and subject a
     (await notFunction.render({ template: 'x' }).catch((e) => e)).message,
     /gave no function/,
   );
+});
+
+test('Templates: no layout goes silently unapplied to an engine that gives its parts', async () => {
+  // Before: a layout was skipped for a template that gave its parts, React
+  // Email's, and the message went without it.
+  const parts = {
+    name: 'parts',
+    extensions: [],
+    compile: () => () => ({ html: '<b/>' }),
+  };
+  assert.throws(
+    () =>
+      createTemplateRenderer({
+        engine: { ...parts, parts: true },
+        loader: createMemoryLoader({}),
+        layout: 'main',
+      }),
+    /parts engine gives its parts at once, which no layout wraps/,
+  );
+  const renderer = createTemplateRenderer({
+    engine: parts,
+    loader: createMemoryLoader({ a: '', main: '' }),
+    layout: 'main',
+  });
+  const error = await renderer.render({ template: 'a' }).catch((e) => e);
+  assert.ok(error instanceof TemplateRenderError);
+  assert.deepStrictEqual([error.phase, error.engine], ['layout', 'parts']);
 });
 
 test('Templates: engines are chosen by extension, the longest first', async () => {
