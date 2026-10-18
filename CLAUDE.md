@@ -128,14 +128,15 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   test that fails without it, not during the port.
 - **The HTTP clients are this package's, the API of each provider upstream's.** The fixes 24 to
   39 had to land in seven copies of the same client, and one missed a copy (Mailtrap, bug 29), so
-  since 1.1 the clients of Resend, SendGrid, Mailgun, Maileroo, Lettermint, Plunk and Mailtrap
-  are their requests over `createApiClient` (`src/internal/api-client.js`), as those of 1.1 are:
+  since 1.1 the clients of SES, Resend, SendGrid, Mailgun, Maileroo, Lettermint, Plunk and
+  Mailtrap are their requests over `createApiClient` (`src/internal/api-client.js`), as those of
+  1.1 are, SES's SigV4 signature the `authorize` of each attempt:
   what stays upstream's is the provider's side (its authorization, the messages it is read for,
   what its 2xx must hold, its error classes), passed in as hooks. Their public errors
   (`SendGridApiError`…) extend `ProviderApiError` with the names, arguments and fields of 1.0, and
-  the transports build their receipts with `providerFailure`. SES, which signs each attempt with
-  SigV4, and JMAP, with its session, keep their own clients; `tests/unit/api.test.js` fails when
-  another provider calls `requestWithRetry` on its own.
+  the transports build their receipts with `providerFailure`. JMAP, with its session, keeps its
+  own client; `tests/unit/api.test.js` fails when another provider calls `requestWithRetry` on
+  its own. The transports of 1.1 extend `ProviderTransport` (`src/internal/provider-transport.js`).
 - A lint rule that upstream code breaks is suppressed on the line,
   `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
   refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
@@ -744,6 +745,58 @@ with a test that fails without it; R for review):
   `bounced` hard, soft or undetermined as it says; `rejected` with nothing sent; `unknown` rather
   than a guess) holds for all, and `tests/unit/webhooks-mapping.test.js` pins every provider's
   table.
+- R21. gate: the first message of a run was admitted before the wrapped `sendMany()` took it,
+  so one that threw or returned at once left it neither failed nor abandoned (a key pending, a
+  probe held). Its slot is there from the start, and a message never taken goes to
+  `gate.unsent`, which `./idempotency` answers by freeing its key.
+- R22. breaker: a `now()` that threw fell back to `Date.now`, another clock, and put a circuit
+  some fifty years off; it gives the last time it gave.
+- R23. ratelimit: a bucket not yet full was dropped as readily as a full one, silently; any
+  number of messages could wait; a message whose tokens were there missed an abort between two
+  of a batch; a shared store that gave no `waitMs` was asked every millisecond. Full buckets go
+  first and an early drop is told (`MAILER_RATELIMIT_EVICTED`), `maxQueue` bounds the waiters,
+  the signal is read before the tokens, a store is asked again after the rate, and
+  `ratelimit.waited` tells the wait.
+- R24. sendmail: a message that could not be read sent SIGINT alone, which a process could
+  ignore for good; it gets SIGKILL after the grace.
+- R25. tee: the copies started before the primary's send; they start once it has answered.
+- R26. hooks: a copy a `beforeSend` returned skipped the checks of `createMessage`, so a line
+  break in a name or an address reached the converters; `checkMessage` of `src/core/message.js`
+  runs them again.
+- R27. webhooks: SNS certificates were cached by the URL as written, and kept though the
+  signature failed, so spellings and forged messages read certificates and pushed the one in use
+  out. A certificate URL is taken only as the URL parser writes it, and kept once it verified.
+- R28. webhooks: a Scaleway anchor that was no CA, or no longer valid, issued; the chain must
+  hold CAs, valid when they are trusted.
+- R29. webhooks: SparkPost's classes 25 and 26 (its own refusals), 60, 80 and 100 (no failure)
+  and 90 (an unsubscribe) were bounces; a Maileroo failure was hard and a Maileroo or Scaleway
+  deferral a soft bounce, though neither provider said so. They follow the rule of the guide.
+- R30. webhooks: the verifiers of providers that sign no id took `replayStore` and `leaseMs`
+  and never read them; an Azure `validationUrl` with a password passed; the lease was said to
+  be shorter than SNS's first retry, which it is not.
+- R31. webhooks: `commit` and `release` of the replay store took the id alone, so a request
+  whose lease ran out could free the reservation of the next; a delivery reserves under a token
+  of its own, and the memory store tells when it drops committed ids early.
+- R32. webhooks: the guide found a message of unknown delivery by `rfcMessageId`, which the HTTP
+  APIs write themselves; an event carries `correlationId` of the message's metadata.
+- R33. a timeout over 2^31 - 1 ms fired at once, and `AbortSignal.timeout` threw past 2^32 - 1;
+  `timerMs` of `internal/sleep.js` cuts each to the longest a timer keeps.
+- R34. a logger that threw was a warning per record with its text as it was; it is told once
+  per log by its name, and `./idempotency` redacts the addresses of a key in its records.
+- R35. receipts of the library's own conditions had no category; each names one, or the status
+  it is told by, and `tests/unit/internal.test.js` fails on a call that names none.
+- R36. api: `classify()` of a provider reached the receipt alone, so a retryable 420 of
+  SparkPost was not retried in the send; the shared client passes `isRetryable`.
+- R37. verify: a 403 verified the key of every provider; only those whose sending keys are
+  refused the read with one (`acceptForbidden`: SES, Mailgun, SparkPost, MailerSend,
+  Scaleway), and with no error marked verified to carry it.
+- R38. postmark, mailjet: a batch was converted whole, its files in base64, before its first
+  request; a request goes as soon as the next message would not fit.
+- R39. breaker, tee: `breaker.open` named the change of state and every refused send, and the
+  tee wrote the code of its process warning in its records: `breaker.refused`,
+  `tee.mirror_failed`.
+- R40. jmap: `verify()` retried its reads with no `onRetry`.
+- R41. attachments: `inlineDataUrls` read HTML of any length; `maxLength` bounds it.
 
 ## Repository layout
 
@@ -754,13 +807,14 @@ src/
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map: the request
-                    layer (http.js, api-client.js for every HTTP provider but SES and JMAP,
+                    layer (http.js, api-client.js for every HTTP provider but JMAP,
                     api.js for the conversions of the providers of 1.1, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
                     receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
                     schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
-                    and redact.js, redact-addresses.js, sleep.js, log.js
+                    the base of the transports of 1.1 (provider-transport.js), and abort.js,
+                    iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock
@@ -872,6 +926,11 @@ engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
   ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
+- **One `./webhooks` entry, not one per provider.** Its fifteen verifiers come to some 15 KB
+  min+gzip, which a function that verifies one provider pays at its cold start; fifteen entries
+  more would be fifteen more parts of the API to keep under semver, for less than a kilobyte
+  each. If that cost is ever measured to matter, the entries can come later without a change
+  to the one there is.
 - **Eighteen providers, then few new ones.** The eight HTTP providers of upyo came with the port;
   1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
   SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare). Each
