@@ -60,4 +60,29 @@ const verifyByRequest = async (request) => {
   request.check?.(answer.status, answer.body);
 };
 
-module.exports = { verifyByRequest };
+/**
+ * Verifies the credentials of a transport with one authenticated read of
+ * `url`, a GET by default.
+ *
+ * @param transport The transport, with its `config` and `httpClient`.
+ * @param label The provider's name, for the error.
+ * @param url The URL read.
+ * @param options The caller's options.
+ * @param request `init` of the request in place of a GET, and `check`.
+ * @internal
+ */
+const verifyByGet = async (transport, label, url, options, request = {}) => {
+  options?.signal?.throwIfAborted();
+  const init = request.init ?? { method: 'GET', headers: { Accept: 'application/json' } };
+  return verifyByRequest({
+    provider: label,
+    send: (signal) => transport.httpClient.fetchWithAuth(url, init, signal),
+    check: request.check,
+    retries: transport.config.retries,
+    timeoutMs: transport.config.timeout,
+    signal: options?.signal,
+    log: transport.httpClient.log,
+  });
+};
+
+module.exports = { verifyByGet, verifyByRequest };

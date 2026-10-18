@@ -15,8 +15,8 @@ const {
   isCallerAbort,
   mergeBatch,
   providerFailure,
-  verifyByGet,
 } = require('../internal/api.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createMailjetConfig } = require('./config.js');
 const { createMailjetClient } = require('./http-client.js');

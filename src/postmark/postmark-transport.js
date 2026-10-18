@@ -16,8 +16,8 @@ const {
   mergeBatch,
   providerFailure,
   sendConverted,
-  verifyByGet,
 } = require('../internal/api.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createPostmarkConfig } = require('./config.js');
 const { classifyErrorCode, createPostmarkClient } = require('./http-client.js');

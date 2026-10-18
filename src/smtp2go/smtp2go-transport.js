@@ -6,7 +6,9 @@
 // the account.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConverted, sendManyConcurrently, verifyByGet } = require('../internal/api.js');
+const { sendConverted } = require('../internal/api.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createSmtp2goConfig } = require('./config.js');
 const { createSmtp2goClient } = require('./http-client.js');

@@ -91,4 +91,18 @@ const sendConcurrently = async function* (messages, limit, send, signal) {
  */
 const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value)) + 1;
 
-module.exports = { chunks, jsonBytes, readItems, sendConcurrently };
+/**
+ * Sends the messages of an iterable `concurrency` at a time through the
+ * `send` of a transport, the receipts in their order.
+ *
+ * @internal
+ */
+const sendManyConcurrently = (transport, messages, options) =>
+  sendConcurrently(
+    messages,
+    transport.config.concurrency,
+    (message) => transport.send(message, options),
+    options?.signal,
+  );
+
+module.exports = { chunks, jsonBytes, readItems, sendConcurrently, sendManyConcurrently };

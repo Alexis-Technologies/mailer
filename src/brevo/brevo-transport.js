@@ -11,13 +11,9 @@
 // delivery already made, not a failure to retry.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const {
-  providerFailure,
-  sendConverted,
-  sendManyConcurrently,
-  sentWith,
-  verifyByGet,
-} = require('../internal/api.js');
+const { providerFailure, sendConverted, sentWith } = require('../internal/api.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createBrevoConfig } = require('./config.js');
 const { createBrevoClient } = require('./http-client.js');

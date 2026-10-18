@@ -7,12 +7,9 @@
 // through the bulk API, which answers with one id for the whole batch and
 // accepts what may fail later, unknown to the receipts.
 
-const {
-  sendConverted,
-  sendManyConcurrently,
-  sentWith,
-  verifyByGet,
-} = require('../internal/api.js');
+const { sendConverted, sentWith } = require('../internal/api.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createMailerSendConfig } = require('./config.js');
 const { createMailerSendClient } = require('./http-client.js');

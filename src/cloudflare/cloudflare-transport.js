@@ -17,9 +17,9 @@ const {
   isCallerAbort,
   providerFailure,
   sendConverted,
-  sendManyConcurrently,
 } = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createCloudflareConfig } = require('./config.js');
 const { createCloudflareClient, errorCodeOf } = require('./http-client.js');

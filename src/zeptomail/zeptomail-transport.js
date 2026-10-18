@@ -5,7 +5,8 @@
 // `/email/batch` of one message to many recipients, whose one answer every
 // message shared.
 
-const { sendConverted, sendManyConcurrently, sentWith } = require('../internal/api.js');
+const { sendConverted, sentWith } = require('../internal/api.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createZeptoMailConfig } = require('./config.js');
 const { createZeptoMailClient } = require('./http-client.js');

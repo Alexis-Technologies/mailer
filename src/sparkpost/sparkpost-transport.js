@@ -6,14 +6,10 @@
 // are counted on the receipt, or fail it when it took none.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const {
-  isCallerAbort,
-  providerFailure,
-  sendConverted,
-  sendManyConcurrently,
-  verifyByGet,
-} = require('../internal/api.js');
+const { isCallerAbort, providerFailure, sendConverted } = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createSparkPostConfig } = require('./config.js');
 const { createSparkPostClient } = require('./http-client.js');

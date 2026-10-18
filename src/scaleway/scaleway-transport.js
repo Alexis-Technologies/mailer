@@ -3,12 +3,9 @@
 // https://github.com/productdevbook/unemail — MIT, Copyright 2025 Wind
 // Changed in the port: `verify` lists the domains of the project.
 
-const {
-  sendConverted,
-  sendManyConcurrently,
-  sentWith,
-  verifyByGet,
-} = require('../internal/api.js');
+const { sendConverted, sentWith } = require('../internal/api.js');
+const { sendManyConcurrently } = require('../internal/batch.js');
+const { verifyByGet } = require('../internal/verify.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createScalewayConfig } = require('./config.js');
 const { createScalewayClient } = require('./http-client.js');

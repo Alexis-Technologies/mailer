@@ -5,8 +5,6 @@
 
 const { readAttachmentContent } = require('../core/attachment.js');
 const { createFailedReceipt, parseRetryAfter } = require('../core/receipt.js');
-const { sendConcurrently } = require('./batch.js');
-const { verifyByRequest } = require('./verify.js');
 const { toBase64 } = require('./base64.js');
 const { readText } = require('./body.js');
 const { canonicalHeaderName } = require('./headers.js');
@@ -356,45 +354,6 @@ const sentWith = (provider, messageId, missing) =>
     ? { successful: true, messageId, provider }
     : createFailedReceipt(missing, { provider, deliveryUnknown: true });
 
-/**
- * Sends the messages of an iterable `concurrency` at a time through the
- * `send` of a transport, the receipts in their order.
- *
- * @internal
- */
-const sendManyConcurrently = (transport, messages, options) =>
-  sendConcurrently(
-    messages,
-    transport.config.concurrency,
-    (message) => transport.send(message, options),
-    options?.signal,
-  );
-
-/**
- * Verifies the credentials of a transport with one authenticated read of
- * `url`, a GET by default.
- *
- * @param transport The transport, with its `config` and `httpClient`.
- * @param label The provider's name, for the error.
- * @param url The URL read.
- * @param options The caller's options.
- * @param request `init` of the request in place of a GET, and `check`.
- * @internal
- */
-const verifyByGet = async (transport, label, url, options, request = {}) => {
-  options?.signal?.throwIfAborted();
-  const init = request.init ?? { method: 'GET', headers: { Accept: 'application/json' } };
-  return verifyByRequest({
-    provider: label,
-    send: (signal) => transport.httpClient.fetchWithAuth(url, init, signal),
-    check: request.check,
-    retries: transport.config.retries,
-    timeoutMs: transport.config.timeout,
-    signal: options?.signal,
-    log: transport.httpClient.log,
-  });
-};
-
 module.exports = {
   ProviderApiError,
   base64Attachments,
@@ -406,7 +365,5 @@ module.exports = {
   mergeBatch,
   providerFailure,
   sendConverted,
-  sendManyConcurrently,
   sentWith,
-  verifyByGet,
 };
