@@ -500,7 +500,13 @@ test('Webhooks SES: the signature versions taken, and the time a certificate is 
     certificateTimeoutMs: 5,
     fetch: (url, init) =>
       new Promise((resolve, reject) => {
-        init.signal.addEventListener('abort', () => reject(init.signal.reason));
+        // A request in flight holds its socket, which keeps the process
+        // alive until the timeout; without one, Node 22 ends the test first.
+        const socket = setTimeout(() => {}, 60_000);
+        init.signal.addEventListener('abort', () => {
+          clearTimeout(socket);
+          reject(init.signal.reason);
+        });
       }),
   });
   await assert.rejects(
