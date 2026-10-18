@@ -39,6 +39,16 @@ it holds only while the first job is not finished. A completed job keeps only
 `{ v, hash }` of its data (`job.updateData`, by `retainData: 'failed'`, the
 default; `'all'` or `'none'`), so its message does not wait a day in Redis.
 
+A rate limit of a tenant's scope (`rateLimitScope: 'tenant'`) is a retry of the
+job on BullMQ, which pauses a queue only whole; and tenants share a queue fairly
+only in BullMQ Pro (groups): give each tenant, or each stream (transactional and
+bulk), a queue and workers of its own:
+
+```js
+const transactional = createMailQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-transactional' }) });
+const bulk = createMailQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-bulk' }) });
+```
+
 A job BullMQ fails itself, which the handler never settled (stalled more than
 `maxStalledCount`), is logged as `queue.job.lost` and told to the queue's audit
 sink as `delivery_unknown` (code `queue.lost`): its run may have sent it before

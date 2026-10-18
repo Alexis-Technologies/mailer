@@ -100,6 +100,14 @@ const settle = async (source, lease, outcome, config) => {
       if (outcome.scope === 'queue' && typeof source.pause === 'function') {
         await source.pause(now + outcome.delayMilliseconds);
       }
+      // The tenant's jobs wait, where the source keeps whose a job is.
+      if (
+        outcome.scope === 'tenant' &&
+        job.tenantId !== undefined &&
+        typeof source.pause === 'function'
+      ) {
+        await source.pause(now + outcome.delayMilliseconds, { tenantId: job.tenantId });
+      }
       return source.retry(lease, now + outcome.delayMilliseconds, failure);
     }
     case 'fail':

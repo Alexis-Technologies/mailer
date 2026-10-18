@@ -23,6 +23,8 @@ expectAssignable<MongoCollectionLike>(typed);
 
 const typedOutbox = createMongoOutbox({ collection: db.collection('x') });
 expectType<true>(typedOutbox.transactional);
+expectType<Promise<void>>(typedOutbox.resume());
+createMongoOutbox({ collection: db.collection('x'), fairness: 'tenant' });
 const outbox = createMongoOutbox({
   collection: db.collection('mail_outbox'),
   changeStream: true,

@@ -31,6 +31,21 @@ const requestOf = (id, extra = {}) => ({
  * @param options `skip`, to register the cases skipped.
  */
 const sourceContract = (name, makeSource, options = {}) => {
+  const fair = (title, body) => {
+    const fairOptions = { ...options, fairness: 'tenant' };
+    test(`Queue source (${name}, fair): ${title}`, { skip: options.skip }, async (t) => {
+      let time = START;
+      const clock = {
+        now: () => time,
+        advance(milliseconds) {
+          time += milliseconds;
+        },
+      };
+      const made = await makeSource({ now: clock.now, fairness: fairOptions.fairness });
+      if (made.cleanup !== undefined) t.after(made.cleanup);
+      await body(made.source, clock);
+    });
+  };
   const contract = (title, body) =>
     test(`Queue source (${name}): ${title}`, { skip: options.skip }, async (t) => {
       let time = START;
@@ -40,7 +55,7 @@ const sourceContract = (name, makeSource, options = {}) => {
           time += milliseconds;
         },
       };
-      const made = await makeSource({ now: clock.now });
+      const made = await makeSource({ now: clock.now, fairness: options.fairness });
       if (made.cleanup !== undefined) t.after(made.cleanup);
       await body(made.source, clock);
     });
@@ -188,6 +203,84 @@ const sourceContract = (name, makeSource, options = {}) => {
     assert.deepStrictEqual(await source.reserve(LEASE), { nextAvailableAt: START + 2000 });
     clock.advance(2000);
     assert.strictEqual((await source.reserve(LEASE)).lease.job.id, 'a');
+  });
+
+  contract('a job gives back the tenant of its request', async (source) => {
+    await source.enqueue(requestOf('a', { tenantId: 'acme' }));
+    await source.enqueue(requestOf('b'));
+    const tenants = {};
+    for (let index = 0; index < 2; index++) {
+      const { lease } = await source.reserve(LEASE);
+      tenants[lease.job.id] = lease.job.tenantId;
+    }
+    assert.deepStrictEqual(tenants, { a: 'acme', b: undefined });
+  });
+
+  contract(
+    'a pause of a tenant holds its jobs alone, until it ends or is resumed',
+    async (source, clock) => {
+      await source.enqueue(requestOf('a1', { tenantId: 'a' }));
+      await source.enqueue(
+        requestOf('b1', { tenantId: 'b', enqueuedAt: START + 1, availableAt: START }),
+      );
+      await source.pause(START + 2000, { tenantId: 'a' });
+      const { lease } = await source.reserve(LEASE);
+      assert.strictEqual(lease.job.id, 'b1');
+      await source.ack(lease, null);
+      assert.deepStrictEqual(await source.reserve(LEASE), { nextAvailableAt: START + 2000 });
+      clock.advance(2000);
+      const resumed = (await source.reserve(LEASE)).lease;
+      assert.strictEqual(resumed.job.id, 'a1');
+      await source.retry(resumed, START + 2000, { code: 'x', reason: 'y' });
+      await source.pause(START + 60_000, { tenantId: 'a' });
+      assert.strictEqual((await source.reserve(LEASE)).lease, undefined);
+      await source.resume({ tenantId: 'a' });
+      assert.strictEqual((await source.reserve(LEASE)).lease.job.id, 'a1');
+    },
+  );
+
+  contract('a pause of the queue ends early when resumed', async (source) => {
+    await source.enqueue(requestOf('a'));
+    await source.pause(START + 60_000);
+    assert.deepStrictEqual(await source.reserve(LEASE), { nextAvailableAt: START + 60_000 });
+    await source.resume();
+    assert.strictEqual((await source.reserve(LEASE)).lease.job.id, 'a');
+  });
+
+  fair("the backlog of one tenant holds no other tenant's jobs", async (source) => {
+    for (let index = 0; index < 20; index++) {
+      await source.enqueue(
+        requestOf(`a${index}`, { tenantId: 'a', enqueuedAt: START + index, availableAt: START }),
+      );
+    }
+    await source.enqueue(
+      requestOf('b0', { tenantId: 'b', enqueuedAt: START + 100, availableAt: START }),
+    );
+    await source.enqueue(requestOf('n0', { enqueuedAt: START + 101, availableAt: START }));
+    await source.enqueue(
+      requestOf('h0', {
+        tenantId: 'a',
+        priority: 'high',
+        enqueuedAt: START + 102,
+        availableAt: START,
+      }),
+    );
+    const order = [];
+    for (let index = 0; index < 6; index++) {
+      const { lease } = await source.reserve(LEASE);
+      order.push(lease.job.id);
+      await source.ack(lease, null);
+    }
+    // A high job first, of any tenant; then the tenants in turn, a tenant of none among them.
+    assert.strictEqual(order[0], 'h0');
+    assert.ok(order.indexOf('b0') <= 3, order.join());
+    assert.ok(order.indexOf('n0') <= 3, order.join());
+    assert.deepStrictEqual(
+      order.filter((id) => id.startsWith('a')),
+      order
+        .filter((id) => id.startsWith('a'))
+        .toSorted((x, y) => Number(x.slice(1)) - Number(y.slice(1))),
+    );
   });
 };
 

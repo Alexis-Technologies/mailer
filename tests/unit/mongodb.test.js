@@ -185,6 +185,7 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
     [{ state: 1, rank: 1, availableAt: 1, enqueuedAt: 1 }, { name: 'mailer_ready' }],
     [{ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' }],
     [{ state: 1, availableAt: 1 }, { name: 'mailer_due' }],
+    [{ state: 1, tenantId: 1, rank: 1, availableAt: 1, enqueuedAt: 1 }, { name: 'mailer_tenant' }],
     [{ expireAt: 1 }, { name: 'mailer_expire', expireAfterSeconds: 0 }],
   ]);
   let woken = 0;
@@ -516,12 +517,7 @@ test('MongoDB: a reserve takes back leases once a third of a lease, and reads th
   for (let index = 0; index < 5; index++) await source.reserve(60_000);
   // Idle, five reserves of five lanes: one write to take back leases, one read of the pause.
   assert.strictEqual(count('updateMany'), 1);
-  assert.strictEqual(
-    collection.calls.filter(
-      (call) => call[0] === 'findOne' && JSON.stringify(call[1]) === '{"_id":"mailer:pause"}',
-    ).length,
-    1,
-  );
+  assert.strictEqual(count('find'), 1);
   advance(20_000);
   await source.reserve(60_000);
   assert.strictEqual(count('updateMany'), 2);

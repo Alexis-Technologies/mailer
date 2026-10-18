@@ -339,8 +339,12 @@ export interface MailWorkerOptions {
   readonly backoff?: MailBackoff;
   /** The wait before an attempt again after an `auth` or `configuration` failure. @default 300000 */
   readonly operatorDelayMilliseconds?: number;
-  /** `queue`: a rate limit makes the whole queue wait, where the driver can. @default 'job' */
-  readonly rateLimitScope?: 'job' | 'queue';
+  /**
+   * What a rate limit makes wait, where the driver can: the job, the whole
+   * queue, or the jobs of the job's tenant (the memory queue and the outbox).
+   * @default 'job'
+   */
+  readonly rateLimitScope?: 'job' | 'queue' | 'tenant';
   /**
    * The runs of a job that may end unsettled (its worker killed, its event
    * loop blocked) before the job is given up as `delivery_unknown`
@@ -494,6 +498,11 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
   readonly retainFailedSeconds?: number;
   /** See {@link MailQueueRetainData}. @default 'failed' */
   readonly retainData?: MailQueueRetainData;
+  /**
+   * `tenant`: high jobs of any tenant first, then the tenants' jobs in turn,
+   * so that one tenant's backlog holds no other's mail. @default 'none'
+   */
+  readonly fairness?: 'none' | 'tenant';
 }
 
 /**
@@ -513,6 +522,8 @@ export interface MemoryQueue extends QueueDriver {
   drain(): Promise<void>;
   /** Wakes its readers, after a clock of the tests moved. */
   wake(): void;
+  /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
+  resume(scope?: { readonly tenantId?: string }): Promise<void>;
 }
 
 /**

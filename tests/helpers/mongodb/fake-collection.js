@@ -1,5 +1,6 @@
 // Not ported: a collection of MongoDB in memory for the tests of ./mongodb,
-// with what the stores call of it: filters of equality, `$lte` and `$or`;
+// with what the stores call of it: filters of equality, `$lte`, `$lt`, `$gt`,
+// `$gte`, `$in`, `$nin` and `$or`; `distinct`;
 // `$set`, `$setOnInsert`, `$unset`, `$inc` and `$max`; an upsert that meets an id held
 // fails as MongoDB does (E11000); sorts; and a change stream.
 
@@ -37,6 +38,23 @@ const matches = (document, filter) => {
         if (!condition.$in.some((candidate) => equal(value, candidate))) return false;
         continue;
       }
+      if ('$nin' in condition) {
+        if (condition.$nin.some((candidate) => equal(value, candidate))) return false;
+        continue;
+      }
+      const bounds = [
+        ['$gt', (a, b) => a > b],
+        ['$gte', (a, b) => a >= b],
+        ['$lt', (a, b) => a < b],
+      ];
+      let bounded = false;
+      for (const [operator, holds] of bounds) {
+        if (!(operator in condition)) continue;
+        bounded = true;
+        if (value === null || value === undefined) return false;
+        if (!holds(comparable(value), comparable(condition[operator]))) return false;
+      }
+      if (bounded) continue;
     }
     if (!equal(value, condition)) return false;
   }
@@ -200,6 +218,16 @@ const fakeCollection = (options = {}) => {
         },
       };
       return cursor;
+    },
+    async distinct(field, filter = {}) {
+      calls.push(['distinct', field, filter]);
+      const values = [];
+      for (const document of documents.values()) {
+        if (!matches(document, filter)) continue;
+        const value = document[field] ?? null;
+        if (!values.some((held) => equal(held, value))) values.push(value);
+      }
+      return values;
     },
     async createIndex(spec, opts = {}) {
       indexes.push([spec, opts]);

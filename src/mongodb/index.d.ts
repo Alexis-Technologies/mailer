@@ -64,6 +64,12 @@ export interface MongoOutboxOptions extends PollingDriverOptions {
   readonly retainFailedSeconds?: number;
   /** The finished jobs whose data is kept: the others keep their version and hash. @default 'failed' */
   readonly retainData?: 'all' | 'failed' | 'none';
+  /**
+   * `tenant`: high jobs of any tenant first, then the tenants' jobs in turn,
+   * so that one tenant's backlog holds no other's mail; needs `distinct()`.
+   * @default 'none'
+   */
+  readonly fairness?: 'none' | 'tenant';
   readonly logger?: Logger;
 }
 
@@ -89,6 +95,8 @@ export interface MongoOutbox extends QueueDriver {
   /** Makes the indexes of the outbox: the ready jobs, the leases, the next one due, and the expiry of finished ones (`expireAt`). */
   ensureIndexes(): Promise<void>;
   get(id: string): Promise<MongoOutboxJob | undefined>;
+  /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
+  resume(scope?: { readonly tenantId?: string }): Promise<void>;
 }
 
 /**

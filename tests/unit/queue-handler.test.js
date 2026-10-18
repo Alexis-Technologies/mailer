@@ -644,3 +644,15 @@ test('Queue: a template that fails leaves its text in the log, not the store or 
     records.some(([message, reason]) => message === 'queue.render.failed' && /4242/.test(reason)),
   );
 });
+
+test('Queue: a rate limit makes the job’s tenant wait under rateLimitScope tenant', async () => {
+  const transport = fakeTransport(() =>
+    failure('rate-limit', { retryable: true, retryAfterMilliseconds: 60_000 }),
+  );
+  const { handler } = handlerOf({ transport, rateLimitScope: 'tenant' });
+  const tenanted = await run(handler, jobOf({ tenantId: 'acme' }));
+  assert.deepStrictEqual([tenanted.type, tenanted.scope], ['retry', 'tenant']);
+  // A job of no tenant waits alone.
+  const alone = await run(handler, jobOf({ idempotencyKey: 'n' }));
+  assert.strictEqual(alone.scope, 'job');
+});

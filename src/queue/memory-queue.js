@@ -61,7 +61,13 @@ class MemorySource {
   // The jobs waiting, by when they are due; those due, by the order they run
   // in; and the leases, by when they run out.
   #delayed = new Heap(dueBefore);
-  #ready = new Heap(readyBefore);
+  // The jobs due: the high ones of every tenant on one heap, the others on a
+  // heap per tenant under fairness, or one for all, the tenants in turn.
+  #high = new Heap(readyBefore);
+  #buckets = new Map();
+  // The jobs due of tenants whose jobs wait, set aside until their pause ends.
+  #parked = new Map();
+  #tenantPauses = new Map();
   #leases = new Heap(leaseBefore);
   #open = 0;
   #active = 0;
@@ -174,16 +180,94 @@ class MemorySource {
       const current = isCurrent(node, 'waiting');
       if (current && node.availableAt > now) return;
       this.#delayed.pop();
-      if (current) this.#ready.push(node);
+      if (current) this.#ready(node);
     }
   }
 
-  #nextReady() {
-    for (;;) {
-      const node = this.#ready.peek();
-      if (node === undefined || isCurrent(node, 'waiting')) return node;
-      this.#ready.pop();
+  // A job due, onto the heap it is taken from.
+  #ready(node) {
+    if (node.rank === 0) {
+      this.#high.push(node);
+      return;
     }
+    const key = this.#config.fairness === 'tenant' ? (node.entry.tenantId ?? '') : '';
+    let heap = this.#buckets.get(key);
+    if (heap === undefined) {
+      heap = new Heap(readyBefore);
+      this.#buckets.set(key, heap);
+    }
+    heap.push(node);
+  }
+
+  #isTenantPaused(entry, now) {
+    return entry.tenantId !== undefined && (this.#tenantPauses.get(entry.tenantId) ?? 0) > now;
+  }
+
+  // The first job of a heap that may run now: stale nodes dropped, those of a
+  // paused tenant set aside.
+  #firstOf(heap, now) {
+    for (;;) {
+      const node = heap.peek();
+      if (node === undefined) return undefined;
+      if (!isCurrent(node, 'waiting')) {
+        heap.pop();
+      } else if (this.#isTenantPaused(node.entry, now)) {
+        heap.pop();
+        const parked = this.#parked.get(node.entry.tenantId) ?? [];
+        parked.push(node);
+        this.#parked.set(node.entry.tenantId, parked);
+      } else {
+        return node;
+      }
+    }
+  }
+
+  // The tenants whose pause ended give their jobs back.
+  #unpark(now) {
+    for (const [tenant, until] of this.#tenantPauses) {
+      if (until > now) continue;
+      this.#tenantPauses.delete(tenant);
+      this.#releaseParked(tenant);
+    }
+  }
+
+  #releaseParked(tenant) {
+    const parked = this.#parked.get(tenant);
+    if (parked === undefined) return;
+    this.#parked.delete(tenant);
+    for (const node of parked) {
+      if (isCurrent(node, 'waiting')) this.#ready(node);
+    }
+  }
+
+  // The next job to run, and the heap it is on: a high one first, then the
+  // tenants in turn, the one taken from going last when `take`.
+  #nextReady(now, take) {
+    const high = this.#firstOf(this.#high, now);
+    if (high !== undefined) return { node: high, heap: this.#high };
+    for (const [key, heap] of this.#buckets) {
+      const node = this.#firstOf(heap, now);
+      if (node === undefined) {
+        this.#buckets.delete(key);
+        continue;
+      }
+      if (take) {
+        this.#buckets.delete(key);
+        this.#buckets.set(key, heap);
+      }
+      return { node, heap };
+    }
+    return undefined;
+  }
+
+  // When the first paused tenant resumes, if its jobs wait.
+  #nextResume() {
+    let next;
+    for (const tenant of this.#parked.keys()) {
+      const until = this.#tenantPauses.get(tenant);
+      if (until !== undefined && (next === undefined || until < next)) next = until;
+    }
+    return next;
   }
 
   #nextDue() {
@@ -221,6 +305,7 @@ class MemorySource {
       token: undefined,
       leaseUntil: 0,
       version: 0,
+      tenantId: request.tenantId,
     };
     this.jobs.set(entry.id, entry);
     this.#open += 1;
@@ -234,14 +319,17 @@ class MemorySource {
     this.#sweep(now);
     this.#expire(now);
     if (this.#pausedUntil > now) return { nextAvailableAt: this.#pausedUntil };
+    this.#unpark(now);
     this.#promote(now);
-    const node = this.#nextReady();
-    if (node === undefined) {
-      const due = this.#nextDue();
+    const found = this.#nextReady(now, true);
+    if (found === undefined) {
+      let due = this.#nextDue();
+      const resumes = this.#nextResume();
+      if (resumes !== undefined && (due === undefined || resumes < due)) due = resumes;
       return due === undefined ? {} : { nextAvailableAt: due };
     }
-    this.#ready.pop();
-    const next = node.entry;
+    found.heap.pop();
+    const next = found.node.entry;
     next.state = 'active';
     next.attempt += 1;
     next.token = randomUUID();
@@ -259,6 +347,7 @@ class MemorySource {
       redelivered: next.redelivered,
       redeliveries: next.redeliveries,
     };
+    if (next.tenantId !== undefined) job.tenantId = next.tenantId;
     next.redelivered = false;
     this.#notify();
     return { lease: { job, token: next.token } };
@@ -313,8 +402,24 @@ class MemorySource {
     return true;
   }
 
-  async pause(until) {
-    this.#pausedUntil = Math.max(this.#pausedUntil, until);
+  async pause(until, scope = {}) {
+    const { tenantId } = scope;
+    if (tenantId === undefined) {
+      this.#pausedUntil = Math.max(this.#pausedUntil, until);
+      return;
+    }
+    this.#tenantPauses.set(tenantId, Math.max(this.#tenantPauses.get(tenantId) ?? 0, until));
+  }
+
+  async resume(scope = {}) {
+    const { tenantId } = scope;
+    if (tenantId === undefined) {
+      this.#pausedUntil = 0;
+    } else {
+      this.#tenantPauses.delete(tenantId);
+      this.#releaseParked(tenantId);
+    }
+    this.#notify();
   }
 
   subscribe(listener) {
@@ -325,8 +430,9 @@ class MemorySource {
   #busy(now) {
     if (this.#active > 0) return true;
     if (this.#pausedUntil > now) return false;
+    this.#unpark(now);
     this.#promote(now);
-    return this.#nextReady() !== undefined;
+    return this.#nextReady(now, false) !== undefined;
   }
 
   // Settles when no job is ready now and none runs.
@@ -370,7 +476,8 @@ const viewOf = (entry, now) => {
  * @param options `now`, `sleep`, `leaseMilliseconds` (60000),
  * `pollIntervalMilliseconds` (1000), `maxJobs` (100000), `retainFinished`
  * (10000), `dedupeWindowSeconds` (a day), `retainFailedSeconds` (a week),
- * `retainData` ('failed'), `logger`.
+ * `retainData` ('failed'), `fairness` ('none', or 'tenant' for the tenants'
+ * jobs in turn), `logger`.
  * @returns The driver, with `source`, `list()`, `get(id)`, `drain()` and
  * `wake()`.
  * @throws {TypeError} If an option is invalid.
@@ -381,8 +488,12 @@ const createMemoryQueue = (options = {}) => {
     maxJobs: checkPositiveInteger(options.maxJobs ?? 100_000, 'maxJobs'),
     retainFinished: checkPositiveInteger(options.retainFinished ?? 10_000, 'retainFinished'),
     retainData: checkRetainData(options.retainData),
+    fairness: options.fairness ?? 'none',
     ...retentionOf(options),
   };
+  if (config.fairness !== 'none' && config.fairness !== 'tenant') {
+    throw new TypeError("fairness must be 'none' or 'tenant'.");
+  }
   const source = new MemorySource(config);
   const driver = createPollingDriver(source, { ...options, now: config.now });
   return {
@@ -401,6 +512,7 @@ const createMemoryQueue = (options = {}) => {
       return entry === undefined ? undefined : viewOf(entry, config.now());
     },
     drain: () => source.drain(),
+    resume: (scope) => source.resume(scope),
     wake: () => source.wake(),
   };
 };

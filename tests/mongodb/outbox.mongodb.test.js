@@ -204,11 +204,11 @@ const { sourceContract } = require('../helpers/queue/source-contract.js');
 
 sourceContract(
   'mongodb, a replica set',
-  async ({ now }) => {
+  async ({ now, fairness }) => {
     const client = new MongoClient(url);
     await client.connect();
     const db = client.db(`mailer_test_${randomUUID().replaceAll('-', '')}`);
-    const outbox = createMongoOutbox({ collection: db.collection('mail_outbox'), now });
+    const outbox = createMongoOutbox({ collection: db.collection('mail_outbox'), now, fairness });
     await outbox.ensureIndexes();
     return {
       source: outbox.source,
@@ -241,4 +241,23 @@ test(
     assert.match(text, /IXSCAN/);
     assert.doesNotMatch(text, /"stage":"SORT"/);
   },
+);
+
+sourceContract(
+  'mongodb, a replica set, tenants in turn',
+  async ({ now, fairness }) => {
+    const client = new MongoClient(url);
+    await client.connect();
+    const db = client.db(`mailer_test_${randomUUID().replaceAll('-', '')}`);
+    const outbox = createMongoOutbox({ collection: db.collection('mail_outbox'), now, fairness });
+    await outbox.ensureIndexes();
+    return {
+      source: outbox.source,
+      cleanup: async () => {
+        await db.dropDatabase();
+        await client.close();
+      },
+    };
+  },
+  { skip, fairness: 'tenant' },
 );

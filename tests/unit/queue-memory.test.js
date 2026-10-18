@@ -610,3 +610,33 @@ test('Queue: a change wakes one waiting lane, not every lane, and is kept when a
   assert.strictEqual(reserves, 7);
   await consumer.close({ timeoutMilliseconds: 10 });
 });
+
+test('Queue: a retry of a tenant’s scope pauses that tenant’s jobs, not the others', async () => {
+  const clock = manualClock(10);
+  const queue = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
+  await queue.enqueue(requestOf('a1', { tenantId: 'a' }));
+  await queue.enqueue(requestOf('a2', { tenantId: 'a', enqueuedAt: 1 }));
+  await queue.enqueue(requestOf('b1', { tenantId: 'b', enqueuedAt: 2 }));
+  const runs = [];
+  const consumer = queue.consume(async (job) => {
+    runs.push(job.id);
+    if (job.id === 'a1' && job.attempt === 1) {
+      return {
+        type: 'retry',
+        delayMilliseconds: 60_000,
+        code: 'rate',
+        reason: 'limited',
+        scope: 'tenant',
+      };
+    }
+    return { type: 'ack' };
+  });
+  await queue.drain();
+  // a2 waits with a1 for the pause of tenant a; b1 goes.
+  assert.deepStrictEqual(runs, ['a1', 'b1']);
+  clock.advance(60_000);
+  queue.wake();
+  await queue.drain();
+  await consumer.close();
+  assert.deepStrictEqual(runs.toSorted(), ['a1', 'a1', 'a2', 'b1']);
+});

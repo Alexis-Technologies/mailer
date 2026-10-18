@@ -70,7 +70,7 @@ const retryDelayOf = (attempt, receipt, config) => {
  * @param receipt The failed receipt.
  * @param job The run of the job.
  * @param config `backoff`, `random`, `now`, `operatorDelayMilliseconds`,
- * `rateLimitScope`, `classify`, and `expiresAt` of the job, if any.
+ * `rateLimitScope`, `classify`, and `expiresAt` and `tenantId` of the job, if any.
  * @returns `{ outcome, state, error }`.
  * @internal
  */
@@ -102,8 +102,17 @@ const outcomeOfFailure = (receipt, job, config) => {
       error,
     };
   }
-  const scope =
-    error.category === 'rate-limit' && config.rateLimitScope === 'queue' ? 'queue' : 'job';
+  // A rate limit makes the queue, or the job's tenant, wait where asked; a
+  // job of no tenant waits alone.
+  let scope = 'job';
+  if (error.category === 'rate-limit' && config.rateLimitScope === 'queue') scope = 'queue';
+  if (
+    error.category === 'rate-limit' &&
+    config.rateLimitScope === 'tenant' &&
+    config.tenantId !== undefined
+  ) {
+    scope = 'tenant';
+  }
   return {
     outcome: { type: 'retry', delayMilliseconds: delay, code, reason, scope },
     state: 'queued',

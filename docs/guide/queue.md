@@ -209,6 +209,23 @@ over it, so that a rate limit does not bring every job back at once.
 driver can. `classify({ receipt, job })` decides in the place of these rules
 (`'retry'`, `'fail'`, `'delivery_unknown'`, or `undefined` for the rules), and
 `checkJob(data, job)` refuses a job for good by throwing.
+`rateLimitScope: 'tenant'` makes a rate limit pause the jobs of the job's
+tenant alone, on the memory queue and the outbox; `resume()` of either ends a
+pause, of the queue or of a tenant (`{ tenantId }`), before its time. A
+`'queue'` pause suits one provider; with failover among several, let
+[`./breaker`](/transports/breaker) and [`./ratelimit`](/transports/ratelimit)
+take a provider out instead.
+
+## Tenants in turn
+
+Jobs go by priority, then time: a tenant who enqueues a million newsletters
+holds every other tenant's `normal` mail behind them. `fairness: 'tenant'`, on
+the memory queue and the outbox, takes a `high` job of any tenant first (a code
+of sign-in waits for no one), then the tenants in turn, a job of each, the jobs
+of no tenant as one more. It is exact within a process and close across them.
+Without it, a queue per stream (transactional and bulk, each with its own
+workers) keeps a campaign from holding a password reset. BullMQ shares a queue
+by tenant only in its Pro edition: use a queue per tenant or per stream there.
 
 **The queue retries; the transport should not.** Each attempt of a
 `RetryTransport` inside the worker holds the job and multiplies its attempts:

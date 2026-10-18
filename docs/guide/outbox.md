@@ -71,7 +71,12 @@ The outbox is a `QueueSource`, read by the polling driver of `./queue`:
 - a job whose lease ran out (its worker died) is ready again, its attempt run
   again, `redelivered`;
 - a rate limit of the whole queue (`rateLimitScope: 'queue'`) pauses every
-  worker, through a document of its own.
+  worker, and one of a tenant (`'tenant'`) that tenant's jobs alone, through
+  documents of their own (`mailer:pause`, `mailer:pause:<tenant>`), which
+  `outbox.resume()` ends early;
+- with `fairness: 'tenant'`, a lane takes a `high` job of any tenant first,
+  then the tenants with jobs ready in turn (read with `distinct` once a poll
+  interval): two round trips a job.
 
 Leases are written by the clock of each worker, so a lease is taken back only
 `clockSkewToleranceMilliseconds` (5 s) after it ran out, lest a worker whose
@@ -94,7 +99,7 @@ that fails is opened again a second later, then up to every 30 seconds
 
 | Collection | Index |
 | --- | --- |
-| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; `{ state, availableAt }` for the next one due; a TTL on `expireAt` |
+| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; `{ state, availableAt }` for the next one due; `{ state, tenantId, rank, availableAt, enqueuedAt }` for the tenants in turn; a TTL on `expireAt` |
 | audit | `{ correlationId, at, attempt, rank }`; `{ jobId }` |
 | idempotency | a TTL on `expiresAt` |
 

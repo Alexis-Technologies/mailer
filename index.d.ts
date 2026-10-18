@@ -1496,6 +1496,8 @@ export interface QueueJobRequest {
   readonly enqueuedAt: number;
   /** Its id comes from a key of the caller's: an enqueue again is expected, and told. */
   readonly unique: boolean;
+  /** The tenant of the job: a source may share its lanes among tenants, and pause one. */
+  readonly tenantId?: string;
 }
 /** The options of an enqueue. */
 export interface QueueEnqueueOptions {
@@ -1529,6 +1531,8 @@ export interface QueueJob {
    * not count them.
    */
   readonly redeliveries?: number;
+  /** The tenant of the job, from its request, where the source keeps it. */
+  readonly tenantId?: string;
 }
 /** What a handler makes of a run of a job. */
 export type QueueOutcome =
@@ -1539,7 +1543,8 @@ export type QueueOutcome =
       readonly delayMilliseconds: number;
       readonly code: string;
       readonly reason: string;
-      readonly scope?: 'job' | 'queue';
+      /** `queue`: the whole queue waits; `tenant`: the jobs of the job's tenant wait. */
+      readonly scope?: 'job' | 'queue' | 'tenant';
     }
   /** No attempt again: the job is failed for good. */
   | { readonly type: 'fail'; readonly code: string; readonly reason: string }
@@ -1624,7 +1629,9 @@ export interface QueueSource {
   /** Back to ready at `availableAt` (now by default), its attempt not counted. */
   release(lease: QueueLease, availableAt?: number): Promise<boolean | void>;
   /** The whole queue waits until then; without it, a retry of the queue is one of the job. */
-  pause?(until: number): Promise<void>;
+  pause?(until: number, scope?: { readonly tenantId?: string }): Promise<void>;
+  /** Ends a pause of the whole queue, or of one tenant's jobs, before its time. */
+  resume?(scope?: { readonly tenantId?: string }): Promise<void>;
   /** Wakes the readers when a job may be ready: an enqueue, a change stream. */
   subscribe?(listener: () => void): () => void;
 }

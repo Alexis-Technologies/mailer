@@ -84,6 +84,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   An idle poll of the outbox is two round trips (leases taken back once a third of a lease, the
   pause read once a poll interval, the next due time from its own index); its change stream wakes
   one lane per change after which a job may be ready, and is opened again when it fails.
+  `fairness: 'tenant'` (memory queue, outbox) takes a high job of any tenant first, then the
+  tenants in turn, so one tenant's backlog holds no other's mail; `rateLimitScope: 'tenant'` pauses
+  one tenant's jobs alone, and `resume()` ends a pause early.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

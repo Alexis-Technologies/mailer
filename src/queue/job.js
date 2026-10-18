@@ -338,6 +338,7 @@ const prepareMailJob = (input, options = {}) => {
     unique: keyed !== undefined,
   };
   if (scheduledAt !== undefined) request.availableAt = scheduledAt.getTime();
+  if (tenantId !== undefined) request.tenantId = tenantId;
   return { data, request };
 };
 

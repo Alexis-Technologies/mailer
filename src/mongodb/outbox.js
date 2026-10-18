@@ -19,8 +19,15 @@ const {
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 const { checkCollection, documentOf, sessionOf } = require('./collection.js');
 
-// The document of a pause of the whole queue: no job id has a colon.
+// The documents of the pauses, of the whole queue and of one tenant's jobs:
+// their ids in one range of _id, which no job id, with no colon, falls in.
 const PAUSE_ID = 'mailer:pause';
+const pauseIdOf = (tenantId) => (tenantId === undefined ? PAUSE_ID : `${PAUSE_ID}:${tenantId}`);
+const PAUSES = { _id: { $gte: PAUSE_ID, $lt: `${PAUSE_ID};` } };
+// The order of the ready jobs, and of those of one rank.
+const READY_ORDER = { rank: 1, availableAt: 1, enqueuedAt: 1 };
+const RANK_ORDER = { availableAt: 1, enqueuedAt: 1 };
+const FAIRNESS = new Set(['none', 'tenant']);
 // How far the clocks of two workers may be apart: a lease is taken back only
 // that long after it ran out by the clock of the worker that takes it.
 const DEFAULT_CLOCK_SKEW_MS = 5000;
@@ -46,12 +53,14 @@ const documentOfRequest = (request, now) => ({
   redeliveries: 0,
   token: null,
   leaseUntil: null,
+  // Null for none, so that an index and a filter of tenants take it as one.
+  tenantId: request.tenantId ?? null,
   updatedAt: new Date(now),
 });
 
 const jobOf = (document) => {
   const { _id: id } = document;
-  return {
+  const job = {
     id,
     name: document.name,
     data: document.data,
@@ -61,6 +70,8 @@ const jobOf = (document) => {
     redelivered: document.redelivered === true,
     redeliveries: document.redeliveries ?? 0,
   };
+  if (typeof document.tenantId === 'string') job.tenantId = document.tenantId;
+  return job;
 };
 
 // The filter of a write under a lease: the job is still lent to it.
@@ -78,7 +89,9 @@ class MongoOutboxSource {
   // When this process last took back the leases that ran out, and read the
   // pause of the queue: once a while, not on each reserve of each lane.
   #reclaimedAt = -Infinity;
-  #pause = { readAt: -Infinity, until: 0 };
+  #pauses = { readAt: -Infinity, until: 0, tenants: new Map() };
+  // The tenants with jobs ready, read once a poll interval, taken in turn.
+  #tenants = { readAt: -Infinity, list: [], cursor: 0, found: false };
 
   constructor(collection, config) {
     this.#collection = collection;
@@ -119,18 +132,36 @@ class MongoOutboxSource {
     return answer;
   }
 
-  // Until when the queue is paused: read again once a poll interval, a pause
-  // of another process seen within it, one of this process at once.
-  async #pausedUntil(now) {
-    if (now - this.#pause.readAt >= this.#config.pauseReadMilliseconds) {
-      const pause = await this.#collection.findOne(
-        { _id: PAUSE_ID },
-        { projection: { pausedUntil: 1 } },
-      );
-      const until = pause?.pausedUntil;
-      this.#pause = { readAt: now, until: until instanceof Date ? until.getTime() : 0 };
+  // The pauses, of the queue and of tenants: read again once a poll
+  // interval, a pause of another process seen within it, one of this process
+  // at once.
+  async #readPauses(now) {
+    if (now - this.#pauses.readAt < this.#config.pauseReadMilliseconds) return this.#pauses;
+    const documents = await this.#collection
+      // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
+      .find(PAUSES, { projection: { pausedUntil: 1, tenantId: 1 } })
+      .toArray();
+    let until = 0;
+    const tenants = new Map();
+    for (const document of documents) {
+      const at = document.pausedUntil instanceof Date ? document.pausedUntil.getTime() : 0;
+      if (typeof document.tenantId === 'string') tenants.set(document.tenantId, at);
+      else until = at;
     }
-    return this.#pause.until;
+    this.#pauses = { readAt: now, until, tenants };
+    return this.#pauses;
+  }
+
+  // The tenants whose jobs wait now, and when the first of them resumes.
+  #pausedTenants(now) {
+    const paused = [];
+    let resumesAt;
+    for (const [tenant, until] of this.#pauses.tenants) {
+      if (until <= now) continue;
+      paused.push(tenant);
+      if (resumesAt === undefined || until < resumesAt) resumesAt = until;
+    }
+    return { paused, resumesAt };
   }
 
   // A job whose lease ran out is ready again, its attempt to run again: by
@@ -151,15 +182,12 @@ class MongoOutboxSource {
     );
   }
 
-  async reserve(leaseMilliseconds) {
-    const now = new Date(this.#config.now());
-    const pausedUntil = await this.#pausedUntil(now.getTime());
-    if (pausedUntil > now.getTime()) return { nextAvailableAt: pausedUntil };
-    await this.#reclaim(now.getTime(), leaseMilliseconds);
+  // Lends the first job a filter meets, in an order.
+  async #take(filter, sort, now, leaseMilliseconds) {
     const token = randomUUID();
     const taken = documentOf(
       await this.#collection.findOneAndUpdate(
-        { state: 'ready', availableAt: { $lte: now } },
+        filter,
         {
           $set: {
             state: 'active',
@@ -171,21 +199,75 @@ class MongoOutboxSource {
           $inc: { attempts: 1 },
         },
         // As it was: whether it comes back, and its attempt before this one.
-        {
-          sort: { rank: 1, availableAt: 1, enqueuedAt: 1 },
-          returnDocument: 'before',
-          includeResultMetadata: false,
-        },
+        { sort, returnDocument: 'before', includeResultMetadata: false },
       ),
     );
-    if (taken !== null) {
-      return { lease: { job: { ...jobOf(taken), attempt: taken.attempts + 1 }, token } };
+    if (taken === null) return undefined;
+    return { lease: { job: { ...jobOf(taken), attempt: taken.attempts + 1 }, token } };
+  }
+
+  // The tenants with jobs ready: read again once a poll interval, or when
+  // those read are done with and some were found then.
+  async #tenantsReady(ready, now, again) {
+    const tenants = this.#tenants;
+    const stale = now - tenants.readAt >= this.#config.pauseReadMilliseconds;
+    if (stale || (again && tenants.found)) {
+      const list = await this.#collection.distinct('tenantId', ready);
+      this.#tenants = { readAt: now, list, cursor: 0, found: list.length > 0 };
     }
-    const next = await this.#collection.findOne(
-      { state: 'ready' },
-      { sort: { availableAt: 1 }, projection: { availableAt: 1 } },
-    );
-    return next?.availableAt instanceof Date ? { nextAvailableAt: next.availableAt.getTime() } : {};
+    return this.#tenants;
+  }
+
+  // A job by tenant in turn: a high one of any tenant first, a code of
+  // sign-in waiting for no one's newsletter, then the tenants one after the
+  // other, so that the backlog of one holds no other's mail.
+  async #takeFairly(ready, paused, now, leaseMilliseconds) {
+    const high = await this.#take({ ...ready, rank: 0 }, RANK_ORDER, now, leaseMilliseconds);
+    if (high !== undefined) return high;
+    for (let round = 0; round < 2; round++) {
+      const tenants = await this.#tenantsReady(ready, now.getTime(), round > 0);
+      while (tenants.list.length > 0) {
+        const index = tenants.cursor % tenants.list.length;
+        const tenant = tenants.list[index];
+        // A tenant paused since its list was read waits.
+        if (!paused.has(tenant)) {
+          const filter = { state: 'ready', availableAt: ready.availableAt, tenantId: tenant };
+          const taken = await this.#take(filter, READY_ORDER, now, leaseMilliseconds);
+          if (taken !== undefined) {
+            tenants.cursor = index + 1;
+            return taken;
+          }
+        }
+        // Nothing of this tenant is ready now.
+        tenants.list.splice(index, 1);
+        tenants.cursor = index;
+      }
+    }
+    return undefined;
+  }
+
+  async reserve(leaseMilliseconds) {
+    const now = new Date(this.#config.now());
+    const pauses = await this.#readPauses(now.getTime());
+    if (pauses.until > now.getTime()) return { nextAvailableAt: pauses.until };
+    await this.#reclaim(now.getTime(), leaseMilliseconds);
+    const { paused, resumesAt } = this.#pausedTenants(now.getTime());
+    const ready = { state: 'ready', availableAt: { $lte: now } };
+    if (paused.length > 0) ready.tenantId = { $nin: paused };
+    const taken =
+      this.#config.fairness === 'tenant'
+        ? await this.#takeFairly(ready, new Set(paused), now, leaseMilliseconds)
+        : await this.#take(ready, READY_ORDER, now, leaseMilliseconds);
+    if (taken !== undefined) return taken;
+    const waiting = { state: 'ready' };
+    if (paused.length > 0) waiting.tenantId = { $nin: paused };
+    const next = await this.#collection.findOne(waiting, {
+      sort: { availableAt: 1 },
+      projection: { availableAt: 1 },
+    });
+    let due = next?.availableAt instanceof Date ? next.availableAt.getTime() : undefined;
+    if (resumesAt !== undefined && (due === undefined || resumesAt < due)) due = resumesAt;
+    return due === undefined ? {} : { nextAvailableAt: due };
   }
 
   async extend(lease, leaseMilliseconds) {
@@ -221,13 +303,26 @@ class MongoOutboxSource {
     return this.#settle(lease, { state: 'ready', availableAt: at }, { attempts: -1 });
   }
 
-  async pause(until) {
-    await this.#collection.updateOne(
-      { _id: PAUSE_ID },
-      { $max: { pausedUntil: new Date(until) } },
-      { upsert: true },
-    );
-    this.#pause.until = Math.max(this.#pause.until, until);
+  async pause(until, scope = {}) {
+    const { tenantId } = scope;
+    const update = { $max: { pausedUntil: new Date(until) } };
+    if (tenantId !== undefined) update.$set = { tenantId };
+    await this.#collection.updateOne({ _id: pauseIdOf(tenantId) }, update, { upsert: true });
+    if (tenantId === undefined) {
+      this.#pauses.until = Math.max(this.#pauses.until, until);
+    } else {
+      const held = this.#pauses.tenants.get(tenantId) ?? 0;
+      this.#pauses.tenants.set(tenantId, Math.max(held, until));
+    }
+  }
+
+  async resume(scope = {}) {
+    const { tenantId } = scope;
+    await this.#collection.deleteOne({ _id: pauseIdOf(tenantId) });
+    if (tenantId === undefined) this.#pauses.until = 0;
+    else this.#pauses.tenants.delete(tenantId);
+    // Its jobs are ready again: the tenants are read again.
+    this.#tenants.readAt = -Infinity;
   }
 }
 
@@ -308,7 +403,8 @@ const subscribe = (collection, listener, config) => {
  *
  * @param options `collection`, `db.collection('mail_outbox')`;
  * `changeStream` (false), to wake the workers on a change (a replica set);
- * `retainData` ('failed'), the finished jobs whose data is kept;
+ * `retainData` ('failed'), the finished jobs whose data is kept; `fairness`
+ * ('none'), or 'tenant' for the tenants' jobs in turn;
  * `dedupeWindowSeconds` (a day), the time a completed job is kept, and so
  * the window of its duplicates; `retainFailedSeconds` (a week), that of a
  * failed one; `clockSkewToleranceMilliseconds` (5000), how
@@ -318,7 +414,12 @@ const subscribe = (collection, listener, config) => {
  * @throws {TypeError} If an option is invalid.
  */
 const createMongoOutbox = (options = {}) => {
+  const fairness = options.fairness ?? 'none';
+  if (!FAIRNESS.has(fairness)) throw new TypeError("fairness must be 'none' or 'tenant'.");
   const collection = checkCollection(options.collection, 'createMongoOutbox');
+  if (fairness === 'tenant' && typeof collection.distinct !== 'function') {
+    throw new TypeError("fairness 'tenant' needs a collection with distinct().");
+  }
   const changeStream = options.changeStream ?? false;
   if (typeof changeStream !== 'boolean') throw new TypeError('changeStream must be a boolean.');
   if (changeStream && typeof collection.watch !== 'function') {
@@ -339,6 +440,7 @@ const createMongoOutbox = (options = {}) => {
     sleep: checkOptionalFunction(options.sleep, 'sleep') ?? sleep,
     // The polling driver checks it; the pause is read again as often.
     pauseReadMilliseconds: options.pollIntervalMilliseconds ?? 1000,
+    fairness,
     // The lease of the workers: none of theirs runs out sooner.
     leaseMilliseconds: options.leaseMilliseconds ?? DEFAULT_LEASE_MS,
     retainData: checkRetainData(options.retainData),
@@ -354,6 +456,7 @@ const createMongoOutbox = (options = {}) => {
     // An enqueue writes in the transaction it is given.
     transactional: true,
     source,
+    resume: (scope) => source.resume(scope),
     async ensureIndexes() {
       await collection.createIndex(
         { state: 1, rank: 1, availableAt: 1, enqueuedAt: 1 },
@@ -363,6 +466,11 @@ const createMongoOutbox = (options = {}) => {
       // When the next job is due, read when none is: sorted by time alone,
       // which the index of the ready jobs, by priority first, cannot give.
       await collection.createIndex({ state: 1, availableAt: 1 }, { name: 'mailer_due' });
+      // The tenants with jobs ready, and the jobs of one, for fairness.
+      await collection.createIndex(
+        { state: 1, tenantId: 1, rank: 1, availableAt: 1, enqueuedAt: 1 },
+        { name: 'mailer_tenant' },
+      );
       // A finished job goes at its time, a completed one and with it the
       // memory of its key after the window of duplicates, a failed one later.
       await collection.createIndex(
@@ -373,7 +481,8 @@ const createMongoOutbox = (options = {}) => {
     async get(id) {
       const document = await collection.findOne({ _id: id });
       // The pause of the queue is no job.
-      if (document === null || document === undefined || id === PAUSE_ID) return undefined;
+      // The pauses of the queue are no jobs.
+      if (document === null || document === undefined || id.startsWith(PAUSE_ID)) return undefined;
       const job = jobOf(document);
       return {
         ...job,

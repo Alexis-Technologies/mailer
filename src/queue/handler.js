@@ -67,8 +67,8 @@ const createHandlerConfig = (options = {}) => {
     throw new TypeError('The audit sink of a mail worker must have append().');
   }
   const rateLimitScope = options.rateLimitScope ?? 'job';
-  if (rateLimitScope !== 'job' && rateLimitScope !== 'queue') {
-    throw new TypeError("rateLimitScope must be 'job' or 'queue'.");
+  if (rateLimitScope !== 'job' && rateLimitScope !== 'queue' && rateLimitScope !== 'tenant') {
+    throw new TypeError("rateLimitScope must be 'job', 'queue' or 'tenant'.");
   }
   if (options.auditStrict !== undefined && typeof options.auditStrict !== 'boolean') {
     throw new TypeError('auditStrict must be a boolean.');
@@ -202,7 +202,7 @@ const release = (run, why) => {
 const settleFailure = async (run, receipt, code) => {
   const { config, job, data } = run;
   const expiresAt = data.expiresAt === undefined ? undefined : Date.parse(data.expiresAt);
-  const decided = outcomeOfFailure(receipt, job, { ...config, expiresAt });
+  const decided = outcomeOfFailure(receipt, job, { ...config, expiresAt, tenantId: data.tenantId });
   let { outcome } = decided;
   const generic = outcome.code === 'queue.attempts_exhausted' || outcome.code === 'queue.expired';
   if (code !== undefined && !generic) outcome = { ...outcome, code };
