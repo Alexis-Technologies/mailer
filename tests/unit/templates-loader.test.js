@@ -87,6 +87,29 @@ test('Templates: the file loader reads no more than maxBytes of a file that grew
   assert.strictEqual(createFileLoader({ dir: root }).loadSync('big.ejs').source.length, 2048);
 });
 
+test('Templates: the file loader stops at the abort of its signal', async (t) => {
+  const { root } = makeTree(t);
+  const loader = createFileLoader({ dir: root });
+  const reason = new Error('stop');
+  await assert.rejects(
+    loader.load('welcome.ejs', { signal: AbortSignal.abort(reason) }),
+    (e) => e === reason,
+  );
+  // Aborted after it found the file, before it opens it.
+  const controller = new AbortController();
+  const realpath = fsp.realpath;
+  t.mock.method(fsp, 'realpath', async (...args) => {
+    const real = await realpath(...args);
+    if (args[0].endsWith('welcome.ejs')) controller.abort(reason);
+    return real;
+  });
+  await assert.rejects(
+    loader.load('welcome.ejs', { signal: controller.signal }),
+    (e) => e === reason,
+  );
+  assert.strictEqual((await loader.load('welcome.ejs', {})).source, '<p>Hi <%= name %></p>');
+});
+
 test('Templates: the file loader takes a directory it cannot open for none', async (t) => {
   // Windows opens no directory: EISDIR, where the others open it and say it
   // is no file.

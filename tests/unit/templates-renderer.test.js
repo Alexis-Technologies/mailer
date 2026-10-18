@@ -695,6 +695,108 @@ test('Templates: no part of a message is longer than maxOutputBytes', async () =
   assert.strictEqual(finished.phase, 'finish');
 });
 
+test('Templates: a render that hangs times out, and what it waited for is read anew', async () => {
+  // Before: no timeout, and a read or a compile that never settled was kept
+  // and waited for by every render after it, until clear().
+  let hang = true;
+  const signals = new Map();
+  const loader = {
+    load: (name, options) => {
+      signals.set(name, options.signal);
+      if (name !== 'a.tpl') return undefined;
+      return hang ? new Promise(() => {}) : { name, source: '<p>{{n}}</p>' };
+    },
+  };
+  const renderer = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader,
+    renderTimeoutMilliseconds: 50,
+  });
+  const error = await renderer.render({ template: 'a', locale: 'uk' }).catch((e) => e);
+  assert.ok(error instanceof TemplateRenderError);
+  assert.deepStrictEqual(
+    [error.phase, error.retryable, error.template, error.requested, error.locale],
+    ['timeout', true, 'a', 'a', 'uk'],
+  );
+  assert.match(error.message, /did not render in time: It took over 50 ms/);
+  // The loader is told to stop, at the timeout of its read, which may come a
+  // tick after that of the render.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(signals.get('a.tpl').aborted);
+  assert.strictEqual(signals.get('a.tpl').reason.name, 'TimeoutError');
+  assert.ok(!signals.get('a.uk.tpl').aborted);
+  hang = false;
+  assert.strictEqual(
+    (await renderer.render({ template: 'a', context: { n: 1 } })).html,
+    '<p>1</p>',
+  );
+  // A compile that hangs is made anew too.
+  let stalls = 1;
+  const engine = fakeEngine();
+  const compile = engine.compile;
+  engine.compile = (source, context) =>
+    stalls-- > 0 ? new Promise(() => {}) : compile(source, context);
+  const { renderer: stalled } = rendererOf(
+    { 'b.tpl': '<p/>' },
+    { engine, renderTimeoutMilliseconds: 50 },
+  );
+  assert.strictEqual((await stalled.render({ template: 'b' }).catch((e) => e)).phase, 'timeout');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.strictEqual((await stalled.render({ template: 'b' })).html, '<p/>');
+});
+
+test('Templates: a render stops at the abort of its signal, with its reason', async () => {
+  // Before: render took no signal, so a worker shutting down waited for it.
+  const seen = [];
+  const loader = {
+    load: (name, options) => {
+      seen.push(options.signal);
+      return name === 'a.tpl' ? new Promise(() => {}) : undefined;
+    },
+  };
+  const renderer = createTemplateRenderer({ engine: fakeEngine(), loader });
+  const controller = new AbortController();
+  const rendering = renderer.render({ template: 'a', signal: controller.signal });
+  const reason = new Error('shutting down');
+  setTimeout(() => controller.abort(reason), 10);
+  assert.strictEqual(await rendering.catch((e) => e), reason);
+  // An aborted signal stops it before it reads anything.
+  const before = seen.length;
+  const aborted = AbortSignal.abort(reason);
+  assert.strictEqual(
+    await renderer.render({ template: 'a', signal: aborted }).catch((e) => e),
+    reason,
+  );
+  assert.strictEqual(seen.length, before);
+  // Without a cache, the reads are the render's own, and its signal stops them.
+  const uncached = createTemplateRenderer({ engine: fakeEngine(), loader, cache: false });
+  const own = new AbortController();
+  const pending = uncached.render({ template: 'a', signal: own.signal });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  own.abort(reason);
+  assert.strictEqual(await pending.catch((e) => e), reason);
+  assert.ok(seen.at(-1).aborted);
+  // A render that ends first is not touched by a later abort.
+  const done = new AbortController();
+  const { renderer: quick } = rendererOf({ 'q.tpl': '<p/>' });
+  assert.strictEqual((await quick.render({ template: 'q', signal: done.signal })).html, '<p/>');
+  done.abort();
+  // An abort between the steps of a render stops it there.
+  const later = new AbortController();
+  const { renderer: steps } = rendererOf(
+    { 's.tpl': '<p/>' },
+    { globals: () => later.abort(reason) },
+  );
+  assert.strictEqual(
+    await steps.render({ template: 's', signal: later.signal }).catch((e) => e),
+    reason,
+  );
+  await assert.rejects(
+    renderer.render({ template: 'a', signal: {} }),
+    /signal must be an AbortSignal/,
+  );
+});
+
 test('Templates: the renderer checks its options', () => {
   const engine = fakeEngine();
   const loader = createMemoryLoader({});
@@ -726,12 +828,16 @@ test('Templates: the renderer checks its options', () => {
     [{ engine, loader, maxIncludes: 0 }, /maxIncludes must be a positive whole number/],
     [{ engine, loader, maxIncludeDepth: 1.5 }, /maxIncludeDepth must be/],
     [{ engine, loader, maxOutputBytes: '1' }, /maxOutputBytes must be/],
+    [{ engine, loader, renderTimeoutMilliseconds: -1 }, /renderTimeoutMilliseconds must be/],
+    [{ engine, loader, renderTimeoutMilliseconds: Number.NaN }, /renderTimeoutMilliseconds/],
   ];
   for (const [options, pattern] of bad) {
     assert.throws(() => createTemplateRenderer(options), pattern, String(pattern));
   }
   assert.throws(() => createTemplateRenderer(), /needs an engine/);
   createTemplateRenderer({ engine, loader, maxIncludes: Infinity, maxOutputBytes: Infinity });
+  createTemplateRenderer({ engine, loader, renderTimeoutMilliseconds: 0 });
+  createTemplateRenderer({ engine, loader, renderTimeoutMilliseconds: Infinity });
   assert.throws(() => createCssInliner({}), /needs inline/);
   assert.throws(() => createCssInliner({ inline() {}, options: 1 }), /must be an object/);
 });

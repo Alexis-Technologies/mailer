@@ -100,6 +100,16 @@ const output = await templates.render({
   template: 'welcome',
   context: { name: 'Ada' },
   locale: 'uk',
+  tenantId: 'acme',
+  signal: AbortSignal.timeout(1000),
+});
+expectError(templates.render({ template: 'welcome', signal: 'now' }));
+createTemplateRenderer({
+  engine: hbs,
+  loader: {
+    load: (name, options) => (options?.signal?.aborted ? undefined : { name, source: '' }),
+  },
+  renderTimeoutMilliseconds: 5000,
 });
 expectType<TemplateOutput>(output);
 expectType<string | undefined>(output.subject);

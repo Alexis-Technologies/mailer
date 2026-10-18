@@ -19,6 +19,15 @@ export interface TemplateInput<TContext extends object = TemplateContext> {
    * `defaultLocale` so, then the template without a locale.
    */
   readonly locale?: string;
+  /** The tenant the message is for, as the worker of `./queue` gives it: for `globals`, which the renderer reads nothing of. */
+  readonly tenantId?: string;
+  /**
+   * Stops the render, which rejects with its reason. With the cache on, a
+   * read or a compile that other renders wait for goes on for them; without
+   * it, the reads of the render are its own, and the loader is given the
+   * signal.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -46,14 +55,25 @@ export interface TemplateSource<TSource = string> {
   readonly path?: string;
 }
 
+/** What a loader is told as it reads. */
+export interface TemplateLoadOptions {
+  /**
+   * Aborted when the read is no longer waited for: at the timeout of the
+   * render (`TimeoutError`), or, without a cache, at the abort of the one
+   * render it is for. A loader that can stop, a query or a fetch, stops.
+   */
+  readonly signal?: AbortSignal;
+}
+
 /**
  * Where templates are read by name: relative to the root of the loader, `/`
- * between directories, no `.` or `..` segment.
+ * between directories, no segment starting with `.`.
  */
 export interface TemplateLoader<TSource = string> {
   /** The template of that name, or undefined when there is none. */
   load(
     name: string,
+    options?: TemplateLoadOptions,
   ): TemplateSource<TSource> | undefined | Promise<TemplateSource<TSource> | undefined>;
   /**
    * The same, synchronously: EJS, Pug, Eta and Mustache read their includes
@@ -251,6 +271,14 @@ export interface TemplateRendererOptions<TSource = string> {
   readonly maxIncludeDepth?: number;
   /** The largest HTML, text or subject a render gives, in bytes of UTF-8. Infinity for no bound. @default 10485760 */
   readonly maxOutputBytes?: number;
+  /**
+   * How long a render may take: then it fails with a retryable
+   * `TemplateRenderError` of phase `timeout`, and a read or a compile it
+   * waited for is made anew by the next render rather than kept. 0 or
+   * Infinity for none. A template that loops without awaiting cannot be
+   * stopped so: Liquid's `renderLimit` stops one. @default 30000
+   */
+  readonly renderTimeoutMilliseconds?: number;
 }
 
 /** A renderer of templates by name, a `Renderer` of `./render`. */
@@ -298,7 +326,8 @@ export type TemplateRenderPhase =
   | 'render'
   | 'layout'
   | 'finish'
-  | 'inline-css';
+  | 'inline-css'
+  | 'timeout';
 
 /**
  * What an error of ./templates tells of a render, for a worker to read
@@ -377,11 +406,14 @@ export interface TemplateRenderErrorOptions extends ErrorOptions {
 /**
  * A template that does not render: its syntax, a value it cannot read, a
  * helper that threw, MJML that does not validate. The engine's error is its
- * cause. Not retryable: the same input fails again.
+ * cause. Not retryable, as the same input fails again, but for phase
+ * `timeout`: what the render waited for, a loader or a helper, may answer on
+ * another attempt.
  */
 export declare class TemplateRenderError extends Error implements TemplateErrorFields {
   readonly code: 'MAILER_TEMPLATE_RENDER';
-  readonly retryable: false;
+  /** false; true for phase `timeout`. */
+  readonly retryable: boolean;
   /** The template that failed, as its loader names it: `welcome.uk.hbs`, a layout, a partial. */
   readonly template: string;
   readonly phase: TemplateRenderPhase;

@@ -257,6 +257,26 @@ Pug and Handlebars look up as they compile, until their first await. The depth
 is counted where the engine names the template an include is written in (Eta,
 Handlebars); a partial that names itself is no deeper for it. The file loader reads no template over its `maxBytes` (1 MiB).
 
+## Timeouts and aborts
+
+A render takes `renderTimeoutMilliseconds` (30000) at most; then it fails with
+a `TemplateRenderError` of phase `timeout`, which is retryable, as what it
+waited for, a loader or an async helper, may answer on another attempt. A read
+or a compile still pending then is not kept: the next render makes it anew,
+rather than wait for one that hangs, and the loader is told to stop through
+the `signal` of `load(name, { signal })`.
+
+`render({ template, context, locale, signal })` stops at the abort of
+`signal`, rejecting with its reason, as the worker of the queue passes it when
+it shuts down. With the cache on, a read or a compile that other renders wait
+for goes on for them; without it, the reads are the render's own, and the
+loader is given its signal.
+
+Neither can stop a template that loops without ever awaiting: JavaScript runs
+it to its end. Liquid's `renderLimit` (on by default) is checked as it
+renders; with the other engines, keep such templates out of the hands of
+those who could write one (see [who may write a template](#who-may-write-a-template)).
+
 ## Errors
 
 | Thrown | When | `retryable` |

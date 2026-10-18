@@ -121,51 +121,32 @@ const spend = () => {
   }
 };
 
-/**
- * Makes the includes of a renderer: the reads of its loader, kept while its
- * cache is on, and the lookup of a name an engine includes.
- *
- * @param loader The loader of the renderer.
- * @param options `partials`, the directories searched by a bare name after the
- * root, `cache`, `maxEntries` and `maxIncludeDepth`.
- * @returns `{ includes, top }`: the includes, one object per renderer and per
- * `clear()`, and the mark of a template the renderer compiles itself, which
- * is no include deep.
- * @internal
- */
-const createIncludes = (loader, options) => {
-  const { partials, cache, maxIncludeDepth } = options;
-  const sources = createCache(cache ? options.maxEntries : 0);
-  const syncSources = createCache(cache ? options.maxEntries : 0);
-  // How many includes deep each template is, at least, as an include is
-  // written in a template: a chain of them deeper than maxIncludeDepth is
-  // refused, and a template that includes itself is as deep as before.
-  const depths = createCache(options.maxEntries);
-  const depthOf = (include, from) => {
-    const depth = (from === undefined ? 0 : (depths.get(from) ?? 0)) + 1;
-    if (depth > maxIncludeDepth) {
-      throw new RangeError(
-        `The include ${JSON.stringify(include)} of ${from} is more than ${maxIncludeDepth} ` +
-          'includes deep (maxIncludeDepth).',
-      );
-    }
-    return depth;
+// The reads of a loader, kept while the cache is on.  A loader is given
+// template names alone, whoever asks: an engine, or the variants of the
+// renderer; and it is told when to stop: at the timeout of a read, which
+// renders that wait for it share, or when the one render it is for is
+// aborted.
+const readsOf = (loader, options) => {
+  const sources = createCache(options.cache ? options.maxEntries : 0);
+  const syncSources = createCache(options.cache ? options.maxEntries : 0);
+  const signalOf = (timeout) => {
+    if (options.signal === undefined) return timeout;
+    return timeout === undefined ? options.signal : AbortSignal.any([timeout, options.signal]);
   };
-  const reached = (name, depth) => {
-    const known = depths.get(name);
-    if (known === undefined || depth < known) depths.set(name, depth);
-  };
-  // A loader is given template names alone, whoever asks: an engine, or the
-  // variants of the renderer.
   const read = (name) => {
     if (!isTemplateName(name)) return Promise.reject(notTemplateName(name, READ));
-    return memoize(sources, name, async () => {
-      try {
-        return (await loader.load(name)) ?? undefined;
-      } catch (error) {
-        throw loadFailure(name, error);
-      }
-    });
+    return memoize(
+      sources,
+      name,
+      async (timeout) => {
+        try {
+          return (await loader.load(name, { signal: signalOf(timeout) })) ?? undefined;
+        } catch (error) {
+          throw loadFailure(name, error);
+        }
+      },
+      options.timeoutMilliseconds,
+    );
   };
   const readSync = (name) => {
     checkTemplateName(name, READ);
@@ -185,38 +166,84 @@ const createIncludes = (loader, options) => {
     syncSources.set(name, { source });
     return source;
   };
+  return { read, readSync };
+};
+
+// How many includes deep each template is, at least, as an include is
+// written in a template: a chain of them deeper than maxIncludeDepth is
+// refused, and a template that includes itself is as deep as before.
+const depthsOf = (options) => {
+  const { maxIncludeDepth } = options;
+  const depths = createCache(options.maxEntries);
+  return {
+    of(include, from) {
+      const depth = (from === undefined ? 0 : (depths.get(from) ?? 0)) + 1;
+      if (depth > maxIncludeDepth) {
+        throw new RangeError(
+          `The include ${JSON.stringify(include)} of ${from} is more than ${maxIncludeDepth} ` +
+            'includes deep (maxIncludeDepth).',
+        );
+      }
+      return depth;
+    },
+    reached(name, depth) {
+      const known = depths.get(name);
+      if (known === undefined || depth < known) depths.set(name, depth);
+    },
+    top: (name) => depths.set(name, 0),
+  };
+};
+
+/**
+ * Makes the includes of a renderer: the reads of its loader, kept while its
+ * cache is on, and the lookup of a name an engine includes.
+ *
+ * @param loader The loader of the renderer.
+ * @param options `partials`, the directories searched by a bare name after the
+ * root, `cache`, `maxEntries`, `maxIncludeDepth`, `timeoutMilliseconds`, after
+ * which a read that hangs is aborted and read anew, and `signal`, that of the
+ * one render the includes are for, without a cache.
+ * @returns `{ includes, top }`: the includes, one object per renderer and per
+ * `clear()`, and the mark of a template the renderer compiles itself, which
+ * is no include deep.
+ * @internal
+ */
+const createIncludes = (loader, options) => {
+  const { partials } = options;
+  const { read, readSync } = readsOf(loader, options);
+  const depths = depthsOf(options);
   const includes = Object.freeze({
     partials,
-    cache,
+    cache: options.cache,
     join: joinName,
     read,
     readSync,
     async lookup(include, from, extensions = ['']) {
       spend();
-      const depth = depthOf(include, from);
+      const depth = depths.of(include, from);
       const names = candidatesOf(include, from, extensions, partials);
       for (const name of names) {
         const source = await read(name);
         if (source === undefined) continue;
-        reached(source.name, depth);
+        depths.reached(source.name, depth);
         return source;
       }
       throw new TemplateNotFoundError(include, names, { from });
     },
     lookupSync(include, from, extensions = ['']) {
       spend();
-      const depth = depthOf(include, from);
+      const depth = depths.of(include, from);
       const names = candidatesOf(include, from, extensions, partials);
       for (const name of names) {
         const source = readSync(name);
         if (source === undefined) continue;
-        reached(source.name, depth);
+        depths.reached(source.name, depth);
         return source;
       }
       throw new TemplateNotFoundError(include, names, { from });
     },
   });
-  return { includes, top: (name) => depths.set(name, 0) };
+  return { includes, top: depths.top };
 };
 
 module.exports = { createIncludes, joinName, withBounds };

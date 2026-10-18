@@ -9,7 +9,9 @@ const { htmlToText } = require('../render/html-to-text.js');
 const { decodeEntities } = require('../render/entities.js');
 const { messageOf } = require('../internal/decorator.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
-const { createCache, memoize } = require('./cache.js');
+const { abortReason } = require('../internal/abort.js');
+const { timerMs } = require('../internal/sleep.js');
+const { createCache, hasTimeout, memoize } = require('./cache.js');
 const {
   forRender,
   inPhase,
@@ -27,6 +29,9 @@ const DEFAULT_MAX_ENTRIES = 1000;
 const DEFAULT_MAX_INCLUDES = 10_000;
 const DEFAULT_MAX_INCLUDE_DEPTH = 32;
 const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+// How long a render may take; what it waits for after that, a read or a
+// compile, is made anew by the next render rather than waited for.
+const DEFAULT_RENDER_TIMEOUT_MS = 30_000;
 const NO_LAYOUT = new Set(['none', 'false']);
 
 const defaultVariantName = (template, variant) => {
@@ -86,6 +91,15 @@ const checkBound = (value, name, fallback) => {
   return value;
 };
 
+// 0 and Infinity mean no timeout, as for the transports.
+const checkTimeout = (value) => {
+  if (value === undefined) return DEFAULT_RENDER_TIMEOUT_MS;
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    throw new TypeError(`renderTimeoutMilliseconds must be a non-negative number: ${value}`);
+  }
+  return value;
+};
+
 const checkLocale = (locale, what) => {
   if (locale === undefined) return undefined;
   if (typeof locale !== 'string') throw new TypeError(`${what} must be a string.`);
@@ -140,6 +154,7 @@ const createRendererConfig = (options) => {
       DEFAULT_MAX_INCLUDE_DEPTH,
     ),
     maxOutputBytes: checkBound(options.maxOutputBytes, 'maxOutputBytes', DEFAULT_MAX_OUTPUT_BYTES),
+    renderTimeoutMilliseconds: checkTimeout(options.renderTimeoutMilliseconds),
   };
 };
 
@@ -172,7 +187,11 @@ const checkInput = (input) => {
   if (typeof context !== 'object' || context === null || Array.isArray(context)) {
     throw new TypeError('context must be an object.');
   }
-  return { template, context, locale: checkLocale(input.locale, 'locale') };
+  const { signal } = input;
+  if (signal !== undefined && typeof signal?.addEventListener !== 'function') {
+    throw new TypeError('signal must be an AbortSignal.');
+  }
+  return { template, context, locale: checkLocale(input.locale, 'locale'), signal };
 };
 
 const wrapError = (error, template, phase, engine) => {
@@ -218,6 +237,39 @@ const normalizeSubject = (subject) => {
 
 const isParts = (value) => typeof value === 'object' && value !== null;
 
+// A render, settled at its timeout or at the abort of its signal, whichever
+// comes first: what it waits for goes on, for the renders that share it, and
+// is not kept if it hangs.  The timer keeps the process, as its caller waits.
+const inTime = (config, checked, rendering) => {
+  const timeout = config.renderTimeoutMilliseconds;
+  const { signal } = checked;
+  if (!hasTimeout(timeout) && signal === undefined) return rendering;
+  return new Promise((resolve, reject) => {
+    let timer;
+    const onAbort = () => {
+      settle();
+      reject(abortReason(signal));
+    };
+    const settle = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    if (hasTimeout(timeout)) {
+      timer = setTimeout(() => {
+        settle();
+        reject(
+          new TemplateRenderError(checked.template, 'timeout', `It took over ${timeout} ms.`, {
+            requested: checked.template,
+            locale: checked.locale,
+          }),
+        );
+      }, timerMs(timeout));
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    rendering.then(resolve, reject).finally(settle);
+  });
+};
+
 /**
  * Makes a renderer of templates by name.
  *
@@ -232,12 +284,14 @@ const isParts = (value) => typeof value === 'object' && value !== null;
  */
 const createTemplateRenderer = (options = {}) => {
   const config = createRendererConfig(options);
-  const makeIncludes = () =>
+  const makeIncludes = (signal) =>
     createIncludes(config.loader, {
       partials: config.partials,
       cache: config.cache,
       maxEntries: config.maxEntries,
       maxIncludeDepth: config.maxIncludeDepth,
+      timeoutMilliseconds: config.renderTimeoutMilliseconds,
+      signal,
     });
   const compiled = createCache(config.cache ? config.maxEntries : 0);
   const resolved = createCache(config.cache ? config.maxEntries : 0);
@@ -245,11 +299,13 @@ const createTemplateRenderer = (options = {}) => {
   return {
     async render(input) {
       const checked = checkInput(input);
-      // Without a cache, each render reads and compiles anew, includes too.
-      const current = config.cache ? state : { ...state, files: makeIncludes() };
+      checked.signal?.throwIfAborted();
+      // Without a cache, each render reads and compiles anew, includes too,
+      // which its signal stops.
+      const current = config.cache ? state : { ...state, files: makeIncludes(checked.signal) };
       const bounds = { includes: 0, maxIncludes: config.maxIncludes };
       try {
-        return await renderTemplate(current, checked, input, bounds);
+        return await inTime(config, checked, renderTemplate(current, checked, input, bounds));
       } catch (error) {
         throw forRender(error, checked.template, checked.locale);
       }
@@ -321,8 +377,11 @@ const resolveTemplate = async (state, template, locale) => {
 };
 
 const resolvedFor = (state, template, locale) =>
-  memoize(state.resolved, `${template}\u0000${locale ?? ''}`, () =>
-    resolveTemplate(state, template, locale),
+  memoize(
+    state.resolved,
+    `${template}\u0000${locale ?? ''}`,
+    () => resolveTemplate(state, template, locale),
+    state.config.renderTimeoutMilliseconds,
   );
 
 const compileEntry = async (state, found, part, bounds) => {
@@ -367,8 +426,11 @@ const compileEntry = async (state, found, part, bounds) => {
 };
 
 const compiledFor = (state, found, part, bounds) =>
-  memoize(state.compiled, `${found.engine.name}\u0000${part}\u0000${found.name}`, () =>
-    compileEntry(state, found, part, bounds),
+  memoize(
+    state.compiled,
+    `${found.engine.name}\u0000${part}\u0000${found.name}`,
+    () => compileEntry(state, found, part, bounds),
+    state.config.renderTimeoutMilliseconds,
   );
 
 const renderString = async (state, phase, entry, render, scope, bounds) => {
@@ -444,6 +506,8 @@ const renderTemplate = async (state, checked, input, bounds) => {
   } catch (error) {
     throw inPhase(error, 'resolve');
   }
+  // An aborted render stops at its next step, as it rejected already.
+  checked.signal?.throwIfAborted();
   const scope = { ...(await globalsOf(config, input)), ...checked.context };
   const main = await compiledFor(
     state,
@@ -454,7 +518,9 @@ const renderTemplate = async (state, checked, input, bounds) => {
   let html;
   let text;
   let subject;
+  checked.signal?.throwIfAborted();
   const output = await run('render', main.name, main.engine, () => main.render(scope), bounds);
+  checked.signal?.throwIfAborted();
   if (typeof output === 'string') {
     if (resolution.html === undefined) text = decodeEntities(output);
     else html = output;

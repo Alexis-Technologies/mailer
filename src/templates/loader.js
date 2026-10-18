@@ -143,7 +143,8 @@ const isNoFile = (error) => isMissing(error) || error?.code === 'EISDIR';
  * Makes a loader of the templates in a directory.
  *
  * @param options `dir`, `extensions` (any by default) and `maxBytes` (1 MiB).
- * @returns The loader.
+ * @returns The loader: `load(name, { signal })`, which stops between its
+ * reads when the signal aborts, and `loadSync(name)`.
  * @throws {TypeError} If an option is invalid.
  */
 const createFileLoader = (options = {}) => {
@@ -169,8 +170,10 @@ const createFileLoader = (options = {}) => {
   };
   const accepts = (name) => isTemplateName(name) && hasExtension(name, extensions);
   return {
-    async load(name) {
+    async load(name, loadOptions) {
       if (!accepts(name)) return undefined;
+      const signal = loadOptions?.signal;
+      signal?.throwIfAborted();
       root ??= await fsp.realpath(dir);
       let real;
       try {
@@ -180,6 +183,7 @@ const createFileLoader = (options = {}) => {
         throw error;
       }
       checkWithin(name, real);
+      signal?.throwIfAborted();
       let handle;
       try {
         handle = await fsp.open(real, OPEN_FLAGS);

@@ -2,6 +2,8 @@
 // used entry dropped first, on a Map, which iterates in the order of
 // insertion: an entry read is written anew, so the first one is the oldest.
 
+const { timerMs } = require('../internal/sleep.js');
+
 /**
  * Makes a cache of at most `maxEntries` entries.  With `maxEntries` 0 it keeps
  * nothing.
@@ -34,19 +36,43 @@ const createCache = (maxEntries) => {
   };
 };
 
+// A timeout of none: 0, Infinity or undefined.
+const hasTimeout = (milliseconds) =>
+  milliseconds !== undefined && milliseconds > 0 && milliseconds !== Number.POSITIVE_INFINITY;
+
 /**
  * The entry of `key`, made by `make` once while it is kept; a promise that
- * rejects is not kept, so the next call makes it again.
+ * rejects is not kept, so the next call makes it again, nor is one still
+ * pending after `timeoutMilliseconds`, which is aborted: what hangs, a read
+ * or a compile, is made anew by the next call rather than waited for by
+ * every one after.
  *
+ * @param make Makes the entry, given the signal of its timeout, if any.
  * @internal
  */
-const memoize = (cache, key, make) => {
+const memoize = (cache, key, make, timeoutMilliseconds) => {
   const kept = cache.get(key);
   if (kept !== undefined) return kept;
-  const made = Promise.resolve().then(make);
+  const controller = hasTimeout(timeoutMilliseconds) ? new AbortController() : undefined;
+  const made = Promise.resolve().then(() => make(controller?.signal));
   cache.set(key, made);
-  made.catch(() => cache.forget(key, made));
+  let timer;
+  if (controller !== undefined) {
+    timer = setTimeout(() => {
+      cache.forget(key, made);
+      controller.abort(new DOMException('The read or compile took too long.', 'TimeoutError'));
+    }, timerMs(timeoutMilliseconds));
+    // The render that waits for it keeps the process, by a timer of its own.
+    timer.unref?.();
+  }
+  made.then(
+    () => clearTimeout(timer),
+    () => {
+      clearTimeout(timer);
+      cache.forget(key, made);
+    },
+  );
   return made;
 };
 
-module.exports = { createCache, memoize };
+module.exports = { createCache, hasTimeout, memoize };

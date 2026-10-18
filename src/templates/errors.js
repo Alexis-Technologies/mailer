@@ -54,22 +54,24 @@ class TemplateNotFoundError extends Error {
 /**
  * A template that does not render: its syntax, a value it cannot read, a
  * helper that threw, MJML that does not validate.  The engine's error is its
- * cause.
+ * cause.  It is not retryable, but for a render that ran out of time, whose
+ * loader or helper may answer on another attempt.
  */
 class TemplateRenderError extends Error {
   /**
    * @param template The template that failed.
    * @param phase Where: `front-matter`, `compile`, `render`, `layout`,
-   * `finish` or `inline-css`.
+   * `finish`, `inline-css`, or `timeout` for a render that ran out of time.
    * @param message What happened.
    * @param options `engine`, the name of the engine; `requested` and
    * `locale`; and `cause`.
    */
   constructor(template, phase, message, options = {}) {
-    super(`The template ${JSON.stringify(template)} failed to ${phase}: ${message}`, options);
+    const failed = phase === 'timeout' ? 'did not render in time' : `failed to ${phase}`;
+    super(`The template ${JSON.stringify(template)} ${failed}: ${message}`, options);
     this.name = 'TemplateRenderError';
     this.code = 'MAILER_TEMPLATE_RENDER';
-    this.retryable = false;
+    this.retryable = phase === 'timeout';
     this.template = template;
     describe(this, { ...options, phase });
   }
