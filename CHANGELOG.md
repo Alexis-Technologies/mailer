@@ -29,7 +29,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   for every attempt. The
   worker fails a permanent failure, a missing template or a bug at once, retries a temporary one
   never sooner than `Retry-After`, an operator's failure (`auth`, `configuration`) after five
-  minutes, and never sends again a message of unknown delivery. `scheduledAt` is a delay of the
+  minutes, and never sends again a message of unknown delivery. The renderer is given the job's
+  `signal`; a template that fails to render leaves only its name, phase and engine in the store and
+  the audit, its text in the log at `debug`. `scheduledAt` is a delay of the
   queue and `expiresAt` a deadline. `createMailJobHandler` is the worker for any driver;
   `createPollingDriver(source)` makes a driver of a store that lends its jobs (an outbox), and
   `createMemoryQueue()` is one in memory for tests, its jobs on heaps so a reserve costs

@@ -280,6 +280,8 @@ export interface MailRenderInput {
   readonly context: JsonObject;
   readonly locale?: string;
   readonly tenantId?: string;
+  /** Aborts when the worker stops the job: a renderer may stop with it. */
+  readonly signal?: AbortSignal;
 }
 
 /** What `classify` may decide of a failed receipt. */

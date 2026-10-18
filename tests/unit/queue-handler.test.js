@@ -144,8 +144,15 @@ test('Queue: a content job is sent as it is; the subject of the job wins over th
   const { handler: spied } = handlerOf({ renderer: spy });
   await run(spied, jobOf({ locale: 'uk', tenantId: 't1' }));
   assert.deepStrictEqual(inputs, [
-    { template: 'welcome', context: { name: 'Ada' }, locale: 'uk', tenantId: 't1' },
+    {
+      template: 'welcome',
+      context: { name: 'Ada' },
+      locale: 'uk',
+      tenantId: 't1',
+      signal: inputs[0].signal,
+    },
   ]);
+  assert.ok(inputs[0].signal instanceof AbortSignal);
 });
 
 test('Queue: a retryable failure is retried after at least its Retry-After', async () => {
@@ -593,4 +600,47 @@ test('Queue: under redelivered: delivery_unknown, a run again after a submit is 
   assert.strictEqual((await run(plain, job)).type, 'ack');
   assert.strictEqual(again.calls.length, 1);
   assert.throws(() => handlerOf({ redelivered: 'never' }), /redelivered must be/);
+});
+
+test('Queue: a template that fails leaves its text in the log, not the store or the audit', async () => {
+  const records = [];
+  const logger = {
+    debug: (record, message) => records.push([message, record.reason]),
+    error: () => {},
+  };
+  const inputs = [];
+  const renderer = {
+    render(input) {
+      inputs.push(input);
+      throw new TemplateNotFoundError('welcome', ['welcome.hbs']);
+    },
+  };
+  const leaky = {
+    render() {
+      throw Object.assign(new Error('helper failed on {"card":"4242 4242 4242 4242"}'), {
+        code: 'MAILER_TEMPLATE_RENDER',
+        template: 'welcome.uk.hbs',
+        phase: 'render',
+        engine: 'handlebars',
+        retryable: false,
+      });
+    },
+  };
+  const { handler: missing } = handlerOf({ renderer, logger });
+  const signal = new AbortController().signal;
+  await run(missing, jobOf(), signal);
+  assert.strictEqual(inputs[0].signal, signal);
+  const { handler, audit } = handlerOf({ renderer: leaky, logger });
+  const outcome = await run(handler, jobOf());
+  assert.deepStrictEqual([outcome.type, outcome.code], ['fail', 'render.failed']);
+  assert.strictEqual(
+    outcome.reason,
+    'The template "welcome.uk.hbs" failed (render) with handlebars.',
+  );
+  const event = audit.events.at(-1);
+  assert.strictEqual(event.state, 'failed');
+  assert.doesNotMatch(JSON.stringify(event), /4242/);
+  assert.ok(
+    records.some(([message, reason]) => message === 'queue.render.failed' && /4242/.test(reason)),
+  );
 });

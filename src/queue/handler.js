@@ -248,6 +248,28 @@ const settleThrown = (run, error, code) => {
   return settleFailure(run, receipt, code);
 };
 
+// A template that fails to render tells what a helper or filter threw, an excerpt of
+// its source, or a value of the context: none of that goes into the store of
+// the queue or the audit, only which template failed and where, the full
+// text to the log at debug.
+const templateFailureOf = (run, error) => {
+  // A template not found names only templates.
+  if (error?.code !== 'MAILER_TEMPLATE_RENDER') return error;
+  run.config.log.write(
+    'debug',
+    () => ({ jobId: run.job.id, code: error.code, reason: reasonOf(messageOf(error)) }),
+    'queue.render.failed',
+  );
+  const where = error.phase === undefined ? '' : ` (${error.phase})`;
+  const engine = error.engine === undefined ? '' : ` with ${error.engine}`;
+  return Object.assign(
+    new Error(
+      `The template ${JSON.stringify(error.template ?? run.data.template)} failed${where}${engine}.`,
+    ),
+    { code: error.code, retryable: error.retryable, name: error.name },
+  );
+};
+
 const renderStep = async (run) => {
   const { config, data } = run;
   if (data.kind === 'content') return { fields: { subject: data.subject, content: data.content } };
@@ -265,10 +287,12 @@ const renderStep = async (run) => {
       context: data.context,
       locale: data.locale,
       tenantId: data.tenantId,
+      // A worker that stops stops its render; a renderer may hear it.
+      signal: run.signal,
     });
   } catch (error) {
     if (run.signal.aborted) return { outcome: release(run, 'aborted while rendering') };
-    return { outcome: await settleThrown(run, error, 'render.failed') };
+    return { outcome: await settleThrown(run, templateFailureOf(run, error), 'render.failed') };
   }
   const subject = data.subject ?? fields.subject;
   if (typeof subject !== 'string' || subject === '') {
