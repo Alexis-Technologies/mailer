@@ -149,12 +149,17 @@ test('Render: htmlToText takes time in proportion to its input, not its square',
   };
   const megabyte = 1024 * 1024;
   for (const piece of ['a <p>', '<', '<a href="h">x</a>']) {
-    const one = bestOf(piece.repeat(Math.ceil(megabyte / piece.length)));
-    if (piece === 'a <p>') assert.ok(one < 1000, `1 MB of ${piece} took ${one} ms`);
-    const two = bestOf(piece.repeat(Math.ceil((2 * megabyte) / piece.length)));
-    // Linear is about 2; the floor keeps a few milliseconds of noise from
-    // deciding it.
-    assert.ok(two <= 3 * Math.max(one, 25), `${piece}: 1 MB ${one} ms, 2 MB ${two} ms`);
+    const quarter = bestOf(piece.repeat(Math.ceil(megabyte / 4 / piece.length)));
+    const whole = bestOf(piece.repeat(Math.ceil(megabyte / piece.length)));
+    if (piece === 'a <p>') assert.ok(whole < 1000, `1 MB of ${piece} took ${whole} ms`);
+    // Linear is about 4 and quadratic 16: 8 is as far from each, so that the
+    // noise of a busy runner (a garbage collection more in the larger run)
+    // does not decide it, as it did between 1 and 2 MB; the floor keeps a few
+    // milliseconds of it from deciding either.
+    assert.ok(
+      whole <= 8 * Math.max(quarter, 25),
+      `${piece}: 256 KB ${quarter} ms, 1 MB ${whole} ms`,
+    );
   }
 });
 
