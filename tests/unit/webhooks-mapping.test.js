@@ -681,3 +681,101 @@ test('Webhooks mapping: SparkPost, a bounce by its bounce class', async () => {
   const { events } = await verifier.verify({ body, headers: { Authorization: basic('sp', 'pw') } });
   assert.deepStrictEqual(batchOf(rows, events), expectedOf(rows));
 });
+
+test('Webhooks mapping: the Message-ID a provider reports, and the correlationId of metadata', async () => {
+  // Before: an event carried no correlationId, and the guide sent a message
+  // of unknown delivery to rfcMessageId, which the HTTP APIs write themselves.
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const sendgrid = createSendGridWebhookVerifier({
+    publicKey: publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    now: () => NOW,
+    replayStore: null,
+  });
+  const sgBody = JSON.stringify([
+    {
+      email: 'bob@example.com',
+      timestamp: 1_799_999_990,
+      sg_event_id: 'sg-c',
+      event: 'delivered',
+      'smtp-id': '<sg-1@example.com>',
+      correlationId: 'order-1',
+    },
+  ]);
+  const sgSignature = sign('sha256', Buffer.from(`1800000000${sgBody}`), privateKey).toString(
+    'base64',
+  );
+  const fromSendGrid = await sendgrid.verify({
+    body: sgBody,
+    headers: {
+      'X-Twilio-Email-Event-Webhook-Signature': sgSignature,
+      'X-Twilio-Email-Event-Webhook-Timestamp': '1800000000',
+    },
+  });
+  const mailersend = createMailerSendWebhookVerifier({ secret: 'ms-secret', replayStore: null });
+  const msBody = JSON.stringify({
+    type: 'activity.delivered',
+    created_at: '2027-01-15T08:00:00.000000Z',
+    data: {
+      id: 'ms-c',
+      email: {
+        headers: [
+          { name: 'Message-ID', value: '<ms-1@example.com>' },
+          { name: 'X-Metadata-correlationId', value: 'order-2' },
+        ],
+      },
+    },
+  });
+  const fromMailerSend = await mailersend.verify({
+    body: msBody,
+    headers: { signature: hmac('ms-secret', msBody) },
+  });
+  const smtp2go = createSmtp2goWebhookVerifier({ username: 'hook', password: 'pw' });
+  const fromSmtp2go = await smtp2go.verify({
+    body: JSON.stringify({
+      event: 'delivered',
+      email_id: '1abc',
+      rcpt: 'bob@example.com',
+      'Message-Id': '<s2g-1@example.com>',
+      'X-Metadata-correlationId': 'order-3',
+    }),
+    headers: { authorization: basic('hook', 'pw') },
+  });
+  const topic = 'arn:scw:sns:fr-par:project-1:tem-events';
+  const scw = createScalewayWebhookVerifier({
+    topicArns: [topic],
+    trustChain: scaleway.trustChain,
+    fetch: certificateFetch(scaleway.certificate).fetch,
+    now: () => SNS_NOW,
+    replayStore: null,
+  });
+  const fromScaleway = await scw.verify({
+    body: JSON.stringify(
+      signSns(
+        {
+          Type: 'Notification',
+          MessageId: 'scw-c',
+          TopicArn: topic,
+          Message: JSON.stringify({
+            id: 'scw-event-c',
+            type: 'email_delivered',
+            email_headers: [
+              { key: 'Message-Id', value: '<scw-1@example.com>' },
+              { key: 'X-Metadata-correlationId', value: 'order-4' },
+            ],
+          }),
+          Timestamp: '2027-01-01T12:00:00.000Z',
+          SigningCertURL: 'https://messaging.s3.fr-par.scw.cloud/fr-par/sns/cert-1.pem',
+        },
+        '2',
+        scaleway.privateKey,
+      ),
+    ),
+  });
+  const read = (delivery) => [delivery.events[0].rfcMessageId, delivery.events[0].correlationId];
+  assert.deepStrictEqual([fromSendGrid, fromMailerSend, fromSmtp2go, fromScaleway].map(read), [
+    ['<sg-1@example.com>', 'order-1'],
+    ['<ms-1@example.com>', 'order-2'],
+    ['<s2g-1@example.com>', 'order-3'],
+    ['<scw-1@example.com>', 'order-4'],
+  ]);
+});

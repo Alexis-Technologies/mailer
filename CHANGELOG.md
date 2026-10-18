@@ -131,8 +131,9 @@ additive but the defaults listed below.
   it meanwhile is refused as `pending`. `replayStore` is required where a verifier keeps ids
   (`createMemoryReplayStore()` in one process, a shared store of `reserve`, `commit` and
   `release`, or `null`), and a refusal carries the `status` to answer the provider with.
-  `onVerify` hears each request taken or refused, and an event carries the `rfcMessageId` it was
-  sent with, where the provider tells it, to find the events of a message of unknown delivery.
+  `onVerify` hears each request taken or refused, and an event carries the `correlationId` of the
+  message's metadata, given back by every provider but Azure, to find the events of a message of
+  unknown delivery, and the `rfcMessageId` the provider reports.
 - **`./pool` `verifyAll()`:** how each transport did, `verified`, `failed` or `unverifiable`,
   where `verify()` passes when one does.
 - **A failure of unknown delivery stands out:** `./otel` sets `mailer.delivery_unknown` on its

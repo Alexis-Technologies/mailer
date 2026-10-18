@@ -634,6 +634,10 @@ const createEvent = (fields) => {
   }
   event.tags = fields.tags ?? [];
   event.metadata = fields.metadata ?? Object.create(null);
+  // What the application gave the message to find its events by, which a
+  // receipt of unknown delivery lacks the provider's id for.
+  const correlationId = stringOf(event.metadata.correlationId);
+  if (correlationId !== undefined) event.correlationId = correlationId;
   event.raw = fields.raw;
   return event;
 };

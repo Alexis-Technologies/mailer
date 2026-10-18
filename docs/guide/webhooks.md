@@ -70,7 +70,8 @@ as many events.
 | `type` | `accepted`, `delivered`, `deferred`, `bounced`, `rejected`, `complained`, `unsubscribed`, `opened`, `clicked` or `unknown`. |
 | `id` | The id of the event, the same each time the provider sends it again. |
 | `messageId` | The provider's id of the message, the `messageId` of its receipt. |
-| `rfcMessageId` | The Message-ID the message was sent with, when the event carries it (SES, SendGrid, Mailgun, and the providers whose events carry the header fields of the email). |
+| `rfcMessageId` | The Message-ID as the provider reports it, when the event carries it (SES, SendGrid, Mailgun, MailerSend, SMTP2GO, Scaleway): one the provider wrote, for an HTTP API. |
+| `correlationId` | The `correlationId` of the message's metadata, given back by every provider but Azure: what a message of unknown delivery is found by. |
 | `recipient` | The recipient, when the event names one, its domain in lower case. |
 | `occurredAt` | When it happened. |
 | `bounce` | For a bounce: `kind` (`hard`, `soft` or `undetermined`), `code` and `diagnostic`. |
@@ -97,9 +98,18 @@ for the application to read. `tests/unit/webhooks-mapping.test.js` holds the
 mapping of every provider's events to this table.
 
 A receipt of unknown delivery (`deliveryUnknown`) has no `messageId` of the
-provider to find its events by. Give the message a `messageId` of its own, or
-send it through `./pool` or `./retry`, which pin one, and find its events by
-`rfcMessageId`, where the provider tells it.
+provider to find its events by, and `rfcMessageId` does not help: the HTTP
+APIs write a Message-ID of their own, not the one the message was given. Give
+the message `metadata: { correlationId }`, which every provider but Azure keeps
+and gives back with its events, and find them by the event's `correlationId`:
+
+```js
+const message = createMessage({ ...fields, metadata: { correlationId: order.id } });
+// Later, in the webhook handler:
+for (const event of delivery.events) {
+  await deliveries.record(event.correlationId ?? event.messageId, event);
+}
+```
 
 ## Time and replays
 

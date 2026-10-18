@@ -1350,13 +1350,20 @@ export interface DeliveryEvent<TProviderId extends string = string> {
    */
   readonly messageId?: string;
   /**
-   * The Message-ID of the message as it was sent, when the event carries it
-   * (SES, SendGrid, Mailgun, and the providers whose events carry the header
-   * fields of the email).  A receipt of unknown delivery has no `messageId`
-   * of the provider: give the message a `messageId`, or pass it through
-   * `./pool` or `./retry`, which pin one, and find its events by this.
+   * The Message-ID of the message as the provider reports it, when the event
+   * carries it (SES, SendGrid, Mailgun, MailerSend, SMTP2GO, Scaleway).  The
+   * HTTP APIs write a Message-ID of their own, so it is not the one a
+   * message was given; to find the events of a message, use
+   * `correlationId`.
    */
   readonly rfcMessageId?: string;
+  /**
+   * The `correlationId` of the message's `metadata`, which the providers
+   * that keep metadata (all but Azure) give back with its events: what a
+   * receipt of unknown delivery, which has no `messageId` of the provider,
+   * finds its events by.
+   */
+  readonly correlationId?: string;
   /**
    * The recipient, when the event names one, its domain in lower case so
    * that an address reads the same in the events of every provider.
