@@ -52,6 +52,12 @@ export interface MongoOutboxOptions extends PollingDriverOptions {
   readonly collection: MongoCollectionLike;
   /** Wakes the workers on a change of the collection, on a replica set. @default false */
   readonly changeStream?: boolean;
+  /**
+   * How far the clocks of the workers may be apart: a lease is taken back
+   * only that long after it ran out. The lease must be more than three times
+   * longer. @default 5000
+   */
+  readonly clockSkewToleranceMilliseconds?: number;
   /** The time a finished job is kept, and so the window of its duplicates. @default 604800 */
   readonly retainFinishedSeconds?: number;
   readonly logger?: Logger;

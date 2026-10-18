@@ -73,6 +73,11 @@ The outbox is a `QueueSource`, read by the polling driver of `./queue`:
 - a rate limit of the whole queue (`rateLimitScope: 'queue'`) pauses every
   worker, through a document of its own.
 
+Leases are written by the clock of each worker, so a lease is taken back only
+`clockSkewToleranceMilliseconds` (5 s) after it ran out, lest a worker whose
+clock is behind still holds it; keep the clocks of the workers in sync (NTP),
+within that tolerance, and the lease more than three times longer.
+
 Workers poll (`pollIntervalMilliseconds`, a second). With `changeStream: true`,
 on a replica set, a change of the collection wakes them at once, and the poll
 is only the fallback.

@@ -63,7 +63,8 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   its indexes and the TTL of finished jobs. `createMongoAuditSink` (each event once by its id,
   in the transaction) and `createMongoIdempotencyStore` (each step atomic, for
   `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a
-  replica set.
+  replica set. A lease is taken back `clockSkewToleranceMilliseconds` (5 s) after it ran out, so
+  that a worker whose clock is behind does not run a job beside its holder.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

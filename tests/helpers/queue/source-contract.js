@@ -8,6 +8,8 @@ const assert = require('node:assert');
 
 const START = Date.parse('2026-10-18T09:00:00Z');
 const LEASE = 60_000;
+// Past the end of a lease by more than the clocks of two workers may be apart.
+const PAST_LEASE = LEASE + 10_000;
 
 const requestOf = (id, extra = {}) => ({
   id,
@@ -147,7 +149,7 @@ const sourceContract = (name, makeSource, options = {}) => {
         assert.strictEqual(lease.job.redeliveries, run);
         // The attempt is run again: only the count of lost runs grows.
         assert.strictEqual(lease.job.attempt, 1);
-        clock.advance(LEASE + 1);
+        clock.advance(PAST_LEASE);
       }
       const { lease } = await source.reserve(LEASE);
       assert.strictEqual(lease.job.redeliveries, 3);
@@ -163,7 +165,7 @@ const sourceContract = (name, makeSource, options = {}) => {
   contract('a lease lost writes nothing over the next one', async (source, clock) => {
     await source.enqueue(requestOf('a'));
     const lost = (await source.reserve(LEASE)).lease;
-    clock.advance(LEASE + 1);
+    clock.advance(PAST_LEASE);
     const held = (await source.reserve(LEASE)).lease;
     assert.strictEqual(await source.extend(lost, LEASE), false);
     // Each settling write of a lost lease writes nothing, and says so.

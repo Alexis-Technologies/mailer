@@ -9,13 +9,21 @@
 const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
-const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const {
+  checkNonNegativeInteger,
+  checkOptionalFunction,
+  checkPositiveInteger,
+} = require('../internal/options.js');
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 const { checkCollection, documentOf, sessionOf } = require('./collection.js');
 
 // The document of a pause of the whole queue: no job id has a colon.
 const PAUSE_ID = 'mailer:pause';
 const DEFAULT_RETAIN_SECONDS = 7 * 24 * 60 * 60;
+// How far the clocks of two workers may be apart: a lease is taken back only
+// that long after it ran out by the clock of the worker that takes it.
+const DEFAULT_CLOCK_SKEW_MS = 5000;
+const DEFAULT_LEASE_MS = 60_000;
 
 // A job id has no colon, which the pause's id has.
 const isRequest = (request) => isJobRequest(request) && !request.id.includes(':');
@@ -116,9 +124,12 @@ class MongoOutboxSource {
     const now = new Date(this.#config.now());
     const paused = await this.#paused(now);
     if (paused !== undefined) return { nextAvailableAt: paused.getTime() };
-    // A job whose lease ran out is ready again, its attempt to run again.
+    // A job whose lease ran out is ready again, its attempt to run again:
+    // by this worker's clock, as long ago as two clocks may be apart, lest a
+    // worker whose clock is behind still holds it.
+    const ranOut = new Date(now.getTime() - this.#config.clockSkewToleranceMilliseconds);
     await this.#collection.updateMany(
-      { state: 'active', leaseUntil: { $lte: now } },
+      { state: 'active', leaseUntil: { $lte: ranOut } },
       {
         $set: { state: 'ready', token: null, leaseUntil: null, redelivered: true },
         $inc: { attempts: -1, redeliveries: 1 },
@@ -213,8 +224,9 @@ const subscribe = (collection, listener, config) => {
  * @param options `collection`, `db.collection('mail_outbox')`;
  * `changeStream` (false), to wake the workers on a change (a replica set);
  * `retainFinishedSeconds` (7 days), the time a finished job is kept, and so
- * the window of its duplicates; `now`, `logger`, and the options of the
- * polling driver.
+ * the window of its duplicates; `clockSkewToleranceMilliseconds` (5000), how
+ * far the clocks of the workers may be apart; `now`, `logger`, and the
+ * options of the polling driver.
  * @returns The driver, with `source`, `ensureIndexes()` and `get(id)`.
  * @throws {TypeError} If an option is invalid.
  */
@@ -225,8 +237,19 @@ const createMongoOutbox = (options = {}) => {
   if (changeStream && typeof collection.watch !== 'function') {
     throw new TypeError('changeStream needs a collection with watch().');
   }
+  const clockSkewToleranceMilliseconds = checkNonNegativeInteger(
+    options.clockSkewToleranceMilliseconds ?? DEFAULT_CLOCK_SKEW_MS,
+    'clockSkewToleranceMilliseconds',
+  );
+  // A lease shorter than the skew would be extended within the skew.
+  if ((options.leaseMilliseconds ?? DEFAULT_LEASE_MS) <= 3 * clockSkewToleranceMilliseconds) {
+    throw new TypeError(
+      'leaseMilliseconds must be more than 3 times clockSkewToleranceMilliseconds.',
+    );
+  }
   const config = {
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
+    clockSkewToleranceMilliseconds,
     changeStream,
     retainFinishedSeconds: checkPositiveInteger(
       options.retainFinishedSeconds ?? DEFAULT_RETAIN_SECONDS,

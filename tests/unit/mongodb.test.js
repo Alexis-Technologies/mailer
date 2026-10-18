@@ -121,7 +121,8 @@ test('MongoDB: a lease that runs out gives the job to another, the late settle i
   await source.enqueue(requestOf('a'));
   const first = (await source.reserve(1000)).lease;
   assert.strictEqual(await source.extend(first, 1000), true);
-  advance(1001);
+  // Past its end by more than the skew of the clocks (5 s).
+  advance(6001);
   const second = (await source.reserve(1000)).lease;
   assert.deepStrictEqual([second.job.attempt, second.job.redelivered], [1, true]);
   // The first holder's writes do nothing now.
@@ -403,4 +404,28 @@ test('MongoDB: IdempotencyTransport sends a key once over the shared store', asy
   const again = await transport.send(message);
   assert.strictEqual(inner.calls.length, 1);
   assert.strictEqual(again.messageId, first.messageId);
+});
+
+test('MongoDB: a lease is taken back only past the skew of the workers’ clocks', async () => {
+  const { source, advance } = outboxOf({ extra: { clockSkewToleranceMilliseconds: 2000 } });
+  await source.enqueue(requestOf('a'));
+  await source.reserve(1000);
+  // Run out by this clock, but a worker whose clock is 2 s behind still holds it.
+  advance(2500);
+  assert.deepStrictEqual(await source.reserve(1000), {});
+  advance(501);
+  assert.strictEqual((await source.reserve(1000)).lease.job.redelivered, true);
+  const strict = outboxOf({ extra: { clockSkewToleranceMilliseconds: 0 } });
+  await strict.source.enqueue(requestOf('b'));
+  await strict.source.reserve(1000);
+  strict.advance(1000);
+  assert.strictEqual((await strict.source.reserve(1000)).lease.job.id, 'b');
+  assert.throws(
+    () => outboxOf({ extra: { clockSkewToleranceMilliseconds: -1 } }),
+    /clockSkewToleranceMilliseconds must be a whole number/,
+  );
+  assert.throws(
+    () => outboxOf({ extra: { leaseMilliseconds: 15_000 } }),
+    /more than 3 times clockSkewToleranceMilliseconds/,
+  );
 });

@@ -41,6 +41,13 @@ const setup = async (t, options = {}) => {
   const client = new MongoClient(url);
   await client.connect();
   const db = client.db(`mailer_test_${randomUUID().replaceAll('-', '')}`);
+  const workers = [];
+  // Before anything that may throw: a client left open holds the run.
+  t.after(async () => {
+    for (const worker of workers) await worker.close({ timeoutMilliseconds: 1000 });
+    await db.dropDatabase();
+    await client.close();
+  });
   const outbox = createMongoOutbox({
     collection: db.collection('mail_outbox'),
     pollIntervalMilliseconds: 20,
@@ -52,12 +59,6 @@ const setup = async (t, options = {}) => {
   await audit.ensureIndexes();
   await store.ensureIndexes();
   const queue = createMailQueue({ driver: outbox, audit });
-  const workers = [];
-  t.after(async () => {
-    for (const worker of workers) await worker.close({ timeoutMilliseconds: 1000 });
-    await db.dropDatabase();
-    await client.close();
-  });
   const worker = (workerOptions) => {
     const consumer = queue.createWorker(workerOptions);
     workers.push(consumer);
@@ -138,7 +139,11 @@ test(
   'MongoDB (replica set): a job whose lease ran out goes to another worker, redelivered',
   { skip },
   async (t) => {
-    const { outbox, queue } = await setup(t, { leaseMilliseconds: 100 });
+    // One process, one clock: no skew to wait out.
+    const { outbox, queue } = await setup(t, {
+      leaseMilliseconds: 100,
+      clockSkewToleranceMilliseconds: 0,
+    });
     const { id } = await queue.enqueue(job());
     const { lease } = await outbox.source.reserve(100);
     assert.equal(lease.job.id, id);
