@@ -49,10 +49,7 @@ test('Verify: SES reads the account, signed, and takes AccessDenied for a known 
   await ses().verify();
   assert.strictEqual(requests[0].url, 'https://email.eu-west-1.amazonaws.com/v2/email/account');
   assert.strictEqual(requests[0].method, 'GET');
-  assert.match(
-    requests[0].headers.authorization ?? requests[0].headers.Authorization,
-    /^AWS4-HMAC-SHA256 /,
-  );
+  assert.match(new Headers(requests[0].headers).get('authorization'), /^AWS4-HMAC-SHA256 /);
   await ses().verify();
   await assert.rejects(ses().verify(), (error) => {
     assert.strictEqual(error.statusCode, 401);

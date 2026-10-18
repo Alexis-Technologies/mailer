@@ -147,10 +147,10 @@ test('API: a refusal of the converter is a non-retryable unsupported failure', (
   assert.notStrictEqual(range.errors[0].category, 'unsupported');
 });
 
-test('API: every HTTP provider requests through createApiClient, but SES and JMAP', () => {
+test('API: every HTTP provider requests through createApiClient, but JMAP', () => {
   // Before: the seven clients ported from upyo each carried their own fetch,
   // retry wiring, timeouts and truncation, and a fix of one (bug 29) missed
-  // another. SES signs each attempt with SigV4 and JMAP has its own session.
+  // another. SES signs each attempt in its authorize; JMAP has its own session.
   const fs = require('node:fs');
   const path = require('node:path');
   const src = path.join(__dirname, '../../src');
@@ -162,7 +162,7 @@ test('API: every HTTP provider requests through createApiClient, but SES and JMA
     if (text.includes('requestWithRetry')) direct.push(entry.name);
     else assert.match(text, /createApiClient\(/, entry.name);
   }
-  assert.deepStrictEqual(direct.sort(), ['jmap', 'ses']);
+  assert.deepStrictEqual(direct, ['jmap']);
 });
 
 test('API: the errors of 1.0 keep their names, arguments and fields over the shared error', () => {

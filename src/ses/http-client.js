@@ -1,59 +1,35 @@
 // Ported from upyo v0.7.0 (packages/ses/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Changed after the port: the request goes through createApiClient of
+// internal/api-client.js, as that of every HTTP provider does, its SigV4
+// signature made by the authorize of each attempt, and SesApiError extends
+// its error; the messages and the errors of upstream stay.
 
 const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
-const { requestWithRetry } = require('../internal/http.js');
-const { createLog } = require('../internal/log.js');
-const { readText } = require('../internal/body.js');
+const { ProviderApiError, createApiClient } = require('../internal/api-client.js');
 
 class SesHttpClient {
   config;
   #signingKey = null;
+  #request;
 
   constructor(config) {
     this.config = config;
-    this.log = createLog(config.logger, { transport: 'ses' });
-  }
-
-  sendMessage(messageData, signal, onRetry) {
-    const region = this.config.region;
-    const url = `https://email.${region}.amazonaws.com/v2/email/outbound-emails`;
-
-    return this.makeRequest(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(messageData),
-        signal,
+    const client = createApiClient(config, {
+      id: 'ses',
+      label: 'SES',
+      // Each attempt is signed anew: X-Amz-Date is the time of the attempt.
+      authorize: async (headers, request) => {
+        const credentials = await this.getCredentials();
+        const signed = this.signRequest(
+          request.url,
+          { method: request.method, headers, body: request.body },
+          credentials,
+        );
+        for (const [name, value] of signed) headers.set(name, value);
       },
-      onRetry,
-    );
-  }
-
-  /**
-   * Makes an HTTP request to the SES API with retry logic.
-   *
-   * @param url The URL to make the request to.
-   * @param options Fetch options.
-   * @returns Promise that resolves to the parsed response.
-   * @throws {DOMException} If the caller aborts the request.
-   * @throws {SesApiError} If SES returns a client error or all retry attempts
-   *                       are exhausted.
-   */
-  makeRequest(url, options, onRetry) {
-    return requestWithRetry({
-      log: this.log,
-      signal: options.signal,
-      onRetry,
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      send: (signal) => this.fetchWithAuth(url, options, signal),
-      read: async (response, attempt) => {
-        const text = await readText(response);
+      read: (response, text, attempt) => {
         if (response.status !== 200) throw createSesApiError(response, text, attempt);
         return {
           statusCode: response.status,
@@ -61,10 +37,8 @@ class SesHttpClient {
           headers: this.headersToRecord(response.headers),
         };
       },
-      reject: async (response, attempt) =>
-        createSesApiError(response, await readText(response), attempt),
-      createTimeoutError: () =>
-        new Error(`SES API request timed out after ${this.config.timeout} ms.`),
+      reject: (response, text, attempt) => createSesApiError(response, text ?? '', attempt),
+      timeoutError: () => new Error(`SES API request timed out after ${config.timeout} ms.`),
       finalError: (error, attempts) =>
         error instanceof SesApiError
           ? error
@@ -72,41 +46,25 @@ class SesHttpClient {
               cause: error,
             }),
     });
+    this.log = client.log;
+    this.fetchWithAuth = client.fetchWithAuth;
+    this.#request = client.request;
   }
 
   /**
-   * Makes a signed fetch request to the SES API.
+   * Sends a message through the SES v2 API.
    *
-   * @param url The URL to make the request to.
-   * @param options Fetch options.
-   * @param signal The signal of the attempt, with its deadline.
-   * @returns Promise that resolves to the fetch response.
+   * @param messageData The JSON data of SendEmail.
+   * @param signal Optional AbortSignal for cancellation.
+   * @param onRetry Optional callback told of each retry.
+   * @returns Promise that resolves to the SES response.
+   * @throws {DOMException} If the caller aborts the request.
+   * @throws {SesApiError} If SES returns a client error or all retry attempts
+   *                       are exhausted.
    */
-  async fetchWithAuth(url, options, signal) {
-    const credentials = await this.getCredentials();
-    const headers = new Headers(options.headers);
-
-    const signedHeaders = this.signRequest(
-      url,
-      {
-        ...options,
-        headers,
-      },
-      credentials,
-    );
-
-    for (const [key, value] of Object.entries(this.config.headers)) {
-      signedHeaders.set(key, value);
-    }
-
-    // A redirect comes back as a response rather than being followed, so the
-    // credentials in the headers never reach another origin.
-    return await (this.config.fetch ?? globalThis.fetch)(url, {
-      ...options,
-      headers: this.headersToRecord(signedHeaders),
-      signal,
-      redirect: 'manual',
-    });
+  sendMessage(messageData, signal, onRetry) {
+    const url = `https://email.${this.config.region}.amazonaws.com/v2/email/outbound-emails`;
+    return this.#request({ url, body: messageData, signal, onRetry });
   }
 
   async getCredentials() {
@@ -225,19 +183,19 @@ const createSesApiError = (response, text, attempt) => {
   );
 };
 
-class SesApiError extends Error {
-  statusCode;
+class SesApiError extends ProviderApiError {
   errors;
-  retryAfterMilliseconds;
-  attempts;
 
   constructor(message, statusCode, errors, retryAfterMilliseconds, attempts, options) {
-    super(message, options);
+    super('ses', message, {
+      statusCode,
+      retryAfterMilliseconds,
+      attempts,
+      cause: options?.cause,
+      providerDetails: errors,
+    });
     this.name = 'SesApiError';
-    this.statusCode = statusCode;
     this.errors = errors;
-    this.retryAfterMilliseconds = retryAfterMilliseconds;
-    this.attempts = attempts;
   }
 }
 

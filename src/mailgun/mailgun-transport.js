@@ -84,7 +84,8 @@ class MailgunTransport {
     const url = `${this.config.baseUrl}/domains/${encodeURIComponent(this.config.domain)}`;
     await verifyByRequest({
       provider: 'Mailgun',
-      // A 403 is a known key that may not read: a domain sending key is refused the read of its domain.
+      // A 403 is a known key that may not read: a domain sending key is refused
+      // the read of its domain.
       acceptForbidden: true,
       send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
       retries: this.config.retries,
