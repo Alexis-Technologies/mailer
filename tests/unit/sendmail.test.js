@@ -483,3 +483,32 @@ test('Sendmail: no more than maxConcurrent processes run at once', async () => {
   await assert.rejects(queued, /gone/);
   await Promise.all(held);
 });
+
+test('Sendmail: a send that waits for a place leaves the queue when it is aborted', async () => {
+  const children = [];
+  const spawn = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => true;
+    child.stdin.resume();
+    children.push(child);
+    return child;
+  };
+  const transport = new SendmailTransport({ spawn, maxConcurrent: 1 });
+  const held = transport.send(message());
+  while (children.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const controller = new AbortController();
+  const queued = transport.send(message(), { signal: controller.signal });
+  for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(new Error('gone'));
+  await assert.rejects(queued, /gone/);
+  // A signal aborted by the time no place is free is refused at once.
+  const envelope = { from: 'a@example.com', to: ['b@example.com'] };
+  const late = AbortSignal.abort(new Error('late'));
+  await assert.rejects(transport.deliver(envelope, [], 'id', late), /late/);
+  children[0].stdin.on('finish', () => children[0].emit('close', 0, null));
+  if (children[0].stdin.writableFinished) children[0].emit('close', 0, null);
+  assert.strictEqual((await held).successful, true);
+  assert.strictEqual(children.length, 1);
+});
