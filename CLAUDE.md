@@ -897,7 +897,9 @@ change. **This file wins** if they ever disagree.
   inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
   `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`, plus `MAILPIT_SENDMAIL="docker exec -i mailer-mailpit
   /mailpit sendmail"` for the sendmail case) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
-  until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
+  until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`; the providers of
+  1.1 in one table, `providers.e2e.test.js`, which also checks that refused credentials are a
+  non-retryable `auth` failure). The release skill asks for them before a release.
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
   written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to

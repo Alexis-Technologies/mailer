@@ -193,6 +193,13 @@ pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run tes
 
 Must exit 0. If it fails, fix and re-run.
 
+Then ask the user whether to run the opt-in suites against the real services, which only they
+can: `pnpm test:e2e` with the sandbox credentials of the providers (each suite is skipped until
+its variables are set; `tests/e2e/providers.e2e.test.js` names those of the providers of 1.1),
+and `pnpm test:mailpit` against the local Mailpit. A release that changed a provider's mapping or
+its error handling should have run that provider's suite. Report which suites ran and which were
+skipped.
+
 ## Step 8: Summary & Next Steps
 
 Present a summary to the user:
