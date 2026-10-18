@@ -99,6 +99,10 @@ const fromDataUri = (uri, options = {}) => {
 // was `[^;]+`, so each `<img src=data:` in an input without a `;` ran to the
 // end of it and the scan was quadratic; a type is a token of at most 127
 // characters (RFC 6838 §4.2) that cannot hold a space or a quote.
+// The longest HTML read, in characters: past it, a message is refused before
+// any scan, whatever its images.
+const DEFAULT_MAX_LENGTH = 64 * 1024 * 1024;
+
 const DATA_IMAGE =
   /(<img\b[^<>]{0,1024} src\s{0,20}=[\s"']{0,20})(data:([^;"'\s>]{1,127});[^"'>\s]+)/gi;
 
@@ -108,14 +112,25 @@ const DATA_IMAGE =
  * data URIs.
  *
  * @param html The HTML.
- * @param options `maxBytes` of one image (25 MiB), `generateId` for the left
- * half of each Content-ID and `domain` for its right half (`localhost`).
+ * @param options `maxBytes` of one image (25 MiB), `maxLength` of the HTML in
+ * characters (64 Mi), `generateId` for the left half of each Content-ID and
+ * `domain` for its right half (`localhost`).
  * @returns The HTML with `cid:` URLs, and the attachments to send with it.
  * @throws {TypeError} If an image's data URI does not parse.
- * @throws {RangeError} If an image holds more than `maxBytes`.
+ * @throws {RangeError} If an image holds more than `maxBytes`, or the HTML is
+ * longer than `maxLength`, refused before it is read.
  */
 const inlineDataUrls = (html, options = {}) => {
   if (typeof html !== 'string') throw new TypeError('inlineDataUrls() needs HTML.');
+  const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH;
+  if (typeof maxLength !== 'number' || !(maxLength >= 0)) {
+    throw new TypeError(`maxLength must be a non-negative number: ${String(maxLength)}`);
+  }
+  if (html.length > maxLength) {
+    throw new RangeError(
+      `inlineDataUrls() takes HTML of at most ${maxLength} characters: ${html.length}`,
+    );
+  }
   const domain = options.domain ?? 'localhost';
   if (typeof domain !== 'string' || !isDotAtomText(domain)) {
     throw new TypeError(`Invalid Content-ID domain: ${JSON.stringify(domain)}`);

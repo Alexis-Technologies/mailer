@@ -60,11 +60,14 @@ const message = createMessage({
 });
 ```
 
-- **`fromPath(path, options)`** checks that the path is a regular file and reads it
-  again each time the message is read (a DKIM signature, a retry, another transport
-  of a pool), never holding it.  When the path comes from a user, pass `root`: the
-  file must be inside it once both are resolved with `realpath`, so neither `..` nor
-  a symbolic link leads out.
+- **`fromPath(path, options)`** checks that the path is a regular file of at most
+  `maxBytes` (25 MiB) and reads it again each time the message is read (a DKIM
+  signature, a retry, another transport of a pool), never holding it.  When the
+  path comes from a user, pass `root`: the file must be inside it once both are
+  resolved with `realpath`, so neither `..` nor a symbolic link leads out.  Each
+  reading opens the file that was checked, by its device and inode: one that a
+  link, a renamed directory or a file renamed over it has put in its place since,
+  or that has grown past `maxBytes`, fails the reading.
 - **`fromUrl(url, options)`** fetches http and https URLs once, through the `fetch`
   you pass or the global one, and holds the bytes.  It follows at most `maxRedirects`
   (5), checks every URL with `allowUrl`, and sends `headers` to the origin of the
@@ -79,7 +82,9 @@ const message = createMessage({
   `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4 `2002::/16`), are refused.  A name
   that answers the fetch with another address than it gave the check (DNS
   rebinding) passes, so an application that fetches URLs its users give passes a
-  `fetch` that checks the address it connects to.
+  `fetch` that checks the address it connects to: one of its own on `node:https`
+  whose `lookup` refuses the same ranges, or one that goes through a proxy that
+  does.
 - **`fromDataUri(uri, options)`** decodes a base64 or percent-encoded `data:` URI
   (RFC 2397) up to `maxBytes`, and refuses one that does not parse.
 - **`fromStream(source, options)`** reads a Node.js `Readable`, a web
@@ -101,6 +106,9 @@ const { inlineDataUrls } = require('@alexify/mailer/attachments');
 const { html, attachments } = inlineDataUrls(renderedHtml, { domain: 'example.com' });
 const message = createMessage({ ...fields, content: { html }, attachments });
 ```
+
+Each image holds at most `maxBytes` (25 MiB), and HTML longer than `maxLength`
+(64 Mi characters) is refused with a `RangeError` before it is read.
 
 ## Multiple attachments
 

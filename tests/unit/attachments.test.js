@@ -658,3 +658,14 @@ test('Attachments: fromUrl refuses a name that resolves to a private address', a
   assert.strictEqual(fetched.length, 3);
   await assert.rejects(fromUrl('https://a.example/', { lookup: 'x' }), /lookup must be a function/);
 });
+
+test('Attachments: inlineDataUrls refuses HTML past maxLength before it reads it', () => {
+  // Before: nothing bounded the HTML read; the plan of the review asked for
+  // its length to be checked before any scan.
+  assert.throws(
+    () => inlineDataUrls('<p>x</p>'.repeat(10), { maxLength: 79 }),
+    /at most 79 characters: 80/,
+  );
+  assert.strictEqual(inlineDataUrls('<p>x</p>', { maxLength: 8 }).html, '<p>x</p>');
+  assert.throws(() => inlineDataUrls('<p>', { maxLength: -1 }), /maxLength/);
+});

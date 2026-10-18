@@ -43,7 +43,11 @@ export interface FromPathOptions extends AttachmentOptions {
 
 /** Options of {@link fromUrl}. */
 export interface FromUrlOptions extends AttachmentOptions {
-  /** The `fetch` to use, such as one with an undici dispatcher. */
+  /**
+   * The `fetch` to use, such as one that checks the address it connects to
+   * (a `node:https` request whose `lookup` refuses the ranges `isPublicUrl`
+   * refuses), which closes the DNS rebinding the default check leaves.
+   */
   readonly fetch?: typeof globalThis.fetch;
   /** Request header fields, sent to the origin of the URL only. */
   readonly headers?: Readonly<Record<string, string>>;
@@ -114,6 +118,12 @@ export interface InlineDataUrlsOptions {
    * @default 26214400
    */
   readonly maxBytes?: number;
+  /**
+   * The longest HTML taken, in characters: a longer one is refused with a
+   * `RangeError` before it is read.
+   * @default 67108864
+   */
+  readonly maxLength?: number;
   /** Makes the left half of each Content-ID instead of a UUID. */
   readonly generateId?: IdGenerator;
   /**

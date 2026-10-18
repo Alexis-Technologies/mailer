@@ -45,3 +45,5 @@ await fromUrl('https://example.com/a', {
 });
 await fromPath('./a.pdf', { root: '.', maxBytes: 1024 });
 expectError(fromUrl('https://example.com/a', { lookup: 'dns' }));
+inlineDataUrls('<p>', { maxLength: 1024 });
+expectError(inlineDataUrls('<p>', { maxLength: '1024' }));
