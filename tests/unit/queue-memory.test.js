@@ -376,3 +376,32 @@ test('Queue: a job that runs longer than its lease keeps it, and runs once', asy
   assert.deepStrictEqual(runs, [false]);
   assert.strictEqual(queue.get('long').state, 'completed');
 });
+
+test('Queue: the memory queue lends each of many jobs without looking through them all', async () => {
+  // Looking through every open job on each reserve made draining 30000 of
+  // them take some 9e8 steps: seconds, where heaps take milliseconds.
+  const { source } = createMemoryQueue({ now: () => 0, retainFinished: 10 });
+  const count = 30_000;
+  for (let index = 0; index < count; index++) {
+    await source.enqueue({
+      id: `j${index}`,
+      name: 'mail',
+      data: {},
+      hash: 'h',
+      priority: index % 3 === 0 ? 'high' : 'normal',
+      maxAttempts: 1,
+      enqueuedAt: 0,
+    });
+  }
+  const started = performance.now();
+  let previous = 'high';
+  for (let index = 0; index < count; index++) {
+    const { lease } = await source.reserve(60_000);
+    const rank = Number(lease.job.id.slice(1)) % 3 === 0 ? 'high' : 'normal';
+    assert.ok(previous === rank || previous === 'high', 'high before normal');
+    previous = rank;
+    await source.ack(lease, null);
+  }
+  assert.deepStrictEqual(await source.reserve(60_000), {});
+  assert.ok(performance.now() - started < 3000, `${performance.now() - started} ms`);
+});
