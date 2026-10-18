@@ -122,6 +122,8 @@ export interface TemplateIncludes<TSource = string> {
   readonly partials: readonly string[];
   /** Whether what is read and compiled may be kept. */
   readonly cache: boolean;
+  /** The most entries the renderer keeps in each of its caches, for an engine to keep as many. */
+  readonly maxEntries: number;
   /**
    * The name `include` stands for in the template `from`: `./x` and `../x`
    * against its directory, `/x` from the root, any other as it is; undefined
@@ -191,6 +193,11 @@ export interface TemplateEngine<TSource = string> {
   finish?(html: string, context: TemplateCompileContext<TSource>): string | Promise<string>;
   /** The templates of an engine whose templates are code (React Email), when the renderer has no loader. */
   readonly loader?: TemplateLoader<TSource>;
+  /**
+   * Forgets what the engine keeps for these includes outside them, such as
+   * EJS's entries in `ejs.cache`: called by the renderer's `clear()`.
+   */
+  clear?(includes: TemplateIncludes<TSource>): void;
 }
 
 /** Inlines the CSS of an HTML body. */

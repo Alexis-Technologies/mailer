@@ -118,6 +118,91 @@ test('Templates: an EJS include is read against the template it is written in', 
   );
 });
 
+test('Templates: an EJS include is compiled once, in ejs.cache, for its renderer alone', async (t) => {
+  // Before: \`cache: false\`, so EJS compiled every include of a template
+  // on every render.
+  const kept = new Map();
+  const original = ejs.cache;
+  ejs.cache = {
+    get: (key) => kept.get(key),
+    set: (key, value) => kept.set(key, value),
+    remove: (key) => kept.delete(key),
+    reset: () => kept.clear(),
+  };
+  t.after(() => {
+    ejs.cache = original;
+  });
+  const compile = t.mock.method(ejs, 'compile');
+  const engine = createEjsEngine({ ejs });
+  const renderer = createTemplateRenderer({
+    engine,
+    loader: createMemoryLoader({
+      'a.ejs': '<%- include("b") %><%- include("./c") %>',
+      'b.ejs': 'b',
+      'c.ejs': 'c<%= n %>',
+    }),
+  });
+  for (let n = 0; n < 3; n++) {
+    assert.strictEqual((await renderer.render({ template: 'a', context: { n } })).html, `bc${n}`);
+  }
+  assert.strictEqual(compile.mock.callCount(), 3, 'a, b and c, once each');
+  assert.strictEqual(kept.size, 2);
+  // Another renderer, its own templates of the same names, its own entries.
+  const other = createTemplateRenderer({
+    engine,
+    loader: createMemoryLoader({ 'a.ejs': '<%- include("b") %>', 'b.ejs': 'other b' }),
+  });
+  assert.strictEqual((await other.render({ template: 'a' })).html, 'other b');
+  assert.strictEqual(kept.size, 3);
+  // clear() forgets what the renderer gave ejs.cache, and compiles anew.
+  renderer.clear();
+  assert.strictEqual(kept.size, 1);
+  await renderer.render({ template: 'a', context: { n: 0 } });
+  assert.strictEqual(
+    compile.mock.callCount(),
+    8,
+    "the other renderer's two, and these three again",
+  );
+  // As many as the cache of the renderer keeps; an lru-cache deletes.
+  const lru = new Map();
+  ejs.cache = {
+    get: (key) => lru.get(key),
+    set: (key, value) => lru.set(key, value),
+    delete: (key) => lru.delete(key),
+  };
+  const small = createTemplateRenderer({
+    engine,
+    loader: createMemoryLoader({
+      'a.ejs': '<%- include("b") %><%- include("c") %>',
+      'b.ejs': 'b',
+      'c.ejs': 'c',
+    }),
+    cache: { maxEntries: 1 },
+  });
+  await small.render({ template: 'a' });
+  assert.ok(lru.size <= 1);
+  small.clear();
+  assert.strictEqual(lru.size, 0);
+  // Without a cache, EJS keeps nothing.
+  const uncached = createTemplateRenderer({
+    engine: createMjmlEngine({ mjml2html: (html) => ({ html, errors: [] }), engine }),
+    loader: createMemoryLoader({ 'a.mjml.ejs': '<%- include("b") %>', 'b.ejs': 'b' }),
+    cache: false,
+  });
+  assert.strictEqual((await uncached.render({ template: 'a' })).html, 'b');
+  uncached.clear();
+  assert.strictEqual(lru.size, 0);
+  // MJML clears the engine inside it.
+  const mjml = createTemplateRenderer({
+    engine: createMjmlEngine({ mjml2html: (html) => ({ html, errors: [] }), engine }),
+    loader: createMemoryLoader({ 'a.mjml.ejs': '<%- include("b") %>', 'b.ejs': 'b' }),
+  });
+  await mjml.render({ template: 'a' });
+  assert.strictEqual(lru.size, 1);
+  mjml.clear();
+  assert.strictEqual(lru.size, 0);
+});
+
 test('Templates: an async EJS template that throws rejects, rather than hanging the send', async () => {
   // Before, in @nestjs-modules/mailer: `rendered.then(render)` had no catch.
   const engine = createEjsEngine({ ejs, options: { async: true } });

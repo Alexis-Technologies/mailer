@@ -91,6 +91,7 @@ const createMjmlEngine = (options = {}) => {
       return () => html;
     },
     ...(inner === undefined ? {} : { finish: toHtml }),
+    ...(typeof inner?.clear === 'function' ? { clear: (of) => inner.clear(of) } : {}),
   };
 };
 

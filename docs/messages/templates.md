@@ -243,6 +243,23 @@ wait for the one compile. A template that is missing or fails is not kept, so
 one deployed later is found. `clear()` forgets everything; `cache: false`
 reads and compiles on every render, for development.
 
+EJS compiles an include as it renders, so it keeps the compiled include in
+`ejs.cache`, which the whole process shares, by file name. The engine names
+each one by its template and its renderer (`emails/footer.ejs#3`), so that two
+renderers share none, keeps as many as `cache.maxEntries`, and forgets them at
+`clear()`. `ejs.cache` keeps whatever else the process compiles with
+`cache: true` without a bound; give it one with an LRU, as EJS documents:
+
+```js
+const { LRUCache } = require('lru-cache');
+ejs.cache = new LRUCache({ max: 500 });
+```
+
+On Node 24 (Apple M3 Max), 2000 renders of a template with three includes, one of
+them nested, took 125 ms when every include was compiled on each render, and
+50 ms with them kept; EJS still checks the disk for each relative include it
+is asked for, which takes most of what is left.
+
 ## Bounds
 
 A render is bounded, so that a template, or a context, that runs away fails

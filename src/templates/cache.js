@@ -8,9 +8,11 @@ const { timerMs } = require('../internal/sleep.js');
  * Makes a cache of at most `maxEntries` entries.  With `maxEntries` 0 it keeps
  * nothing.
  *
+ * @param maxEntries The most it keeps.
+ * @param onDrop Told the key of each entry the bound drops, if given.
  * @internal
  */
-const createCache = (maxEntries) => {
+const createCache = (maxEntries, onDrop) => {
   const entries = new Map();
   return {
     get(key) {
@@ -24,11 +26,18 @@ const createCache = (maxEntries) => {
       if (maxEntries === 0) return;
       entries.delete(key);
       entries.set(key, value);
-      if (entries.size > maxEntries) entries.delete(entries.keys().next().value);
+      if (entries.size > maxEntries) {
+        const oldest = entries.keys().next().value;
+        entries.delete(oldest);
+        onDrop?.(oldest);
+      }
     },
     // Forgets an entry, unless another value took its place meanwhile.
     forget(key, value) {
       if (entries.get(key) === value) entries.delete(key);
+    },
+    keys() {
+      return entries.keys();
     },
     clear() {
       entries.clear();

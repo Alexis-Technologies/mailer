@@ -311,7 +311,9 @@ const createTemplateRenderer = (options = {}) => {
       }
     },
     clear() {
-      // Engines key what they keep by the includes, so they make it anew too.
+      // Engines key what they keep by the includes, so they make it anew too;
+      // one that keeps it elsewhere, EJS in ejs.cache, forgets it.
+      for (const engine of config.engines) engine.clear?.(state.files.includes);
       state.files = makeIncludes();
       compiled.clear();
       resolved.clear();

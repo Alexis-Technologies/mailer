@@ -209,6 +209,7 @@ const createIncludes = (loader, options) => {
   const includes = Object.freeze({
     partials,
     cache: options.cache,
+    maxEntries: options.maxEntries,
     join: joinName,
     read,
     readSync,
