@@ -332,10 +332,11 @@ test('Idempotency: sendMany answers repeated keys in place, the batch too', asyn
       message(),
     ]),
   );
-  // The second x comes once the first is done, and gets its receipt.
+  // An answer in place no longer ends the batch, so the second x is read
+  // while the first is in flight, and is not sent.
   assert.deepStrictEqual(
     receipts.map((receipt) => receipt.messageId ?? receipt.errors[0].code),
-    ['m1', 'm0', 'm1', 'm2'],
+    ['m1', 'm0', 'idempotency.in_flight', 'm2'],
   );
   // Read while the first is in flight, a second y is not sent.
   const twice = await collect(

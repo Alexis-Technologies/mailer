@@ -94,3 +94,41 @@ test('Gate: what a transport reading ahead was handed is abandoned on a break', 
   assert.deepStrictEqual(await collect(gatedSendMany(short, [1, 2], undefined, gate)), []);
   assert.deepStrictEqual(abandoned, [1, 2]);
 });
+
+test('Gate: answers in place do not split the batch of the wrapped transport', async () => {
+  // Before: each answer in place ended the run, so a batching transport got
+  // batches of the messages between two of them.
+  let calls = 0;
+  const batching = {
+    async *sendMany(messages) {
+      calls++;
+      for await (const message of messages) yield sent(String(message));
+    },
+  };
+  const many = [];
+  for (let i = 1; i <= 100; i++) many.push(i);
+  const receipts = await collect(
+    gatedSendMany(batching, many, undefined, {
+      admit: (n) => (n % 10 === 0 ? { receipt: sent(`own-${n}`) } : { message: n }),
+    }),
+  );
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(receipts.length, 100);
+  assert.strictEqual(receipts[9].messageId, 'own-10');
+  assert.strictEqual(receipts[10].messageId, '11');
+  // A streak of answers in place past the bound ends the run, and the input
+  // is not read ahead without end.
+  calls = 0;
+  let read = 0;
+  const endless = {
+    [Symbol.asyncIterator]() {
+      return { next: async () => ({ done: false, value: read++ }) };
+    },
+  };
+  for await (const receipt of gatedSendMany(batching, endless, undefined, {
+    admit: (n) => (n === 0 ? { message: n } : { receipt: sent(`own-${n}`) }),
+  })) {
+    if (receipt.messageId === 'own-70') break;
+  }
+  assert.ok(read < 200, String(read));
+});

@@ -42,11 +42,19 @@ const iteratorOf = (messages) =>
     ? messages[Symbol.asyncIterator]()
     : messages[Symbol.iterator]();
 
+// The most answers in place a run holds while a message handed to the
+// wrapped transport waits for its receipt: past it, the run ends, so that a
+// long streak of them, a circuit open over an endless input, is not read
+// ahead without bound.
+const MAX_IN_PLACE = 64;
+
 /**
  * Sends messages through a gate.  `gate.admit(message)` decides each one: `{
  * receipt }` answers it in place; `{ message, …state }` hands `message` to the
- * wrapped transport.  The admitted ones go through `transport.sendMany()` in
- * runs, a run ending at a message answered in place, and each receipt goes
+ * wrapped transport.  The admitted ones go through one `transport.sendMany()`,
+ * the answers in place taking their turn among its receipts, so that a
+ * transport that batches keeps its batches; a run ends only at the end of the
+ * input or past `MAX_IN_PLACE` answers in place in a row.  Each receipt goes
  * through `gate.settle(receipt, admitted)` before it is yielded.  When the
  * wrapped `sendMany()` throws, `gate.fail(error, admitted)` hears of each
  * message still waiting for its receipt; when the caller stops reading, or
@@ -63,23 +71,21 @@ const iteratorOf = (messages) =>
 const gatedSendMany = async function* (transport, messages, options, gate) {
   options?.signal?.throwIfAborted();
   const iterator = iteratorOf(messages);
-  let first;
   try {
     for (;;) {
-      if (first === undefined) {
-        const step = await iterator.next();
-        if (step.done) return;
-        const decision = await gate.admit(step.value);
-        if (decision.receipt !== undefined) {
-          yield decision.receipt;
-          continue;
-        }
-        first = decision;
+      // Until a message goes to the transport, the answers in place go at once.
+      const step = await iterator.next();
+      if (step.done) return;
+      const decision = await gate.admit(step.value);
+      if (decision.receipt !== undefined) {
+        yield decision.receipt;
+        continue;
       }
-      const run = { iterator, first, fed: new Fifo(), refusal: undefined, exhausted: false };
-      first = undefined;
+      // In the order of the messages: `{ admitted }` waiting for its receipt,
+      // or `{ receipt }` answered in place.
+      const run = { iterator, first: decision, slots: new Fifo(), inPlace: 0, exhausted: false };
       yield* sendRun(transport, run, options, gate);
-      if (run.refusal !== undefined) yield run.refusal;
+      while (run.slots.size > 0) yield run.slots.shift().receipt;
       if (run.exhausted) return;
     }
   } finally {
@@ -87,12 +93,13 @@ const gatedSendMany = async function* (transport, messages, options, gate) {
   }
 };
 
-// The admitted messages of a run, read until one is answered in place or the
-// input ends.
+// The admitted messages of a run, read until the input ends or too many
+// answers in place wait.
 const feedRun = async function* (run, gate) {
-  run.fed.push(run.first);
+  run.slots.push({ admitted: run.first });
   yield run.first.message;
   for (;;) {
+    if (run.inPlace >= MAX_IN_PLACE) return;
     const step = await run.iterator.next();
     if (step.done) {
       run.exhausted = true;
@@ -100,33 +107,47 @@ const feedRun = async function* (run, gate) {
     }
     const decision = await gate.admit(step.value);
     if (decision.receipt !== undefined) {
-      run.refusal = decision.receipt;
-      return;
+      run.slots.push({ receipt: decision.receipt });
+      run.inPlace++;
+      continue;
     }
-    run.fed.push(decision);
+    run.slots.push({ admitted: decision });
     yield decision.message;
   }
+};
+
+// The messages of a run still waiting for their receipts, to be failed or
+// abandoned; the answers in place among them stay for the caller.
+const drainAdmitted = async (run, each) => {
+  const kept = new Fifo();
+  while (run.slots.size > 0) {
+    const slot = run.slots.shift();
+    if (slot.admitted === undefined) kept.push(slot);
+    else await each(slot.admitted);
+  }
+  run.slots = kept;
 };
 
 const sendRun = async function* (transport, run, options, gate) {
   let failed = false;
   try {
     for await (const receipt of transport.sendMany(feedRun(run, gate), options)) {
-      const admitted = run.fed.shift();
-      yield gate.settle === undefined ? receipt : await gate.settle(receipt, admitted);
+      // The answers in place before the message this receipt is for go first.
+      while (run.slots.peek()?.receipt !== undefined) {
+        run.inPlace--;
+        yield run.slots.shift().receipt;
+      }
+      const slot = run.slots.shift();
+      yield gate.settle === undefined ? receipt : await gate.settle(receipt, slot?.admitted);
     }
   } catch (error) {
     failed = true;
-    if (gate.fail !== undefined) {
-      while (run.fed.size > 0) await gate.fail(error, run.fed.shift());
-    }
+    if (gate.fail !== undefined) await drainAdmitted(run, (admitted) => gate.fail(error, admitted));
     throw error;
   } finally {
     // The caller stopped reading, or the transport answered fewer messages
     // than it was handed: those it was handed are neither settled nor failed.
-    if (!failed && gate.abandon !== undefined) {
-      while (run.fed.size > 0) await gate.abandon(run.fed.shift());
-    }
+    if (!failed && gate.abandon !== undefined) await drainAdmitted(run, gate.abandon);
   }
 };
 
