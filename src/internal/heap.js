@@ -19,10 +19,6 @@ class Heap {
     this.#before = before;
   }
 
-  get size() {
-    return this.#items.length;
-  }
-
   /** The least item, left on the heap. */
   peek() {
     return this.#items[0];

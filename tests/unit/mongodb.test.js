@@ -622,6 +622,8 @@ test('MongoDB: the outbox tells what it holds, lists its failed jobs and retries
   );
   assert.strictEqual(stats.oldestReadyMilliseconds, 6000);
   assert.deepStrictEqual(stats.pausedTenants, [{ tenantId: 'acme', until: 20_000 }]);
+  await outbox.resume({ tenantId: 'acme' });
+  assert.strictEqual((await outbox.stats()).pausedTenants, undefined);
   assert.deepStrictEqual(
     (await outbox.failed({ limit: 2 })).map((job) => job.id),
     ['f1', 'f2'],

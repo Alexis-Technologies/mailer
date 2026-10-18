@@ -661,6 +661,8 @@ test('Queue: the memory queue tells what it holds, lists its failed jobs and ret
   );
   assert.strictEqual(stats.oldestReadyMilliseconds, 6000);
   assert.deepStrictEqual(stats.pausedTenants, [{ tenantId: 'acme', until: 20_000 }]);
+  await queue.resume({ tenantId: 'acme' });
+  assert.strictEqual(queue.stats().pausedTenants, undefined);
   // In the order of their ids, a page at a time.
   assert.deepStrictEqual(
     queue.failed({ limit: 2 }).map((job) => job.id),
