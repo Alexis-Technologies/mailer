@@ -128,16 +128,25 @@ const runLease = async (source, handler, lease, jobsSignal, config, log) => {
   const lost = new AbortController();
   const { signal, cleanup } = combineSignals(jobsSignal, lost.signal);
   const every = Math.max(1, Math.floor(config.leaseMilliseconds / 3));
+  // When the lease was last taken or extended: it runs out a lease after.
+  let keptAt = config.now();
   const keep = async () => {
     try {
       const kept = await source.extend(lease, config.leaseMilliseconds);
       if (!kept) lost.abort(new QueueLeaseLostError(lease.job.id));
+      else keptAt = config.now();
     } catch (error) {
       log.write(
         'warn',
         () => ({ jobId: lease.job.id, error: error?.message }),
         'queue.lease.extend_failed',
       );
+      // The store does not answer: past the next keep the lease will have run
+      // out, and another worker may take the job. The run stops now, before
+      // it sends what the other would send too.
+      if (config.now() - keptAt + every >= config.leaseMilliseconds) {
+        lost.abort(new QueueLeaseLostError(lease.job.id));
+      }
     }
   };
   const keeper = setInterval(keep, every);

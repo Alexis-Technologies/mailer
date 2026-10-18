@@ -442,3 +442,69 @@ test('Queue: a settle its source fenced off is told, as the job may run twice', 
     { component: 'queue', queue: 'fenced', jobId: 'j', outcome: 'ack' },
   ]);
 });
+
+test('Queue: a run whose lease cannot be extended stops before the lease runs out', async () => {
+  let reserved = false;
+  const settled = [];
+  const records = [];
+  const source = {
+    id: 'unkept',
+    enqueue: async () => ({ id: 'x', duplicate: false }),
+    reserve: async () => {
+      if (reserved) return {};
+      reserved = true;
+      const job = {
+        id: 'j',
+        name: 'mail',
+        data: {},
+        attempt: 1,
+        maxAttempts: 1,
+        redelivered: false,
+      };
+      return { lease: { job, token: 't' } };
+    },
+    // The store is out of reach: no extend answers.
+    extend: async () => {
+      throw new Error('connection reset');
+    },
+    ack: async () => settled.push('ack'),
+    retry: async () => settled.push('retry'),
+    fail: async () => settled.push('fail'),
+    release: async () => settled.push('release'),
+  };
+  const logger = { warn: (record, message) => records.push(message) };
+  const driver = createPollingDriver(source, {
+    leaseMilliseconds: 60,
+    pollIntervalMilliseconds: 5,
+    logger,
+  });
+  const started = Date.now();
+  let onStopped;
+  const stoppedOnce = new Promise((resolve) => {
+    onStopped = resolve;
+  });
+  const consumer = driver.consume(
+    (job, signal) =>
+      new Promise((resolve) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            onStopped({ reason: signal.reason, after: Date.now() - started });
+            resolve({ type: 'ack' });
+          },
+          { once: true },
+        );
+      }),
+  );
+  const stopped = await Promise.race([
+    stoppedOnce,
+    new Promise((resolve) => setTimeout(resolve, 1000)),
+  ]);
+  await consumer.close({ timeoutMilliseconds: 50 });
+  assert.ok(stopped?.reason instanceof QueueLeaseLostError);
+  // Two keeps failed (at 20 and 40 ms): the third would come after the lease.
+  assert.ok(stopped.after < 60, `${stopped.after} ms`);
+  assert.deepStrictEqual(settled, []);
+  assert.ok(records.includes('queue.lease.extend_failed'));
+  assert.ok(records.includes('queue.lease.lost'));
+});
