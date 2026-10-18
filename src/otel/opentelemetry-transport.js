@@ -5,8 +5,7 @@ const { createOpenTelemetryConfig, defaultErrorClassifier } = require('./config.
 const { MetricsCollector } = require('./metrics.js');
 const { TracingCollector } = require('./tracing.js');
 const { estimateMessageSize } = require('./message-size.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
-const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 
 // How many error messages of a failed batch its span keeps; the count says how
 // many there were in all.
@@ -163,7 +162,8 @@ class OpenTelemetryTransport {
    * @returns The receipt of the wrapped transport.
    */
   async sendRaw(message, options) {
-    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
     const startTime = performance.now();
     const messageSize = message?.content instanceof Uint8Array ? message.content.byteLength : 0;
     const span = this.tracingCollector?.createRawSendSpan(
@@ -183,9 +183,8 @@ class OpenTelemetryTransport {
    * Verifies the wrapped transport, which has nothing to check when it
    * cannot verify.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**
@@ -356,20 +355,7 @@ class OpenTelemetryTransport {
    * Cleanup resources if the wrapped transport supports Disposable or AsyncDisposable.
    */
   async [Symbol.asyncDispose]() {
-    if (!this.wrappedTransport) {
-      return;
-    }
-
-    // Try AsyncDisposable first
-    if (typeof this.wrappedTransport[Symbol.asyncDispose] === 'function') {
-      await this.wrappedTransport[Symbol.asyncDispose]();
-      return;
-    }
-
-    // Fall back to synchronous Disposable
-    if (typeof this.wrappedTransport[Symbol.dispose] === 'function') {
-      this.wrappedTransport[Symbol.dispose]();
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   extractTransportName(transport) {

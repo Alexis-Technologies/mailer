@@ -12,9 +12,7 @@
 // `maxQueue`; and disposal stops the waits.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport } = require('../core/transport.js');
-const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
 const { warnLimited } = require('../internal/warn.js');
 const { createLog } = require('../internal/log.js');
@@ -67,8 +65,8 @@ class RateLimitTransport {
 
   /** Sends a raw message once the bucket has its tokens. */
   async sendRaw(message, options) {
-    options?.signal?.throwIfAborted();
-    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const unsent = refuseUnlessRaw(this.wrappedTransport, options);
+    if (unsent !== undefined) return unsent;
     const refusal = await this.#admit(message, options?.signal);
     if (refusal !== undefined) return refusal;
     return this.wrappedTransport.sendRaw(message, options);

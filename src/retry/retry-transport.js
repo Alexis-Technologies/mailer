@@ -8,11 +8,10 @@ const {
 } = require('../core/receipt.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
-const { refuseRaw } = require('../internal/capabilities.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
 const { abortReason } = require('../internal/sleep.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 
 /**
  * Transport decorator that retries transient delivery failures.
@@ -83,8 +82,8 @@ class RetryTransport {
    * @throws {DOMException} If the operation is aborted.
    */
   async sendRaw(message, options) {
-    options?.signal?.throwIfAborted();
-    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
     return this.#withRetries(
       (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
       options,
@@ -95,9 +94,8 @@ class RetryTransport {
    * Verifies the wrapped transport once, without retries; it has nothing to
    * check when it cannot verify.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**
@@ -227,21 +225,7 @@ class RetryTransport {
    *   throws or rejects.
    */
   async [Symbol.asyncDispose]() {
-    const wrappedTransport = Object(this.wrappedTransport);
-    const asyncDisposeSymbol = Symbol.asyncDispose;
-    if (typeof asyncDisposeSymbol === 'symbol') {
-      const asyncDispose = wrappedTransport[asyncDisposeSymbol];
-      if (typeof asyncDispose === 'function') {
-        await asyncDispose.call(wrappedTransport);
-        return;
-      }
-    }
-
-    const disposeSymbol = Symbol.dispose;
-    if (typeof disposeSymbol === 'symbol') {
-      const dispose = wrappedTransport[disposeSymbol];
-      if (typeof dispose === 'function') dispose.call(wrappedTransport);
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   withSuccessMetadata(receipt, attempts) {

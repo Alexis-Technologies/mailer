@@ -13,10 +13,13 @@
 // batch that throws counts once.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
-const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, isCallerAbort, verifyWrapped } = require('../internal/decorator.js');
+const {
+  disposeOf,
+  isCallerAbort,
+  refuseUnlessRaw,
+  verifyWrapped,
+} = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createBreakerConfig } = require('./config.js');
@@ -103,10 +106,8 @@ class CircuitBreakerTransport {
    * `configuration`, which the circuit does not count.
    */
   async sendRaw(message, options) {
-    if (!isRawTransport(this.wrappedTransport)) {
-      options?.signal?.throwIfAborted();
-      return refuseRaw(this.wrappedTransport);
-    }
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
     return this.#guard(options, (sendOptions) =>
       this.wrappedTransport.sendRaw(message, sendOptions),
     );

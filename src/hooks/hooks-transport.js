@@ -14,10 +14,13 @@
 
 const { checkMessage } = require('../core/message.js');
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
-const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, messageOf, verifyWrapped } = require('../internal/decorator.js');
+const {
+  disposeOf,
+  messageOf,
+  refuseUnlessRaw,
+  verifyWrapped,
+} = require('../internal/decorator.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
@@ -73,8 +76,8 @@ class HooksTransport {
    * `configuration`.
    */
   async sendRaw(message, options) {
-    options?.signal?.throwIfAborted();
-    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
     const context = this.#contextOf('sendRaw', options?.signal);
     const before = await this.#before('beforeSendRaw', message, context);
     if (before.receipt !== undefined) return before.receipt;

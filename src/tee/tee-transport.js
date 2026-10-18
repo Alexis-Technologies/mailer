@@ -14,8 +14,7 @@ const { pinMessageId } = require('../core/message-id.js');
 const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnLimited, warnThrown } = require('../internal/callback.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
-const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createTeeConfig } = require('./config.js');
@@ -90,8 +89,8 @@ class TeeTransport {
    * of the category `configuration`.
    */
   async sendRaw(message, options) {
-    options?.signal?.throwIfAborted();
-    if (!isRawTransport(this.primary)) return refuseRaw(this.primary);
+    const refusal = refuseUnlessRaw(this.primary, options);
+    if (refusal !== undefined) return refusal;
     const receipt = await this.primary.sendRaw(message, options);
     await this.#mirror(message, options?.signal, 'sendRaw');
     return receipt;

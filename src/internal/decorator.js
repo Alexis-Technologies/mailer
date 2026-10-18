@@ -2,7 +2,8 @@
 // wrap: its disposal, its verification, and the reading of a caller's abort
 // and of what was thrown.
 
-const { isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { refuseRaw } = require('./capabilities.js');
 const { isCallerAbort } = require('./abort.js');
 
 /**
@@ -17,13 +18,14 @@ const disposeOf = async (transport) => {
 };
 
 /**
- * Verifies a transport that can verify; one that cannot has nothing to check.
+ * Verifies a transport that can verify; one that cannot, or none, has nothing
+ * to check.
  *
  * @internal
  */
 const verifyWrapped = async (transport, options) => {
   options?.signal?.throwIfAborted();
-  if (isVerifiableTransport(transport)) await transport.verify(options);
+  if (transport != null && isVerifiableTransport(transport)) await transport.verify(options);
 };
 
 /**
@@ -33,4 +35,16 @@ const verifyWrapped = async (transport, options) => {
  */
 const messageOf = (error) => (error instanceof Error ? error.message : String(error));
 
-module.exports = { disposeOf, isCallerAbort, messageOf, verifyWrapped };
+/**
+ * The start of `sendRaw()` of a decorator: the caller's abort heard, then the
+ * refusal of a raw message when the wrapped transport sends none, or
+ * `undefined` when it does.
+ *
+ * @internal
+ */
+const refuseUnlessRaw = (transport, options) => {
+  options?.signal?.throwIfAborted();
+  return isRawTransport(transport) ? undefined : refuseRaw(transport);
+};
+
+module.exports = { disposeOf, isCallerAbort, messageOf, refuseUnlessRaw, verifyWrapped };

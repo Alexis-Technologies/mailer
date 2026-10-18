@@ -13,10 +13,14 @@
 // was asked about alone.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnThrown } = require('../internal/callback.js');
-const { refuseRaw } = require('../internal/capabilities.js');
-const { disposeOf, isCallerAbort, messageOf, verifyWrapped } = require('../internal/decorator.js');
+const {
+  disposeOf,
+  isCallerAbort,
+  messageOf,
+  refuseUnlessRaw,
+  verifyWrapped,
+} = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { gatedSendMany } = require('../internal/gate.js');
@@ -75,8 +79,8 @@ class IdempotencyTransport {
    * message has no `idempotencyKey`, so without `key` it goes as it is.
    */
   async sendRaw(message, options) {
-    options?.signal?.throwIfAborted();
-    if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
     const entry = await this.#reserve(message);
     if (entry.receipt !== undefined) return entry.receipt;
     return this.#sendReserved(entry, options, (sendOptions) =>

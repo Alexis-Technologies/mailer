@@ -8,8 +8,9 @@ const { redactAddresses } = require('../internal/redact-addresses.js');
 const { warnLimited } = require('../internal/warn.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 
 // A raw message has its envelope where a message has its recipients.
 const isRawMessage = (message) => message.envelope != null && message.recipients == null;
@@ -87,10 +88,8 @@ class LoggerTransport {
    * Verifies the wrapped transport, which has nothing to check when it is
    * absent or cannot verify.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    const transport = this.wrappedTransport;
-    if (transport != null && isVerifiableTransport(transport)) await transport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**
@@ -148,17 +147,7 @@ class LoggerTransport {
    * management.
    */
   async [Symbol.asyncDispose]() {
-    const transport = this.wrappedTransport;
-    if (transport == null) return;
-
-    if (isAsyncDisposable(transport)) {
-      await transport[Symbol.asyncDispose]();
-      return;
-    }
-
-    if (isDisposable(transport)) {
-      transport[Symbol.dispose]();
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   async sendOne(
@@ -396,14 +385,6 @@ const redactFailure = (receipt) => {
     }
   }
   return { ...receipt, errorMessages, errors };
-};
-
-const isAsyncDisposable = (value) => {
-  return Symbol.asyncDispose in value && typeof value[Symbol.asyncDispose] === 'function';
-};
-
-const isDisposable = (value) => {
-  return Symbol.dispose in value && typeof value[Symbol.dispose] === 'function';
 };
 
 // What LogTape rendered for {error}: an Error as "TypeError: message", any
