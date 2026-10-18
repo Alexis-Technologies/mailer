@@ -430,6 +430,57 @@ test('Sendmail: a process that ignores SIGTERM gets SIGKILL after a grace', asyn
   assert.deepStrictEqual(children[0].killed, ['SIGTERM', 'SIGKILL']);
 });
 
+test('Sendmail: a process that ignores the SIGINT of a broken message gets SIGKILL', async (t) => {
+  // Before: a message that could not be read sent SIGINT alone, so with no
+  // timeout a process that ignored it held its place for good.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+  let child;
+  const spawn = () => {
+    child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin.resume();
+    child.killed = [];
+    child.kill = (signal) => {
+      child.killed.push(signal);
+      if (signal === 'SIGKILL') process.nextTick(() => child.emit('close', null, signal));
+      return true;
+    };
+    return child;
+  };
+  const broken = createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'Broken',
+    content: { text: 'x' },
+    attachments: {
+      filename: 'a.bin',
+      contentType: 'application/octet-stream',
+      inline: false,
+      contentId: '',
+      content: async function* () {
+        yield new Uint8Array(10);
+        throw new Error('disk gone');
+      },
+    },
+  });
+  const sending = new SendmailTransport({ spawn, timeout: 0 }).send(broken);
+  // The composition yields with setTimeout(0), which the mocked clock runs;
+  // setImmediate is not waited for, as a second test of a file that mocks
+  // the timers does not get it on Node 24.
+  for (let i = 0; i < 10_000 && child?.killed.length !== 1; i++) {
+    t.mock.timers.tick(0);
+    await new Promise((resolve) => process.nextTick(resolve));
+  }
+  assert.deepStrictEqual(child.killed, ['SIGINT']);
+  t.mock.timers.tick(5000);
+  const receipt = await sending;
+  assert.deepStrictEqual(child.killed, ['SIGINT', 'SIGKILL']);
+  assert.strictEqual(receipt.successful, false);
+  assert.match(receipt.errorMessages[0], /disk gone/);
+});
+
 test('Sendmail: an exit with 0 before the whole message was read is not a success', async () => {
   // Before: code 0 was success whatever had been written.
   const spawn = () => {

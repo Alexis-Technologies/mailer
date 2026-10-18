@@ -141,8 +141,8 @@ const collectStderr = (stream) => {
 };
 
 // Asks the process to stop, and makes it if it does not within the grace.
-const terminate = (child) => {
-  child.kill('SIGTERM');
+const terminate = (child, signal = 'SIGTERM') => {
+  child.kill(signal);
   const timer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
   timer.unref?.();
   child.once('close', () => clearTimeout(timer));
@@ -188,9 +188,11 @@ const run = (child, chunks, newline, abort, timeout) =>
         return written;
       },
       (error) => {
-        // The message could not be read: sendmail must not deliver a part.
+        // The message could not be read: sendmail must not deliver a part, and
+        // one that does not stop on SIGINT is killed after the grace, so that
+        // it holds no place among maxConcurrent with no timeout to end it.
         outcome.contentError = error;
-        child.kill('SIGINT');
+        terminate(child, 'SIGINT');
       },
     );
   });
