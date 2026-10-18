@@ -13,9 +13,10 @@
 // was asked about alone.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, isAbortOf, messageOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createIdempotencyConfig } = require('./config.js');
@@ -25,15 +26,6 @@ const STORE_FAILED = 'MAILER_IDEMPOTENCY_STORE_FAILED';
 
 const isToken = (value) => typeof value === 'string' && value !== '';
 const isRecord = (value) => typeof value === 'object' && value !== null;
-
-const isAbortOf = (error, signal) =>
-  signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
-
-const disposeOf = async (transport) => {
-  const target = Object(transport);
-  if (typeof target[Symbol.asyncDispose] === 'function') await target[Symbol.asyncDispose]();
-  else if (typeof target[Symbol.dispose] === 'function') target[Symbol.dispose]();
-};
 
 /**
  * A transport that sends a message with an idempotency key once: a send under
@@ -111,9 +103,8 @@ class IdempotencyTransport {
   }
 
   /** Verifies the wrapped transport. */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /** Disposes of the wrapped transport when it supports disposal. */
@@ -198,15 +189,12 @@ class IdempotencyTransport {
   // Retryable, but not a failure of the provider, which a circuit breaker
   // would count.
   #storeFailure(error) {
-    return createFailedReceipt(
-      `The idempotency store failed: ${error instanceof Error ? error.message : String(error)}`,
-      {
-        provider: this.id,
-        category: 'unknown',
-        retryable: true,
-        code: 'idempotency.store_failed',
-      },
-    );
+    return createFailedReceipt(`The idempotency store failed: ${messageOf(error)}`, {
+      provider: this.id,
+      category: 'unknown',
+      retryable: true,
+      code: 'idempotency.store_failed',
+    });
   }
 
   // A sent or possibly sent message keeps its key with its receipt; one that

@@ -11,18 +11,13 @@
 // least used dropped first; and disposal stops the waits.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
 const { createLog } = require('../internal/log.js');
 const { abortReason, sleep } = require('../internal/sleep.js');
 const { createRateLimitConfig } = require('./config.js');
-
-const disposeOf = async (transport) => {
-  const target = Object(transport);
-  if (typeof target[Symbol.asyncDispose] === 'function') await target[Symbol.asyncDispose]();
-  else if (typeof target[Symbol.dispose] === 'function') target[Symbol.dispose]();
-};
 
 /**
  * A transport that sends through the one it wraps at most `limit` messages
@@ -92,9 +87,8 @@ class RateLimitTransport {
   }
 
   /** Verifies the wrapped transport, without taking tokens. */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**

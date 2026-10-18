@@ -13,20 +13,15 @@
 // message or refuse it.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, messageOf, verifyWrapped } = require('../internal/decorator.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
 const HOOK_FAILED = 'MAILER_HOOK_FAILED';
 const HOOKS = ['beforeSend', 'beforeSendRaw', 'afterSend', 'onRetry', 'onError'];
-
-const disposeOf = async (transport) => {
-  const target = Object(transport);
-  if (typeof target[Symbol.asyncDispose] === 'function') await target[Symbol.asyncDispose]();
-  else if (typeof target[Symbol.dispose] === 'function') target[Symbol.dispose]();
-};
 
 /**
  * A transport that calls the hooks of the application around each send of
@@ -111,9 +106,8 @@ class HooksTransport {
   }
 
   /** Verifies the wrapped transport. */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /** Disposes of the wrapped transport when it supports disposal. */
@@ -152,9 +146,7 @@ class HooksTransport {
       replaced = await hook(message, context);
     } catch (error) {
       return {
-        receipt: this.#refusal(
-          `The ${name} hook refused the message: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+        receipt: this.#refusal(`The ${name} hook refused the message: ${messageOf(error)}`),
       };
     }
     if (replaced === undefined) return { message };

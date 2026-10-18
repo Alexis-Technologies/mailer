@@ -11,19 +11,14 @@
 // address in it.
 
 const { pinMessageId } = require('../core/message-id.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnLimited, warnThrown } = require('../internal/callback.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createTeeConfig } = require('./config.js');
-
-const disposeOf = async (transport) => {
-  const target = Object(transport);
-  if (typeof target[Symbol.asyncDispose] === 'function') await target[Symbol.asyncDispose]();
-  else if (typeof target[Symbol.dispose] === 'function') target[Symbol.dispose]();
-};
 
 const describe = (outcome) => {
   if (outcome.skipped !== undefined) return outcome.skipped;
@@ -119,9 +114,8 @@ class TeeTransport {
   }
 
   /** Verifies the primary; the mirrors are not checked. */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.primary)) await this.primary.verify(options);
+  verify(options) {
+    return verifyWrapped(this.primary, options);
   }
 
   /**

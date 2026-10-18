@@ -13,9 +13,10 @@
 // batch that throws counts once.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, isAbortOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createBreakerConfig } = require('./config.js');
@@ -30,9 +31,6 @@ const isProviderFailure = (receipt) => {
   }
   return false;
 };
-
-const isAbortOf = (error, signal) =>
-  signal?.aborted === true && (error === signal.reason || error?.name === 'AbortError');
 
 /**
  * A transport that stops sending through the one it wraps after it failed
@@ -146,9 +144,8 @@ class CircuitBreakerTransport {
    * Verifies the wrapped transport, whatever the state of the circuit; it has
    * nothing to check when that transport cannot verify.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    if (isVerifiableTransport(this.wrappedTransport)) await this.wrappedTransport.verify(options);
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**
@@ -156,12 +153,7 @@ class CircuitBreakerTransport {
    * management.
    */
   async [Symbol.asyncDispose]() {
-    const transport = Object(this.wrappedTransport);
-    if (typeof transport[Symbol.asyncDispose] === 'function') {
-      await transport[Symbol.asyncDispose]();
-    } else if (typeof transport[Symbol.dispose] === 'function') {
-      transport[Symbol.dispose]();
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   async #guard(options, send) {
