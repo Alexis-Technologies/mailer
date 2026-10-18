@@ -488,9 +488,11 @@ export interface LiquidEngineOptions {
   /**
    * `outputEscape` ('escape', where liquidjs escapes nothing),
    * `ownPropertyOnly` (true), `strictFilters`, `strictVariables`, `jsTruthy`,
-   * `parseLimit`, `renderLimit`, `memoryLimit`. `root`, `partials`, `layouts`,
-   * `fs`, `extname`, `relativeReference`, `templates` and `cache` are the
-   * engine's, and throw.
+   * and the limits, where liquidjs has none: `parseLimit` (1048576, the
+   * characters of a template), `renderLimit` (1000, the milliseconds of a
+   * render) and `memoryLimit` (1e8). `root`, `partials`, `layouts`, `fs`,
+   * `extname`, `relativeReference`, `templates` and `cache` are the engine's,
+   * and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
   readonly filters?: Readonly<Record<string, (...args: any[]) => unknown>>;
@@ -507,7 +509,8 @@ export interface LiquidEngineOptions {
 /**
  * The Liquid engine: `include`, `render` and `layout` through the loader, from
  * the root, then the directories of partials, `./x` against the file. With
- * its limits, the one engine of these for templates a tenant writes.
+ * its limits, on by default, the engine of these for templates a tenant
+ * writes; see the trust matrix of the guide.
  */
 export declare function createLiquidEngine(options: LiquidEngineOptions): TemplateEngine;
 

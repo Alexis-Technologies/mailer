@@ -24,6 +24,13 @@ const RESERVED = new Set([
   'cache',
 ]);
 
+// The limits of liquidjs, which has none of its own: the characters of a
+// template parsed, as many as the file loader reads; the milliseconds of a
+// render, which liquidjs checks as it goes, so that a loop of a template stops
+// where no timeout can stop it; and what a render may allocate, in liquidjs's
+// units (characters, and the items of a range).
+const LIMITS = Object.freeze({ parseLimit: 1024 * 1024, renderLimit: 1000, memoryLimit: 1e8 });
+
 // The options of liquidjs that turn off its escaping, or replace it.
 const UNESCAPED = new Map([['outputEscape', (value) => value !== 'escape']]);
 
@@ -106,9 +113,10 @@ const fileSystemOf = (includes, roots, extname) => {
  * Makes the Liquid engine.
  *
  * @param options `Liquid`, the `Liquid` of `liquidjs`; `options` of
- * liquidjs, such as `strictVariables`, `ownPropertyOnly` (true) or
- * `outputEscape` ('escape'); `filters`; `configure(liquid)`; `extensions`
- * (`['.liquid']`).
+ * liquidjs, such as `strictVariables`, `ownPropertyOnly` (true),
+ * `outputEscape` ('escape'), `parseLimit` (1 MiB), `renderLimit` (1000 ms) or
+ * `memoryLimit` (1e8); `filters`; `configure(liquid)`; `extensions`
+ * (`['.liquid']`); `allowUnescaped`.
  * @returns The engine.
  * @throws {TypeError} If `Liquid` is not a class or an option is reserved.
  */
@@ -131,6 +139,7 @@ const createLiquidEngine = (options = {}) => {
     liquid = new Liquid({
       outputEscape: 'escape',
       ownPropertyOnly: true,
+      ...LIMITS,
       ...given,
       root: [''],
       partials: roots,

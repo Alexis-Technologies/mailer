@@ -565,6 +565,37 @@ test('Templates: Liquid escapes by default, its includes and layouts through the
   );
 });
 
+test('Templates: Liquid has limits by default, which its options override', async () => {
+  // Before: liquidjs's own, none, so a template a tenant wrote could loop or
+  // allocate until the process fell over.
+  let liquid;
+  const engine = createLiquidEngine({ Liquid, configure: (instance) => (liquid = instance) });
+  await renderWith(engine, { 'a.liquid': 'x' }, { template: 'a' });
+  assert.deepStrictEqual(
+    [liquid.options.parseLimit, liquid.options.renderLimit, liquid.options.memoryLimit],
+    [1024 * 1024, 1000, 1e8],
+  );
+  const huge = await failureOf(
+    renderWith(
+      engine,
+      { 'a.liquid': '{% for i in (1..200000000) %}{% endfor %}' },
+      { template: 'a' },
+    ),
+  );
+  assert.ok(huge instanceof TemplateRenderError);
+  assert.match(huge.message, /memory alloc limit exceeded/);
+  const small = createLiquidEngine({ Liquid, options: { memoryLimit: 10 } });
+  await assert.rejects(
+    renderWith(small, { 'a.liquid': '{% for i in (1..100) %}{% endfor %}' }, { template: 'a' }),
+    /memory alloc limit exceeded/,
+  );
+  const long = createLiquidEngine({ Liquid, options: { parseLimit: 4 } });
+  await assert.rejects(
+    renderWith(long, { 'a.liquid': 'too long' }, { template: 'a' }),
+    /parse length limit exceeded/,
+  );
+});
+
 test('Templates: Liquid reads synchronously too, through its loader', async () => {
   // liquidjs renders synchronously with existsSync and readFileSync of its
   // file system, which are the loader's too.

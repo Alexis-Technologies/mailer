@@ -185,11 +185,33 @@ Some engines behave a little differently here than they do on their own:
   const templates = createTemplateRenderer({ engine });
   ```
 
-Templates are code: EJS, Eta, Pug and Nunjucks run JavaScript or close to it.
-For templates your tenants write, use Liquid (with `parseLimit`, `renderLimit`
-and `memoryLimit`), Handlebars or Mustache. The context is data.
-
 :::
+
+## Who may write a template
+
+A template is code that runs in your process, so who writes it decides the
+engine. The context is data in every engine, escaped on output; what differs
+is what a template itself can do.
+
+| Engine | A template | Templates a tenant writes |
+| --- | --- | --- |
+| EJS, Eta | compiles to JavaScript: `<% %>` runs any code, with the rights of the process | no |
+| Pug | compiles to JavaScript: `- code` lines and `#{}` run any code | no |
+| Nunjucks | compiles to JavaScript and is no sandbox: its own guide calls user-defined templates unsafe, and known escapes reach `Function` through the values a template sees | no |
+| React Email | is a component, code of yours | no |
+| MJML | is the engine inside it; `mj-include` reads files, so it stays off | as that engine |
+| Handlebars | is logic-less: it calls the helpers you register and reads own properties only | yes, with helpers you trust and `knownHelpersOnly` |
+| Mustache | is logic-less | yes |
+| Liquid | was made for templates users write; parse, render and memory limits are on by default here (`parseLimit` 1 MiB, `renderLimit` 1000 ms, `memoryLimit` 1e8) | yes, the one to choose |
+
+The subject of a front matter is compiled by the same engine as the template,
+under the same rules: a tenant who writes the subject writes a template.
+
+For templates a tenant writes, keep the bounds of the renderer on: the
+includes a render reads, the size of its output, and its timeout (see
+[Bounds](#bounds)). A loop of a template that never yields can be stopped by
+none of them, only by the engine: Liquid's `renderLimit` is checked as it
+renders.
 
 ## CSS
 
