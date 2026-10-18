@@ -184,6 +184,7 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
   assert.deepStrictEqual(collection.indexes, [
     [{ state: 1, rank: 1, availableAt: 1, enqueuedAt: 1 }, { name: 'mailer_ready' }],
     [{ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' }],
+    [{ state: 1, availableAt: 1 }, { name: 'mailer_due' }],
     [{ expireAt: 1 }, { name: 'mailer_expire', expireAfterSeconds: 0 }],
   ]);
   let woken = 0;

@@ -86,7 +86,7 @@ export interface MongoOutboxJob {
 export interface MongoOutbox extends QueueDriver {
   readonly transactional: true;
   readonly source: QueueSource;
-  /** Makes the indexes of the outbox: the ready jobs, the leases, and the expiry of finished ones (`expireAt`). */
+  /** Makes the indexes of the outbox: the ready jobs, the leases, the next one due, and the expiry of finished ones (`expireAt`). */
   ensureIndexes(): Promise<void>;
   get(id: string): Promise<MongoOutboxJob | undefined>;
 }

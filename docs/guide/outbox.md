@@ -88,7 +88,7 @@ is only the fallback.
 
 | Collection | Index |
 | --- | --- |
-| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; a TTL on `expireAt` |
+| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; `{ state, availableAt }` for the next one due; a TTL on `expireAt` |
 | audit | `{ correlationId, at, attempt, rank }`; `{ jobId }` |
 | idempotency | a TTL on `expiresAt` |
 

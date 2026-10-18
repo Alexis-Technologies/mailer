@@ -220,3 +220,25 @@ sourceContract(
   },
   { skip },
 );
+
+test(
+  'MongoDB (replica set): when the next job is due is read from an index, not a sort',
+  { skip },
+  async (t) => {
+    const { outbox, queue, db } = await setup(t);
+    for (let index = 0; index < 50; index++) {
+      await queue.enqueue(job({ scheduledAt: new Date(Date.now() + 60_000 + index) }));
+    }
+    assert.ok(outbox);
+    const plan = await db
+      .collection('mail_outbox')
+      .find({ state: 'ready' })
+      .sort({ availableAt: 1 })
+      .project({ availableAt: 1 })
+      .limit(1)
+      .explain();
+    const text = JSON.stringify(plan.queryPlanner.winningPlan);
+    assert.match(text, /IXSCAN/);
+    assert.doesNotMatch(text, /"stage":"SORT"/);
+  },
+);

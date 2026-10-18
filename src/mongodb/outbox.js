@@ -280,6 +280,9 @@ const createMongoOutbox = (options = {}) => {
         { name: 'mailer_ready' },
       );
       await collection.createIndex({ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' });
+      // When the next job is due, read when none is: sorted by time alone,
+      // which the index of the ready jobs, by priority first, cannot give.
+      await collection.createIndex({ state: 1, availableAt: 1 }, { name: 'mailer_due' });
       // A finished job goes at its time, a completed one and with it the
       // memory of its key after the window of duplicates, a failed one later.
       await collection.createIndex(
