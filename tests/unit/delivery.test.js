@@ -284,11 +284,15 @@ test('Delivery: the failure of fetch stays the cause of the provider error', asy
   t.mock.method(globalThis, 'fetch', async () => {
     throw refused;
   });
-  for (const [name, , create] of portedProviders) {
+  for (const [name, , create] of providers) {
+    const transport = create({ retries: 0 });
     const body = name === 'Mailgun' ? new FormData() : {};
-    const error = await create({ retries: 0 })
-      .httpClient.sendMessage(body, undefined)
-      .catch((caught) => caught);
+    // The clients ported from upyo send with sendMessage; those of 1.1 with
+    // the request of the shared client.
+    const sending = portedProviders.some((provider) => provider[0] === name)
+      ? transport.httpClient.sendMessage(body, undefined)
+      : transport.httpClient.request({ url: 'https://api.example.com/send', body: {} });
+    const error = await sending.catch((caught) => caught);
     assert.ok(error instanceof Error, name);
     let cause = error;
     while (cause !== refused && cause?.cause != null) cause = cause.cause;
@@ -441,4 +445,74 @@ test('Delivery: the logger of an HTTP transport hears its retries, without addre
   assert.strictEqual(properties.statusCode, 503);
   assert.ok(properties.delayMilliseconds > 0);
   assert.ok(!JSON.stringify(records).includes('bob@example.com'), JSON.stringify(records));
+});
+
+test('Delivery: the matrix holds every HTTP provider of the exports map', () => {
+  // Before: the contracts listed the providers by hand, so a provider added
+  // to the exports map was not held to them.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const pkg = require('../../package.json');
+  const root = path.join(__dirname, '../..');
+  const http = [];
+  for (const key of Object.keys(pkg.exports)) {
+    const subpath = key.slice(2);
+    if (key === '.' || subpath === 'jmap') continue;
+    if (fs.existsSync(path.join(root, 'src', subpath, 'http-client.js'))) http.push(subpath);
+  }
+  const inMatrix = [];
+  for (const [, , create] of providers) inMatrix.push(create().id);
+  assert.deepStrictEqual(inMatrix.sort(), http.sort());
+});
+
+test('Delivery: every HTTP provider refuses a plain HTTP URL but to this machine', () => {
+  // Before: the refusal was checked for the providers ported from upyo alone.
+  const insecure = 'http://api.example.com';
+  for (const [name, , create] of providers) {
+    if (name === 'SES') continue; // Its endpoint is made of its region alone.
+    if (name === 'Azure') {
+      assert.throws(
+        () =>
+          new AzureTransport({
+            connectionString: `endpoint=${insecure}/;accesskey=${AZURE_KEY}`,
+          }),
+        TypeError,
+        name,
+      );
+      continue;
+    }
+    const url = name === 'Mailtrap' ? { sendBaseUrl: insecure } : { baseUrl: insecure };
+    assert.throws(() => create(url), TypeError, name);
+  }
+});
+
+test('Delivery: every HTTP provider rejects with the reason of an abort, before or during', async (t) => {
+  // Before: no contract held the providers to the reason of the caller's
+  // signal, which a decorator tells apart from a failure.
+  for (const [name, , create] of providers) {
+    const seen = { requests: 0 };
+    t.mock.method(globalThis, 'fetch', (_url, init) => {
+      seen.requests++;
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      });
+    });
+    const early = new AbortController();
+    const reason = new Error(`stopped ${name}`);
+    early.abort(reason);
+    await assert.rejects(create().send(message(), { signal: early.signal }), (error) => {
+      assert.strictEqual(error, reason, name);
+      return true;
+    });
+    assert.strictEqual(seen.requests, 0, name);
+    const late = new AbortController();
+    const sending = create().send(message(), { signal: late.signal });
+    while (seen.requests === 0) await new Promise((resolve) => setImmediate(resolve));
+    late.abort(reason);
+    await assert.rejects(sending, (error) => {
+      assert.strictEqual(error, reason, name);
+      return true;
+    });
+    t.mock.restoreAll();
+  }
 });
