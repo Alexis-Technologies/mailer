@@ -7,20 +7,24 @@ const { checkTemplateName, isTemplateName, notTemplateName } = require('./loader
 const { createCache, memoize } = require('./cache.js');
 const { hasExtension } = require('./environment.js');
 
-// The segments of a name, `.` dropped and `..` taking the one before; undefined
-// when `..` leads out of the root.
-const normalize = (segments) => {
-  const kept = [];
-  for (const segment of segments) {
-    if (segment === '' || segment === '.') continue;
+// The name a path stands for, its segments read in one pass, `.` dropped and
+// `..` taking the one before; undefined when `..` leads out of the root.
+const normalize = (written) => {
+  let name = '';
+  let start = 0;
+  for (;;) {
+    const slash = written.indexOf('/', start);
+    const segment = written.slice(start, slash === -1 ? written.length : slash);
     if (segment === '..') {
-      if (kept.length === 0) return undefined;
-      kept.pop();
-    } else {
-      kept.push(segment);
+      if (name === '') return undefined;
+      const last = name.lastIndexOf('/');
+      name = last === -1 ? '' : name.slice(0, last);
+    } else if (segment !== '' && segment !== '.') {
+      name = name === '' ? segment : `${name}/${segment}`;
     }
+    if (slash === -1) break;
+    start = slash + 1;
   }
-  const name = kept.join('/');
   return isTemplateName(name) ? name : undefined;
 };
 
@@ -28,6 +32,8 @@ const directoryOf = (name) => {
   const slash = name.lastIndexOf('/');
   return slash === -1 ? '' : name.slice(0, slash);
 };
+
+const isRelative = (include) => include.startsWith('./') || include.startsWith('../');
 
 /**
  * The name an include stands for in a template: `./x` and `../x` against the
@@ -40,39 +46,48 @@ const directoryOf = (name) => {
  */
 const joinName = (from, include) => {
   if (typeof include !== 'string' || include === '') return undefined;
-  if (include[0] === '/') return normalize(include.split('/'));
-  const relative = include.startsWith('./') || include.startsWith('../');
-  if (!relative || from === undefined) return normalize(include.split('/'));
-  return normalize(`${directoryOf(from)}/${include}`.split('/'));
+  if (include[0] === '/' || !isRelative(include) || from === undefined) return normalize(include);
+  return normalize(`${directoryOf(from)}/${include}`);
 };
 
-// The names an include may be: as joined, then under each partials directory
-// for a bare name; each with an extension of the engine unless it has one,
-// then as it is.
-const candidatesOf = (include, from, extensions, partials) => {
-  const bases = [];
+// The names a base may be: itself when it has an extension of the engine,
+// else with each of them, then as it is.
+const namesOf = function* (base, extensions) {
+  if (hasExtension(base, extensions)) {
+    yield base;
+    return;
+  }
+  let empty = false;
+  for (const extension of extensions) {
+    if (extension === '') empty = true;
+    yield base + extension;
+  }
+  if (!empty) yield base;
+};
+
+// The names an include may be, in the order they are tried: as joined, then
+// under each directory of partials for a bare name, as they are tried, so
+// that the first found ends the lookup.
+const candidatesOf = function* (include, from, extensions, partials) {
   const joined = joinName(from, include);
-  if (joined !== undefined) bases.push(joined);
-  const bare = include[0] !== '/' && !include.startsWith('./') && !include.startsWith('../');
-  if (bare) {
-    for (const directory of partials) {
-      const name = joinName(undefined, `${directory}/${include}`);
-      if (name !== undefined) bases.push(name);
-    }
+  if (joined !== undefined) yield* namesOf(joined, extensions);
+  if (include[0] === '/' || isRelative(include)) return;
+  for (const directory of partials) {
+    const name = joinName(undefined, `${directory}/${include}`);
+    if (name !== undefined) yield* namesOf(name, extensions);
   }
-  const names = [];
-  for (const base of bases) {
-    if (hasExtension(base, extensions)) {
-      names.push(base);
-      continue;
-    }
-    for (const extension of extensions) names.push(base + extension);
-    if (!extensions.includes('')) names.push(base);
-  }
-  return names;
+};
+
+// The names tried, for the error of an include that is not found.
+const triedOf = (include, from, extensions, partials) => {
+  const tried = [];
+  for (const name of candidatesOf(include, from, extensions, partials)) tried.push(name);
+  return tried;
 };
 
 const READ = 'The name of a template read';
+// A lookup of a name as it is.
+const NO_EXTENSIONS = Object.freeze(['']);
 
 // What a loader threw, as an error that names the template: one of
 // ./templates as it is, and any other, such as EMFILE or a database timeout,
@@ -213,29 +228,31 @@ const createIncludes = (loader, options) => {
     join: joinName,
     read,
     readSync,
-    async lookup(include, from, extensions = ['']) {
+    async lookup(include, from, extensions = NO_EXTENSIONS) {
       spend();
       const depth = depths.of(include, from);
-      const names = candidatesOf(include, from, extensions, partials);
-      for (const name of names) {
+      for (const name of candidatesOf(include, from, extensions, partials)) {
         const source = await read(name);
         if (source === undefined) continue;
         depths.reached(source.name, depth);
         return source;
       }
-      throw new TemplateNotFoundError(include, names, { from });
+      throw new TemplateNotFoundError(include, triedOf(include, from, extensions, partials), {
+        from,
+      });
     },
-    lookupSync(include, from, extensions = ['']) {
+    lookupSync(include, from, extensions = NO_EXTENSIONS) {
       spend();
       const depth = depths.of(include, from);
-      const names = candidatesOf(include, from, extensions, partials);
-      for (const name of names) {
+      for (const name of candidatesOf(include, from, extensions, partials)) {
         const source = readSync(name);
         if (source === undefined) continue;
         depths.reached(source.name, depth);
         return source;
       }
-      throw new TemplateNotFoundError(include, names, { from });
+      throw new TemplateNotFoundError(include, triedOf(include, from, extensions, partials), {
+        from,
+      });
     },
   });
   return { includes, top: depths.top };

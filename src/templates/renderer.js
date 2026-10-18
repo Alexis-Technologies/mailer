@@ -34,6 +34,11 @@ const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 // compile, is made anew by the next render rather than waited for.
 const DEFAULT_RENDER_TIMEOUT_MS = 30_000;
 const NO_LAYOUT = new Set(['none', 'false']);
+const BOOLEANS = Object.freeze(['frontMatter', 'autoText']);
+// The parts a template is found by, its HTML, or its text alone; and those a
+// template gives.
+const MAIN_PARTS = Object.freeze(['html', 'text']);
+const PARTS = Object.freeze(['html', 'text', 'subject']);
 
 const defaultVariantName = (template, variant) => {
   const locale = variant.locale === undefined ? '' : `.${variant.locale}`;
@@ -155,7 +160,7 @@ const createRendererConfig = (options) => {
   if (globals !== undefined && typeof globals !== 'function' && typeof globals !== 'object') {
     throw new TypeError('globals must be an object or a function.');
   }
-  for (const name of ['frontMatter', 'autoText']) {
+  for (const name of BOOLEANS) {
     if (options[name] !== undefined && typeof options[name] !== 'boolean') {
       throw new TypeError(`${name} must be a boolean.`);
     }
@@ -196,21 +201,24 @@ const createRendererConfig = (options) => {
 };
 
 // The locales a template is looked up in: the one asked for, its subtags
-// dropped from the end, then the default one so, then none.
+// dropped from the end, then the default one so, each once, then none.
+const addLocale = (chain, seen, tag) => {
+  let current = tag;
+  while (current !== undefined) {
+    if (!seen.has(current)) {
+      seen.add(current);
+      chain.push(current);
+    }
+    const dash = current.lastIndexOf('-');
+    current = dash === -1 ? undefined : current.slice(0, dash);
+  }
+};
+
 const localeChain = (locale, defaultLocale) => {
   const chain = [];
-  const add = (tag) => {
-    if (tag === undefined) return;
-    let current = tag;
-    for (;;) {
-      if (!chain.includes(current)) chain.push(current);
-      const dash = current.lastIndexOf('-');
-      if (dash === -1) break;
-      current = current.slice(0, dash);
-    }
-  };
-  add(locale);
-  add(defaultLocale);
+  const seen = new Set();
+  addLocale(chain, seen, locale);
+  addLocale(chain, seen, defaultLocale);
   chain.push(undefined);
   return chain;
 };
@@ -419,7 +427,7 @@ const resolveTemplate = async (state, template, locale) => {
   const { base, choices } = choicesOf(state.config, template);
   const chain = localeChain(locale, state.config.defaultLocale);
   const tried = [];
-  for (const main of ['html', 'text']) {
+  for (const main of MAIN_PARTS) {
     for (const level of chain) {
       const found = await findPart(state, base, level, main, choices, tried);
       if (found === undefined) continue;
@@ -648,7 +656,7 @@ const renderTemplate = async (state, checked, input, bounds) => {
 
 const outputOf = (config, main, resolution, parts) => {
   const { html } = parts;
-  for (const key of ['html', 'text', 'subject']) {
+  for (const key of PARTS) {
     if (parts[key] === undefined) continue;
     if (typeof parts[key] !== 'string') {
       throw new TemplateRenderError(
