@@ -8,6 +8,7 @@ const { toUuid } = require('../internal/uuid.js');
 const { MailQueueError } = require('./errors.js');
 const { createMailJobHandler } = require('./handler.js');
 const { prepareMailJob } = require('./job.js');
+const { keyringOf } = require('./signing.js');
 
 const checkDriver = (driver) => {
   if (typeof driver?.enqueue !== 'function' || typeof driver?.consume !== 'function') {
@@ -74,7 +75,8 @@ const afterEnqueue = async (queue, { data, request }, result, enqueueOptions) =>
  *
  * @param options `driver`; `audit` and `auditStrict`; `namespace` ('mail'),
  * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
- * `maxInlineAttachmentBytes` (256 KiB); `logger`, `generateId`, `now`.
+ * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
+ * and which its workers verify; `logger`, `generateId`, `now`.
  * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
  * @throws {TypeError} If an option is invalid.
  */
@@ -86,6 +88,7 @@ const createMailQueue = (options = {}) => {
   }
   const auditStrict = options.auditStrict ?? false;
   if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
+  keyringOf(options.signingKeys);
   const now = options.now ?? Date.now;
   const jobOptions = {
     namespace: options.namespace,
@@ -93,6 +96,7 @@ const createMailQueue = (options = {}) => {
     maxJobBytes: options.maxJobBytes,
     maxInlineAttachmentBytes: options.maxInlineAttachmentBytes,
     generateId: options.generateId,
+    signingKeys: options.signingKeys,
     now,
   };
   for (const name of Object.keys(jobOptions)) {
@@ -131,7 +135,14 @@ const createMailQueue = (options = {}) => {
       return answers;
     },
     createWorker(workerOptions = {}) {
-      const handler = createMailJobHandler({ audit, auditStrict, logger, now, ...workerOptions });
+      const handler = createMailJobHandler({
+        audit,
+        auditStrict,
+        logger,
+        now,
+        signingKeys: options.signingKeys,
+        ...workerOptions,
+      });
       const consumer = driver.consume(handler, {
         concurrency: workerOptions.concurrency,
         signal: workerOptions.signal,

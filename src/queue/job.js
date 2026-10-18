@@ -14,6 +14,7 @@ const { toBase64 } = require('../internal/base64.js');
 const { toUuid } = require('../internal/uuid.js');
 const { hashJson } = require('./hash.js');
 const { toJson } = require('./json.js');
+const { keyringOf, signJob } = require('./signing.js');
 
 const MAIL_JOB_VERSION = 1;
 const MAIL_JOB_NAME = 'mail';
@@ -204,6 +205,7 @@ const resolveConfig = (options) => {
     }
   }
   if (!isText(config.namespace, 128)) throw new TypeError('namespace must be a short string.');
+  config.keyring = keyringOf(config.signingKeys);
   return config;
 };
 
@@ -239,9 +241,11 @@ const fieldsOf = (input, probe, attachments, messageId) => {
  * @param input `{ kind: 'template', template, context, locale }` or
  * `{ kind: 'content', subject, content }`, with the fields of a message.
  * @param options `namespace` ('mail'), `generateId`, `now`, `maxAttempts`
- * (5), `maxJobBytes` (256 KiB), `maxInlineAttachmentBytes` (256 KiB).
+ * (5), `maxJobBytes` (256 KiB), `maxInlineAttachmentBytes` (256 KiB);
+ * `signingKeys`, whose first key signs the job (`kid`, `mac`).
  * @returns `{ data, request }`.
- * @throws {TypeError} If a field is invalid, as `createMessage` finds it.
+ * @throws {TypeError} If a field is invalid, as `createMessage` finds it, or
+ * a signing key.
  * @throws {RangeError} If the job or its attachments are too large.
  */
 const prepareMailJob = (input, options = {}) => {
@@ -295,6 +299,7 @@ const prepareMailJob = (input, options = {}) => {
   if (expiresAt !== undefined) data.expiresAt = expiresAt.toISOString();
   data.enqueuedAt = new Date(now).toISOString();
   data.hash = hashJson(data, UNHASHED);
+  if (config.keyring !== undefined) signJob(data, config.keyring, UNHASHED);
   const bytes = Buffer.byteLength(JSON.stringify(data));
   if (bytes > config.maxJobBytes) {
     throw new RangeError(`The job holds ${bytes} bytes, more than ${config.maxJobBytes}.`);

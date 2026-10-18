@@ -121,11 +121,35 @@ const prepared = prepareMailJob({
 expectType<MailJobData>(prepared.data);
 expectType<string>(prepared.request.id);
 expectType<MailJobData>(parseMailJob({}));
+const keys = [
+  { id: 'k1', secret: 'a'.repeat(32) },
+  { id: 'k0', secret: new Uint8Array(32) },
+];
+expectType<MailJobData>(parseMailJob({}, { signingKeys: keys }));
+expectType<string | undefined>(
+  prepareMailJob(
+    {
+      kind: 'content',
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 't' },
+    },
+    { signingKeys: keys },
+  ).data.mac,
+);
+createMailQueue({ driver, signingKeys: keys });
+createMailJobHandler({ transport, signingKeys: keys });
+expectError(createMailJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));
 expectType<1>(MAIL_JOB_VERSION);
 expectType<'mail'>(MAIL_JOB_NAME);
 const error = new MailQueueError('queue.key_reused', 'x');
 expectType<
-  'queue.key_reused' | 'queue.invalid_job' | 'queue.unsupported_version' | 'queue.hash_mismatch'
+  | 'queue.key_reused'
+  | 'queue.invalid_job'
+  | 'queue.unsupported_version'
+  | 'queue.hash_mismatch'
+  | 'queue.signature_invalid'
 >(error.code);
 expectError(new MailQueueError('nope', 'x'));
 new QueueLeaseLostError('j');

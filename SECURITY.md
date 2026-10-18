@@ -72,7 +72,10 @@ are next. The principles all of it is designed around:
   certificate of an SNS host or of the trust chain the application pins.
 - **A job of the queue is untrusted when it is read.** Whoever can write to its store (Redis,
   MongoDB) could have written it, so the worker checks its shape and its hash before it acts on
-  it, and `checkJob` can refuse a sender. A job names no file or URL: an attachment is its bytes
+  it, and `checkJob` can refuse a sender. The hash, a SHA-256, tells a job that changed but not
+  one that was forged, since a writer can recompute it: with `signingKeys`, each job carries an
+  HMAC-SHA256 under the application's key, and the worker sends no job that one of its keys did
+  not sign. A job names no file or URL: an attachment is its bytes
   or a reference that the application's `resolveAttachment` reads. A job's data is stored as it is,
   a token of a reset link among it: the store is the application's to restrict (Redis ACLs and
   TLS, MongoDB roles).

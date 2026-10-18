@@ -172,6 +172,17 @@ export interface MailContentJobData extends MailJobDataBase {
 /** The data of a mail job, as stored: JSON only. */
 export type MailJobData = MailTemplateJobData | MailContentJobData;
 
+/**
+ * A key that signs jobs: an HMAC-SHA256 key of 32 bytes at least. Of the keys
+ * given, the first signs and each verifies, so a key is rotated by putting
+ * the new one first and dropping the old one once its jobs are done.
+ */
+export interface MailJobSigningKey {
+  /** 1 to 64 of A-Z, a-z, 0-9, `.`, `_` and `-`; written into each job it signs as `kid`. */
+  readonly id: string;
+  readonly secret: string | Uint8Array;
+}
+
 /** The options of the jobs of a queue. */
 export interface MailJobOptions {
   /** The scope of the keys of the jobs. @default 'mail' */
@@ -184,6 +195,8 @@ export interface MailJobOptions {
   readonly maxInlineAttachmentBytes?: number;
   readonly generateId?: IdGenerator;
   readonly now?: () => number;
+  /** Signs each job (`kid`, `mac`) with the first key, for workers that read only signed jobs. */
+  readonly signingKeys?: readonly MailJobSigningKey[];
 }
 
 /** A job of a message: its data, and the request a driver takes. */
@@ -209,16 +222,22 @@ export declare function prepareMailJob(
  *
  * @throws {MailQueueError} `queue.invalid_job`; `queue.unsupported_version`
  * for a later version, or a field this version does not know; or
- * `queue.hash_mismatch`.
+ * `queue.hash_mismatch`; `queue.signature_invalid` if `signingKeys` are given
+ * and the job is not signed by one of them.
+ * @throws {TypeError} If a signing key is invalid.
  */
-export declare function parseMailJob(data: unknown): MailJobData;
+export declare function parseMailJob(
+  data: unknown,
+  options?: { readonly signingKeys?: readonly MailJobSigningKey[] },
+): MailJobData;
 
 /** The code of a {@link MailQueueError}. */
 export type MailQueueErrorCode =
   | 'queue.key_reused'
   | 'queue.invalid_job'
   | 'queue.unsupported_version'
-  | 'queue.hash_mismatch';
+  | 'queue.hash_mismatch'
+  | 'queue.signature_invalid';
 
 /** A failure of the queue, by its code. */
 export declare class MailQueueError extends Error {
@@ -275,6 +294,11 @@ export interface MailWorkerOptions {
   readonly audit?: AuditSink;
   /** A sink that fails before the send makes the job retried, rather than sent unrecorded. @default false */
   readonly auditStrict?: boolean;
+  /**
+   * Only jobs signed by one of these keys are sent; any other fails with
+   * `queue.signature_invalid`. A worker of a queue takes the queue's.
+   */
+  readonly signingKeys?: readonly MailJobSigningKey[];
   readonly backoff?: MailBackoff;
   /** The wait before an attempt again after an `auth` or `configuration` failure. @default 300000 */
   readonly operatorDelayMilliseconds?: number;

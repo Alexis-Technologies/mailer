@@ -5,6 +5,7 @@
 const { MailQueueError } = require('./errors.js');
 const { hashJson } = require('./hash.js');
 const { MAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
+const { keyringOf, verifyJob } = require('./signing.js');
 
 const invalid = (message) => new MailQueueError('queue.invalid_job', `Invalid job: ${message}`);
 
@@ -67,13 +68,17 @@ const checkAttachments = (attachments) => {
  * Checks the data of a job as read from its queue.
  *
  * @param data The data of the job.
+ * @param options `signingKeys`: a job must then be signed by one of them.
  * @returns The same data, checked.
  * @throws {MailQueueError} `queue.invalid_job` if it is not the data of a
  * mail job, `queue.unsupported_version` if a later version wrote it (its
- * version, or a field this one does not know), and
- * `queue.hash_mismatch` if it is not what was enqueued.
+ * version, or a field this one does not know), `queue.hash_mismatch` if it is
+ * not what was enqueued, and `queue.signature_invalid` if it is not signed by
+ * a key of `signingKeys`.
+ * @throws {TypeError} If a signing key is invalid.
  */
-const parseMailJob = (data) => {
+const parseMailJob = (data, options = {}) => {
+  const keyring = keyringOf(options.signingKeys);
   if (!isObject(data)) throw invalid('its data is no object.');
   if (data.v !== MAIL_JOB_VERSION) {
     if (Number.isInteger(data.v) && data.v > MAIL_JOB_VERSION) {
@@ -114,6 +119,7 @@ const parseMailJob = (data) => {
       'The job is not what was enqueued: its hash differs.',
     );
   }
+  if (keyring !== undefined) verifyJob(data, keyring, UNHASHED);
   return data;
 };
 

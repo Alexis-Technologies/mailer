@@ -20,6 +20,7 @@ const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');
 const { outcomeOfFailure, reasonOf } = require('./outcome.js');
 const { parseMailJob } = require('./parse.js');
+const { keyringOf } = require('./signing.js');
 
 const DEFAULT_BACKOFF = Object.freeze({
   baseDelayMilliseconds: 30_000,
@@ -61,11 +62,14 @@ const createHandlerConfig = (options = {}) => {
   if (options.auditStrict !== undefined && typeof options.auditStrict !== 'boolean') {
     throw new TypeError('auditStrict must be a boolean.');
   }
+  // Checked now, so that a bad key fails the worker, not each job.
+  keyringOf(options.signingKeys);
   return {
     transport,
     renderer,
     audit,
     auditStrict: options.auditStrict ?? false,
+    signingKeys: options.signingKeys,
     resolveAttachment: checkOptionalFunction(options.resolveAttachment, 'resolveAttachment'),
     checkJob: checkOptionalFunction(options.checkJob, 'checkJob'),
     classify: checkOptionalFunction(options.classify, 'classify'),
@@ -412,7 +416,7 @@ const attempt = async (run) => {
 
 const readJob = (config, job) => {
   try {
-    return { data: parseMailJob(job.data) };
+    return { data: parseMailJob(job.data, { signingKeys: config.signingKeys }) };
   } catch (error) {
     const code = error?.code ?? 'queue.invalid_job';
     const later = code === 'queue.unsupported_version' && job.attempt < job.maxAttempts;
@@ -440,7 +444,8 @@ const readJob = (config, job) => {
  * Makes the handler of mail jobs, for any queue driver.
  *
  * @param options `transport`; `renderer`, for template jobs; `audit`,
- * `auditStrict`; `resolveAttachment(ref, { job, attachment, signal })`;
+ * `auditStrict`; `signingKeys`, when only signed jobs are sent;
+ * `resolveAttachment(ref, { job, attachment, signal })`;
  * `checkJob(data, job)`; `classify({ receipt, job })`; `backoff`,
  * `operatorDelayMilliseconds` (5 minutes), `rateLimitScope` ('job');
  * `logger`, `random`, `now`.

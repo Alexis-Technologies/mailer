@@ -87,6 +87,28 @@ failing it for a hash it cannot recompute: during a rolling deploy, the jobs
 the new producers write wait for the new workers. A field is never added to
 version 1; a new field is a new version.
 
+## Signed jobs
+
+The hash of a job tells a job that changed in its store, but not one that was
+forged: whoever can write to Redis or MongoDB can recompute a SHA-256, and a
+worker would send their message from your domain, signed with your DKIM key.
+Give the queue `signingKeys`, and each job is signed with an HMAC-SHA256 (`kid`
+and `mac`); its workers send only jobs that one of the keys signed, and fail
+any other with `queue.signature_invalid`, unsent, logged at `error`:
+
+```js
+const queue = createMailQueue({
+  driver,
+  signingKeys: [{ id: '2026-10', secret: process.env.MAIL_JOB_KEY }], // 32 bytes at least
+});
+const worker = queue.createWorker({ transport }); // verifies with the queue's keys
+```
+
+The first key signs and each one verifies. To rotate, put the new key first,
+deploy the workers, then the producers, and drop the old key once no job it
+signed is left. A worker without keys checks the hash alone, so give every
+worker the keys before any producer.
+
 ## Once per key
 
 The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the

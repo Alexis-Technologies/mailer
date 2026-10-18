@@ -33,6 +33,10 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   `createMemoryQueue()` is one in memory for tests. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`) rather than fail its hash during a rolling deploy.
+  `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends
+  no job they did not sign (`queue.signature_invalid`): the SHA-256 of a job tells a change, but
+  whoever writes to the store can recompute it. The first key signs and each verifies, for
+  rotation.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
