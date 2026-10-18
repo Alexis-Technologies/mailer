@@ -10,6 +10,7 @@ const { decodeEntities } = require('../render/entities.js');
 const { messageOf } = require('../internal/decorator.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { abortReason } = require('../internal/abort.js');
+const { createLog } = require('../internal/log.js');
 const { timerMs } = require('../internal/sleep.js');
 const { createCache, hasTimeout, memoize } = require('./cache.js');
 const {
@@ -178,6 +179,7 @@ const createRendererConfig = (options) => {
     ),
     maxOutputBytes: checkBound(options.maxOutputBytes, 'maxOutputBytes', DEFAULT_MAX_OUTPUT_BYTES),
     renderTimeoutMilliseconds: checkTimeout(options.renderTimeoutMilliseconds),
+    log: createLog(options.logger, { component: 'templates' }),
   };
 };
 
@@ -260,6 +262,9 @@ const normalizeSubject = (subject) => {
 
 const isParts = (value) => typeof value === 'object' && value !== null;
 
+// Milliseconds since `start`, to the microsecond.
+const since = (start) => Math.round((performance.now() - start) * 1000) / 1000;
+
 // A render, settled at its timeout or at the abort of its signal, whichever
 // comes first: what it waits for goes on, for the renders that share it, and
 // is not kept if it hangs.  The timer keeps the process, as its caller waits.
@@ -326,12 +331,29 @@ const createTemplateRenderer = (options = {}) => {
       // Without a cache, each render reads and compiles anew, includes too,
       // which its signal stops.
       const current = config.cache ? state : { ...state, files: makeIncludes(checked.signal) };
-      const bounds = { includes: 0, maxIncludes: config.maxIncludes };
+      // The bounds of the render, and what it made itself rather than found
+      // kept: a cache miss.
+      const bounds = { includes: 0, maxIncludes: config.maxIncludes, missed: false };
+      const start = performance.now();
+      let output;
       try {
-        return await inTime(config, checked, renderTemplate(current, checked, input, bounds));
+        output = await inTime(config, checked, renderTemplate(current, checked, input, bounds));
       } catch (error) {
         throw forRender(error, checked.template, checked.locale);
       }
+      config.log.write(
+        'debug',
+        () => ({
+          template: output.template,
+          requested: checked.template,
+          locale: checked.locale,
+          engine: bounds.engine,
+          cache: bounds.missed ? 'miss' : 'hit',
+          durationMs: since(start),
+        }),
+        'templates.rendered',
+      );
+      return output;
     },
     clear() {
       // Engines key what they keep by the includes, so they make it anew too;
@@ -401,11 +423,14 @@ const resolveTemplate = async (state, template, locale) => {
   throw new TemplateNotFoundError(template, tried, { phase: 'resolve' });
 };
 
-const resolvedFor = (state, template, locale) =>
+const resolvedFor = (state, template, locale, bounds) =>
   memoize(
     state.resolved,
     `${template}\u0000${locale ?? ''}`,
-    () => resolveTemplate(state, template, locale),
+    () => {
+      bounds.missed = true;
+      return resolveTemplate(state, template, locale);
+    },
     state.config.renderTimeoutMilliseconds,
   );
 
@@ -431,6 +456,7 @@ const compileEntry = async (state, found, part, bounds) => {
     includes: state.files.includes,
   };
   state.files.top(name);
+  const start = performance.now();
   const render = await run('compile', name, engine, () => engine.compile(body, context), bounds);
   if (typeof render !== 'function') {
     throw new TemplateRenderError(name, 'compile', 'The engine gave no function.', {
@@ -447,6 +473,11 @@ const compileEntry = async (state, found, part, bounds) => {
           () => engine.compile(fields.subject, { ...context, part: 'subject' }),
           bounds,
         );
+  state.config.log.write(
+    'debug',
+    () => ({ template: name, engine: engine.name, part, durationMs: since(start) }),
+    'templates.compiled',
+  );
   return { name, engine, render, subject, fields, context };
 };
 
@@ -454,7 +485,10 @@ const compiledFor = (state, found, part, bounds) =>
   memoize(
     state.compiled,
     `${found.engine.name}\u0000${part}\u0000${found.name}`,
-    () => compileEntry(state, found, part, bounds),
+    () => {
+      bounds.missed = true;
+      return compileEntry(state, found, part, bounds);
+    },
     state.config.renderTimeoutMilliseconds,
   );
 
@@ -492,7 +526,7 @@ const applyLayout = async (state, entry, html, scope, locale, bounds) => {
   if (name === undefined) return { html, engine: entry.engine, context: entry.context };
   let resolution;
   try {
-    resolution = await resolvedFor(state, name, locale);
+    resolution = await resolvedFor(state, name, locale, bounds);
   } catch (error) {
     if (!(error instanceof TemplateNotFoundError)) throw inPhase(error, 'layout');
     throw new TemplateNotFoundError(name, error.tried, {
@@ -527,7 +561,12 @@ const renderTemplate = async (state, checked, input, bounds) => {
   const { config } = state;
   let resolution;
   try {
-    resolution = await resolvedFor(state, checked.template, allowedLocale(config, checked.locale));
+    resolution = await resolvedFor(
+      state,
+      checked.template,
+      allowedLocale(config, checked.locale),
+      bounds,
+    );
   } catch (error) {
     throw inPhase(error, 'resolve');
   }
@@ -540,6 +579,7 @@ const renderTemplate = async (state, checked, input, bounds) => {
     resolution.html ? 'html' : 'text',
     bounds,
   );
+  bounds.engine = main.engine.name;
   let html;
   let text;
   let subject;

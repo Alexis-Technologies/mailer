@@ -304,6 +304,15 @@ it to its end. Liquid's `renderLimit` (on by default) is checked as it
 renders; with the other engines, keep such templates out of the hands of
 those who could write one (see [who may write a template](#who-may-write-a-template)).
 
+## Logging
+
+Given a pino-like `logger`, the renderer tells at `debug`, with
+`component: 'templates'`, each compile (`templates.compiled`: `template`,
+`engine`, `part`, `durationMs`) and each render (`templates.rendered`:
+`template`, `requested`, `locale`, `engine`, `durationMs`, and `cache`, `miss`
+when the render resolved or compiled a template itself, `hit` when it found
+them kept). A record is built only when the logger writes `debug`.
+
 ## Errors
 
 | Thrown | When | `retryable` |

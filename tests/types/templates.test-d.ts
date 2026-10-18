@@ -111,6 +111,7 @@ createTemplateRenderer({
     load: (name, options) => (options?.signal?.aborted ? undefined : { name, source: '' }),
   },
   renderTimeoutMilliseconds: 5000,
+  logger: { debug: (properties: object, message: string) => [properties, message] },
 });
 expectType<TemplateOutput>(output);
 expectType<string | undefined>(output.subject);

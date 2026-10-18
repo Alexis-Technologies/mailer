@@ -837,6 +837,83 @@ test('Templates: a render stops at the abort of its signal, with its reason', as
   );
 });
 
+test('Templates: a logger hears each compile and each render at debug, a hit or a miss', async () => {
+  // Before: nothing told how long a compile or a render took, or whether the
+  // cache had it.
+  const records = [];
+  const logger = {
+    debug: (properties, message) => records.push({ message, ...properties }),
+    isLevelEnabled: (level) => level === 'debug',
+  };
+  const { renderer } = rendererOf(
+    { 'a.tpl': '---\nsubject: S\n---\n<p>{{n}}</p>', 'a.uk.tpl': '<p>uk</p>' },
+    { logger },
+  );
+  await renderer.render({ template: 'a', context: { n: 1 } });
+  await renderer.render({ template: 'a', context: { n: 2 } });
+  await renderer.render({ template: 'a', locale: 'uk' });
+  const shape = (record) => {
+    assert.ok(record.durationMs >= 0, record.message);
+    return { ...record, durationMs: undefined };
+  };
+  assert.deepStrictEqual(records.map(shape), [
+    {
+      message: 'templates.compiled',
+      component: 'templates',
+      template: 'a.tpl',
+      engine: 'fake',
+      part: 'html',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.tpl',
+      requested: 'a',
+      locale: undefined,
+      engine: 'fake',
+      cache: 'miss',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.tpl',
+      requested: 'a',
+      locale: undefined,
+      engine: 'fake',
+      cache: 'hit',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.compiled',
+      component: 'templates',
+      template: 'a.uk.tpl',
+      engine: 'fake',
+      part: 'html',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.uk.tpl',
+      requested: 'a',
+      locale: 'uk',
+      engine: 'fake',
+      cache: 'miss',
+      durationMs: undefined,
+    },
+  ]);
+  // Above debug, nothing is built.
+  const quiet = [];
+  const { renderer: info } = rendererOf(
+    { 'a.tpl': '<p/>' },
+    { logger: { debug: () => quiet.push(1), isLevelEnabled: () => false } },
+  );
+  await info.render({ template: 'a' });
+  assert.strictEqual(quiet.length, 0);
+});
+
 test('Templates: the renderer checks its options', () => {
   const engine = fakeEngine();
   const loader = createMemoryLoader({});

@@ -1,6 +1,7 @@
 // Not ported: the types of ./templates, templates by name rendered by an
 // engine the application passes in.
 
+import type { Logger } from '../../index.js';
 import type { ReactEmailRenderOptions, RenderOutput, Renderer } from '../render/index.js';
 
 /** The values a template renders. */
@@ -293,6 +294,14 @@ export interface TemplateRendererOptions<TSource = string> {
    * stopped so: Liquid's `renderLimit` stops one. @default 30000
    */
   readonly renderTimeoutMilliseconds?: number;
+  /**
+   * A pino-like logger, which hears at `debug`, with `component: 'templates'`:
+   * `templates.compiled` (`template`, `engine`, `part`, `durationMs`) for each
+   * compile, and `templates.rendered` (`template`, `requested`, `locale`,
+   * `engine`, `cache`: `'hit'`, or `'miss'` when the render resolved or
+   * compiled a template itself, `durationMs`) for each render. None by default.
+   */
+  readonly logger?: Logger;
 }
 
 /** A renderer of templates by name, a `Renderer` of `./render`. */
