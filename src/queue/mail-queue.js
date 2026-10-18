@@ -38,6 +38,19 @@ const queuedEventOf = (data, request) => {
   return event;
 };
 
+// The refusal of keys used before for other messages, with what the other
+// jobs of the call gave.
+const keyReused = (jobIds, answers) =>
+  Object.assign(
+    new MailQueueError(
+      'queue.key_reused',
+      jobIds.length === 1
+        ? `The key of job ${jobIds[0]} was used before for another message.`
+        : `The keys of ${jobIds.length} jobs were used before for other messages: ${jobIds.join(', ')}.`,
+    ),
+    { jobIds, answers },
+  );
+
 // A first enqueue is told to the sink, in the transaction of the store when
 // there is one; a job enqueued again is not, and one enqueued again for
 // another message is refused.
@@ -45,10 +58,7 @@ const afterEnqueue = async (queue, { data, request }, result, enqueueOptions) =>
   const answer = { id: request.id, correlationId: data.correlationId, messageId: data.messageId };
   if (result?.duplicate === true) {
     if (result.existingHash !== undefined && result.existingHash !== request.hash) {
-      throw new MailQueueError(
-        'queue.key_reused',
-        `The key of job ${request.id} was used before for another message.`,
-      );
+      throw keyReused([request.id], []);
     }
     queue.log.write('debug', () => ({ jobId: request.id }), 'queue.duplicate');
     return { ...answer, duplicate: true };
@@ -151,10 +161,19 @@ const createMailQueue = (options = {}) => {
         results = [];
         for (const job of prepared) results.push(await driver.enqueue(job.request, enqueueOptions));
       }
+      // Every job the driver took is told to the sink, a key used before for
+      // another message refused once all are.
       const answers = [];
+      const reused = [];
       for (let index = 0; index < prepared.length; index++) {
-        answers.push(await afterEnqueue(queue, prepared[index], results[index], enqueueOptions));
+        try {
+          answers.push(await afterEnqueue(queue, prepared[index], results[index], enqueueOptions));
+        } catch (error) {
+          if (error?.code !== 'queue.key_reused') throw error;
+          reused.push(prepared[index].request.id);
+        }
       }
+      if (reused.length > 0) throw keyReused(reused, answers);
       return answers;
     },
     createWorker(workerOptions = {}) {

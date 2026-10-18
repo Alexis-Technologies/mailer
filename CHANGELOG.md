@@ -24,7 +24,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   checks them, its context refused with the path to what JSON would change, attachments as bytes
   (bounded) or references the worker resolves. Its id is a UUID of the namespace, tenant and
   `idempotencyKey`, so the same message enqueued again is one job and another under the key is
-  refused (`queue.key_reused`); its Message-ID and Content-IDs are fixed for every attempt. The
+  refused (`queue.key_reused`, with the `jobIds` refused and, from `enqueueMany`, the `answers` of
+  the other jobs, all of them enqueued and audited first); its Message-ID and Content-IDs are fixed
+  for every attempt. The
   worker fails a permanent failure, a missing template or a bug at once, retries a temporary one
   never sooner than `Retry-After`, an operator's failure (`auth`, `configuration`) after five
   minutes, and never sends again a message of unknown delivery. `scheduledAt` is a delay of the

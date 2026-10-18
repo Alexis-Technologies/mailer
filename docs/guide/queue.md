@@ -156,7 +156,10 @@ can seal can still forge, so seal with `signingKeys` too.
 
 The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the
 same message enqueued again is the same job (`duplicate: true`), and another
-message under the key is refused with `MailQueueError` `queue.key_reused`.
+message under the key is refused with `MailQueueError` `queue.key_reused`, its
+`jobIds` the jobs refused. `enqueueMany` refuses them only once every other
+job of the call is enqueued and told to the audit, and gives what those gave as
+the error's `answers`.
 The worker gives the message that id as its `idempotencyKey`, so
 [`IdempotencyTransport`](/transports/idempotency), with a store the workers
 share, and the providers that take a key (Resend, Lettermint, Brevo, Azure)

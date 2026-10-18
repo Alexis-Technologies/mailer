@@ -267,6 +267,10 @@ export type MailQueueErrorCode =
 /** A failure of the queue, by its code. */
 export declare class MailQueueError extends Error {
   readonly code: MailQueueErrorCode;
+  /** `queue.key_reused`: the jobs whose keys were used before for other messages. */
+  readonly jobIds?: readonly string[];
+  /** `queue.key_reused` of `enqueueMany`: what the other jobs of the call gave. */
+  readonly answers?: readonly MailEnqueueResult[];
   constructor(code: MailQueueErrorCode, message: string, options?: ErrorOptions);
 }
 

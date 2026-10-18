@@ -268,3 +268,26 @@ test('Queue: the queue logs its enqueues; it checks its options', async () => {
   const { id } = await scoped.enqueue(resetJob());
   assert.strictEqual(driver.get(id).maxAttempts, 2);
 });
+
+test('Queue: enqueueMany refuses a key used before only once every other job is told', async () => {
+  const { driver, audit, queue } = setup();
+  await queue.enqueue(resetJob({ idempotencyKey: 'taken' }));
+  const batch = [
+    resetJob({ idempotencyKey: 'first' }),
+    resetJob({ idempotencyKey: 'taken', context: { url: 'https://example.com/other' } }),
+    resetJob({ idempotencyKey: 'last' }),
+  ];
+  const error = await queue.enqueueMany(batch).catch((thrown) => thrown);
+  assert.ok(error instanceof MailQueueError);
+  assert.strictEqual(error.code, 'queue.key_reused');
+  assert.strictEqual(error.jobIds.length, 1);
+  assert.deepStrictEqual(
+    error.answers.map((answer) => answer.duplicate),
+    [false, false],
+  );
+  // The jobs after the refused one were enqueued, and told to the sink.
+  for (const answer of error.answers) {
+    assert.strictEqual(driver.get(answer.id).state, 'waiting');
+    assert.strictEqual(audit.stateOf(answer.correlationId), 'queued');
+  }
+});
