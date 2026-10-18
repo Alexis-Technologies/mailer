@@ -596,3 +596,81 @@ test('Webhooks: the memory replay store tells of a committed id dropped before i
   assert.deepStrictEqual(warned, ['MAILER_REPLAY_EVICTED']);
   assert.strictEqual(store.reserve('a', 1000, 'again'), 'reserved');
 });
+
+test('Webhooks: the handler of the guide takes again a delivery whose handling failed', async (t) => {
+  // The example of docs/guide/webhooks.md on node:http: before the two steps
+  // of the replay store, the first delivery's id was taken inside verify(),
+  // so the provider's redelivery was a replay, answered 200, and lost.
+  const http = require('node:http');
+  const replayStore = createMemoryReplayStore();
+  const resend = createResendWebhookVerifier({ secret: SECRET, now: () => NOW, replayStore });
+  const recorded = [];
+  let failures = 1;
+  const deliveries = {
+    record: async (event) => {
+      if (failures-- > 0) throw new Error('database down');
+      recorded.push(event.id);
+    },
+  };
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    let delivery;
+    try {
+      delivery = await resend.verify({ body: Buffer.concat(chunks), headers: req.headers });
+    } catch (error) {
+      if (!(error instanceof WebhookVerificationError)) throw error;
+      res.statusCode = error.status;
+      res.end();
+      return;
+    }
+    try {
+      for (const event of delivery.events) await deliveries.record(event);
+      await delivery.commit();
+      res.statusCode = 200;
+    } catch {
+      await delivery.release();
+      res.statusCode = 500;
+    }
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}/webhooks/resend`;
+  const body = JSON.stringify({
+    type: 'email.delivered',
+    created_at: '2027-01-15T08:00:00.000Z',
+    data: { email_id: 'e-1', to: ['bob@example.com'] },
+  });
+  const signed = signSvix(body, 'msg_guide');
+  const post = async () =>
+    (await fetch(url, { method: 'POST', body, headers: signed.headers })).status;
+  assert.strictEqual(await post(), 500);
+  assert.strictEqual(await post(), 200);
+  assert.strictEqual(await post(), 200);
+  assert.deepStrictEqual(recorded, ['msg_guide:0']);
+});
+
+test('Webhooks: a batch goes to the store 64 ids at a time, no more', async () => {
+  // The window that sends the ids of a batch together is bounded, so a batch
+  // of thousands does not open thousands of calls to a store at once.
+  let inFlight = 0;
+  let most = 0;
+  const store = {
+    reserve: async () => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight--;
+      return 'reserved';
+    },
+    commit: async () => {},
+    release: async () => {},
+  };
+  const ids = [];
+  for (let i = 0; i < 150; i++) ids.push(`ev-${i}`);
+  const mailtrap = createMailtrapWebhookVerifier({ secret: 'mt', replayStore: store });
+  const delivery = await mailtrap.verify(signMailtrap(mailtrapBatch(...ids)));
+  assert.strictEqual(delivery.events.length, 150);
+  assert.strictEqual(most, 64);
+});
