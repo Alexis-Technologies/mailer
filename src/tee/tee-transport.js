@@ -67,7 +67,9 @@ class TeeTransport {
   }
 
   /**
-   * Sends a message through the primary and mirrors it.
+   * Sends a message through the primary, then mirrors it once the primary
+   * has answered, whatever it answered; a primary that throws is not
+   * mirrored.
    *
    * @returns The receipt of the primary.
    * @throws What the primary throws.
@@ -76,9 +78,8 @@ class TeeTransport {
     options?.signal?.throwIfAborted();
     // The copies are of one message, so they carry one Message-ID.
     const pinned = pinMessageId(message);
-    const mirrored = this.#mirror(pinned, options?.signal, 'send');
     const receipt = await this.primary.send(pinned, options);
-    await mirrored;
+    await this.#mirror(pinned, options?.signal, 'send');
     return receipt;
   }
 
@@ -90,24 +91,20 @@ class TeeTransport {
   async sendRaw(message, options) {
     options?.signal?.throwIfAborted();
     if (!isRawTransport(this.primary)) return refuseRaw(this.primary);
-    const mirrored = this.#mirror(message, options?.signal, 'sendRaw');
     const receipt = await this.primary.sendRaw(message, options);
-    await mirrored;
+    await this.#mirror(message, options?.signal, 'sendRaw');
     return receipt;
   }
 
   /**
-   * Sends messages through the `sendMany()` of the primary, each mirrored as
-   * it is handed to it.
+   * Sends messages through the `sendMany()` of the primary, each mirrored
+   * once the primary has answered it.
    */
   sendMany(messages, options) {
     return gatedSendMany(this.primary, messages, options, {
-      admit: (message) => {
-        const pinned = pinMessageId(message);
-        return { message: pinned, mirrored: this.#mirror(pinned, options?.signal, 'send') };
-      },
+      admit: (message) => ({ message: pinMessageId(message) }),
       settle: async (receipt, admitted) => {
-        await admitted.mirrored;
+        await this.#mirror(admitted.message, options?.signal, 'send');
         return receipt;
       },
     });

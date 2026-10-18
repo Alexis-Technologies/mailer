@@ -284,3 +284,39 @@ test('Tee: a failed copy is a warning with no address, and a flood of them is cu
   assert.strictEqual(warnings.length, 11);
   assert.match(warnings[10][0], /2 more warnings of MAILER_TEE_MIRROR_FAILED were left out/);
 });
+
+test('Tee: the mirrors start once the primary has answered, and not when it throws', async () => {
+  // Before: the copies started before the primary's send, so a mirror could
+  // run ahead of the provider in use.
+  const order = [];
+  const primary = fakeTransport(async (m) => {
+    order.push(`primary ${m.subject}`);
+    await settle();
+    order.push(`answered ${m.subject}`);
+    return sent('p');
+  });
+  const mirror = fakeTransport((m) => {
+    order.push(`mirror ${m.subject}`);
+    return sent('m');
+  });
+  const tee = new TeeTransport(primary, { mirrors: [mirror], awaitMirrors: true });
+  await tee.send(message('one'));
+  await collect(tee.sendMany([message('two')]));
+  assert.deepStrictEqual(order, [
+    'primary one',
+    'answered one',
+    'mirror one',
+    'primary two',
+    'answered two',
+    'mirror two',
+  ]);
+  const throwing = new TeeTransport(
+    fakeTransport(() => {
+      throw new Error('bug');
+    }),
+    { mirrors: [mirror], awaitMirrors: true },
+  );
+  order.length = 0;
+  await assert.rejects(throwing.send(message('three')), /bug/);
+  assert.deepStrictEqual(order, []);
+});

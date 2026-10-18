@@ -30,10 +30,12 @@ timeout, and follow the caller's signal. Disposing of the tee waits for the
 copies in flight before it disposes of the mirrors. The primary and the mirrors
 send one Message-ID, so a copy reads as the message it is.
 
-The copies start with the primary's send, not after it: a mirror receives the
-message whether or not the primary takes it, so a copy may go out for a
-message the primary refused. A shadow that should see only what the primary
-sent belongs after the send, in `afterSend` of [`./hooks`](/transports/hooks).
+The copies start once the primary has answered, so a mirror never runs ahead
+of the provider in use, and, as they are not awaited by default, the caller
+waits no longer for them. A message is mirrored whatever the primary answered,
+a refusal included, which a shadow comparing providers wants; a primary that
+throws is not mirrored. A copy only of what the primary sent belongs in
+`afterSend` of [`./hooks`](/transports/hooks), which sees the receipt.
 
 `onMirror` hears the outcome of every copy: its `receipt`, the `error` its send
 threw, or why it was `skipped`. Without it, a failed or skipped copy becomes a
@@ -53,6 +55,6 @@ were left out.
 | `logger` | | A pino-like logger: without `onMirror`, a failed copy at `warn`, in place of a process warning. |
 
 `sendMany()` goes through the `sendMany()` of the primary, each message mirrored
-as it is handed to it. `sendRaw()` mirrors to the mirrors that send raw
+once the primary has answered it. `sendRaw()` mirrors to the mirrors that send raw
 messages and reports the others as skipped. `verify()` checks the primary
 alone, and disposal disposes of the primary and every mirror once.

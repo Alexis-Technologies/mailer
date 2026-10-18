@@ -107,8 +107,9 @@ export declare class TeeTransport<TProviderId extends string = string>
    */
   constructor(primary: Transport<TProviderId>, config: TeeConfig);
   /**
-   * Sends a message through the primary and mirrors it; the copies start
-   * with the primary's send, whatever the primary answers.
+   * Sends a message through the primary, then mirrors it once the primary
+   * has answered, whatever it answered; a primary that throws is not
+   * mirrored.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
