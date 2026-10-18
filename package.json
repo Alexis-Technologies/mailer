@@ -1,6 +1,6 @@
 {
   "name": "@alexify/mailer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Zero-dependency email for Node.js, Bun and Deno: its own SMTP client, sendmail, MIME builder and DKIM, eighteen HTTP providers and JMAP, a persistent queue with a BullMQ driver, templates over nine engines, an audit of message states, verified webhooks into one model of delivery events, and decorators for failover, retries, circuit breaking, rate limits, idempotency and OpenTelemetry",
   "license": "MIT",
   "type": "commonjs",

@@ -20,19 +20,19 @@ Nodemailer, emailjs or Upyo, made of two parts:
    of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
    of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
    idempotency decorator whose store interface the outbox is to implement (`./idempotency`).
-   Unreleased: the queue (`./queue`, a driver-neutral contract, its worker and a memory queue;
-   `./bullmq`, the BullMQ driver), templates by name over nine engines passed in (`./templates`)
-   and the audit of the states of a message (`./audit`).
+   1.2 adds the queue (`./queue`, a driver-neutral contract, its worker and a memory queue;
+   `./bullmq`, the BullMQ driver; `./mongodb`, the transactional outbox with its audit sink and
+   idempotency store), templates by name over nine engines passed in (`./templates`) and the
+   audit of the states of a message (`./audit`).
 
 It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
 Node compatibility (see "Platform"; no browser entry).
 
-**Status: 1.1 is the transport and the first parts of the reliability layer.** The root entry
-exports the message model and the transport contract of upyo, with the delivery events of 1.1
-and, unreleased, the contracts of the reliability layer as types; each transport, decorator and
-helper is a subpath, and their API is under semver from 1.0.0. The MongoDB outbox, the
-crypto-shredding of the audit and suppression have no API yet; their direction is in "Roadmap"
-below.
+**Status: 1.2 is the transport and the reliability layer on it.** The root entry exports the
+message model and the transport contract of upyo, with the delivery events of 1.1 and the
+contracts of the reliability layer of 1.2 as types; each transport, decorator, driver and helper
+is a subpath, and their API is under semver from 1.0.0. The crypto-shredding of the audit and
+suppression have no API yet; their direction is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -909,7 +909,7 @@ model of states and events. `tenantId` is in the context from the start.
   providers.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
-  (Unreleased: `./queue`, `./bullmq` and `./mongodb`, the outbox as a `QueueSource` with its
+  (Done in 1.2: `./queue`, `./bullmq` and `./mongodb`, the outbox as a `QueueSource` with its
   audit sink and idempotency store, and the memory queue.)
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
   (crypto-shredding), so the right to erasure does not fight an append-only log. 3–6 records per

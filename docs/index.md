@@ -60,7 +60,7 @@ The transport layer is here, ported from [upyo](https://github.com/dahlia/upyo) 
 what [nodemailer](https://github.com/nodemailer/nodemailer),
 [unemail](https://github.com/productdevbook/unemail) and
 [sently](https://github.com/omqkhafi/sently) did better ported in 1.1: one package, with a subpath
-per transport and decorator. Delivery events are here too, and, unreleased, the
+per transport and decorator. Delivery events are here too, and, from 1.2, the
 [queue](/guide/queue), [templates](/messages/templates) and the [audit](/guide/audit). See
 [Why @alexify/mailer?](/guide/why) for the plan.
 :::

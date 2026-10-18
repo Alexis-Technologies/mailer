@@ -4,8 +4,8 @@
 Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo)
 0.7.0; 1.1 adds sendmail, ten more HTTP providers, verified webhooks into delivery
 events, and decorators for circuit breaking, rate limits, idempotency, hooks and
-mirroring. Unreleased: [the queue](/guide/queue), [templates by name](/messages/templates)
-and [the audit](/guide/audit).
+mirroring; 1.2 adds [the queue](/guide/queue) on BullMQ or a MongoDB outbox,
+[templates by name](/messages/templates) and [the audit](/guide/audit).
 :::
 
 ## Installation

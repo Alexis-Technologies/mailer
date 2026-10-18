@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The reliability layer: a persistent queue whose workers render templates, and the audit of the
-states of a message. Everything is additive.
+## [1.2.0] - 2026-10-18
+
+The reliability layer of the roadmap, on the transport of 1.1: a persistent queue, on BullMQ or a
+transactional outbox in MongoDB, whose workers render templates of the engine the application
+uses and know a permanent failure from a temporary one, and the audit of every state of a
+message. Everything is additive: nothing of 1.1 changes, and the package still has no runtime
+dependency, BullMQ, MongoDB and the template engines being passed in.
 
 ### Added
 
@@ -58,6 +63,17 @@ states of a message. Everything is additive.
   `{ subject, content }`.
 - **The root**: the contracts of the reliability layer as types (`QueueDriver`, `QueueSource`,
   `QueueJob`, `QueueOutcome`, `MessageState`, `AuditEvent`, `AuditSink`), with no code.
+
+### Tooling
+
+- **Opt-in suites on the real services:** `pnpm test:bullmq` on BullMQ and Valkey
+  (`tests/bullmq/docker-compose.yml`) and `pnpm test:mongodb` on a MongoDB replica set
+  (`tests/mongodb/docker-compose.yml`), outside the gates, as `test:mailpit` is.
+- **devDependencies for the tests:** the nine template engines, juice and css-inline, BullMQ,
+  ioredis and the MongoDB driver; `src/` requires none of them, as
+  `tests/unit/dependencies.test.js` checks.
+- **Shared internals:** the backoff, the classification of thrown errors, the fingerprint of a
+  message and the path check moved to `src/internal/`, with no change of behavior.
 
 ## [1.1.0] - 2026-10-18
 
@@ -668,6 +684,7 @@ for code written against upyo 0.7:
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0

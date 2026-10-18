@@ -3,15 +3,14 @@
 > Zero-dependency email for Node.js, Bun and Deno, maintained by Alexis Technologies. Its own SMTP
 > client, sendmail, MIME builder, DKIM signing, eighteen HTTP providers and JMAP, with a
 > reliability layer on top that none of the common Node.js email libraries has: one model of
-> delivery events from verified webhooks and idempotency; unreleased, a persistent queue with a
-> BullMQ driver, templates over nine engines and an audit of message states; an outbox in MongoDB
-> and suppression next.
+> delivery events from verified webhooks, idempotency, a persistent queue on BullMQ or a
+> transactional MongoDB outbox, templates over nine engines and an audit of message states;
+> suppression next.
 
 Key facts:
 - Status: 1.0 is the transport layer, ported from upyo 0.7.0 (MIT); 1.1 ports what nodemailer,
-  unemail and sently did better and adds delivery events with verified webhooks; the queue
-  (`/queue`, `/bullmq`, `/mongodb`), templates (`/templates`) and the audit (`/audit`) are
-  unreleased
+  unemail and sently did better and adds delivery events with verified webhooks; 1.2 adds the
+  queue (`/queue`, `/bullmq`, `/mongodb`), templates (`/templates`) and the audit (`/audit`)
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
 - Node.js >= 22, tested on Bun and Deno too; CommonJS with ESM named-import interop;
   hand-written d.ts per entry

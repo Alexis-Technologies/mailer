@@ -14,14 +14,14 @@ render templates of the engine you use and know a permanent failure from a tempo
 audit of every state of a message, one model of delivery events and idempotency; next
 suppression. Zero runtime dependencies.
 
-> **Status: 1.1 is the transport layer and the first parts of the reliability layer.** 1.0 ported
+> **Status: 1.2 is the transport layer and the reliability layer on it.** 1.0 ported
 > the transport from [upyo](https://github.com/dahlia/upyo) 0.7.0; 1.1 adds what
 > [nodemailer](https://github.com/nodemailer/nodemailer),
 > [unemail](https://github.com/productdevbook/unemail) and
 > [sently](https://github.com/omqkhafi/sently) did better: sendmail, ten more HTTP providers,
 > attachments from paths and URLs, one-click List-Unsubscribe, verified webhooks into one model of
 > delivery events, and decorators for circuit breaking, rate limits, idempotency, hooks and
-> mirroring. Unreleased: the queue (`./queue`, with a BullMQ driver in `./bullmq` and a
+> mirroring. 1.2 adds the queue (`./queue`, with a BullMQ driver in `./bullmq` and a
 > transactional outbox in `./mongodb`), templates by name over nine engines (`./templates`) and
 > the audit of the states of a message (`./audit`). Suppression is next.
 

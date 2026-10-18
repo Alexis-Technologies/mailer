@@ -495,13 +495,13 @@
           "text": "MIT"
         },
         "version": {
-          "text": "1.1.0"
+          "text": "1.2.0"
         },
         "lastCommit": {
           "text": "2026-10 (this release)"
         },
         "tests": {
-          "text": "167 / ~2340"
+          "text": "177 / ~2560"
         },
         "maintainer": {
           "text": "1 author, Alexis Technologies"
