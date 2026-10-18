@@ -106,6 +106,28 @@ const checkLocale = (locale, what) => {
   return Intl.getCanonicalLocales(locale)[0];
 };
 
+// The locales templates are written in, when the application names them: a
+// locale asked for is looked up as the first of them its subtags reach, so
+// that a locale a user chose keeps no entry of its own in the cache.
+const checkLocales = (locales) => {
+  if (locales === undefined) return undefined;
+  if (!Array.isArray(locales)) throw new TypeError('locales must be an array of BCP 47 tags.');
+  const set = new Set();
+  for (const locale of locales) set.add(checkLocale(locale, 'A locale of locales'));
+  return set;
+};
+
+const allowedLocale = (config, locale) => {
+  if (config.locales === undefined || locale === undefined) return locale;
+  let current = locale;
+  for (;;) {
+    if (config.locales.has(current)) return current;
+    const dash = current.lastIndexOf('-');
+    if (dash === -1) return undefined;
+    current = current.slice(0, dash);
+  }
+};
+
 const createRendererConfig = (options) => {
   const { engines, suffixes } = enginesOf(options);
   const loader = options.loader ?? (engines.length === 1 ? engines[0].loader : undefined);
@@ -141,6 +163,7 @@ const createRendererConfig = (options) => {
     layout: options.layout,
     globals,
     defaultLocale: checkLocale(options.defaultLocale, 'defaultLocale'),
+    locales: checkLocales(options.locales),
     variantName: checkOptionalFunction(options.variantName, 'variantName') ?? defaultVariantName,
     frontMatter: options.frontMatter ?? true,
     inlineCss: checkOptionalFunction(options.inlineCss, 'inlineCss'),
@@ -504,7 +527,7 @@ const renderTemplate = async (state, checked, input, bounds) => {
   const { config } = state;
   let resolution;
   try {
-    resolution = await resolvedFor(state, checked.template, checked.locale);
+    resolution = await resolvedFor(state, checked.template, allowedLocale(config, checked.locale));
   } catch (error) {
     throw inPhase(error, 'resolve');
   }

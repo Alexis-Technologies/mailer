@@ -89,6 +89,7 @@ const templates = createTemplateRenderer({
   layout: 'layouts/main',
   globals: (input) => ({ locale: input.locale }),
   defaultLocale: 'en',
+  locales: ['en', 'uk'],
   inlineCss: cssInline,
   cache: { maxEntries: 100 },
   maxIncludes: 100,

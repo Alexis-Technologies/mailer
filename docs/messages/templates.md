@@ -87,6 +87,11 @@ are taken at the locale the HTML was found at, so that a Ukrainian body never
 goes with an English subject. `variantName(template, { locale, part })` names
 the variants another way.
 
+When the locale comes from a user, name the locales your templates are written
+in: with `locales: ['en', 'uk']`, `uk-UA` is looked up as `uk` and any other
+locale as none, so that a made-up tag reads no template and keeps no entry of
+the cache of its own.
+
 A name with the extension of an engine (`welcome.hbs`) is that engine's alone;
 without one, the engines are tried in their order.
 

@@ -251,6 +251,13 @@ export interface TemplateRendererOptions<TSource = string> {
       ) => TemplateContext | undefined | Promise<TemplateContext | undefined>);
   /** The locale tried after the requested ones, before the templates without one. */
   readonly defaultLocale?: string;
+  /**
+   * The locales templates are written in. A locale asked for is then looked
+   * up as the first of them its subtags reach (`uk-UA` as `uk`), and any
+   * other as none, so that a locale a user chose reads no template and keeps
+   * no entry of the cache of its own. Any by default.
+   */
+  readonly locales?: readonly string[];
   /** The name of a variant before its extension. @default `${template}[.${locale}][.text|.subject]` */
   readonly variantName?: (
     template: string,

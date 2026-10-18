@@ -110,6 +110,46 @@ test('Templates: locales fall back by subtag, then the default, then none', asyn
   await assert.rejects(plain.render({ template: 'welcome', locale: 'not a tag' }), RangeError);
 });
 
+test('Templates: with locales, a locale asked for is one of them or none', async () => {
+  // Before: every locale a user chose was looked up, and kept an entry of the
+  // cache of its own, so made-up tags pushed the templates out of it.
+  const reads = [];
+  const loader = createMemoryLoader({
+    'welcome.tpl': '<p>Hi</p>',
+    'welcome.uk.tpl': '<p>Привіт</p>',
+  });
+  const counted = {
+    load: (name) => {
+      reads.push(name);
+      return loader.load(name);
+    },
+  };
+  const renderer = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: counted,
+    locales: ['uk', 'EN'],
+    defaultLocale: 'en',
+  });
+  const uk = await renderer.render({ template: 'welcome', locale: 'uk-UA-x-anything' });
+  assert.deepStrictEqual([uk.template, uk.locale], ['welcome.uk.tpl', 'uk']);
+  const before = reads.length;
+  for (let index = 0; index < 20; index++) {
+    const other = await renderer.render({ template: 'welcome', locale: `de-x-tag${index}` });
+    assert.deepStrictEqual([other.template, other.locale], ['welcome.tpl', undefined]);
+  }
+  // The twenty made-up tags were one lookup: the template without a locale.
+  assert.ok(reads.length - before <= 4, String(reads.length - before));
+  assert.ok(!reads.some((name) => name.includes('tag')));
+  assert.throws(
+    () => createTemplateRenderer({ engine: fakeEngine(), loader, locales: 'uk' }),
+    /locales must be an array/,
+  );
+  assert.throws(
+    () => createTemplateRenderer({ engine: fakeEngine(), loader, locales: ['not a tag'] }),
+    RangeError,
+  );
+});
+
 test('Templates: a missing template names what was tried, and is not retryable', async () => {
   const { renderer } = rendererOf({}, { defaultLocale: 'en' });
   const error = await renderer.render({ template: 'nope', locale: 'uk' }).catch((e) => e);
