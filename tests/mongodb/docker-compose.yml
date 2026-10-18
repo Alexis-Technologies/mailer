@@ -1,0 +1,24 @@
+# Not ported: a local MongoDB for `pnpm test:mongodb`, a replica set of one,
+# as transactions and change streams need one:
+#   docker compose -f tests/mongodb/docker-compose.yml up -d --wait
+#   MONGODB_URL='mongodb://localhost:27027/?replicaSet=rs0' pnpm test:mongodb
+services:
+  mongo:
+    image: mongo:7
+    container_name: mailer-mongo
+    command: ['--replSet', 'rs0', '--bind_ip_all', '--port', '27027']
+    ports:
+      - '27027:27027'
+    healthcheck:
+      # Initiates the replica set on its first run, under the name the host reaches it by.
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27027'
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27027' }] }).ok }"
+      interval: 3s
+      timeout: 10s
+      retries: 30

@@ -31,6 +31,16 @@ states of a message. Everything is additive.
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
   that spend no attempt. `createBullMQProcessor` and `createBullMQBackoffStrategy` serve a Worker
   of your own. `pnpm test:bullmq` runs it on BullMQ and Valkey.
+- **`./mongodb`**: the transactional outbox, `createMongoOutbox({ collection })`, a
+  `QueueSource` in a collection of the MongoDB driver passed in: a job enqueued with
+  `{ transaction: session }` is written in that transaction (by an upsert, so a duplicate does
+  not abort it), lent by one atomic `findOneAndUpdate` under a token every later write is
+  fenced by, given to another worker as `redelivered` when its lease runs out, with a pause of
+  the whole queue and an optional change stream to wake the workers; `ensureIndexes()` makes
+  its indexes and the TTL of finished jobs. `createMongoAuditSink` (each event once by its id,
+  in the transaction) and `createMongoIdempotencyStore` (each step atomic, for
+  `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a
+  replica set.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

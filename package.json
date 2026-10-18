@@ -180,6 +180,10 @@
     "./bullmq": {
       "types": "./src/bullmq/index.d.ts",
       "default": "./src/bullmq/index.js"
+    },
+    "./mongodb": {
+      "types": "./src/mongodb/index.d.ts",
+      "default": "./src/mongodb/index.js"
     }
   },
   "directories": {
@@ -205,6 +209,7 @@
     "test:mailpit": "node --test --test-concurrency=1 tests/mailpit/*.test.js",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:bullmq": "node --test --test-concurrency=1 tests/bullmq/*.test.js",
+    "test:mongodb": "node --test --test-concurrency=1 tests/mongodb/*.test.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",
@@ -238,6 +243,7 @@
     "transactional-email",
     "email-queue",
     "bullmq",
+    "mongodb",
     "email-templates",
     "outbox",
     "audit-log",
@@ -275,6 +281,7 @@
     "juice": "^12.2.0",
     "liquidjs": "^10.30.0",
     "mjml": "^5.4.1",
+    "mongodb": "^7.7.0",
     "mustache": "^4.2.0",
     "nunjucks": "^3.2.4",
     "oxfmt": "^0.72.0",

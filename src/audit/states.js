@@ -17,6 +17,14 @@ const RANKS = new Map([
 const FINAL = new Set(['delivered', 'bounced', 'complained', 'failed']);
 
 /**
+ * The place of a state in the order of states: of two events at one time and
+ * attempt, the one further along came later.
+ *
+ * @internal
+ */
+const rankOf = (state) => RANKS.get(state) ?? -1;
+
+/**
  * Whether no later state but a complaint follows: `delivered`, `bounced`,
  * `complained` and `failed`.
  *
@@ -45,4 +53,4 @@ const stateOf = (events) => {
   return state;
 };
 
-module.exports = { isFinalState, stateOf };
+module.exports = { isFinalState, rankOf, stateOf };

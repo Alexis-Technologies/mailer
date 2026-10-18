@@ -103,6 +103,8 @@ const SUBPATH_EDGES = [
   // The worker of ./queue renders the subject and content of a template job
   // as ./render does, the text derived from the HTML.
   'queue/handler.js -> render/renderer.js',
+  // The audit sink of ./mongodb reads the state of a message as ./audit does.
+  'mongodb/audit-sink.js -> audit/states.js',
 ];
 
 const subpathOf = (name) => {

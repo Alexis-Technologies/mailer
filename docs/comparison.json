@@ -340,8 +340,8 @@
         },
         "queue": {
           "mark": "✅",
-          "text": "BullMQ driver, memory queue, any outbox as a `QueueSource`",
-          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again. A MongoDB outbox is next on the [roadmap](/guide/why#the-plan)."
+          "text": "MongoDB outbox (transactional), BullMQ driver, memory queue",
+          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again; in MongoDB, a job is written in the transaction of its cause."
         },
         "attachments": {
           "mark": "✅",
@@ -478,8 +478,8 @@
         },
         "auditLog": {
           "mark": "⚠️",
-          "text": "state model + sinks; crypto-shredding next",
-          "note": "Each state of a message, from the queue to the webhooks, one event per change. The keyed HMAC and encrypted recipients are on the [roadmap](/guide/why#the-plan)."
+          "text": "state model + sinks, MongoDB among them; crypto-shredding next",
+          "note": "Each state of a message, from the queue to the webhooks, one event per change, written once by its id. The keyed HMAC and encrypted recipients are on the [roadmap](/guide/why#the-plan)."
         },
         "types": {
           "mark": "✅",

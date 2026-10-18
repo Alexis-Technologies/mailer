@@ -121,6 +121,7 @@ const guide = [
     items: [
       { text: 'The queue', link: '/guide/queue' },
       { text: 'BullMQ', link: '/transports/bullmq' },
+      { text: 'MongoDB outbox', link: '/guide/outbox' },
       { text: 'The audit', link: '/guide/audit' },
     ],
   },

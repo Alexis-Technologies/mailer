@@ -51,6 +51,7 @@ pnpm test:deno                     # tests/unit and tests/runtime on Deno (deno 
 pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailpit (compose file there)
 pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
 pnpm test:bullmq                   # opt-in: tests/bullmq on BullMQ and Valkey (compose file there)
+pnpm test:mongodb                  # opt-in: tests/mongodb on a MongoDB replica set (compose file there)
 node --test tests/unit/mailer.test.js   # a single file
 node --test --test-name-pattern="Bundle" tests/unit/*.test.js   # filter by name
 pnpm run test:coverage             # c8 over src/, gated at 98 lines/statements, 90 branches, 100 functions
@@ -879,8 +880,8 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
   Content-IDs fixed (derived from the id under a key of the caller's), and a SHA-256 of all but
   `enqueuedAt` that tells a duplicate from a key used again.
 - **`AuditSink`**: `append(event, { transaction })`, append-only, an event written once by its
-  deterministic `id`; sinks in memory, of a logger, and combined (`./audit`). A MongoDB sink and
-  the crypto-shredding of recipients are next.
+  deterministic `id`; sinks in memory, of a logger, and combined (`./audit`), and in MongoDB
+  (`./mongodb`). The crypto-shredding of recipients is next.
 - **The states and events of a message:** `queued → rendered → submitted → accepted → delivered |
   bounced | complained | failed | delivery_unknown`, with correlationId, tenantId, attempt, the
   provider's message id and the hashes of the payload and of the message; no recipient.
@@ -908,8 +909,8 @@ model of states and events. `tenantId` is in the context from the start.
   providers.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
-  (Unreleased: `./queue` and `./bullmq`, with the memory queue; the outbox is next, a
-  `QueueSource`.)
+  (Unreleased: `./queue`, `./bullmq` and `./mongodb`, the outbox as a `QueueSource` with its
+  audit sink and idempotency store, and the memory queue.)
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
   (crypto-shredding), so the right to erasure does not fight an append-only log. 3–6 records per
   message; optional hash chain for tamper evidence.
@@ -1099,9 +1100,14 @@ change. **This file wins** if they ever disagree.
   `BULLMQ_REDIS_URL=redis://localhost:6390`: duplicates, retries after `Retry-After`, priorities,
   delays, a release on close and a Worker without the strategy, on BullMQ itself). The release
   skill asks for them before a release.
-- **The template engines, BullMQ and ioredis are devDependencies** for the tests of `./templates`
-  and `./bullmq` (the real engines, a fake BullMQ in `tests/helpers/bullmq/`, and tsd against the
-  real classes); `src/` requires none of them.
+- **The template engines, BullMQ, ioredis and mongodb are devDependencies** for the tests of
+  `./templates`, `./bullmq` and `./mongodb` (the real engines, a fake BullMQ in
+  `tests/helpers/bullmq/`, a collection in memory in `tests/helpers/mongodb/`, and tsd against
+  the real classes); `src/` requires none of them. `tests/mongodb/` (`pnpm test:mongodb`,
+  serial; `docker compose -f tests/mongodb/docker-compose.yml up -d --wait` and
+  `MONGODB_URL='mongodb://localhost:27027/?replicaSet=rs0'`) runs the outbox, the audit sink and
+  the store on a replica set: transactions committed and aborted, workers of several processes,
+  leases, concurrent reserves of a key and the change stream.
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
   written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to

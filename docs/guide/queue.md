@@ -4,7 +4,8 @@
 message as a job, and a worker renders it, sends it through the transport you
 composed, and decides from the receipt what the queue does next. The queue is a
 driver of your choice: [BullMQ](/transports/bullmq) on Redis or Valkey, the
-memory queue for tests, or a store's outbox (a `QueueSource`).
+[MongoDB outbox](/guide/outbox), the memory queue for tests, or an outbox of
+your own store (a `QueueSource`).
 
 ```
 producer   queue.enqueue(job) ──▶ driver (BullMQ, outbox, memory)
@@ -140,8 +141,8 @@ category and reason.
 ## Several processes
 
 A job is shared by every worker of its driver; the key store of
-`IdempotencyTransport` must be shared too (Redis, the outbox), or a crash
-mid-send can be sent twice. The breaker and the rate limit of the chain are
+`IdempotencyTransport` must be shared too (`createMongoIdempotencyStore`, or
+one on Redis), or a crash mid-send can be sent twice. The breaker and the rate limit of the chain are
 per process unless given a shared store (see
 [getting started](/guide/getting-started#several-processes)).
 

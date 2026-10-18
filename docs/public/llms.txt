@@ -10,7 +10,8 @@
 Key facts:
 - Status: 1.0 is the transport layer, ported from upyo 0.7.0 (MIT); 1.1 ports what nodemailer,
   unemail and sently did better and adds delivery events with verified webhooks; the queue
-  (`/queue`, `/bullmq`), templates (`/templates`) and the audit (`/audit`) are unreleased
+  (`/queue`, `/bullmq`, `/mongodb`), templates (`/templates`) and the audit (`/audit`) are
+  unreleased
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
 - Node.js >= 22, tested on Bun and Deno too; CommonJS with ESM named-import interop;
   hand-written d.ts per entry
@@ -24,7 +25,7 @@ Key facts:
   `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`,
   `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk`, `/mock`; decorators
   `/pool`, `/retry`, `/breaker`, `/ratelimit`, `/idempotency`, `/hooks`, `/tee`, `/otel`, `/logger`;
-  the reliability layer `/queue`, `/bullmq`, `/templates`, `/audit`
+  the reliability layer `/queue`, `/bullmq`, `/mongodb`, `/templates`, `/audit`
 - Guide: https://mailerat.vercel.app/guide/getting-started
 - API: https://mailerat.vercel.app/api/exports
 - Comparison with 14 alternatives (Nodemailer, emailjs, Upyo, unemail, sently, provider SDKs):

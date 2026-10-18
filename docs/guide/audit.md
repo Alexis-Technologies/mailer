@@ -60,6 +60,8 @@ const audit = combineAuditSinks(createLoggerAuditSink(logger), myDatabaseSink);
   `mail.<state>`: `failed` at error; `delivery_unknown`, `bounced` and
   `complained` at warn.
 - `combineAuditSinks(...sinks)` tells each in turn, whatever another threw.
+- `createMongoAuditSink({ collection })` of [`./mongodb`](/guide/outbox), each
+  event once by its id, in the transaction of the enqueue.
 - Your own: `{ append(event, { transaction }) }`. An outbox writes the
   `queued` event in the transaction of the enqueue; a sink keyed by `id`
   writes an event once however often it is told.

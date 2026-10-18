@@ -9,10 +9,10 @@
 
 **Email for Node.js, with a reliability layer.** Its own SMTP client, MIME builder, DKIM signing
 and eighteen HTTP providers, and on top of them what the other libraries leave to the
-application: a persistent queue whose workers render templates of the engine you use and know a
-permanent failure from a temporary one, an audit of every state of a message, one model of
-delivery events and idempotency; next an outbox in MongoDB and suppression. Zero runtime
-dependencies.
+application: a persistent queue, on BullMQ or a transactional outbox in MongoDB, whose workers
+render templates of the engine you use and know a permanent failure from a temporary one, an
+audit of every state of a message, one model of delivery events and idempotency; next
+suppression. Zero runtime dependencies.
 
 > **Status: 1.1 is the transport layer and the first parts of the reliability layer.** 1.0 ported
 > the transport from [upyo](https://github.com/dahlia/upyo) 0.7.0; 1.1 adds what
@@ -21,9 +21,9 @@ dependencies.
 > [sently](https://github.com/omqkhafi/sently) did better: sendmail, ten more HTTP providers,
 > attachments from paths and URLs, one-click List-Unsubscribe, verified webhooks into one model of
 > delivery events, and decorators for circuit breaking, rate limits, idempotency, hooks and
-> mirroring. Unreleased: the queue (`./queue`, with a BullMQ driver in `./bullmq`), templates by
-> name over nine engines (`./templates`) and the audit of the states of a message (`./audit`).
-> The MongoDB outbox and suppression are next.
+> mirroring. Unreleased: the queue (`./queue`, with a BullMQ driver in `./bullmq` and a
+> transactional outbox in `./mongodb`), templates by name over nine engines (`./templates`) and
+> the audit of the states of a message (`./audit`). Suppression is next.
 
 ### 📖 [Read the documentation →](https://mailerat.vercel.app/)
 
@@ -41,7 +41,8 @@ dependencies.
   read and taken as handled only once your handler commits it, give one model of delivery events
   (delivered, bounced, complained, …). A queue on BullMQ or a store of yours sends each message
   once per key, retries what may pass and fails what will not, and an audit sink hears every state
-  from `queued` to `bounced`. Next: an outbox in MongoDB and suppression. None of the
+  from `queued` to `bounced`; in MongoDB, the job is written in the transaction of its cause.
+  Next: suppression. None of the
   [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has them.
 - **Sent once, or known to be unknown.** Errors are classified as permanent or temporary, and a
   failure after which the provider may have taken the message is marked `deliveryUnknown`:
@@ -53,9 +54,9 @@ dependencies.
   internationalized addresses are planned.
 - **Zero dependencies.** Built on `node:*` modules and `fetch`. What a part needs from your
   application is passed in: the OpenTelemetry providers, a pino-like logger, BullMQ's classes,
-  your template engine (EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email),
-  and later a database driver (MongoDB). CommonJS with ESM named imports and hand-written
-  TypeScript typings, no build step.
+  your template engine (EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email)
+  and the collections of MongoDB. CommonJS with ESM named imports and hand-written TypeScript
+  typings, no build step.
 
 ## Installation
 
@@ -100,7 +101,7 @@ if (!receipt.successful) console.error(receipt.errorMessages);
 | `/mime` | MIME composition and DKIM signing |
 | `/attachments`, `/render` | attachments from a path, a URL, a data URI or a stream; the content of a renderer, React Email |
 | `/templates` | templates by name over EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache or React Email: locales, layouts, subjects, CSS inlined |
-| `/queue`, `/bullmq`, `/audit` | the mail queue and its worker, the BullMQ driver, the states of a message and their sinks |
+| `/queue`, `/bullmq`, `/mongodb`, `/audit` | the mail queue and its worker, the BullMQ driver, the MongoDB outbox (and its audit and idempotency stores), the states of a message and their sinks |
 | `/smtp`, `/sendmail`, `/jmap` | SMTP, sendmail and JMAP transports |
 | `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`, `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`, `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk` | HTTP providers |
 | `/webhooks` | verified webhooks of fifteen providers, read into delivery events |
