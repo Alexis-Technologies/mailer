@@ -2,14 +2,12 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
-const { createFailedReceipt } = require('../core/receipt.js');
 const { createPlunkConfig } = require('./config.js');
-const { PlunkApiError, PlunkHttpClient } = require('./http-client.js');
+const { PlunkHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
-const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 
 /**
  * Plunk transport implementation for sending emails via Plunk API.
@@ -133,10 +131,7 @@ class PlunkTransport {
       if (isCallerAbort(error, options?.signal)) {
         throw error;
       }
-
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return createPlunkFailure(errorMessage, error);
+      return providerFailure('plunk', error);
     }
   }
 
@@ -224,32 +219,5 @@ class PlunkTransport {
     return `plunk-${generateId('receipt-id', this.config.generateId)}`;
   }
 }
-
-const createPlunkFailure = (message, error) => {
-  const known = refusalFailure('plunk', error) ?? certificateFailure('plunk', message, error);
-  if (known !== undefined) return known;
-  if (error instanceof PlunkApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'plunk',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'plunk',
-  });
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
 
 module.exports = { PlunkTransport };
