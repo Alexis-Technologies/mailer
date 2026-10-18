@@ -3,6 +3,8 @@
 // through that transport's own `sendMany()` so its batching is kept, with the
 // receipts in the order of the messages.
 
+const { iteratorOf } = require('./iterate.js');
+
 /**
  * A first-in first-out queue whose `shift` takes constant time.
  *
@@ -36,11 +38,6 @@ class Fifo {
     return item;
   }
 }
-
-const iteratorOf = (messages) =>
-  typeof messages[Symbol.asyncIterator] === 'function'
-    ? messages[Symbol.asyncIterator]()
-    : messages[Symbol.iterator]();
 
 // The most answers in place a run holds while the messages handed to the
 // wrapped transport before them wait for their receipts: past it, the run

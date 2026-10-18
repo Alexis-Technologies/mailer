@@ -1,19 +1,9 @@
 // Not ported: the messages of a sendMany() read as they are needed
 // rather than all at once, so that it holds a batch in memory, not its input.
 
-const noop = () => {};
+const { readItems } = require('./iterate.js');
 
-/**
- * The items of an iterable, synchronous or not, through one async iterator
- * that can be read by hand and then iterated for the rest.
- *
- * @param iterable The items.
- * @returns An async generator of them.
- * @internal
- */
-const readItems = async function* (iterable) {
-  for await (const item of iterable) yield item;
-};
+const noop = () => {};
 
 /**
  * Reads an iterable, synchronous or not, in arrays of at most `size` items,

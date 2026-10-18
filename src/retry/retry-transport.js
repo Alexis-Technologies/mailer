@@ -11,7 +11,13 @@ const { pinMessageId } = require('../core/message-id.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
 const { abortReason } = require('../internal/sleep.js');
-const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
+const {
+  disposeOf,
+  messageOf,
+  refuseUnlessRaw,
+  verifyWrapped,
+} = require('../internal/decorator.js');
+const { iteratorOf } = require('../internal/iterate.js');
 
 /**
  * Transport decorator that retries transient delivery failures.
@@ -190,7 +196,7 @@ class RetryTransport {
     const controller = new AbortController();
     const combinedSignal = combineSignals(controller.signal, options?.signal);
     const signal = combinedSignal.signal;
-    const run = new SendManyRun(this, toAsyncIterator(messages), { ...options, signal });
+    const run = new SendManyRun(this, iteratorOf(messages), { ...options, signal });
     try {
       run.launch();
       while (run.isActive()) {
@@ -357,7 +363,7 @@ class RetryTransport {
       });
     }
 
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     const classification =
       error instanceof Error && error.name === 'AbortError'
         ? {
@@ -556,26 +562,6 @@ class SendManyRun {
     );
   }
 }
-
-const toAsyncIterator = (values) => {
-  const asyncIterator = values[Symbol.asyncIterator];
-  if (typeof asyncIterator === 'function') return asyncIterator.call(values);
-
-  const iterator = values[Symbol.iterator]();
-  return {
-    async next() {
-      return await Promise.resolve(iterator.next());
-    },
-    async return(value) {
-      return await Promise.resolve(
-        iterator.return?.(value) ?? {
-          done: true,
-          value,
-        },
-      );
-    },
-  };
-};
 
 const raceWithAbort = (promise, signal) => {
   if (signal.aborted) return Promise.reject(abortReason(signal));

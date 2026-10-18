@@ -5,6 +5,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
 const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, messageOf } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
@@ -332,7 +333,9 @@ class PoolTransport {
       const transport = entry.transport;
       if (seen.has(transport)) continue;
       seen.add(transport);
-      disposals.push(dispose(transport));
+      // An async disposal: one that throws at once rejects, rather than
+      // stopping the disposal of the others.
+      disposals.push(disposeOf(transport));
     }
 
     // Every transport is disposed of, whichever fails; the failures come
@@ -371,7 +374,7 @@ class PoolTransport {
           onSelectorError: (error, index) =>
             this.log.write(
               'warn',
-              () => ({ index, error: error instanceof Error ? error.message : String(error) }),
+              () => ({ index, error: messageOf(error) }),
               'A pool selector threw; its transport is skipped',
             ),
         });
@@ -552,16 +555,6 @@ const hasMessageRejection = (errors) => {
     if (error.category === 'validation' || error.category === 'rejected') return true;
   }
   return false;
-};
-
-// Disposes of a transport, asynchronously or not; an error it throws at once
-// rejects rather than stopping the disposal of the others.
-const dispose = async (transport) => {
-  if (typeof transport[Symbol.asyncDispose] === 'function') {
-    await transport[Symbol.asyncDispose]();
-  } else if (typeof transport[Symbol.dispose] === 'function') {
-    transport[Symbol.dispose]();
-  }
 };
 
 module.exports = { PoolTransport };
