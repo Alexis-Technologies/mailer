@@ -55,7 +55,6 @@ const verifyByRequest = (request) =>
       if (request.check?.(status, body) === true) return;
       throw failureOf(request.provider, status, body);
     },
-    reject: async (response) => failureOf(request.provider, response.status, ''),
   });
 
 /**

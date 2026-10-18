@@ -1,7 +1,7 @@
 // Not ported: what the HTTP providers added in 1.1 share, once rather than a
-// copy in each: the client of api-client.js, and the conversion of a batch in
-// which a message that cannot be converted fails alone, its attachments and
-// header fields, and the steps of one send.
+// copy in each: the client of api-client.js, the receipts of a batch in the
+// order of its messages, their attachments, addresses and header fields, and
+// the steps of one send.
 
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
@@ -17,32 +17,6 @@ const {
   providerFailure,
   truncateErrorText,
 } = require('./api-client.js');
-
-/**
- * Converts each message of a batch, one that fails to convert failing alone.
- *
- * @param messages The messages.
- * @param convert Converts one message.
- * @param provider The provider's id, for the receipt of a failure.
- * @param signal Rethrows the caller's abort.
- * @returns `{ payloads, slots }`: a slot is the index of a payload, or the
- * receipt of a message that did not convert.
- * @internal
- */
-const convertBatch = async (messages, convert, provider, signal) => {
-  const payloads = [];
-  const slots = [];
-  for (let i = 0; i < messages.length; i++) {
-    try {
-      payloads.push(await convert(messages[i]));
-      slots.push(payloads.length - 1);
-    } catch (error) {
-      if (isCallerAbort(error, signal)) throw error;
-      slots.push(providerFailure(provider, error));
-    }
-  }
-  return { payloads, slots };
-};
 
 /**
  * The receipts of a batch in the order of its messages: those of
@@ -212,7 +186,6 @@ module.exports = {
   ProviderApiError,
   base64Attachments,
   checkCredential,
-  convertBatch,
   createApiClient,
   headerFieldsOf,
   isCallerAbort,
