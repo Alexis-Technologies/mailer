@@ -14,7 +14,7 @@ const {
   observed,
   parseJsonOf,
   requireSecret,
-  resolveCommonOptions,
+  resolveUntimedOptions,
   stringOf,
   stringRecordOf,
 } = require('./request.js');
@@ -109,7 +109,7 @@ const createMailtrapWebhookVerifier = (options = {}) => {
     options.secret,
     'secret is the signing secret of the Mailtrap webhook.',
   );
-  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
+  const common = resolveUntimedOptions(options);
   return {
     verify: observed(common, 'mailtrap', async (request) => {
       const bytes = bodyBytesOf(request, common);

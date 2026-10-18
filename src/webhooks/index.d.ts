@@ -131,7 +131,7 @@ export interface WebhookVerifyReport {
 export type WebhookVerifyListener = (report: WebhookVerifyReport) => void;
 
 /**
- * The options every verifier takes.
+ * The options of a verifier whose provider signs the time of a request.
  */
 export interface WebhookVerifierOptions {
   /** Hears each request taken or refused. */
@@ -331,7 +331,8 @@ export declare function createMailgunWebhookVerifier(
 /**
  * The options of a verifier of a webhook whose URL carries Basic credentials,
  * as its provider signs nothing (Postmark, Mailjet, SparkPost, SMTP2GO).  No
- * id is kept: committing its delivery does nothing.
+ * id is kept: committing its delivery does nothing.  With no time signed,
+ * `toleranceMs` and `now` throw a `TypeError`.
  */
 export interface BasicWebhookVerifierOptions {
   /** Hears each request taken or refused. */
@@ -360,6 +361,7 @@ export declare function createPostmarkWebhookVerifier(
 /**
  * The options of a verifier of a webhook signed with an HMAC of its body and
  * no time: an event is taken once by its id, kept a day and an hour.
+ * `toleranceMs` and `now` throw a `TypeError`.
  */
 export interface SignedBodyWebhookVerifierOptions {
   /** Hears each request taken or refused. */

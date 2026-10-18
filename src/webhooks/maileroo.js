@@ -14,7 +14,7 @@ const {
   observed,
   parseJsonOf,
   requireSecret,
-  resolveCommonOptions,
+  resolveUntimedOptions,
   splitNamedTags,
   stringListOf,
   stringOf,
@@ -81,7 +81,7 @@ const createMailerooWebhookVerifier = (options = {}) => {
     options.secret,
     'secret is the signing secret of the Maileroo webhook.',
   );
-  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
+  const common = resolveUntimedOptions(options);
   return {
     verify: observed(common, 'maileroo', async (request) => {
       const bytes = bodyBytesOf(request, common);

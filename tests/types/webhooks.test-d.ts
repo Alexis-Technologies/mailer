@@ -73,6 +73,7 @@ expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
   (await postmark.verify({ body: '' })).events,
 );
 expectError(createPostmarkWebhookVerifier({ username: 'u' }));
+expectError(createPostmarkWebhookVerifier({ username: 'u', password: 'p', toleranceMs: 1 }));
 expectError(createResendWebhookVerifier({}));
 
 const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: null });

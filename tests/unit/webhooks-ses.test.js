@@ -14,6 +14,7 @@ const {
   notification,
   signSns,
 } = require('../helpers/webhooks/sns.js');
+const { storeKey } = require('../helpers/webhooks/store.js');
 
 const NOW = Date.parse('2027-01-01T12:00:30Z');
 const verifier = (options = {}) => {
@@ -352,8 +353,8 @@ test('Webhooks SES: the options are checked, and a replay store may be given or 
   const good = notification({ eventType: 'Send', mail: mail() });
   await (await verify(request(good))).commit();
   assert.deepStrictEqual(seen, [
-    ['reserve', 'ses:sns-1', 30 * 1000],
-    ['commit', 'ses:sns-1', 2 * 60 * 60 * 1000],
+    ['reserve', storeKey('ses:sns-1'), 30 * 1000],
+    ['commit', storeKey('ses:sns-1'), 2 * 60 * 60 * 1000],
   ]);
   const open = verifier({ replayStore: null });
   await open.verify(request(good));

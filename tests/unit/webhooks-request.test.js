@@ -5,8 +5,10 @@ const {
   createMemoryReplayStore,
   dateOf,
   equalBytes,
+  equalSecrets,
   headerOf,
 } = require('../../src/webhooks/request.js');
+const { storeKey } = require('../helpers/webhooks/store.js');
 
 test('Webhooks: a header field is read from Headers or from Node headers, in any case', () => {
   const headers = new Headers({ 'Svix-Id': 'msg_1' });
@@ -23,6 +25,35 @@ test('Webhooks: secrets compare in constant time, a length apart is unequal', ()
   assert.strictEqual(equalBytes(Buffer.from('abc'), Buffer.from('abc')), true);
   assert.strictEqual(equalBytes(Buffer.from('abc'), Buffer.from('abd')), false);
   assert.strictEqual(equalBytes(Buffer.from('abc'), Buffer.from('abcd')), false);
+  assert.strictEqual(equalSecrets(Buffer.from('abc'), Buffer.from('abc')), true);
+  assert.strictEqual(equalSecrets(Buffer.from('abc'), Buffer.from('abd')), false);
+  assert.strictEqual(equalSecrets(Buffer.from('abc'), Buffer.from('abcd')), false);
+});
+
+test('Webhooks: credentials of another length take the time of the comparison', async (t) => {
+  // Before: Basic and Bearer credentials were compared with equalBytes, which
+  // answers at once for a length apart, so the time told the secret's length.
+  const crypto = require('node:crypto');
+  const compared = [];
+  const original = crypto.timingSafeEqual;
+  t.mock.method(crypto, 'timingSafeEqual', (a, b) => {
+    compared.push([a.length, b.length]);
+    return original(a, b);
+  });
+  const root = require('node:path').join(__dirname, '../../src/webhooks/');
+  const fresh = () => {
+    for (const name of Object.keys(require.cache)) {
+      if (name.startsWith(root)) delete require.cache[name];
+    }
+  };
+  fresh();
+  t.after(fresh);
+  const { createPostmarkWebhookVerifier: postmark } = require('../../src/webhooks/index.js');
+  const verifier = postmark({ username: 'user', password: 'a long password of the hook' });
+  const short = `Basic ${Buffer.from('user:x').toString('base64')}`;
+  const body = JSON.stringify({ RecordType: 'Delivery', MessageID: 'm', Recipient: 'b@e.com' });
+  await assert.rejects(verifier.verify({ body, headers: { authorization: short } }), /credentials/);
+  assert.deepStrictEqual(compared, [[32, 32]]);
 });
 
 test('Webhooks: dates come from seconds, milliseconds or ISO text', () => {
@@ -187,7 +218,7 @@ test('Webhooks: a store that fails releases the ids reserved before it', async (
   const store = {
     reserve: async (id) => {
       calls.push(['reserve', id]);
-      if (id === 'mailtrap:ev-2') throw new Error('store down');
+      if (id === storeKey('mailtrap:ev-2')) throw new Error('store down');
       return 'reserved';
     },
     commit: async (id) => {
@@ -200,15 +231,36 @@ test('Webhooks: a store that fails releases the ids reserved before it', async (
   const mailtrap = createMailtrapWebhookVerifier({ secret: 'mt', replayStore: store });
   await assert.rejects(mailtrap.verify(signMailtrap(mailtrapBatch('ev-1', 'ev-2'))), /store down/);
   assert.deepStrictEqual(calls, [
-    ['reserve', 'mailtrap:ev-1'],
-    ['reserve', 'mailtrap:ev-2'],
-    ['release', 'mailtrap:ev-1'],
+    ['reserve', storeKey('mailtrap:ev-1')],
+    ['reserve', storeKey('mailtrap:ev-2')],
+    ['release', storeKey('mailtrap:ev-1')],
   ]);
   const odd = createMailtrapWebhookVerifier({
     secret: 'mt',
     replayStore: { ...store, reserve: () => true },
   });
   await assert.rejects(odd.verify(signMailtrap(mailtrapBatch('ev-9'))), /answered true/);
+});
+
+test('Webhooks: an id is kept in the store by its digest, never with an address', async () => {
+  // Before: an event of Mailtrap without an event_id went into the store as
+  // its message, type and recipient, so a shared store held the addresses.
+  const keys = [];
+  const mailtrap = createMailtrapWebhookVerifier({
+    secret: 'mt',
+    replayStore: {
+      reserve: async (id) => keys.push(id) && 'reserved',
+      commit: async () => {},
+      release: async () => {},
+    },
+  });
+  const body = JSON.stringify({
+    events: [{ event: 'delivery', message_id: 'm-1', email: 'bob@example.com' }],
+  });
+  const { events } = await mailtrap.verify(signMailtrap(body));
+  assert.strictEqual(events[0].id, 'm-1:delivery:bob@example.com');
+  assert.deepStrictEqual(keys, [storeKey('mailtrap:m-1:delivery:bob@example.com')]);
+  assert.match(keys[0], /^mailtrap:[\w-]{43}$/);
 });
 
 test('Webhooks: a batch with nothing new waits for its other delivery, or is a replay', async () => {
@@ -264,6 +316,25 @@ test('Webhooks: every verifier that keeps ids needs a replay store, null to keep
   assert.ok(createPostmarkWebhookVerifier({ username: 'u', password: 'p' }));
   assert.ok(createBrevoWebhookVerifier({ token: 't' }));
   assert.ok(createSmtp2goWebhookVerifier({ username: 'u', password: 'p' }));
+});
+
+test('Webhooks: a verifier of a provider that signs no time refuses a window of time', () => {
+  // Before: toleranceMs and now were taken and never read, so a caller who
+  // set a window believed old requests were refused.
+  const makers = [
+    (more) => createPostmarkWebhookVerifier({ username: 'u', password: 'p', ...more }),
+    (more) => createBrevoWebhookVerifier({ token: 't', ...more }),
+    (more) => createSmtp2goWebhookVerifier({ username: 'u', password: 'p', ...more }),
+    (more) => createMailerSendWebhookVerifier({ secret: 's', replayStore: null, ...more }),
+    (more) => createMailtrapWebhookVerifier({ secret: 's', replayStore: null, ...more }),
+    (more) => createMailerooWebhookVerifier({ secret: 's', replayStore: null, ...more }),
+    (more) => createAzureWebhookVerifier({ token: 't', replayStore: null, ...more }),
+  ];
+  for (const make of makers) {
+    assert.ok(make({}));
+    assert.throws(() => make({ toleranceMs: 60_000 }), /toleranceMs is not read/);
+    assert.throws(() => make({ now: Date.now }), /now is not read/);
+  }
 });
 
 test('Webhooks: a refusal says what to answer, a certificate not read asks for a retry', async () => {

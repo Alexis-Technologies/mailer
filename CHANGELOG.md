@@ -140,7 +140,10 @@ additive but the defaults listed below.
   `DKIM-Signature` field (the fix of 1.0 missed it).
 - **The webhooks of a provider are verified before they are read,** where sently parsed SES,
   SendGrid, Postmark and Brevo events unverified and checked Resend and Mailgun with no window
-  of time or replay check.
+  of time or replay check. Basic credentials and tokens are compared by an HMAC of each, so the
+  time of a refusal tells nothing of their length; a replay store is given the provider and a
+  SHA-256 of each id, never an id that names a recipient; and a verifier whose provider signs no
+  time refuses `toleranceMs` and `now` rather than ignore them.
 
 ### Fixed
 

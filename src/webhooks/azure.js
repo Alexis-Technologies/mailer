@@ -14,7 +14,7 @@ const {
   isRecord,
   observed,
   parseJsonOf,
-  resolveCommonOptions,
+  resolveUntimedOptions,
   stringOf,
   tokenCheckOf,
 } = require('./request.js');
@@ -115,7 +115,7 @@ const validationOf = (payload) => {
 const createAzureWebhookVerifier = (options = {}) => {
   const checkToken = tokenCheckOf(options, 'Event Grid');
   const tokenHeader = options.header ?? 'authorization';
-  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
+  const common = resolveUntimedOptions(options);
   return {
     verify: observed(common, 'azure', async (request) => {
       const bytes = bodyBytesOf(request, common);

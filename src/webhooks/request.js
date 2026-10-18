@@ -6,7 +6,7 @@
 // verified, and an id is kept as taken only once the application has handled
 // its events.
 
-const { createHmac, timingSafeEqual } = require('node:crypto');
+const { createHash, createHmac, randomBytes, timingSafeEqual } = require('node:crypto');
 const { warnThrown } = require('../internal/callback.js');
 const {
   checkOptionalFunction,
@@ -201,8 +201,27 @@ const observed = (common, provider, verify) => {
  *
  * @internal
  */
+// A provider that signs no time leaves no window to hold a request to, so an
+// option of one would be taken and never read.
+const UNTIMED = ['toleranceMs', 'now'];
+
+/**
+ * Resolves the options of a verifier whose provider signs no time: an id is
+ * kept a day and an hour, and `toleranceMs` or `now` is refused.
+ *
+ * @internal
+ */
+const resolveUntimedOptions = (options) => {
+  for (const name of UNTIMED) {
+    if (options[name] !== undefined) {
+      throw new TypeError(`${name} is not read: the provider signs no time.`);
+    }
+  }
+  return resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
+};
+
 const resolveCredentialOptions = (options) =>
-  resolveCommonOptions({ ...options, replayStore: null }, DEFAULT_TOLERANCE_MS);
+  resolveUntimedOptions({ ...options, replayStore: null });
 
 /**
  * The events of a verified request, whose ids stay reserved in the replay
@@ -298,6 +317,16 @@ class WebhookDelivery {
  * @returns The delivery.
  * @internal
  */
+// The key of an id in the replay store: its provider, and a digest of the id,
+// which may name a recipient (an event of Mailtrap without an event_id).
+const storeKeyOf = (key) => {
+  const colon = key.indexOf(':');
+  const digest = createHash('sha256')
+    .update(key.slice(colon + 1))
+    .digest('base64url');
+  return `${key.slice(0, colon + 1)}${digest}`;
+};
+
 const claimDelivery = async (common, entries, fields = {}, ttlMs = common.toleranceMs * 2) => {
   const store = common.replayStore;
   const delivery = new WebhookDelivery(fields, store, ttlMs);
@@ -305,8 +334,9 @@ const claimDelivery = async (common, entries, fields = {}, ttlMs = common.tolera
   let pending = 0;
   try {
     for (const entry of entries) {
-      const state = store === null ? 'reserved' : await store.reserve(entry.key, common.leaseMs);
-      if (state === 'reserved') delivery.add(entry.key, entry.events);
+      const key = store === null ? undefined : storeKeyOf(entry.key);
+      const state = store === null ? 'reserved' : await store.reserve(key, common.leaseMs);
+      if (state === 'reserved') delivery.add(key, entry.events);
       else if (state === 'pending') pending++;
       else if (state === 'done') done++;
       else throw new TypeError(`replayStore.reserve answered ${String(state)}.`);
@@ -321,14 +351,14 @@ const claimDelivery = async (common, entries, fields = {}, ttlMs = common.tolera
     throw new WebhookVerificationError(
       'pending',
       single
-        ? `The request ${entries[0].key} is being handled by another delivery.`
+        ? `The request ${storeKeyOf(entries[0].key)} is being handled by another delivery.`
         : 'The events of the batch are being handled by another delivery.',
     );
   }
   throw new WebhookVerificationError(
     'replay',
     single
-      ? `The request ${entries[0].key} was taken before.`
+      ? `The request ${storeKeyOf(entries[0].key)} was taken before.`
       : 'Every event of the batch was taken before.',
   );
 };
@@ -427,11 +457,24 @@ const checkSignedSeconds = (value, common, label) => {
 };
 
 /**
- * Compares two secrets in constant time.
+ * Compares two digests in constant time; a length apart is unequal.
  *
  * @internal
  */
 const equalBytes = (a, b) => a.length === b.length && timingSafeEqual(a, b);
+
+// A key of this process: the digests of two secrets compare in a time that
+// tells nothing of their length, as the secrets themselves would.
+const COMPARE_KEY = randomBytes(32);
+const digestOf = (bytes) => createHmac('sha256', COMPARE_KEY).update(bytes).digest();
+
+/**
+ * Compares a secret given with the one expected, in constant time whatever
+ * their lengths.
+ *
+ * @internal
+ */
+const equalSecrets = (given, expected) => timingSafeEqual(digestOf(given), digestOf(expected));
 
 /**
  * The HMAC-SHA256 of the parts given, in order.
@@ -570,7 +613,7 @@ const checkBasicCredentials = (request, expected) => {
     throw new WebhookVerificationError('credentials', 'The request has no Basic credentials.');
   }
   const given = Buffer.from(header.slice(space + 1).trim(), 'base64');
-  if (!equalBytes(given, expected)) {
+  if (!equalSecrets(given, expected)) {
     throw new WebhookVerificationError('credentials', 'The credentials do not match.');
   }
 };
@@ -703,7 +746,7 @@ const tokenCheckOf = (options, label) => {
   );
   return (request) => {
     const given = headerOf(request, header);
-    if (given === undefined || !equalBytes(Buffer.from(given.trim(), 'utf8'), expected)) {
+    if (given === undefined || !equalSecrets(Buffer.from(given.trim(), 'utf8'), expected)) {
       throw new WebhookVerificationError('credentials', 'The webhook token does not match.');
     }
   };
@@ -753,6 +796,7 @@ module.exports = {
   dateOf,
   deliveryOf,
   equalBytes,
+  equalSecrets,
   headerOf,
   headerValueOf,
   hmacOf,
@@ -764,6 +808,7 @@ module.exports = {
   requireSecret,
   resolveCommonOptions,
   resolveCredentialOptions,
+  resolveUntimedOptions,
   splitNamedTags,
   stringListOf,
   stringOf,

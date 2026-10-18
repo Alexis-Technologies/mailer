@@ -116,7 +116,9 @@ are committed.
 `createMemoryReplayStore()` in one process; for several processes, or a
 function that makes its verifier for each request, a store they share; `null`
 for an application that deduplicates the events by their `id` itself. A shared
-store implements three methods:
+store implements three methods. The ids it is given are the provider and a
+SHA-256 of the provider's id (`mailtrap:3q2+7w…`), as some ids name a
+recipient:
 
 ```js
 // Redis, with node-redis: an atomic reservation, a commit, and a release
@@ -140,9 +142,9 @@ const replayStore = {
 | --- | --- | --- |
 | `replayStore` | required | The ids taken, or `null`. |
 | `leaseMs` | 30 seconds | How long an id stays reserved while it is handled: longer than a handler takes, shorter than the provider's first retry (20 seconds for SNS). |
-| `toleranceMs` | 5 minutes (an hour for SES) | How far from now a request may be signed. |
+| `toleranceMs` | 5 minutes (an hour for SES) | How far from now a request may be signed. A verifier whose provider signs no time (Postmark, Brevo, Mailjet, SparkPost, SMTP2GO, MailerSend, Mailtrap, Maileroo, Azure) refuses it, and `now`. |
 | `maxBodyBytes` | 5 MiB | The longest body taken. |
-| `now` | `Date.now` | The clock. |
+| `now` | `Date.now` | The clock of `toleranceMs`. |
 | `onVerify` | | Hears each request: `{ provider, status, reason, events, durationMs }`, `status` being `taken`, `refused` or `error`, for a metric of refusals by `reason`. |
 
 ## Amazon SES
@@ -211,7 +213,11 @@ const mailgun = createMailgunWebhookVerifier({
 ```
 
 The signature is the HMAC-SHA256 of the timestamp and the token of the body,
-with the HTTP webhook signing key; the token is taken once. A permanent
+with the HTTP webhook signing key; the token is taken once. Mailgun signs
+neither the body nor the event in it, so a timestamp, token and signature
+seen once can carry any event until the token is taken: give every process
+the same shared `replayStore`, as one store per process takes the same token
+once in each. A permanent
 failure is a hard bounce, a temporary one a deferred soft bounce, and a
 failure for a suppressed address `rejected`. The user variables are the
 metadata, and `messageId` the id of the receipt, in angle brackets.

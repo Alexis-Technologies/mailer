@@ -16,7 +16,7 @@ const {
   observed,
   parseJsonOf,
   requireSecret,
-  resolveCommonOptions,
+  resolveUntimedOptions,
   stringOf,
   stringsOf,
 } = require('./request.js');
@@ -92,7 +92,7 @@ const createMailerSendWebhookVerifier = (options = {}) => {
     options.secret,
     'secret is the signing secret of the MailerSend webhook.',
   );
-  const common = resolveCommonOptions(options, DAY_REPLAY_TTL_MS);
+  const common = resolveUntimedOptions(options);
   return {
     verify: observed(common, 'mailersend', async (request) => {
       const bytes = bodyBytesOf(request, common);
