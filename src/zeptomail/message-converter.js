@@ -4,8 +4,12 @@
 // Changed in the port: a tag is the `client_reference`, a second one
 // refused, as ZeptoMail has no tags; and a scheduled message is refused.
 
-const { toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const {
+  base64Attachments,
+  headerFieldsOf,
+  mailboxOf,
+  visitMetadataHeaders,
+} = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
 
@@ -14,11 +18,7 @@ const MAX_RECIPIENTS = 500;
 const MAX_ATTACHMENTS = 60;
 const MAX_SUBJECT = 500;
 
-const addressOf = (address) => {
-  const result = { address: toAsciiAddress(address.address) };
-  if (address.name) result.name = address.name;
-  return result;
-};
+const addressOf = (address) => mailboxOf(address, 'address', 'name');
 
 const recipientsOf = (addresses) => {
   const list = [];
@@ -56,12 +56,10 @@ const headersOf = (message) => {
     hasHeaders = true;
   }
   // ZeptoMail has no metadata of its own: its events carry the headers.
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers[`X-Metadata-${key}`] = message.metadata[key];
-      hasHeaders = true;
-    }
-  }
+  visitMetadataHeaders(message, (name, value) => {
+    headers[name] = value;
+    hasHeaders = true;
+  });
   return hasHeaders ? headers : undefined;
 };
 

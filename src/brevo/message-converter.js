@@ -12,21 +12,13 @@
 // goes in `X-Mailin-custom`, which Brevo returns in its events.
 
 const { generateId } = require('../core/id.js');
-const { toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const { base64Attachments, headerFieldsOf, mailboxesOf, mailboxOf } = require('../internal/api.js');
 const { toUuid } = require('../internal/uuid.js');
 const { RefusalError } = require('../internal/refusal.js');
 
-const addressOf = (address) => {
-  const email = toAsciiAddress(address.address);
-  return address.name ? { email, name: address.name } : { email };
-};
+const addressOf = (address) => mailboxOf(address, 'email', 'name');
 
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'email', 'name');
 
 /**
  * Converts a message to a request of Brevo's `/v3/smtp/email`.

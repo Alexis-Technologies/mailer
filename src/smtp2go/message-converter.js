@@ -6,7 +6,7 @@
 // SMTP2GO has no field for, are not sent, as over SMTP.
 
 const { formatMailbox } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const { base64Attachments, headerFieldsOf, visitMetadataHeaders } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
 
@@ -52,11 +52,7 @@ const headersOf = (message) => {
     const value = formatAddresses(message.replyRecipients, formatMailbox).join(', ');
     headers.push({ header: 'Reply-To', value });
   }
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers.push({ header: `X-Metadata-${key}`, value: message.metadata[key] });
-    }
-  }
+  visitMetadataHeaders(message, (header, value) => headers.push({ header, value }));
   return headers;
 };
 

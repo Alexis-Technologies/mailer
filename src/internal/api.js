@@ -3,6 +3,7 @@
 // which a message that cannot be converted fails alone, its attachments and
 // header fields, and the steps of one send.
 
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { toBase64 } = require('./base64.js');
@@ -172,6 +173,41 @@ const sentWith = (provider, messageId, missing) =>
     ? { successful: true, messageId, provider }
     : createFailedReceipt(missing, { provider, category: 'unknown', deliveryUnknown: true });
 
+/**
+ * An address as a provider writes it: `{ [emailKey]: the address in A-labels,
+ * [nameKey]: the name }`, the name only when there is one.
+ *
+ * @internal
+ */
+const mailboxOf = (address, emailKey, nameKey) => {
+  const mailbox = { [emailKey]: toAsciiAddress(address.address) };
+  if (address.name) mailbox[nameKey] = address.name;
+  return mailbox;
+};
+
+/**
+ * The addresses of a list, each as {@link mailboxOf} writes it.
+ *
+ * @internal
+ */
+const mailboxesOf = (addresses, emailKey, nameKey) => {
+  const list = [];
+  for (let i = 0; i < addresses.length; i++) list.push(mailboxOf(addresses[i], emailKey, nameKey));
+  return list;
+};
+
+/**
+ * Calls `visit(name, value)` with the `X-Metadata-<key>` header field of each
+ * entry of the metadata of a message, for a provider that keeps none of its
+ * own but gives the header fields back with its events.
+ *
+ * @internal
+ */
+const visitMetadataHeaders = (message, visit) => {
+  if (message.metadata === undefined) return;
+  for (const key in message.metadata) visit(`X-Metadata-${key}`, message.metadata[key]);
+};
+
 module.exports = {
   ProviderApiError,
   base64Attachments,
@@ -180,10 +216,13 @@ module.exports = {
   createApiClient,
   headerFieldsOf,
   isCallerAbort,
+  mailboxOf,
+  mailboxesOf,
   mergeBatch,
   parseAnswer,
   providerFailure,
   sendConverted,
   sentWith,
   truncateErrorText,
+  visitMetadataHeaders,
 };

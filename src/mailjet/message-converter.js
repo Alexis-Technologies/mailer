@@ -6,8 +6,7 @@
 // refused, as `CustomCampaign` is one name; `metadata` goes in `EventPayload`;
 // and a scheduled message is refused.
 
-const { toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const { base64Attachments, headerFieldsOf, mailboxesOf, mailboxOf } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
 
@@ -59,16 +58,9 @@ const FORBIDDEN_HEADERS = new Set([
   'x-mj-statisticscontactslistid',
 ]);
 
-const addressOf = (address) => {
-  const email = toAsciiAddress(address.address);
-  return address.name ? { Email: email, Name: address.name } : { Email: email };
-};
+const addressOf = (address) => mailboxOf(address, 'Email', 'Name');
 
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'Email', 'Name');
 
 /**
  * The recipients of a message, an address counted once, as Mailjet counts

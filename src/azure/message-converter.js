@@ -7,7 +7,12 @@
 // and a scheduled message is refused.
 
 const { toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const {
+  base64Attachments,
+  headerFieldsOf,
+  mailboxesOf,
+  visitMetadataHeaders,
+} = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { trackingSwitchOf } = require('../internal/tracking.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -15,17 +20,7 @@ const { RefusalError } = require('../internal/refusal.js');
 /** Azure takes a request of at most 10 MB, its attachments included. */
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
 
-const addressOf = (address) => {
-  const result = { address: toAsciiAddress(address.address) };
-  if (address.name) result.displayName = address.name;
-  return result;
-};
-
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'address', 'displayName');
 
 // `userEngagementTrackingDisabled` turns opens and clicks off together, and
 // can only turn off what the resource has on.
@@ -42,12 +37,10 @@ const headersOf = (message) => {
     hasHeaders = true;
   }
   // Azure has no metadata of its own: a header field carries it.
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers[`X-Metadata-${key}`] = message.metadata[key];
-      hasHeaders = true;
-    }
-  }
+  visitMetadataHeaders(message, (name, value) => {
+    headers[name] = value;
+    hasHeaders = true;
+  });
   return hasHeaders ? headers : undefined;
 };
 

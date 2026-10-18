@@ -8,8 +8,13 @@
 // second reply-to address and a scheduled message are refused; tags, which
 // Cloudflare has no field for, are not sent, as over SMTP.
 
-const { toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const {
+  base64Attachments,
+  headerFieldsOf,
+  mailboxesOf,
+  mailboxOf,
+  visitMetadataHeaders,
+} = require('../internal/api.js');
 const { rawMessageText } = require('../internal/raw.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -17,17 +22,9 @@ const { RefusalError } = require('../internal/refusal.js');
 // "The combined number of addresses across to, cc, and bcc must not exceed 50."
 const MAX_RECIPIENTS = 50;
 
-const addressOf = (address) => {
-  const result = { address: toAsciiAddress(address.address) };
-  if (address.name) result.name = address.name;
-  return result;
-};
+const addressOf = (address) => mailboxOf(address, 'address', 'name');
 
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'address', 'name');
 
 const checkLimits = (message) => {
   refuseScheduledAt(message, 'cloudflare');
@@ -48,12 +45,10 @@ const headersOf = (message) => {
     headers[field.name] = field.value;
     hasHeaders = true;
   }
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers[`X-Metadata-${key}`] = message.metadata[key];
-      hasHeaders = true;
-    }
-  }
+  visitMetadataHeaders(message, (name, value) => {
+    headers[name] = value;
+    hasHeaders = true;
+  });
   return hasHeaders ? headers : undefined;
 };
 

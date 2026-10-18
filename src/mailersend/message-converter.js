@@ -9,9 +9,14 @@
 // key, a second reply-to address is refused, and sently's dropped custom
 // headers are sent.
 
-const { toAsciiAddress } = require('../core/address.js');
 const { parseMessageId } = require('../core/message-id.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const {
+  base64Attachments,
+  headerFieldsOf,
+  mailboxesOf,
+  mailboxOf,
+  visitMetadataHeaders,
+} = require('../internal/api.js');
 const { RefusalError } = require('../internal/refusal.js');
 
 const LIMITS = [
@@ -31,16 +36,9 @@ const OWN_FIELDS = new Set([
   'list-unsubscribe-post',
 ]);
 
-const addressOf = (address) => {
-  const email = toAsciiAddress(address.address);
-  return address.name ? { email, name: address.name } : { email };
-};
+const addressOf = (address) => mailboxOf(address, 'email', 'name');
 
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'email', 'name');
 
 const checkLimits = (message, config) => {
   for (const [field, name, limit] of LIMITS) {
@@ -88,11 +86,7 @@ const placeHeaders = (payload, message) => {
     }
   }
   // MailerSend has no metadata of its own: a header reaches its events.
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers.push({ name: `X-Metadata-${key}`, value: message.metadata[key] });
-    }
-  }
+  visitMetadataHeaders(message, (name, value) => headers.push({ name, value }));
   if (headers.length > 0) payload.headers = headers;
 };
 

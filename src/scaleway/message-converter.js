@@ -6,8 +6,14 @@
 // matched nothing; tags, which Scaleway has no field for, are not sent, as
 // over SMTP; and a scheduled message is refused.
 
-const { formatMailbox, toAsciiAddress } = require('../core/address.js');
-const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
+const { formatMailbox } = require('../core/address.js');
+const {
+  base64Attachments,
+  headerFieldsOf,
+  mailboxesOf,
+  mailboxOf,
+  visitMetadataHeaders,
+} = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -15,17 +21,9 @@ const { RefusalError } = require('../internal/refusal.js');
 // "Maximum email size (API): 2 MB, including the email and all attachments".
 const MAX_EMAIL_BYTES = 2 * 1024 * 1024;
 
-const addressOf = (address) => {
-  const result = { email: toAsciiAddress(address.address) };
-  if (address.name) result.name = address.name;
-  return result;
-};
+const addressOf = (address) => mailboxOf(address, 'email', 'name');
 
-const addressesOf = (addresses) => {
-  const list = [];
-  for (let i = 0; i < addresses.length; i++) list.push(addressOf(addresses[i]));
-  return list;
-};
+const addressesOf = (addresses) => mailboxesOf(addresses, 'email', 'name');
 
 // Scaleway has no reply-to or metadata field: both are header fields, as its
 // documentation shows for Reply-To.
@@ -38,11 +36,7 @@ const headersOf = (message) => {
     const value = formatAddresses(message.replyRecipients, formatMailbox).join(', ');
     headers.push({ key: 'Reply-To', value });
   }
-  if (message.metadata !== undefined) {
-    for (const key in message.metadata) {
-      headers.push({ key: `X-Metadata-${key}`, value: message.metadata[key] });
-    }
-  }
+  visitMetadataHeaders(message, (key, value) => headers.push({ key, value }));
   return headers;
 };
 
