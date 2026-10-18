@@ -328,7 +328,7 @@
         },
         "rateLimit": {
           "mark": "✅",
-          "text": "token bucket per key, FIFO"
+          "text": "token bucket per key, FIFO, shared store"
         },
         "circuitBreaker": {
           "mark": "✅",
@@ -434,7 +434,7 @@
         "webhooks": {
           "mark": "✅",
           "text": "15 providers, verified before parsing",
-          "note": "A signature where the provider signs (SNS, Svix, ECDSA, HMAC), its Basic credentials or token where it does not; a window of time and a replay store."
+          "note": "A signature where the provider signs (SNS, Svix, ECDSA, HMAC), its Basic credentials or token where it does not; a window of time, and an id kept as taken only once the handler commits its events."
         },
         "inbound": {
           "mark": "❌",
