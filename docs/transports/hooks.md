@@ -24,12 +24,17 @@ const transport = new HooksTransport(ses, {
 
 ## The hooks
 
+The `context` of a hook holds the `transportId`, the `operation`, when the send
+began (`startedAt`) and the caller's `signal`, for a hook that waits on something
+to heed it; an abort while `beforeSend` runs sends nothing.
+
+
 | Hook | Called | When it throws |
 | --- | --- | --- |
-| `beforeSend(message, context)` | before a message is sent; it may return a message to send in its place | the message is not sent; its receipt is `rejected` (code `hooks.refused`), not retryable |
+| `beforeSend(message, context)` | before a message is sent; it may return a message of `createMessage` to send in its place (anything else refuses it) | the message is not sent; its receipt is `rejected` (code `hooks.refused`), not retryable |
 | `beforeSendRaw(raw, context)` | before a raw message is sent, the same way | the same |
 | `afterSend(receipt, message, context)` | after every send, its receipt successful or not | a process warning (`MAILER_HOOK_FAILED`); the receipt stands |
-| `onRetry(event, context)` | before each retry of the wrapped transport, or of a `./retry` inside it | a process warning |
+| `onRetry(event, context)` | before each retry of the wrapped transport, or of a `./retry` inside it, not awaited | a process warning, a promise that rejects too |
 | `onError(error, message, context)` | when the wrapped transport throws, before the error goes on | a process warning; the error goes on |
 
 A hook may be async; it is awaited. The context, `{ transportId, operation,

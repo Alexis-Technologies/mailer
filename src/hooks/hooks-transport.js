@@ -56,9 +56,11 @@ class HooksTransport {
    */
   async send(message, options) {
     options?.signal?.throwIfAborted();
-    const context = this.#contextOf('send');
+    const context = this.#contextOf('send', options?.signal);
     const before = await this.#before('beforeSend', message, context);
     if (before.receipt !== undefined) return before.receipt;
+    // A hook that took its time may outlast the caller's wish to send.
+    options?.signal?.throwIfAborted();
     return this.#around(before.message, context, options, (sendOptions) =>
       this.wrappedTransport.send(before.message, sendOptions),
     );
@@ -72,9 +74,10 @@ class HooksTransport {
   async sendRaw(message, options) {
     options?.signal?.throwIfAborted();
     if (!isRawTransport(this.wrappedTransport)) return refuseRaw(this.wrappedTransport);
-    const context = this.#contextOf('sendRaw');
+    const context = this.#contextOf('sendRaw', options?.signal);
     const before = await this.#before('beforeSendRaw', message, context);
     if (before.receipt !== undefined) return before.receipt;
+    options?.signal?.throwIfAborted();
     return this.#around(before.message, context, options, (sendOptions) =>
       this.wrappedTransport.sendRaw(before.message, sendOptions),
     );
@@ -85,10 +88,10 @@ class HooksTransport {
    * between its hooks; one `beforeSend` refuses is answered in place.
    */
   sendMany(messages, options) {
-    const batch = this.#contextOf('sendMany');
+    const batch = this.#contextOf('sendMany', options?.signal);
     return gatedSendMany(this.wrappedTransport, messages, this.#optionsOf(options, batch), {
       admit: async (message) => {
-        const context = this.#contextOf('sendMany');
+        const context = this.#contextOf('sendMany', options?.signal);
         const before = await this.#before('beforeSend', message, context);
         return before.receipt === undefined
           ? { message: before.message, context }
@@ -115,8 +118,8 @@ class HooksTransport {
     await disposeOf(this.wrappedTransport);
   }
 
-  #contextOf(operation) {
-    return { transportId: this.id, operation, startedAt: this.config.now() };
+  #contextOf(operation, signal) {
+    return { transportId: this.id, operation, startedAt: this.config.now(), signal };
   }
 
   // The options of one send, its retries told to `onRetry` with its context.
@@ -128,9 +131,12 @@ class HooksTransport {
       ...options,
       onRetry: (event) => {
         try {
-          hook(event, context);
+          // Not awaited, as a retry does not wait for it; a promise that
+          // rejects is told all the same.
+          const result = hook(event, context);
+          if (typeof result?.then === 'function') result.then(undefined, warnRetryHook);
         } catch (error) {
-          warnThrown('The onRetry hook of HooksTransport', error, HOOK_FAILED);
+          warnRetryHook(error);
         }
         onRetry?.(event);
       },
@@ -150,7 +156,7 @@ class HooksTransport {
       };
     }
     if (replaced === undefined) return { message };
-    if (replaced === null || typeof replaced !== 'object') {
+    if (!isShaped(name, replaced)) {
       return {
         receipt: this.#refusal(`The ${name} hook returned neither a message nor nothing.`),
       };
@@ -197,6 +203,20 @@ class HooksTransport {
     }
   }
 }
+
+// What a hook may hand on in place of the message: one of `createMessage`
+// for beforeSend, which the converters of the providers rely on to have
+// checked its fields, and a raw message with its envelope for beforeSendRaw.
+const isShaped = (name, value) => {
+  if (value === null || typeof value !== 'object') return false;
+  if (name === 'beforeSendRaw') {
+    return typeof value.envelope === 'object' && value.envelope !== null;
+  }
+  return typeof value.sender?.address === 'string' && Array.isArray(value.recipients);
+};
+
+const warnRetryHook = (error) =>
+  warnThrown('The onRetry hook of HooksTransport', error, HOOK_FAILED);
 
 const abandonedError = () =>
   new DOMException(

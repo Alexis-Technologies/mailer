@@ -24,6 +24,8 @@ export interface HookContext {
   readonly operation: 'send' | 'sendMany' | 'sendRaw';
   /** When the send began, by the clock `now`, in milliseconds. */
   readonly startedAt: number;
+  /** The caller's signal, for a hook that waits on something to heed. */
+  readonly signal?: AbortSignal;
 }
 
 /**

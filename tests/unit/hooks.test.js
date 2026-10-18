@@ -235,3 +235,43 @@ test('Hooks: a message a batch left before its answer ends with onError', async 
     ['AbortError', 'c'],
   ]);
 });
+
+test('Hooks: the context carries the signal, an abort during beforeSend sends nothing', async () => {
+  // Before: a hook had no signal to heed, and an abort while it ran still
+  // sent the message.
+  const inner = fakeTransport();
+  const controller = new AbortController();
+  let seen;
+  const hooks = new HooksTransport(inner, {
+    beforeSend: async (sentMessage, context) => {
+      seen = context.signal;
+      controller.abort(new Error('gone'));
+    },
+  });
+  await assert.rejects(hooks.send(message(), { signal: controller.signal }), /gone/);
+  assert.strictEqual(seen, controller.signal);
+  assert.strictEqual(inner.calls.length, 0);
+});
+
+test('Hooks: a beforeSend that returns something else than a message refuses it', async () => {
+  // Before: any object went on as the message, past the checks of createMessage.
+  const inner = fakeTransport();
+  const hooks = new HooksTransport(inner, { beforeSend: () => ({ subject: 'not a message' }) });
+  const receipt = await hooks.send(message());
+  assert.strictEqual(receipt.errors[0].code, 'hooks.refused');
+  assert.strictEqual(inner.calls.length, 0);
+});
+
+test('Hooks: an onRetry hook whose promise rejects is a warning', async (t) => {
+  // Before: the rejection of an async onRetry hook went unhandled.
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push(options.code));
+  const inner = fakeTransport(async (_message, _index, options) => {
+    options.onRetry({ attempt: 1, delayMilliseconds: 0, error: new Error('busy') });
+    return sent('m');
+  });
+  const hooks = new HooksTransport(inner, { onRetry: async () => Promise.reject(new Error('no')) });
+  await hooks.send(message());
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepStrictEqual(warnings, ['MAILER_HOOK_FAILED']);
+});
