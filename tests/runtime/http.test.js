@@ -192,3 +192,33 @@ test('Runtime attachments: fromUrl reads through the fetch of the runtime, check
   );
   assert.strictEqual(requests.length, before + 1);
 });
+
+test('Runtime attachments: the default check resolves a name, a private answer refused', async () => {
+  // The default allowUrl on each runtime: a name whose lookup gives a private
+  // or a cloud metadata address is refused before any request, and one that
+  // gives a public address passes the check.
+  const asked = [];
+  const lookup = async (hostname) => {
+    asked.push(hostname);
+    if (hostname === 'internal.example.com') return [{ address: '10.0.0.1', family: 4 }];
+    if (hostname === 'metadata.example.com') return [{ address: '169.254.169.254', family: 4 }];
+    return [{ address: '93.184.215.14', family: 4 }];
+  };
+  let fetched = 0;
+  const fetch = async () => {
+    fetched++;
+    return new Response('ok', { headers: { 'content-type': 'text/plain' } });
+  };
+  for (const host of ['internal.example.com', 'metadata.example.com']) {
+    await assert.rejects(fromUrl(`https://${host}/a.txt`, { lookup, fetch }), RangeError);
+  }
+  assert.strictEqual(fetched, 0);
+  const attachment = await fromUrl('https://public.example.com/a.txt', { lookup, fetch });
+  assert.strictEqual(attachment.filename, 'a.txt');
+  assert.strictEqual(fetched, 1);
+  assert.deepStrictEqual(asked, [
+    'internal.example.com',
+    'metadata.example.com',
+    'public.example.com',
+  ]);
+});
