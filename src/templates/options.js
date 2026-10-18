@@ -29,6 +29,35 @@ const checkEngineOptions = (options, reserved, engine) => {
 };
 
 /**
+ * Refuses the options that turn off the escaping of an engine's output, or
+ * put an escaper of the application's in its place, unless the engine is
+ * given `allowUnescaped: true`: a template whose context a user wrote would
+ * otherwise put that user's HTML into the message.
+ *
+ * @param options The options of the engine.
+ * @param given The options passed on to the engine.
+ * @param switches By the name of each such option, whether a value turns the
+ * escaping off.
+ * @param engine The name of the engine, for the message.
+ * @throws {TypeError} If one is given without `allowUnescaped`.
+ * @internal
+ */
+const checkEscaping = (options, given, switches, engine) => {
+  const allowed = options.allowUnescaped ?? false;
+  if (typeof allowed !== 'boolean') throw new TypeError('allowUnescaped must be a boolean.');
+  if (allowed) return;
+  for (const name of Object.keys(given)) {
+    const turnsOff = switches.get(name);
+    if (turnsOff !== undefined && turnsOff(given[name])) {
+      throw new TypeError(
+        `${name} turns off the escaping of the ${engine} engine: pass it allowUnescaped: true ` +
+          'to allow that.',
+      );
+    }
+  }
+};
+
+/**
  * Checks the extensions of an engine.
  *
  * @internal
@@ -76,4 +105,10 @@ const checkModule = (value, member, message) => {
   return value;
 };
 
-module.exports = { checkEngineExtensions, checkEngineOptions, checkFunctions, checkModule };
+module.exports = {
+  checkEngineExtensions,
+  checkEngineOptions,
+  checkEscaping,
+  checkFunctions,
+  checkModule,
+};

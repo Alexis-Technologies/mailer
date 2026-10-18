@@ -4,9 +4,19 @@
 // template it is written in; output is escaped, as Eta does by default.
 
 const { TemplateNotFoundError } = require('./errors.js');
-const { checkEngineExtensions, checkEngineOptions, checkModule } = require('./options.js');
+const {
+  checkEngineExtensions,
+  checkEngineOptions,
+  checkEscaping,
+  checkModule,
+} = require('./options.js');
 
 const RESERVED = new Set(['views', 'cache', 'cacheFilepaths', 'defaultExtension']);
+// The options of Eta that turn off its escaping, or replace it.
+const UNESCAPED = new Map([
+  ['autoEscape', (value) => !value],
+  ['escapeFunction', () => true],
+]);
 
 /**
  * Makes the Eta engine.
@@ -24,6 +34,7 @@ const createEtaEngine = (options = {}) => {
     'createEtaEngine needs Eta: the Eta of the eta package.',
   );
   const given = checkEngineOptions(options.options, RESERVED, 'eta');
+  checkEscaping(options, given, UNESCAPED, 'eta');
   const async = options.async ?? false;
   if (typeof async !== 'boolean') throw new TypeError('async must be a boolean.');
   const extensions = checkEngineExtensions(options.extensions, ['.eta']);

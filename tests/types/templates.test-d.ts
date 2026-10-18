@@ -62,6 +62,8 @@ createMustacheEngine({ mustache, tags: ['<%', '%>'] });
 createNunjucksEngine({ nunjucks, filters: { upper: (s: string) => s.toUpperCase() } });
 createMjmlEngine({ mjml2html, engine: hbs, includes: false, onErrors: (errors) => errors.length });
 expectError(createEjsEngine({}));
+createHandlebarsEngine({ handlebars, options: { noEscape: true }, allowUnescaped: true });
+expectError(createEtaEngine({ Eta, allowUnescaped: 'yes' }));
 expectError(createMustacheEngine({ mustache, tags: ['<%'] }));
 
 declare const render: (element: { type: string }) => Promise<string>;

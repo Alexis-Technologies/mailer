@@ -117,6 +117,63 @@ test('Templates: an async EJS template that throws rejects, rather than hanging 
   assert.strictEqual(error.phase, 'render');
 });
 
+test('Templates: no engine option turns off escaping unless allowUnescaped', async () => {
+  // Before: noEscape, autoescape: false, an outputEscape of one's own and
+  // autoEscape: false went through, and every value was written raw.
+  const refused = [
+    () => createHandlebarsEngine({ handlebars, options: { noEscape: true } }),
+    () => createNunjucksEngine({ nunjucks, options: { autoescape: false } }),
+    () => createLiquidEngine({ Liquid, options: { outputEscape: undefined } }),
+    () => createLiquidEngine({ Liquid, options: { outputEscape: (value) => value } }),
+    () => createEtaEngine({ Eta, options: { autoEscape: false } }),
+    () => createEtaEngine({ Eta, options: { escapeFunction: String } }),
+    () => createEjsEngine({ ejs, options: { escape: String } }),
+  ];
+  for (const make of refused) assert.throws(make, /turns off the escaping .* allowUnescaped: true/);
+  assert.throws(
+    () => createHandlebarsEngine({ handlebars, allowUnescaped: 'yes' }),
+    /allowUnescaped must be a boolean/,
+  );
+  // What keeps escaping on, or keeps the default, passes.
+  createHandlebarsEngine({ handlebars, options: { noEscape: false } });
+  createNunjucksEngine({ nunjucks, options: { autoescape: true } });
+  createNunjucksEngine({ nunjucks, options: { autoescape: null } });
+  createLiquidEngine({ Liquid, options: { outputEscape: 'escape' } });
+  createEtaEngine({ Eta, options: { autoEscape: true } });
+  const context = { name: '<b>' };
+  const allowed = [
+    [
+      createHandlebarsEngine({ handlebars, options: { noEscape: true }, allowUnescaped: true }),
+      'a.hbs',
+      '{{name}}',
+    ],
+    [
+      createNunjucksEngine({ nunjucks, options: { autoescape: false }, allowUnescaped: true }),
+      'a.njk',
+      '{{ name }}',
+    ],
+    [
+      createLiquidEngine({ Liquid, options: { outputEscape: undefined }, allowUnescaped: true }),
+      'a.liquid',
+      '{{ name }}',
+    ],
+    [
+      createEtaEngine({ Eta, options: { autoEscape: false }, allowUnescaped: true }),
+      'a.eta',
+      '<%= it.name %>',
+    ],
+    [
+      createEjsEngine({ ejs, options: { escape: String }, allowUnescaped: true }),
+      'a.ejs',
+      '<%= name %>',
+    ],
+  ];
+  for (const [engine, name, source] of allowed) {
+    const output = await renderWith(engine, { [name]: source }, { template: 'a', context });
+    assert.strictEqual(output.html, '<b>', engine.name);
+  }
+});
+
 test('Templates: the EJS engine refuses what it sets itself', () => {
   assert.throws(() => createEjsEngine({}), /needs ejs/);
   for (const name of ['filename', 'root', 'views', 'includer', 'cache', 'client']) {

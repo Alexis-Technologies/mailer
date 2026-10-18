@@ -4,9 +4,19 @@
 // its options.  @nestjs-modules/mailer let an async template's promise reject
 // unheard, which hung the send.
 
-const { checkEngineExtensions, checkEngineOptions, checkModule } = require('./options.js');
+const {
+  checkEngineExtensions,
+  checkEngineOptions,
+  checkEscaping,
+  checkModule,
+} = require('./options.js');
 
 const RESERVED = new Set(['filename', 'root', 'views', 'includer', 'cache', 'client']);
+// The options of ejs.compile that replace its escaping.
+const UNESCAPED = new Map([
+  ['escape', () => true],
+  ['escapeFunction', () => true],
+]);
 
 /**
  * Makes the EJS engine.
@@ -23,6 +33,7 @@ const createEjsEngine = (options = {}) => {
     'createEjsEngine needs ejs: the module of the ejs package.',
   );
   const given = checkEngineOptions(options.options, RESERVED, 'ejs');
+  checkEscaping(options, given, UNESCAPED, 'ejs');
   const extensions = checkEngineExtensions(options.extensions, ['.ejs']);
   return {
     name: 'ejs',

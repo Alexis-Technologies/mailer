@@ -364,6 +364,12 @@ export interface EjsEngineOptions {
    * are the engine's, and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `escape` and `escapeFunction`, which replace it, turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** @default ['.ejs'] */
   readonly extensions?: readonly string[];
 }
@@ -393,6 +399,12 @@ export interface HandlebarsEngineOptions {
   readonly helpers?: Readonly<Record<string, (...args: any[]) => unknown>>;
   /** Of compile: `strict`, `knownHelpers`, `knownHelpersOnly`, `preventIndent`, `noEscape`. */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `noEscape: true` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** Called with each environment the engine makes: decorators, more helpers. */
   readonly configure?: (environment: any) => void;
   /** @default ['.hbs', '.handlebars'] */
@@ -483,6 +495,12 @@ export interface LiquidEngineOptions {
   readonly options?: Readonly<Record<string, unknown>>;
   readonly filters?: Readonly<Record<string, (...args: any[]) => unknown>>;
   readonly configure?: (liquid: any) => void;
+  /**
+   * Lets an `outputEscape` other than `'escape'` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** @default ['.liquid'] */
   readonly extensions?: readonly string[];
 }
@@ -511,6 +529,12 @@ export interface NunjucksEngineOptions {
   readonly nunjucks: NunjucksModule;
   /** `autoescape` (true), `throwOnUndefined`, `trimBlocks`, `lstripBlocks`, `tags`. */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets a falsy `autoescape` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   readonly filters?: Readonly<Record<string, (...args: any[]) => unknown>>;
   readonly configure?: (environment: any) => void;
   /** @default ['.njk', '.nunjucks'] */
@@ -529,6 +553,12 @@ export interface EtaEngineOptions {
    * `defaultExtension` are the engine's, and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `autoEscape: false` and an `escapeFunction` of your own turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** Compiles to async functions, for `await` and `includeAsync`. @default false */
   readonly async?: boolean;
   /** @default ['.eta'] */

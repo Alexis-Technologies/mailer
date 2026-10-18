@@ -148,6 +148,13 @@ option rather than accepted and ignored.
 Several engines go into one renderer with `engines: [...]`, chosen by
 extension, the longest first.
 
+Output is escaped, and no option of an engine turns that off unless the engine
+is given `allowUnescaped: true`: Handlebars `noEscape`, Nunjucks `autoescape:
+false`, a Liquid `outputEscape` other than `'escape'`, Eta `autoEscape: false`
+or an `escapeFunction`, and an EJS `escape` throw a `TypeError` without it.
+The raw tags of each engine (`{{{ }}}`, `<%- %>`, `| raw`, `| safe`) stay
+yours to use where a value is HTML you trust.
+
 Some engines behave a little differently here than they do on their own:
 
 - **Handlebars** gets an environment per renderer (`handlebars.create()`), so

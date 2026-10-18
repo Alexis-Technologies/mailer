@@ -8,12 +8,17 @@ const { TemplateNotFoundError } = require('./errors.js');
 const {
   checkEngineExtensions,
   checkEngineOptions,
+  checkEscaping,
   checkFunctions,
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
 const isRelative = (name) => name.startsWith('./') || name.startsWith('../');
+
+// The options of the Environment that turn off its escaping: a falsy
+// `autoescape`, null and undefined keeping the default.
+const UNESCAPED = new Map([['autoescape', (value) => value != null && !value]]);
 
 // What Nunjucks says of a template no loader has.
 const NOT_FOUND = 'template not found: ';
@@ -58,6 +63,7 @@ const createNunjucksEngine = (options = {}) => {
   );
   checkModule(nunjucks.Template, undefined, 'nunjucks has no Template.');
   const given = checkEngineOptions(options.options, new Set(), 'nunjucks');
+  checkEscaping(options, given, UNESCAPED, 'nunjucks');
   const filters = checkFunctions(options.filters, 'filters');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.njk', '.nunjucks']);

@@ -7,6 +7,7 @@ const { TemplateNotFoundError } = require('./errors.js');
 const {
   checkEngineExtensions,
   checkEngineOptions,
+  checkEscaping,
   checkFunctions,
   checkModule,
 } = require('./options.js');
@@ -22,6 +23,9 @@ const RESERVED = new Set([
   'templates',
   'cache',
 ]);
+
+// The options of liquidjs that turn off its escaping, or replace it.
+const UNESCAPED = new Map([['outputEscape', (value) => value !== 'escape']]);
 
 // A name no loader has: where a reference leads out of the root, and, before
 // the name written, where liquidjs looks last for a template it did not find.
@@ -115,6 +119,7 @@ const createLiquidEngine = (options = {}) => {
     'createLiquidEngine needs Liquid: the Liquid of the liquidjs package.',
   );
   const given = checkEngineOptions(options.options, RESERVED, 'liquid');
+  checkEscaping(options, given, UNESCAPED, 'liquid');
   const filters = checkFunctions(options.filters, 'filters');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.liquid']);

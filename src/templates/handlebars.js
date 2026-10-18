@@ -8,12 +8,15 @@
 const {
   checkEngineExtensions,
   checkEngineOptions,
+  checkEscaping,
   checkFunctions,
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
 const PARTIALS = new Set(['PartialStatement', 'PartialBlockStatement']);
+// The options of compile that turn off its escaping.
+const UNESCAPED = new Map([['noEscape', Boolean]]);
 
 const partialNameOf = (name) => {
   if (name?.type === 'PathExpression') return name.original;
@@ -85,6 +88,7 @@ const createHandlebarsEngine = (options = {}) => {
   );
   const helpers = checkFunctions(options.helpers, 'helpers');
   const given = checkEngineOptions(options.options, new Set(), 'handlebars');
+  checkEscaping(options, given, UNESCAPED, 'handlebars');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.hbs', '.handlebars']);
   // The environment of each renderer, keyed by its includes: a new one after
