@@ -78,7 +78,10 @@ Leases are written by the clock of each worker, so a lease is taken back only
 clock is behind still holds it; keep the clocks of the workers in sync (NTP),
 within that tolerance, and the lease more than three times longer.
 
-Workers poll (`pollIntervalMilliseconds`, a second). With `changeStream: true`,
+Workers poll (`pollIntervalMilliseconds`, a second). An idle poll of a lane is
+one `findOneAndUpdate` and one read of when the next job is due: a process
+takes back the leases that ran out once a third of a lease, and reads the
+pause of the queue once a poll interval (a pause of its own at once). With `changeStream: true`,
 on a replica set, a change of the collection wakes them at once, and the poll
 is only the fallback.
 

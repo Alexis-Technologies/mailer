@@ -499,3 +499,30 @@ test('MongoDB: the audit sink tells whether it holds an event', async () => {
     { projection: { _id: 1 } },
   ]);
 });
+
+test('MongoDB: a reserve takes back leases once a third of a lease, and reads the pause once a poll', async () => {
+  const { collection, source, advance } = outboxOf({ extra: { pollIntervalMilliseconds: 1000 } });
+  const count = (name) => collection.calls.filter((call) => call[0] === name).length;
+  for (let index = 0; index < 5; index++) await source.reserve(60_000);
+  // Idle, five reserves of five lanes: one write to take back leases, one read of the pause.
+  assert.strictEqual(count('updateMany'), 1);
+  assert.strictEqual(
+    collection.calls.filter(
+      (call) => call[0] === 'findOne' && JSON.stringify(call[1]) === '{"_id":"mailer:pause"}',
+    ).length,
+    1,
+  );
+  advance(20_000);
+  await source.reserve(60_000);
+  assert.strictEqual(count('updateMany'), 2);
+  // A pause of another process is seen within a poll interval.
+  const other = createMongoOutbox({ collection, now: () => 0 });
+  await source.enqueue(requestOf('a'));
+  await other.source.pause(90_000_000);
+  assert.strictEqual((await source.reserve(60_000)).lease?.job.id, 'a');
+  advance(1000);
+  await source.enqueue(requestOf('b'));
+  assert.deepStrictEqual(await source.reserve(60_000), {
+    nextAvailableAt: 90_000_000,
+  });
+});

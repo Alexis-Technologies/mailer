@@ -74,6 +74,10 @@ class MongoOutboxSource {
   id = 'mongodb';
   #collection;
   #config;
+  // When this process last took back the leases that ran out, and read the
+  // pause of the queue: once a while, not on each reserve of each lane.
+  #reclaimedAt = -Infinity;
+  #pause = { readAt: -Infinity, until: 0 };
 
   constructor(collection, config) {
     this.#collection = collection;
@@ -114,23 +118,29 @@ class MongoOutboxSource {
     return answer;
   }
 
-  async #paused(now) {
-    const pause = await this.#collection.findOne(
-      { _id: PAUSE_ID },
-      { projection: { pausedUntil: 1 } },
-    );
-    const until = pause?.pausedUntil;
-    return until instanceof Date && until > now ? until : undefined;
+  // Until when the queue is paused: read again once a poll interval, a pause
+  // of another process seen within it, one of this process at once.
+  async #pausedUntil(now) {
+    if (now - this.#pause.readAt >= this.#config.pauseReadMilliseconds) {
+      const pause = await this.#collection.findOne(
+        { _id: PAUSE_ID },
+        { projection: { pausedUntil: 1 } },
+      );
+      const until = pause?.pausedUntil;
+      this.#pause = { readAt: now, until: until instanceof Date ? until.getTime() : 0 };
+    }
+    return this.#pause.until;
   }
 
-  async reserve(leaseMilliseconds) {
-    const now = new Date(this.#config.now());
-    const paused = await this.#paused(now);
-    if (paused !== undefined) return { nextAvailableAt: paused.getTime() };
-    // A job whose lease ran out is ready again, its attempt to run again:
-    // by this worker's clock, as long ago as two clocks may be apart, lest a
-    // worker whose clock is behind still holds it.
-    const ranOut = new Date(now.getTime() - this.#config.clockSkewToleranceMilliseconds);
+  // A job whose lease ran out is ready again, its attempt to run again: by
+  // this worker's clock, as long ago as two clocks may be apart, lest a worker
+  // whose clock is behind still holds it. Once a third of a lease, as a lease
+  // cannot run out sooner, a write on the primary saved on every other poll.
+  async #reclaim(now, leaseMilliseconds) {
+    const every = Math.min(this.#config.leaseMilliseconds, leaseMilliseconds) / 3;
+    if (now - this.#reclaimedAt < every) return;
+    this.#reclaimedAt = now;
+    const ranOut = new Date(now - this.#config.clockSkewToleranceMilliseconds);
     await this.#collection.updateMany(
       { state: 'active', leaseUntil: { $lte: ranOut } },
       {
@@ -138,6 +148,13 @@ class MongoOutboxSource {
         $inc: { attempts: -1, redeliveries: 1 },
       },
     );
+  }
+
+  async reserve(leaseMilliseconds) {
+    const now = new Date(this.#config.now());
+    const pausedUntil = await this.#pausedUntil(now.getTime());
+    if (pausedUntil > now.getTime()) return { nextAvailableAt: pausedUntil };
+    await this.#reclaim(now.getTime(), leaseMilliseconds);
     const token = randomUUID();
     const taken = documentOf(
       await this.#collection.findOneAndUpdate(
@@ -209,6 +226,7 @@ class MongoOutboxSource {
       { $max: { pausedUntil: new Date(until) } },
       { upsert: true },
     );
+    this.#pause.until = Math.max(this.#pause.until, until);
   }
 }
 
@@ -261,6 +279,10 @@ const createMongoOutbox = (options = {}) => {
   }
   const config = {
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
+    // The polling driver checks it; the pause is read again as often.
+    pauseReadMilliseconds: options.pollIntervalMilliseconds ?? 1000,
+    // The lease of the workers: none of theirs runs out sooner.
+    leaseMilliseconds: options.leaseMilliseconds ?? DEFAULT_LEASE_MS,
     retainData: checkRetainData(options.retainData),
     clockSkewToleranceMilliseconds,
     changeStream,
