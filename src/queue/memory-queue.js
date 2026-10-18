@@ -240,7 +240,8 @@ const viewOf = (entry, now) => {
  * @param options `now`, `sleep`, `leaseMilliseconds` (60000),
  * `pollIntervalMilliseconds` (1000), `maxJobs` (100000), `retainFinished`
  * (10000), `logger`.
- * @returns The driver, with `list()`, `get(id)`, `drain()` and `wake()`.
+ * @returns The driver, with `source`, `list()`, `get(id)`, `drain()` and
+ * `wake()`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMemoryQueue = (options = {}) => {
@@ -253,6 +254,7 @@ const createMemoryQueue = (options = {}) => {
   const driver = createPollingDriver(source, { ...options, now: config.now });
   return {
     ...driver,
+    source,
     list() {
       const views = [];
       const now = config.now();

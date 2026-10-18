@@ -31,6 +31,7 @@ declare const transport: Transport;
 declare const engine: TemplateEngine;
 const driver = createMemoryQueue({ maxJobs: 10, pollIntervalMilliseconds: 100 });
 expectType<MemoryQueue>(driver);
+expectType<QueueSource>(driver.source);
 expectAssignable<QueueDriver>(driver);
 const queue = createMailQueue({
   driver,

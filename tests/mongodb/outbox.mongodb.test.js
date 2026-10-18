@@ -194,3 +194,24 @@ test('MongoDB (replica set): a change stream wakes the workers at once', { skip 
   await until(async () => (await outbox.get(id))?.state === 'completed', 5000);
   assert.ok(Date.now() - started < 3000, 'woken by the change stream');
 });
+
+const { sourceContract } = require('../helpers/queue/source-contract.js');
+
+sourceContract(
+  'mongodb, a replica set',
+  async ({ now }) => {
+    const client = new MongoClient(url);
+    await client.connect();
+    const db = client.db(`mailer_test_${randomUUID().replaceAll('-', '')}`);
+    const outbox = createMongoOutbox({ collection: db.collection('mail_outbox'), now });
+    await outbox.ensureIndexes();
+    return {
+      source: outbox.source,
+      cleanup: async () => {
+        await db.dropDatabase();
+        await client.close();
+      },
+    };
+  },
+  { skip },
+);

@@ -469,6 +469,8 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
 
 /** The queue in memory. */
 export interface MemoryQueue extends QueueDriver {
+  /** The source the polling driver reads: what a store's outbox implements, in memory. */
+  readonly source: QueueSource;
   list(): readonly MemoryQueueJob[];
   get(id: string): MemoryQueueJob | undefined;
   /** Settles when no job is ready now and none runs. */

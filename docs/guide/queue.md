@@ -229,3 +229,9 @@ lends its jobs (`reserve`, `extend`, `ack`, `retry`, `fail`, `release`), such
 as an outbox in your database. It keeps the lease of a job while it runs, gives
 a job whose lease ran out to another worker as `redelivered`, and on `close()`
 waits for the jobs in flight, then aborts them.
+
+A source of your own is held to the same semantics as the memory queue and the
+MongoDB outbox: the order of priorities, leases, redelivery, fencing by the
+token, releases that spend no attempt, and the pause. The repository's
+`tests/helpers/queue/source-contract.js` is that contract as tests; copy it,
+and run it on your source (`createMemoryQueue().source` is one to compare).
