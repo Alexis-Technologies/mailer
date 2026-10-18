@@ -75,6 +75,10 @@ class PoolTransport {
 
   strategy;
 
+  // The entries of sendRaw(), made at its first call: the configuration does
+  // not change, and the raw transports among it neither.
+  #raw;
+
   /**
    * Creates a new PoolTransport instance.
    *
@@ -120,6 +124,18 @@ class PoolTransport {
    */
   async sendRaw(message, options) {
     options?.signal?.throwIfAborted();
+    const raw = this.#rawEntries();
+    if (raw.enabled === 0) return refuseRaw(this);
+    return this.#deliver(
+      message,
+      raw.entries,
+      (transport, sendOptions) => transport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  #rawEntries() {
+    if (this.#raw !== undefined) return this.#raw;
     const entries = [];
     let enabled = 0;
     for (const entry of this.config.transports) {
@@ -127,13 +143,8 @@ class PoolTransport {
       if (canSend) enabled++;
       entries.push({ ...entry, enabled: canSend, selector: undefined });
     }
-    if (enabled === 0) return refuseRaw(this);
-    return this.#deliver(
-      message,
-      entries,
-      (transport, sendOptions) => transport.sendRaw(message, sendOptions),
-      options,
-    );
+    this.#raw = { entries, enabled };
+    return this.#raw;
   }
 
   /**

@@ -25,7 +25,7 @@
   "./azure": 8.5,
   "./scaleway": 7.5,
   "./cloudflare": 8,
-  "./pool": 3,
+  "./pool": 3.5,
   "./retry": 3,
   "./mock": 2,
   "./otel": 5,

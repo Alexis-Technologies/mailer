@@ -123,6 +123,22 @@ test('Raw: the pool sends through the transports that can, failing over among th
   assertRefused(await disabled.sendRaw(raw()), 'pool');
 });
 
+test('Raw: the pool makes the entries of sendRaw once, not for every message', async (t) => {
+  // Before: every sendRaw copied each entry of the configuration.
+  const pool = new PoolTransport({
+    strategy: 'round-robin',
+    transports: [{ transport: plain() }, { transport: new MockTransport() }],
+  });
+  const select = t.mock.method(pool.strategy, 'select');
+  await pool.sendRaw(raw());
+  await pool.sendRaw(raw());
+  assert.strictEqual(select.mock.callCount(), 2);
+  const [first, second] = select.mock.calls;
+  assert.strictEqual(first.arguments[1], second.arguments[1]);
+  assert.strictEqual(first.arguments[1][0].enabled, false);
+  assert.strictEqual(first.arguments[1][1].enabled, true);
+});
+
 test('Raw: the pool verifies when one transport verifies', async () => {
   const fails = (text) => ({ ...plain(), verify: async () => Promise.reject(new Error(text)) });
   const passes = { ...plain(), verify: async () => {} };
