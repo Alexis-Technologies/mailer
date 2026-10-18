@@ -14,6 +14,21 @@ const {
 } = require('../../src/templates/index.js');
 const ejs = require('ejs');
 
+// Replaces functions of node:fs for a test, and tells whether it could: a
+// runtime whose node:fs is not writable leaves the test to the others.
+const replace = (t, pairs) => {
+  for (const [object, name, implementation] of pairs) {
+    const before = object[name];
+    try {
+      t.mock.method(object, name, implementation);
+    } catch {
+      return false;
+    }
+    if (object[name] === before) return false;
+  }
+  return true;
+};
+
 const makeTree = (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'mailer-templates-'));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
@@ -70,15 +85,25 @@ test('Templates: the file loader reads no more than maxBytes of a file that grew
   // after, so a file that grew in between, or was replaced, was read whole.
   const { root } = makeTree(t);
   const small = { isFile: () => true, size: 10 };
-  t.mock.method(fsp, 'stat', async () => small);
-  t.mock.method(fs, 'statSync', () => small);
   const open = fsp.open;
-  t.mock.method(fsp, 'open', async (...args) => {
-    const handle = await open(...args);
-    handle.stat = async () => small;
-    return handle;
-  });
-  t.mock.method(fs, 'fstatSync', () => small);
+  const replaced = replace(t, [
+    [fsp, 'stat', async () => small],
+    [fs, 'statSync', () => small],
+    [
+      fsp,
+      'open',
+      async (...args) => {
+        const handle = await open(...args);
+        handle.stat = async () => small;
+        return handle;
+      },
+    ],
+    [fs, 'fstatSync', () => small],
+  ]);
+  if (!replaced) {
+    t.skip('node:fs cannot be replaced on this runtime');
+    return;
+  }
   const loader = createFileLoader({ dir: root, maxBytes: 1024 });
   await assert.rejects(loader.load('big.ejs'), /more than 1024 bytes/);
   assert.throws(() => loader.loadSync('big.ejs'), /more than 1024 bytes/);
@@ -98,11 +123,21 @@ test('Templates: the file loader stops at the abort of its signal', async (t) =>
   // Aborted after it found the file, before it opens it.
   const controller = new AbortController();
   const realpath = fsp.realpath;
-  t.mock.method(fsp, 'realpath', async (...args) => {
-    const real = await realpath(...args);
-    if (args[0].endsWith('welcome.ejs')) controller.abort(reason);
-    return real;
-  });
+  const replaced = replace(t, [
+    [
+      fsp,
+      'realpath',
+      async (...args) => {
+        const real = await realpath(...args);
+        if (args[0].endsWith('welcome.ejs')) controller.abort(reason);
+        return real;
+      },
+    ],
+  ]);
+  if (!replaced) {
+    t.skip('node:fs cannot be replaced on this runtime');
+    return;
+  }
   await assert.rejects(
     loader.load('welcome.ejs', { signal: controller.signal }),
     (e) => e === reason,
@@ -116,12 +151,26 @@ test('Templates: the file loader takes a directory it cannot open for none', asy
   const { root } = makeTree(t);
   const denied = (code) => Object.assign(new Error(code), { code });
   let code = 'EISDIR';
-  t.mock.method(fsp, 'open', async () => {
-    throw denied(code);
-  });
-  t.mock.method(fs, 'openSync', () => {
-    throw denied(code);
-  });
+  const replaced = replace(t, [
+    [
+      fsp,
+      'open',
+      async () => {
+        throw denied(code);
+      },
+    ],
+    [
+      fs,
+      'openSync',
+      () => {
+        throw denied(code);
+      },
+    ],
+  ]);
+  if (!replaced) {
+    t.skip('node:fs cannot be replaced on this runtime');
+    return;
+  }
   const loader = createFileLoader({ dir: root });
   assert.strictEqual(await loader.load('folder.ejs'), undefined);
   assert.strictEqual(loader.loadSync('folder.ejs'), undefined);
