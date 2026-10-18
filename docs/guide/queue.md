@@ -109,6 +109,42 @@ deploy the workers, then the producers, and drop the old key once no job it
 signed is left. A worker without keys checks the hash alone, so give every
 worker the keys before any producer.
 
+## Sealed jobs
+
+A job holds its message in clear: its addresses, its context (a link of a
+password reset among it) and its attachments, in Redis or MongoDB for as long
+as the job is kept, and in their backups. Give the queue a `codec`, and the
+store holds what it made of them:
+
+```js
+const { createCipheriv, createDecipheriv, randomBytes } = require('node:crypto');
+const key = Buffer.from(process.env.MAIL_DATA_KEY, 'base64'); // 32 bytes
+
+const codec = {
+  encode(text) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const sealed = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), sealed]).toString('base64');
+  },
+  decode(text) {
+    const bytes = Buffer.from(text, 'base64');
+    const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
+    decipher.setAuthTag(bytes.subarray(12, 28));
+    return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString();
+  },
+};
+const queue = createMailQueue({ driver, codec, signingKeys });
+```
+
+A sealed job keeps in clear only `v`, `hash` (a duplicate is still told by
+it), `enqueuedAt`, `kid`, `mac` and `trace`; the rest is `enc`. Its workers
+take the queue's codec. A worker without it, or whose codec throws (a key out
+of reach), gives the job back for a worker that can open it
+(`queue.codec_missing`, `queue.codec_failed`); a codec that throws an error
+with `retryable: false` fails it. Encryption is not a signature: a writer who
+can seal can still forge, so seal with `signingKeys` too.
+
 ## Once per key
 
 The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the

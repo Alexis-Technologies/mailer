@@ -106,7 +106,8 @@ deduplication. A key of the store goes when its time passes.
 ```
 
 `outbox.get(id)` reads one. The data of a job is stored as it is, a token of a
-reset link among it: restrict who reads the collection.
+reset link among it, unless the queue seals it with a
+[codec](/guide/queue#sealed-jobs): restrict who reads the collection.
 
 ## The audit and the keys
 

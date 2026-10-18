@@ -77,8 +77,10 @@ are next. The principles all of it is designed around:
   HMAC-SHA256 under the application's key, and the worker sends no job that one of its keys did
   not sign. A job names no file or URL: an attachment is its bytes
   or a reference that the application's `resolveAttachment` reads. A job's data is stored as it is,
-  a token of a reset link among it: the store is the application's to restrict (Redis ACLs and
-  TLS, MongoDB roles).
+  a token of a reset link among it, unless a `codec` of the application's seals it (an envelope
+  encryption: the store then holds the version, the hash and the signature in clear and the
+  rest encrypted); the store is the application's to restrict (Redis ACLs and TLS, MongoDB
+  roles).
 - **Templates are named, never pathed.** A template, include, partial or layout is read only
   through the loader of the renderer, by a name with no `..` or leading `/`; the file loader
   compares real paths, so a symbolic link cannot lead out of its directory. No engine reads a file

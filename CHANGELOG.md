@@ -36,7 +36,10 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends
   no job they did not sign (`queue.signature_invalid`): the SHA-256 of a job tells a change, but
   whoever writes to the store can recompute it. The first key signs and each verifies, for
-  rotation.
+  rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the application's key) seals the
+  fields of each job in its store, its addresses, context and attachments, leaving the version,
+  hash, signature and trace context in clear; a worker that cannot open a sealed job gives it
+  back (`queue.codec_missing`, `queue.codec_failed`).
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases

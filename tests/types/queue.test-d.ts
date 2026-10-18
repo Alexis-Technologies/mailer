@@ -139,6 +139,10 @@ expectType<string | undefined>(
   ).data.mac,
 );
 createMailQueue({ driver, signingKeys: keys });
+const codec = { encode: (text: string) => text, decode: async (text: string) => text };
+createMailQueue({ driver, codec });
+createMailJobHandler({ transport, codec });
+expectError(createMailQueue({ driver, codec: { encode: (text: string) => text } }));
 createMailJobHandler({ transport, signingKeys: keys });
 expectError(createMailJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));
 expectType<1>(MAIL_JOB_VERSION);
@@ -150,6 +154,8 @@ expectType<
   | 'queue.unsupported_version'
   | 'queue.hash_mismatch'
   | 'queue.signature_invalid'
+  | 'queue.codec_missing'
+  | 'queue.codec_failed'
 >(error.code);
 expectError(new MailQueueError('nope', 'x'));
 new QueueLeaseLostError('j');

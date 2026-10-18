@@ -3,8 +3,8 @@
 
 /**
  * A failure of the queue: `queue.key_reused`, `queue.invalid_job`,
- * `queue.unsupported_version`, `queue.hash_mismatch` or
- * `queue.signature_invalid`.
+ * `queue.unsupported_version`, `queue.hash_mismatch`,
+ * `queue.signature_invalid`, `queue.codec_missing` or `queue.codec_failed`.
  */
 class MailQueueError extends Error {
   /**

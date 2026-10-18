@@ -133,3 +133,147 @@ test('Queue: a worker with signing keys sends a signed job and fails a forged on
   assert.deepStrictEqual(records[0][0], 'queue.job.failed');
   assert.strictEqual(records[0][1].code, 'queue.signature_invalid');
 });
+
+// An envelope encryption as an application would write it: AES-256-GCM.
+const aesCodec = (key = Buffer.alloc(32, 9)) => {
+  const { createCipheriv, createDecipheriv, randomBytes } = require('node:crypto');
+  return {
+    encode(text) {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', key, iv);
+      const sealed = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+      return Buffer.concat([iv, cipher.getAuthTag(), sealed]).toString('base64');
+    },
+    async decode(text) {
+      const bytes = Buffer.from(text, 'base64');
+      const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
+      decipher.setAuthTag(bytes.subarray(12, 28));
+      return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString();
+    },
+  };
+};
+
+const runOf = (data, extra = {}) => ({
+  id: 'job-1',
+  name: 'mail',
+  data,
+  attempt: 1,
+  maxAttempts: 5,
+  redelivered: false,
+  ...extra,
+});
+
+test('Queue: with a codec the store holds no address, and the worker opens the job', async () => {
+  const clock = manualClock(NOW);
+  const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
+  const codec = aesCodec();
+  const queue = createMailQueue({ driver, now: clock.now, codec, signingKeys: [KEY_A] });
+  const transport = fakeTransport();
+  const withFile = {
+    ...input,
+    attachments: [{ filename: 'a.txt', content: new Uint8Array([65]) }],
+  };
+  const enqueued = await queue.enqueue(withFile);
+  const [stored] = driver.list();
+  assert.deepStrictEqual(Object.keys(stored.data).toSorted(), [
+    'enc',
+    'enqueuedAt',
+    'hash',
+    'kid',
+    'mac',
+    'v',
+  ]);
+  const text = JSON.stringify(stored);
+  for (const secret of ['ada@example.com', 'app@example.com', '123456', 'a.txt']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  // A duplicate is still told by the hash in clear.
+  assert.strictEqual((await queue.enqueue(withFile)).duplicate, true);
+  await using worker = queue.createWorker({ transport });
+  await driver.drain();
+  assert.strictEqual(transport.calls.length, 1);
+  const { message } = transport.calls[0];
+  assert.strictEqual(message.recipients[0].address, 'ada@example.com');
+  assert.strictEqual(message.messageId, enqueued.messageId);
+  assert.ok(worker);
+  assert.throws(() => parseMailJob(stored.data), isCode('queue.codec_missing'));
+});
+
+test('Queue: a sealed job waits for a worker with its codec, and fails one that does not open', async () => {
+  const codec = aesCodec();
+  const queue = createMailQueue({ driver: createMemoryQueue(), codec });
+  await queue.enqueue(input);
+  const sealed = queue.driver.list()[0].data;
+  const transport = fakeTransport();
+  const plain = createMailJobHandler({ transport, now: () => NOW });
+  const waiting = await plain(runOf(sealed), new AbortController().signal);
+  assert.deepStrictEqual([waiting.type, waiting.code], ['retry', 'queue.codec_missing']);
+  const last = await plain(runOf(sealed, { attempt: 5 }), new AbortController().signal);
+  assert.deepStrictEqual([last.type, last.code], ['fail', 'queue.codec_missing']);
+  // Another key: the ciphertext does not authenticate, which may be an outage of the key...
+  const other = createMailJobHandler({ transport, codec: aesCodec(Buffer.alloc(32, 1)) });
+  const outage = await other(runOf(sealed), new AbortController().signal);
+  assert.deepStrictEqual([outage.type, outage.code], ['retry', 'queue.codec_failed']);
+  // ...unless the codec says it is for good.
+  const final = createMailJobHandler({
+    transport,
+    codec: {
+      encode: (text) => text,
+      decode() {
+        throw Object.assign(new Error('bad tag'), { retryable: false });
+      },
+    },
+  });
+  const refused = await final(runOf(sealed), new AbortController().signal);
+  assert.deepStrictEqual([refused.type, refused.code], ['fail', 'queue.codec_failed']);
+  assert.strictEqual(transport.calls.length, 0);
+});
+
+test('Queue: what a codec opens is checked, and a field in clear is refused', async () => {
+  const identity = { encode: (text) => text, decode: (text) => text };
+  const handler = createMailJobHandler({ transport: fakeTransport(), codec: identity });
+  const outcomeOf = async (data) => (await handler(runOf(data), new AbortController().signal)).code;
+  const envelope = { v: 1, hash: 'h', enqueuedAt: '2026-10-18T09:00:00.000Z' };
+  assert.strictEqual(await outcomeOf({ ...envelope, enc: 'not json' }), 'queue.invalid_job');
+  assert.strictEqual(await outcomeOf({ ...envelope, enc: '[1]' }), 'queue.invalid_job');
+  assert.strictEqual(await outcomeOf({ ...envelope, enc: '{"hash":"x"}' }), 'queue.invalid_job');
+  const queue = createMailQueue({ driver: createMemoryQueue(), codec: identity });
+  await queue.enqueue(input);
+  const sealed = queue.driver.list()[0].data;
+  const overridden = { ...sealed, to: [{ address: 'victim@example.org' }] };
+  assert.strictEqual(await outcomeOf(overridden), 'queue.invalid_job');
+  // A writer who can seal (a codec without a key) is still stopped by the signature.
+  const signedQueue = createMailQueue({
+    driver: createMemoryQueue(),
+    codec: identity,
+    signingKeys: [KEY_A],
+  });
+  await signedQueue.enqueue(input);
+  const signed = signedQueue.driver.list()[0].data;
+  const opened = { ...JSON.parse(signed.enc), ...signed };
+  delete opened.enc;
+  const forged = forge(opened);
+  const { v, hash, enqueuedAt, kid, mac, ...fields } = forged;
+  const resealed = { v, hash, enqueuedAt, kid, mac, enc: JSON.stringify(fields) };
+  const verifying = createMailJobHandler({
+    transport: fakeTransport(),
+    codec: identity,
+    signingKeys: [KEY_A],
+  });
+  const outcome = await verifying(runOf(resealed), new AbortController().signal);
+  assert.strictEqual(outcome.code, 'queue.signature_invalid');
+});
+
+test('Queue: a codec is checked, and must give a string', async () => {
+  assert.throws(() => createMailQueue({ driver: createMemoryQueue(), codec: {} }), /codec must/);
+  assert.throws(
+    () => createMailJobHandler({ transport: fakeTransport(), codec: { encode() {} } }),
+    /codec must/,
+  );
+  const queue = createMailQueue({
+    driver: createMemoryQueue(),
+    codec: { encode: () => 42, decode: (text) => text },
+  });
+  await assert.rejects(queue.enqueue(input), /codec.encode must give a string/);
+  assert.strictEqual(queue.driver.list().length, 0);
+});

@@ -183,6 +183,18 @@ export interface MailJobSigningKey {
   readonly secret: string | Uint8Array;
 }
 
+/**
+ * Seals the fields of a job in its store, such as an envelope encryption
+ * under the application's key or KMS: `encode` gets their JSON and gives the
+ * text stored as `enc`, `decode` gives the JSON back. The version, the hash,
+ * the signature and the trace context stay in clear.
+ */
+export interface MailJobCodec {
+  encode(text: string): string | Promise<string>;
+  /** Throws an error with `retryable: false` when the text can never be opened, so the job fails rather than waits. */
+  decode(text: string): string | Promise<string>;
+}
+
 /** The options of the jobs of a queue. */
 export interface MailJobOptions {
   /** The scope of the keys of the jobs. @default 'mail' */
@@ -218,9 +230,10 @@ export declare function prepareMailJob(
 ): PreparedMailJob;
 
 /**
- * Checks the data of a job read from its queue.
+ * Checks the data of a job read from its queue, opened if it was sealed.
  *
- * @throws {MailQueueError} `queue.invalid_job`; `queue.unsupported_version`
+ * @throws {MailQueueError} `queue.invalid_job`; `queue.codec_missing` for a
+ * sealed job; `queue.unsupported_version`
  * for a later version, or a field this version does not know; or
  * `queue.hash_mismatch`; `queue.signature_invalid` if `signingKeys` are given
  * and the job is not signed by one of them.
@@ -237,7 +250,9 @@ export type MailQueueErrorCode =
   | 'queue.invalid_job'
   | 'queue.unsupported_version'
   | 'queue.hash_mismatch'
-  | 'queue.signature_invalid';
+  | 'queue.signature_invalid'
+  | 'queue.codec_missing'
+  | 'queue.codec_failed';
 
 /** A failure of the queue, by its code. */
 export declare class MailQueueError extends Error {
@@ -299,6 +314,12 @@ export interface MailWorkerOptions {
    * `queue.signature_invalid`. A worker of a queue takes the queue's.
    */
   readonly signingKeys?: readonly MailJobSigningKey[];
+  /**
+   * Opens sealed jobs. A sealed job this worker cannot open waits for one
+   * that can (`queue.codec_missing`, `queue.codec_failed`). A worker of a
+   * queue takes the queue's.
+   */
+  readonly codec?: MailJobCodec;
   readonly backoff?: MailBackoff;
   /** The wait before an attempt again after an `auth` or `configuration` failure. @default 300000 */
   readonly operatorDelayMilliseconds?: number;
@@ -323,6 +344,8 @@ export interface MailQueueOptions extends Omit<MailJobOptions, 'now'> {
   readonly audit?: AuditSink;
   /** A sink that fails makes the enqueue fail, and the job retried before its send. @default false */
   readonly auditStrict?: boolean;
+  /** Seals the fields of each job in the store; its workers open them. */
+  readonly codec?: MailJobCodec;
   readonly logger?: Logger;
   readonly now?: () => number;
 }

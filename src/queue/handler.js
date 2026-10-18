@@ -19,6 +19,7 @@ const { isCallerAbort } = require('../internal/sleep.js');
 const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');
 const { outcomeOfFailure, reasonOf } = require('./outcome.js');
+const { checkCodec, openMailJob } = require('./envelope.js');
 const { parseMailJob } = require('./parse.js');
 const { keyringOf } = require('./signing.js');
 
@@ -30,6 +31,13 @@ const DEFAULT_BACKOFF = Object.freeze({
 const DEFAULT_OPERATOR_DELAY_MS = 5 * 60_000;
 // The errors of a template that fails again the same way.
 const TEMPLATE_CODES = new Set(['MAILER_TEMPLATE_NOT_FOUND', 'MAILER_TEMPLATE_RENDER']);
+// The jobs this worker cannot read yet: of a later version, or sealed for a
+// codec it lacks or that fails. They wait for a worker that can.
+const WAITING_CODES = new Set([
+  'queue.unsupported_version',
+  'queue.codec_missing',
+  'queue.codec_failed',
+]);
 
 const checkBackoff = (given) => {
   const backoff = { ...DEFAULT_BACKOFF, ...given };
@@ -70,6 +78,7 @@ const createHandlerConfig = (options = {}) => {
     audit,
     auditStrict: options.auditStrict ?? false,
     signingKeys: options.signingKeys,
+    codec: checkCodec(options.codec),
     resolveAttachment: checkOptionalFunction(options.resolveAttachment, 'resolveAttachment'),
     checkJob: checkOptionalFunction(options.checkJob, 'checkJob'),
     classify: checkOptionalFunction(options.classify, 'classify'),
@@ -414,25 +423,33 @@ const attempt = async (run) => {
   return sendStep(run, message);
 };
 
-const readJob = (config, job) => {
+// A codec that says its failure is for good (a ciphertext that does not
+// authenticate) fails the job; any other failure may be an outage of its key.
+const isWaiting = (error) =>
+  WAITING_CODES.has(error?.code) &&
+  !(error.code === 'queue.codec_failed' && error.cause?.retryable === false);
+
+const readJob = async (config, job) => {
   try {
-    return { data: parseMailJob(job.data, { signingKeys: config.signingKeys }) };
+    const data = await openMailJob(job.data, config.codec);
+    return { data: parseMailJob(data, { signingKeys: config.signingKeys }) };
   } catch (error) {
     const code = error?.code ?? 'queue.invalid_job';
-    const later = code === 'queue.unsupported_version' && job.attempt < job.maxAttempts;
+    const later = isWaiting(error) && job.attempt < job.maxAttempts;
     config.log.write(
       later ? 'warn' : 'error',
       () => ({ jobId: job.id, attempt: job.attempt, code }),
       later ? 'queue.job.retrying' : 'queue.job.failed',
     );
-    // A job a later version wrote waits for a worker of that version.
+    // A job a later version wrote waits for a worker of that version, and a
+    // sealed one for a worker with its codec.
     if (later) {
       return {
         outcome: {
           type: 'retry',
           delayMilliseconds: config.operatorDelayMilliseconds,
           code,
-          reason: error.message,
+          reason: reasonOf(error.message),
         },
       };
     }
@@ -444,7 +461,8 @@ const readJob = (config, job) => {
  * Makes the handler of mail jobs, for any queue driver.
  *
  * @param options `transport`; `renderer`, for template jobs; `audit`,
- * `auditStrict`; `signingKeys`, when only signed jobs are sent;
+ * `auditStrict`; `signingKeys`, when only signed jobs are sent; `codec`,
+ * which opens sealed jobs;
  * `resolveAttachment(ref, { job, attachment, signal })`;
  * `checkJob(data, job)`; `classify({ receipt, job })`; `backoff`,
  * `operatorDelayMilliseconds` (5 minutes), `rateLimitScope` ('job');
@@ -456,7 +474,7 @@ const readJob = (config, job) => {
 const createMailJobHandler = (options) => {
   const config = createHandlerConfig(options);
   return async (job, signal) => {
-    const read = readJob(config, job);
+    const read = await readJob(config, job);
     if (read.outcome !== undefined) return read.outcome;
     const run = {
       config,

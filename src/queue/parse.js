@@ -80,6 +80,12 @@ const checkAttachments = (attachments) => {
 const parseMailJob = (data, options = {}) => {
   const keyring = keyringOf(options.signingKeys);
   if (!isObject(data)) throw invalid('its data is no object.');
+  if (typeof data.enc === 'string') {
+    throw new MailQueueError(
+      'queue.codec_missing',
+      'The job is sealed: open it with its codec before it is read.',
+    );
+  }
   if (data.v !== MAIL_JOB_VERSION) {
     if (Number.isInteger(data.v) && data.v > MAIL_JOB_VERSION) {
       throw new MailQueueError(

@@ -5,6 +5,7 @@
 const { warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
 const { toUuid } = require('../internal/uuid.js');
+const { checkCodec, sealMailJob } = require('./envelope.js');
 const { MailQueueError } = require('./errors.js');
 const { createMailJobHandler } = require('./handler.js');
 const { prepareMailJob } = require('./job.js');
@@ -70,19 +71,10 @@ const afterEnqueue = async (queue, { data, request }, result, enqueueOptions) =>
   return { ...answer, duplicate: result?.duplicate };
 };
 
-/**
- * Makes a mail queue over a driver.
- *
- * @param options `driver`; `audit` and `auditStrict`; `namespace` ('mail'),
- * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
- * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
- * and which its workers verify; `logger`, `generateId`, `now`.
- * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
- * @throws {TypeError} If an option is invalid.
- */
-const createMailQueue = (options = {}) => {
+// The options of a queue, checked: a bad one fails the queue, not an enqueue.
+const createQueueConfig = (options) => {
   const driver = checkDriver(options.driver);
-  const { audit, logger } = options;
+  const { audit } = options;
   if (audit !== undefined && typeof audit?.append !== 'function') {
     throw new TypeError('The audit sink of a mail queue must have append().');
   }
@@ -102,23 +94,51 @@ const createMailQueue = (options = {}) => {
   for (const name of Object.keys(jobOptions)) {
     if (jobOptions[name] === undefined) delete jobOptions[name];
   }
-  const queue = {
+  return {
+    driver,
     audit,
     auditStrict,
-    log: createLog(logger, { component: 'queue', queue: driver.id }),
+    codec: checkCodec(options.codec),
+    now,
+    jobOptions,
+    log: createLog(options.logger, { component: 'queue', queue: driver.id }),
+  };
+};
+
+/**
+ * Makes a mail queue over a driver.
+ *
+ * @param options `driver`; `audit` and `auditStrict`; `namespace` ('mail'),
+ * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
+ * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
+ * and which its workers verify; `codec`, which seals the fields of each job
+ * in its store and opens them in its workers; `logger`, `generateId`, `now`.
+ * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
+ * @throws {TypeError} If an option is invalid.
+ */
+const createMailQueue = (options = {}) => {
+  const queue = createQueueConfig(options);
+  const { driver, codec } = queue;
+  // The job, its data sealed when the queue has a codec: the driver stores
+  // the sealed data, the audit reads the clear.
+  const prepare = async (input) => {
+    const prepared = prepareMailJob(input, queue.jobOptions);
+    if (codec === undefined) return prepared;
+    const data = await sealMailJob(prepared.data, codec);
+    return { data: prepared.data, request: { ...prepared.request, data } };
   };
   return {
     driver,
     async enqueue(input, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
-      const prepared = prepareMailJob(input, jobOptions);
+      const prepared = await prepare(input);
       const result = await driver.enqueue(prepared.request, enqueueOptions);
       return afterEnqueue(queue, prepared, result, enqueueOptions);
     },
     async enqueueMany(inputs, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
       const prepared = [];
-      for (const input of inputs) prepared.push(prepareMailJob(input, jobOptions));
+      for (const input of inputs) prepared.push(await prepare(input));
       let results;
       if (typeof driver.enqueueMany === 'function') {
         const requests = [];
@@ -136,11 +156,12 @@ const createMailQueue = (options = {}) => {
     },
     createWorker(workerOptions = {}) {
       const handler = createMailJobHandler({
-        audit,
-        auditStrict,
-        logger,
-        now,
+        audit: queue.audit,
+        auditStrict: queue.auditStrict,
+        logger: options.logger,
+        now: queue.now,
         signingKeys: options.signingKeys,
+        codec,
         ...workerOptions,
       });
       const consumer = driver.consume(handler, {
