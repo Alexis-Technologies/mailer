@@ -477,3 +477,25 @@ test('OTel: a failure of unknown delivery is told apart, on the span and the cou
   }
   assert.deepStrictEqual(counted, [true, true]);
 });
+
+test('OTel: the message counter takes the category and the code of a failure', async () => {
+  // Before: a failed message was counted as a failure alone, so a rate
+  // limit, a refused key and a refusal of the provider could not be told
+  // apart without the traces.
+  const limited = {
+    successful: false,
+    errorMessages: ['Too many requests.'],
+    errors: [{ message: 'limited', category: 'rate-limit', code: 'http.429', retryable: true }],
+  };
+  const otel = providers();
+  const transport = new OpenTelemetryTransport(plain({}, limited), otel);
+  await transport.send(createTestMessage());
+  const counted = [];
+  for (const metric of otel.meterProvider.getAllRecords()) {
+    if (metric.name !== 'mailer.email.messages') continue;
+    for (const record of metric.records) {
+      counted.push([record.attributes['error.type'], record.attributes['mailer.error.code']]);
+    }
+  }
+  assert.deepStrictEqual(counted, [['rate-limit', 'http.429']]);
+});

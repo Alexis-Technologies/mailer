@@ -97,14 +97,19 @@ class MetricsCollector {
 
   /**
    * Records the receipt of one message, once, with the priority of the
-   * message, whether it was sent, and, for a failure the provider may have
-   * taken, `mailer.delivery_unknown`: the messages to reconcile.
+   * message, whether it was sent, and, for a failure, the category and the
+   * code of its first error (`error.type`, `mailer.error.code`, such as
+   * `rate-limit` and `http.429`) and, when the provider may have taken it,
+   * `mailer.delivery_unknown`: the messages to reconcile.
    */
   recordMessageOutcome(transport, priority, receipt) {
+    const first = receipt.successful ? undefined : receipt.errors?.[0];
     this.messageCounter.add(1, {
       'mailer.transport.name': transport,
       'email.priority': priority,
       'mailer.status': receipt.successful ? 'success' : 'failure',
+      ...(typeof first?.category === 'string' && { 'error.type': first.category }),
+      ...(typeof first?.code === 'string' && { 'mailer.error.code': first.code }),
       ...(receipt.deliveryUnknown === true && { 'mailer.delivery_unknown': true }),
     });
   }

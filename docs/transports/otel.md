@@ -365,7 +365,7 @@ Prometheus turns into its own (`mailer_email_attempts_total`):
 |---|---|---|---|
 | `mailer.email.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
 | `mailer.email.duration` | histogram | `s` | as `mailer.email.attempts` |
-| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status`, and `mailer.delivery_unknown` (`true`) on a failure the provider may have taken |
+| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it |
 | `mailer.email.retries` | counter | `{retry}` | `mailer.transport.name`, `error.type` |
 | `mailer.email.message.size` | histogram | `By` | `mailer.transport.name`, `email.priority`, `email.content.type` |
 | `mailer.email.attachments` | histogram | `{attachment}` | as `mailer.email.message.size` |
