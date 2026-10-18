@@ -28,6 +28,19 @@ const {
   readAttachmentContent,
 } = require('../index.js');
 const { composeMessage } = require('../src/mime/index.js');
+const { htmlToText } = require('../src/render/index.js');
+const { fingerprintOf } = require('../src/idempotency/fingerprint.js');
+const { gatedSendMany } = require('../src/internal/gate.js');
+const {
+  createMailtrapWebhookVerifier,
+  createResendWebhookVerifier,
+  createSendGridWebhookVerifier,
+} = require('../src/webhooks/index.js');
+const { CircuitBreakerTransport } = require('../src/breaker/index.js');
+const { HooksTransport } = require('../src/hooks/index.js');
+const { IdempotencyTransport } = require('../src/idempotency/index.js');
+const { RateLimitTransport } = require('../src/ratelimit/index.js');
+const { TeeTransport } = require('../src/tee/index.js');
 const { writeMessageData } = require('../src/smtp/data-stream.js');
 const { PriorityStrategy } = require('../src/pool/strategies/priority-strategy.js');
 
@@ -115,6 +128,88 @@ const dottedBody = Buffer.from(
     '\r\n',
 );
 
+// 100 KB of Cyrillic text, which goes base64, and of Latin text, which goes
+// quoted-printable.
+const cyrillicMessage = createMessage({
+  from: ADDRESS,
+  to: ADDRESS,
+  subject: 'Рахунок',
+  content: { text: 'Шановний клієнте, ваш рахунок за жовтень готовий. '.repeat(2000) },
+});
+const latinMessage = createMessage({
+  from: ADDRESS,
+  to: ADDRESS,
+  subject: 'Invoice',
+  content: { text: 'Dear customer, your invoice for October is ready, à bientôt. '.repeat(1700) },
+});
+const megabyteHtml = '<p>Hello <a href="https://example.com/x">world</a>, &amp; more</p>'.repeat(
+  16000,
+);
+
+// Requests signed as each provider signs them, verified without a replay store.
+const SVIX_SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
+const svixRequest = () => {
+  const body = JSON.stringify({ type: 'email.delivered', data: { email_id: 'e', to: [ADDRESS] } });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const key = Buffer.from(SVIX_SECRET.slice(6), 'base64');
+  const signature = crypto
+    .createHmac('sha256', key)
+    .update(`msg_1.${timestamp}.${body}`)
+    .digest('base64');
+  return {
+    body,
+    headers: {
+      'svix-id': 'msg_1',
+      'svix-timestamp': timestamp,
+      'svix-signature': `v1,${signature}`,
+    },
+  };
+};
+const ecdsa = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const sendgridRequest = () => {
+  const body = JSON.stringify([
+    { event: 'delivered', email: ADDRESS, sg_event_id: 'e1', timestamp: 1 },
+  ]);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  return {
+    body,
+    headers: {
+      'x-twilio-email-event-webhook-signature': crypto
+        .sign('sha256', Buffer.from(timestamp + body), ecdsa.privateKey)
+        .toString('base64'),
+      'x-twilio-email-event-webhook-timestamp': timestamp,
+    },
+  };
+};
+const mailtrapBody = JSON.stringify({
+  events: [{ event: 'delivery', event_id: 'e1', email: ADDRESS }],
+});
+const mailtrapRequest = {
+  body: mailtrapBody,
+  headers: {
+    'mailtrap-signature': crypto.createHmac('sha256', 'mt').update(mailtrapBody).digest('hex'),
+  },
+};
+
+// A transport that answers at once, under the five decorators of 1.1.
+const instant = {
+  id: 'instant',
+  send: async () => ({ successful: true, messageId: 'm' }),
+  async *sendMany(messages) {
+    for await (const message of messages) yield { successful: true, messageId: 'm', message };
+  },
+};
+const decorated = new HooksTransport(
+  new TeeTransport(
+    new IdempotencyTransport(
+      new RateLimitTransport(new CircuitBreakerTransport(instant), { limit: 1e9, burst: 1e9 }),
+    ),
+    { mirrors: [instant], awaitMirrors: true },
+  ),
+  { afterSend: () => {} },
+);
+const hundred = Array.from({ length: 100 }, () => textMessage);
+
 const main = async () => {
   if (!json) console.log(`Node ${process.version} | ${new Date().toISOString()}\n`);
   const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -138,6 +233,15 @@ const main = async () => {
     cause: Object.assign(new Error('connect ECONNRESET'), { code: 'ECONNRESET' }),
   });
   const slow = { warmup: 20 };
+  const resend = createResendWebhookVerifier({ secret: SVIX_SECRET, replayStore: null });
+  const sendgrid = createSendGridWebhookVerifier({
+    publicKey: ecdsa.publicKey.export({ format: 'pem', type: 'spki' }),
+    replayStore: null,
+  });
+  const mailtrap = createMailtrapWebhookVerifier({
+    secret: 'mt',
+    replayStore: null,
+  });
 
   const scenarios = [
     ['MIME — compose a text and HTML message', () => composeAndRead(textMessage), slow],
@@ -169,6 +273,36 @@ const main = async () => {
     [
       'Pool — select by priority among 10 transports',
       () => strategy.select(textMessage, transports, new Set()),
+    ],
+    ['MIME — compose 100 KB of Cyrillic (base64)', () => composeAndRead(cyrillicMessage), slow],
+    ['MIME — compose 100 KB of Latin (quoted-printable)', () => composeAndRead(latinMessage), slow],
+    ['Render — htmlToText of 1 MB', () => htmlToText(megabyteHtml), slow],
+    ['Idempotency — fingerprintOf a message', () => fingerprintOf(textMessage)],
+    ['Webhooks — verify a Svix (Resend) request', () => resend.verify(svixRequest())],
+    ['Webhooks — verify a SendGrid ECDSA request', () => sendgrid.verify(sendgridRequest())],
+    ['Webhooks — verify a Mailtrap HMAC request', () => mailtrap.verify(mailtrapRequest)],
+    [
+      'Gate — 100 messages through five decorators',
+      async () => {
+        let sent = 0;
+        for await (const receipt of decorated.sendMany(hundred)) if (receipt.successful) sent++;
+        return sent;
+      },
+      slow,
+    ],
+    [
+      'Gate — 100 messages, every tenth answered in place',
+      async () => {
+        let n = 0;
+        for await (const receipt of gatedSendMany(instant, hundred, undefined, {
+          admit: (message) =>
+            ++n % 10 === 0 ? { receipt: { successful: true, messageId: 'own' } } : { message },
+        })) {
+          if (receipt.successful) n++;
+        }
+        return n;
+      },
+      slow,
     ],
   ];
 

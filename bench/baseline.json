@@ -1,34 +1,70 @@
 {
   "node": "v24.14.1",
-  "date": "2026-10-16T14:05:15.910Z",
+  "date": "2026-10-18T00:04:42.115Z",
   "results": [
     {
       "name": "MIME — compose a text and HTML message",
-      "opsPerSec": 2796
+      "opsPerSec": 9401
     },
     {
       "name": "MIME — compose a message with a 1 MiB attachment",
-      "opsPerSec": 40
+      "opsPerSec": 406
     },
     {
       "name": "DKIM — compose and sign a text message (RSA-2048)",
-      "opsPerSec": 755
+      "opsPerSec": 1312
     },
     {
       "name": "SMTP — dot-stuff and write 1 MiB of message data",
-      "opsPerSec": 301
+      "opsPerSec": 745
     },
     {
       "name": "Address — isEmailAddress",
-      "opsPerSec": 1687799
+      "opsPerSec": 3559030
     },
     {
       "name": "Receipt — classifyReceiptError of a reset",
-      "opsPerSec": 31384578
+      "opsPerSec": 32283909
     },
     {
       "name": "Pool — select by priority among 10 transports",
-      "opsPerSec": 2263836
+      "opsPerSec": 10120402
+    },
+    {
+      "name": "MIME — compose 100 KB of Cyrillic (base64)",
+      "opsPerSec": 594
+    },
+    {
+      "name": "MIME — compose 100 KB of Latin (quoted-printable)",
+      "opsPerSec": 750
+    },
+    {
+      "name": "Render — htmlToText of 1 MB",
+      "opsPerSec": 38
+    },
+    {
+      "name": "Idempotency — fingerprintOf a message",
+      "opsPerSec": 74060
+    },
+    {
+      "name": "Webhooks — verify a Svix (Resend) request",
+      "opsPerSec": 181926
+    },
+    {
+      "name": "Webhooks — verify a SendGrid ECDSA request",
+      "opsPerSec": 12227
+    },
+    {
+      "name": "Webhooks — verify a Mailtrap HMAC request",
+      "opsPerSec": 329750
+    },
+    {
+      "name": "Gate — 100 messages through five decorators",
+      "opsPerSec": 1847
+    },
+    {
+      "name": "Gate — 100 messages, every tenth answered in place",
+      "opsPerSec": 15761
     }
   ]
 }
