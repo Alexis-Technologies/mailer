@@ -12,6 +12,7 @@
 // production and dropped it in production; and `beforeSend` may replace the
 // message or refuse it.
 
+const { checkMessage } = require('../core/message.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport } = require('../core/transport.js');
 const { warnThrown } = require('../internal/callback.js');
@@ -160,6 +161,19 @@ class HooksTransport {
       return {
         receipt: this.#refusal(`The ${name} hook returned neither a message nor nothing.`),
       };
+    }
+    // A copy of the message with fields changed did not go through
+    // createMessage, which the transports rely on: its checks run again.
+    if (name !== 'beforeSendRaw') {
+      try {
+        checkMessage(replaced);
+      } catch (error) {
+        return {
+          receipt: this.#refusal(
+            `The ${name} hook returned an invalid message: ${messageOf(error)}`,
+          ),
+        };
+      }
     }
     return { message: replaced };
   }

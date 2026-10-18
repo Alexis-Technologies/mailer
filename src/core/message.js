@@ -294,4 +294,43 @@ const ensureArray = (value) => {
   return value == null ? [] : [value];
 };
 
-module.exports = { checkAttachment, createMessage };
+// The lists of addresses of a message and how its errors name them.
+const ADDRESS_LISTS = [
+  ['recipients', 'recipient'],
+  ['ccRecipients', 'CC'],
+  ['bccRecipients', 'BCC'],
+  ['replyRecipients', 'reply-to'],
+];
+
+/**
+ * Checks again what `createMessage` checks of a message already made, such
+ * as one a hook of `./hooks` gives in place of another: a copy with fields
+ * changed (`{ ...message, to }`) skips `createMessage`, and the transports
+ * that rely on it would write what it refuses.
+ *
+ * @param message The message.
+ * @throws {TypeError} If a field is one `createMessage` refuses.
+ * @internal
+ */
+const checkMessage = (message) => {
+  checkAddress('sender', message.sender);
+  for (const [field, label] of ADDRESS_LISTS) {
+    if (!Array.isArray(message[field])) throwTypeError(`Invalid ${field}: it must be an array.`);
+    for (const address of message[field]) checkAddress(label, address);
+  }
+  if (!Array.isArray(message.attachments)) throwTypeError('Invalid attachments: not an array.');
+  for (const attachment of message.attachments) {
+    if (!isAttachment(attachment)) throwTypeError('Invalid attachment.');
+    checkAttachment(attachment);
+  }
+  if (!(message.headers instanceof Headers)) throwTypeError('Invalid headers: not a Headers.');
+  if (message.messageId != null) checkMessageId('', message.messageId);
+  checkMessageIds('in-reply-to ', message.inReplyTo);
+  checkMessageIds('references ', message.references);
+  if (message.date !== undefined) checkDate(message.date);
+  checkScheduledAt(message.scheduledAt);
+  checkTracking(message.tracking);
+  checkMetadata(message.metadata);
+};
+
+module.exports = { checkAttachment, checkMessage, createMessage };

@@ -262,6 +262,42 @@ test('Hooks: a beforeSend that returns something else than a message refuses it'
   assert.strictEqual(inner.calls.length, 0);
 });
 
+test('Hooks: a copy a beforeSend returns is checked again as createMessage checks it', async () => {
+  // Before: a copy with fields changed kept the shape of a message, so a
+  // line break in a name or an address, or in the content type of an
+  // attachment, reached transports that rely on createMessage refusing it.
+  const inner = fakeTransport();
+  const copies = [
+    (m) => ({ ...m, sender: { name: 'Eve\r\nBcc: x@evil.example', address: 'a@example.com' } }),
+    (m) => ({ ...m, recipients: [{ address: 'b@example.com\r\nBcc: x@evil.example' }] }),
+    (m) => ({
+      ...m,
+      attachments: [
+        {
+          filename: 'a.txt',
+          contentType: 'text/plain\r\nX-Evil: 1',
+          content: new Uint8Array(1),
+          inline: false,
+          contentId: '',
+        },
+      ],
+    }),
+    (m) => ({ ...m, headers: { 'X-Plain': 'object' } }),
+    (m) => ({ ...m, metadata: { 'bad key': 'x' } }),
+  ];
+  for (const copy of copies) {
+    const hooks = new HooksTransport(inner, { beforeSend: copy });
+    const receipt = await hooks.send(message());
+    assert.strictEqual(receipt.errors[0].code, 'hooks.refused', String(copy));
+    assert.match(receipt.errorMessages[0], /returned an invalid message/);
+  }
+  assert.strictEqual(inner.calls.length, 0);
+  // A sound copy goes.
+  const fine = new HooksTransport(inner, { beforeSend: (m) => ({ ...m, subject: 'Changed' }) });
+  assert.strictEqual((await fine.send(message())).successful, true);
+  assert.strictEqual(inner.calls[0].message.subject, 'Changed');
+});
+
 test('Hooks: an onRetry hook whose promise rejects is a warning', async (t) => {
   // Before: the rejection of an async onRetry hook went unhandled.
   const warnings = [];
