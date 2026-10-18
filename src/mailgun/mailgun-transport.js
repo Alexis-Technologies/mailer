@@ -1,16 +1,14 @@
 // Ported from upyo v0.7.0 (packages/mailgun/src/mailgun-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailgunConfig } = require('./config.js');
 const { verifyByRequest } = require('../internal/verify.js');
-const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
+const { MailgunHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
-const { certificateFailure } = require('../internal/refusal.js');
 
 /**
  * Mailgun transport implementation for sending emails via Mailgun API.
@@ -150,10 +148,7 @@ class MailgunTransport {
       if (isCallerAbort(error, options?.signal)) {
         throw error;
       }
-
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return createMailgunFailure(errorMessage, error);
+      return providerFailure('mailgun', error);
     }
   }
 
@@ -178,8 +173,7 @@ class MailgunTransport {
       return { successful: true, messageId: response.id, provider: 'mailgun' };
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return rawMessageFailure('mailgun', error) ?? createMailgunFailure(errorMessage, error);
+      return rawMessageFailure('mailgun', error) ?? providerFailure('mailgun', error);
     }
   }
 
@@ -245,32 +239,5 @@ class MailgunTransport {
     );
   }
 }
-
-const createMailgunFailure = (message, error) => {
-  const certificate = certificateFailure('mailgun', message, error);
-  if (certificate !== undefined) return certificate;
-  if (error instanceof MailgunApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'mailgun',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'mailgun',
-  });
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
 
 module.exports = { MailgunTransport };

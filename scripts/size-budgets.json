@@ -10,7 +10,7 @@
   "./ses": 8,
   "./resend": 7.5,
   "./sendgrid": 7.5,
-  "./mailgun": 6.5,
+  "./mailgun": 7.5,
   "./mailtrap": 7,
   "./maileroo": 6.5,
   "./lettermint": 6.5,
