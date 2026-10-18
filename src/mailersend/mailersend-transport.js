@@ -71,7 +71,10 @@ class MailerSendTransport {
    * @throws {Error} If MailerSend refuses the token or cannot be reached.
    */
   verify(options) {
-    return verifyByGet(this, 'MailerSend', `${this.config.baseUrl}/v1/domains`, options);
+    // A token without the access of domains is refused it with a 403.
+    return verifyByGet(this, 'MailerSend', `${this.config.baseUrl}/v1/domains`, options, {
+      acceptForbidden: true,
+    });
   }
 }
 

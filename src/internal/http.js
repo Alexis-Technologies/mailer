@@ -90,7 +90,9 @@ const startDeadline = (timeoutMs, signal) => {
  *
  * @param request What the provider passes in:
  * - `send(signal, attempt)`: one fetch, with the signal of the attempt;
- * - `read(response, attempt)`: the result of a 2xx response;
+ * - `read(response, attempt)`: the result of a 2xx response, or of one
+ *   `accepts(status)` takes (a check that reads a refusal), which is not
+ *   taken for a delivery: what `read` throws for it is retried by its status;
  * - `reject(response, attempt)`: the error of any other response;
  * - `retries`, `timeoutMs`, `signal`;
  * - `isRetryable(error)`: by default, a failure without a status or with a
@@ -132,7 +134,9 @@ const requestWithRetry = async (request) => {
       const response = await request.send(deadline.signal, attempt);
       hasResponse = true;
       isAccepted = response.ok;
-      if (response.ok) return await request.read(response, attempt);
+      if (response.ok || request.accepts?.(response.status) === true) {
+        return await request.read(response, attempt);
+      }
       failure = await request.reject(response, attempt);
     } catch (error) {
       const isTimeout = deadline.isExpired && !signal?.aborted && isAbortError(error);

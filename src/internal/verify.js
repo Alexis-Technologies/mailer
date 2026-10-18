@@ -22,43 +22,41 @@ const failureOf = (provider, status, text) => {
 
 /**
  * Verifies the credentials of an HTTP provider with one read of its API.  A
- * 2xx verifies them; so does a 403, which says the key is known but may not
- * read what was asked (a key that may only send); a 401, or any other
- * status, fails.
+ * 2xx verifies them; so does a 403 with `acceptForbidden`, for a provider
+ * whose keys that may only send are refused that read with it; a 401, or
+ * any other status, fails, unless `check` takes it.
  *
  * @param request `provider`, the name in the error; `send(signal)`, the
  * authenticated request; `check(status, body)`, which may throw on a 2xx or
- * return `true` to accept another status; and `retries`, `timeoutMs`,
- * `signal` and `log` of the transport.
+ * return `true` to take another status; `acceptForbidden`; and `retries`,
+ * `timeoutMs`, `signal` and `log` of the transport.
  * @throws {Error} With the `statusCode` of the answer, if the check fails.
  * @internal
  */
-const verifyByRequest = async (request) => {
-  let answer;
-  try {
-    answer = await requestWithRetry({
-      log: request.log,
-      signal: request.signal,
-      retries: request.retries,
-      timeoutMs: request.timeoutMs,
-      isIdempotent: true,
-      send: request.send,
-      read: async (response) => ({ status: response.status, body: await readText(response) }),
-      reject: async (response) => {
-        const text = await readText(response);
-        if (response.status === 403 || request.check?.(response.status, text) === true) {
-          // Not retried, as its status says, and caught below.
-          return Object.assign(new Error('Verified.'), { verified: true, statusCode: 403 });
-        }
-        return failureOf(request.provider, response.status, text);
-      },
-    });
-  } catch (error) {
-    if (error?.verified === true) return;
-    throw error;
-  }
-  request.check?.(answer.status, answer.body);
-};
+const verifyByRequest = (request) =>
+  requestWithRetry({
+    log: request.log,
+    signal: request.signal,
+    retries: request.retries,
+    timeoutMs: request.timeoutMs,
+    isIdempotent: true,
+    send: request.send,
+    // Every answer is read, as the check reads the body of a refusal; one it
+    // does not take fails with its status, retried as that says.
+    accepts: () => true,
+    read: async (response) => {
+      const { status } = response;
+      const body = await readText(response);
+      if (status >= 200 && status <= 299) {
+        request.check?.(status, body);
+        return;
+      }
+      if (status === 403 && request.acceptForbidden === true) return;
+      if (request.check?.(status, body) === true) return;
+      throw failureOf(request.provider, status, body);
+    },
+    reject: async (response) => failureOf(request.provider, response.status, ''),
+  });
 
 /**
  * Verifies the credentials of a transport with one authenticated read of
@@ -68,7 +66,8 @@ const verifyByRequest = async (request) => {
  * @param label The provider's name, for the error.
  * @param url The URL read.
  * @param options The caller's options.
- * @param request `init` of the request in place of a GET, and `check`.
+ * @param request `init` of the request in place of a GET, `check` and
+ * `acceptForbidden`.
  * @internal
  */
 const verifyByGet = async (transport, label, url, options, request = {}) => {
@@ -78,6 +77,7 @@ const verifyByGet = async (transport, label, url, options, request = {}) => {
     provider: label,
     send: (signal) => transport.httpClient.fetchWithAuth(url, init, signal),
     check: request.check,
+    acceptForbidden: request.acceptForbidden,
     retries: transport.config.retries,
     timeoutMs: transport.config.timeout,
     signal: options?.signal,

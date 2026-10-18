@@ -116,7 +116,10 @@ class SparkPostTransport {
    * @throws {Error} If SparkPost refuses the key or cannot be reached.
    */
   verify(options) {
-    return verifyByGet(this, 'SparkPost', `${this.config.baseUrl}/api/v1/account`, options);
+    // An API key without the grant of the account is refused it with a 403.
+    return verifyByGet(this, 'SparkPost', `${this.config.baseUrl}/api/v1/account`, options, {
+      acceptForbidden: true,
+    });
   }
 }
 

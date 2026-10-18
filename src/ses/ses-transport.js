@@ -96,6 +96,8 @@ class SesTransport {
     const url = `https://email.${this.config.region}.amazonaws.com/v2/email/account`;
     await verifyByRequest({
       provider: 'SES',
+      // A 403 is a known key that may not read: an IAM key that may only send is refused GetAccount (AccessDenied).
+      acceptForbidden: true,
       send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
       retries: this.config.retries,
       timeoutMs: this.config.timeout,

@@ -152,3 +152,29 @@ test('Verify: an aborted signal rejects before any request', async (t) => {
   }
   assert.strictEqual(requests.length, 0);
 });
+
+test('Verify: a 403 verifies only where a key that may only send is refused with it', async (t) => {
+  // Before: a 403 verified the credentials of every provider, so a key
+  // Postmark or Brevo refused passed verify().
+  const { PostmarkTransport } = require('../../src/postmark/index.js');
+  const { BrevoTransport } = require('../../src/brevo/index.js');
+  const { SparkPostTransport } = require('../../src/sparkpost/index.js');
+  const { MailerSendTransport } = require('../../src/mailersend/index.js');
+  const { ScalewayTransport } = require('../../src/scaleway/index.js');
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ message: 'Forbidden' }, { status: 403 }),
+  );
+  const refused = [
+    new PostmarkTransport({ serverToken: 'token', retries: 0 }),
+    new BrevoTransport({ apiKey: 'key', retries: 0 }),
+  ];
+  for (const transport of refused) {
+    await assert.rejects(transport.verify(), (error) => error.statusCode === 403, transport.id);
+  }
+  const taken = [
+    new SparkPostTransport({ apiKey: 'key', retries: 0 }),
+    new MailerSendTransport({ apiKey: 'key', retries: 0 }),
+    new ScalewayTransport({ secretKey: 'key', projectId: 'p', retries: 0 }),
+  ];
+  for (const transport of taken) await transport.verify();
+});

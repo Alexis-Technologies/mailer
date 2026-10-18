@@ -69,7 +69,10 @@ class ScalewayTransport {
    */
   verify(options) {
     const query = `project_id=${encodeURIComponent(this.config.projectId)}&page_size=1`;
-    return verifyByGet(this, 'Scaleway', `${this.httpClient.base}/domains?${query}`, options);
+    // A key whose policy may send but not read the domains is refused with a 403.
+    return verifyByGet(this, 'Scaleway', `${this.httpClient.base}/domains?${query}`, options, {
+      acceptForbidden: true,
+    });
   }
 }
 
