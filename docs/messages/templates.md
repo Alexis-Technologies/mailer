@@ -216,11 +216,13 @@ reads and compiles on every render, for development.
 | --- | --- | --- |
 | `TemplateNotFoundError` (`MAILER_TEMPLATE_NOT_FOUND`) | no template, include, partial or layout; `tried` lists the names looked up | `false` |
 | `TemplateRenderError` (`MAILER_TEMPLATE_RENDER`) | syntax, a helper that threw, MJML under `strict`, the inliner; `phase`, `engine`, `cause` | `false` |
+| `TemplateLoadError` (`MAILER_TEMPLATE_LOAD`) | the loader failed (`EMFILE`, a database timeout); `template` names what it read, `cause` is its error | `true`; unset for a bug of the loader (`TypeError`…) |
 | `TypeError`, `RangeError` | a name that is not one, a bad locale or context | — |
-| the loader's own error | the loader failed (`EMFILE`, a database timeout) | as classified |
 
-The queue fails a job at once on the first three, and retries an outage of the
-loader.
+The queue fails a job at once on the first two and the last, and retries an
+outage of the loader. An engine that wraps what a loader threw in its own error
+(Nunjucks, Liquid) does not hide it: the error of ./templates is found among its
+causes and thrown as it is.
 
 ## Migrating from @nestjs-modules/mailer
 

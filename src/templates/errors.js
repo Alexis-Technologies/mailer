@@ -1,7 +1,8 @@
-// Not ported: the errors of ./templates.  Each has a stable `code` and
-// `retryable: false`, so that a queue fails a job whose template is missing
-// or does not render at once, rather than retrying what fails again the same
-// way; a queue reads the code, which holds across two copies of the package.
+// Not ported: the errors of ./templates.  Each has a stable `code`, which a
+// queue reads, as it holds across two copies of the package.  A template that
+// is missing or does not render has `retryable: false`, so that a queue fails
+// its job at once rather than retrying what fails again the same way; a
+// loader that fails may pass on another attempt.
 
 // The names a message lists, of all those tried.
 const MAX_NAMES = 8;
@@ -61,4 +62,62 @@ class TemplateRenderError extends Error {
   }
 }
 
-module.exports = { TemplateNotFoundError, TemplateRenderError };
+// The errors a loader throws for a bug of its own, or of its caller.
+const BUGS = [TypeError, RangeError, ReferenceError, SyntaxError];
+
+const isBug = (error) => {
+  for (const type of BUGS) {
+    if (error instanceof type) return true;
+  }
+  return false;
+};
+
+/**
+ * A loader that failed to read a template: a file system that refused it, a
+ * database that timed out.  The loader's error is its cause.  It is
+ * retryable, as it may pass on another attempt, unless the loader's error is
+ * a bug or says it is not, when `retryable` is left unset for a queue to
+ * classify by the cause.
+ */
+class TemplateLoadError extends Error {
+  /**
+   * @param template The name the loader was asked for.
+   * @param options `from`, the template that included it, and `cause`, the
+   * loader's error.
+   */
+  constructor(template, options = {}) {
+    const { cause } = options;
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(`The template ${JSON.stringify(template)} failed to load: ${reason}`, options);
+    this.name = 'TemplateLoadError';
+    this.code = 'MAILER_TEMPLATE_LOAD';
+    if (cause?.retryable !== false && !isBug(cause)) this.retryable = true;
+    this.template = template;
+    if (options.from !== undefined) this.from = options.from;
+  }
+}
+
+/**
+ * The missing template or the failed load an engine wrapped in its own
+ * error: the error itself or one of its causes.
+ *
+ * @returns The error of ./templates, or `undefined` when there is none.
+ * @internal
+ */
+const templateErrorOf = (error) => {
+  let current = error;
+  for (let depth = 0; depth < 8 && typeof current === 'object' && current !== null; depth++) {
+    if (current instanceof TemplateNotFoundError || current instanceof TemplateLoadError) {
+      return current;
+    }
+    current = current.cause;
+  }
+  return undefined;
+};
+
+module.exports = {
+  TemplateLoadError,
+  TemplateNotFoundError,
+  TemplateRenderError,
+  templateErrorOf,
+};

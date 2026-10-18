@@ -7,6 +7,7 @@ const {
   createCssInliner,
   createMemoryLoader,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
 } = require('../../src/templates/index.js');
@@ -305,21 +306,55 @@ test('Templates: failures are classified by phase, the engine error their cause'
   }
 });
 
-test('Templates: a loader that fails fails with its own error, which may pass on a retry', async () => {
+test('Templates: a loader that fails fails as a load of its template, which may pass on a retry', async () => {
+  // Before: the loader's error came back as it was, naming no template.
   const outage = Object.assign(new Error('EMFILE: too many open files'), { code: 'EMFILE' });
   const loader = {
     load: (name) => {
-      if (name === 'a.tpl') return { name, source: '{{> b}}' };
-      throw outage;
+      if (name === 'b.tpl') throw outage;
+      return name === 'a.tpl' ? { name, source: '{{> b}}' } : undefined;
     },
   };
   const renderer = createTemplateRenderer({ engine: fakeEngine(), loader });
-  assert.strictEqual(await renderer.render({ template: 'a' }).catch((e) => e), outage);
+  const include = await renderer.render({ template: 'a' }).catch((e) => e);
+  assert.ok(include instanceof TemplateLoadError);
+  assert.deepStrictEqual(
+    [include.code, include.template, include.retryable, include.cause],
+    ['MAILER_TEMPLATE_LOAD', 'b.tpl', true, outage],
+  );
+  assert.match(include.message, /The template "b.tpl" failed to load: EMFILE/);
   const failing = createTemplateRenderer({
     engine: fakeEngine(),
     loader: { load: () => Promise.reject(outage) },
   });
-  assert.strictEqual(await failing.render({ template: 'x' }).catch((e) => e), outage);
+  const main = await failing.render({ template: 'x' }).catch((e) => e);
+  assert.deepStrictEqual([main.template, main.cause], ['x.tpl', outage]);
+  // A bug of the loader, or an error that says so, is left for the queue to
+  // classify by its cause, never marked retryable.
+  for (const cause of [new TypeError('x is undefined'), { retryable: false, message: 'gone' }]) {
+    const buggy = createTemplateRenderer({
+      engine: fakeEngine(),
+      loader: {
+        load: () => {
+          throw cause;
+        },
+      },
+    });
+    const error = await buggy.render({ template: 'x' }).catch((e) => e);
+    assert.ok(error instanceof TemplateLoadError);
+    assert.ok(!('retryable' in error));
+  }
+  // A loader that throws an error of ./templates throws it as it is.
+  const refusal = new TemplateNotFoundError('x', []);
+  const own = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: {
+      load: () => {
+        throw refusal;
+      },
+    },
+  });
+  assert.strictEqual(await own.render({ template: 'x' }).catch((e) => e), refusal);
 });
 
 test('Templates: finish makes the HTML of the outermost template, then the CSS is inlined', async () => {

@@ -246,6 +246,7 @@ export interface TemplateRenderer<
   /**
    * @throws {TemplateNotFoundError} If there is no such template.
    * @throws {TemplateRenderError} If it does not render.
+   * @throws {TemplateLoadError} If the loader failed to read one.
    * @throws {TypeError} If the input is invalid.
    */
   render(input: TInput): Promise<TemplateOutput>;
@@ -290,6 +291,28 @@ export declare class TemplateNotFoundError extends Error {
   /** The names looked up, in order. */
   readonly tried: readonly string[];
   constructor(template: string, tried: readonly string[], options?: TemplateNotFoundErrorOptions);
+}
+
+/** The options of {@link TemplateLoadError}. */
+export interface TemplateLoadErrorOptions extends ErrorOptions {
+  /** The template that included it, for an include, a partial or a layout. */
+  readonly from?: string;
+}
+
+/**
+ * A loader that failed to read a template: a file system that refused it, a
+ * database that timed out. The loader's error is its `cause`. Retryable, as
+ * it may pass on another attempt, unless the loader's error is a bug
+ * (`TypeError`, `RangeError`…) or says `retryable: false`: then `retryable`
+ * is unset, for a queue to classify by the cause.
+ */
+export declare class TemplateLoadError extends Error {
+  readonly code: 'MAILER_TEMPLATE_LOAD';
+  readonly retryable?: true;
+  /** The name the loader was asked for. */
+  readonly template: string;
+  readonly from?: string;
+  constructor(template: string, options?: TemplateLoadErrorOptions);
 }
 
 /** Where a template failed. */

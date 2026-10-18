@@ -2,35 +2,9 @@
 // template: through the loader of its renderer, so that they are checked and
 // kept as its templates are, and never read from disk by the engine itself.
 
-const { TemplateNotFoundError } = require('./errors.js');
+const { TemplateLoadError, TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
 const { isTemplateName } = require('./loader.js');
 const { createCache, memoize } = require('./cache.js');
-
-// The errors a loader threw, such as EMFILE or a database timeout: an engine
-// that wraps them in its own does not make them a failure of the template, as
-// they may pass on another attempt.
-const loaderErrors = new WeakSet();
-
-const markLoaderError = (error) => {
-  if (typeof error === 'object' && error !== null) loaderErrors.add(error);
-  return error;
-};
-
-/**
- * The error a loader threw, found on what an engine made of it: the error
- * itself or one of its causes.
- *
- * @returns The loader's error, or `undefined` when there is none.
- * @internal
- */
-const loaderErrorOf = (error) => {
-  let current = error;
-  for (let depth = 0; depth < 8 && typeof current === 'object' && current !== null; depth++) {
-    if (loaderErrors.has(current)) return current;
-    current = current.cause;
-  }
-  return undefined;
-};
 
 // The segments of a name, `.` dropped and `..` taking the one before; undefined
 // when `..` leads out of the root.
@@ -104,6 +78,17 @@ const candidatesOf = (include, from, extensions, partials) => {
   return names;
 };
 
+// What a loader threw, as an error that names the template: one of
+// ./templates as it is, and any other, such as EMFILE or a database timeout,
+// as a TemplateLoadError, which an engine that wraps it does not make a
+// failure of the template, as it may pass on another attempt.
+const loadFailure = (name, error) =>
+  error instanceof TemplateNotFoundError ||
+  error instanceof TemplateRenderError ||
+  error instanceof TemplateLoadError
+    ? error
+    : new TemplateLoadError(name, { cause: error });
+
 /**
  * Makes the includes of a renderer: the reads of its loader, kept while its
  * cache is on, and the lookup of a name an engine includes.
@@ -123,7 +108,7 @@ const createIncludes = (loader, options) => {
       try {
         return (await loader.load(name)) ?? undefined;
       } catch (error) {
-        throw markLoaderError(error);
+        throw loadFailure(name, error);
       }
     });
   const readSync = (name) => {
@@ -138,7 +123,7 @@ const createIncludes = (loader, options) => {
     try {
       source = loader.loadSync(name) ?? undefined;
     } catch (error) {
-      throw markLoaderError(error);
+      throw loadFailure(name, error);
     }
     syncSources.set(name, { source });
     return source;
@@ -168,4 +153,4 @@ const createIncludes = (loader, options) => {
   });
 };
 
-module.exports = { createIncludes, joinName, loaderErrorOf };
+module.exports = { createIncludes, joinName };

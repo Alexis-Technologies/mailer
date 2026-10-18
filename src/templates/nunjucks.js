@@ -94,7 +94,8 @@ const createNunjucksEngine = (options = {}) => {
         );
       },
     };
-    const env = new nunjucks.Environment([loader], { autoescape: true, ...given });
+    // `dev` keeps the error Nunjucks wraps as its cause, such as a loader's.
+    const env = new nunjucks.Environment([loader], { autoescape: true, dev: true, ...given });
     for (const name of Object.keys(filters)) env.addFilter(name, filters[name]);
     configure?.(env);
     state = { env, failures };

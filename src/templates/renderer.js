@@ -10,9 +10,9 @@ const { decodeEntities } = require('../render/entities.js');
 const { messageOf } = require('../internal/decorator.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { createCache, memoize } = require('./cache.js');
-const { TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
+const { TemplateNotFoundError, TemplateRenderError, templateErrorOf } = require('./errors.js');
 const { parseFrontMatter } = require('./front-matter.js');
-const { createIncludes, loaderErrorOf } = require('./includes.js');
+const { createIncludes } = require('./includes.js');
 const { checkTemplateName } = require('./loader.js');
 
 const DEFAULT_MAX_ENTRIES = 1000;
@@ -149,16 +149,11 @@ const checkInput = (input) => {
 };
 
 const wrapError = (error, template, phase, engine) => {
-  if (error instanceof TemplateNotFoundError || error instanceof TemplateRenderError) return error;
+  if (error instanceof TemplateRenderError) return error;
   // An engine may wrap what its include threw: a missing include stays one,
   // and a loader's failure stays the loader's, which may pass on another try.
-  let cause = error;
-  for (let depth = 0; depth < 8 && typeof cause === 'object' && cause !== null; depth++) {
-    if (cause instanceof TemplateNotFoundError) return cause;
-    cause = cause.cause;
-  }
-  const failure = loaderErrorOf(error);
-  if (failure !== undefined) return failure;
+  const found = templateErrorOf(error);
+  if (found !== undefined) return found;
   return new TemplateRenderError(template, phase, messageOf(error), {
     cause: error,
     engine: engine?.name,

@@ -20,6 +20,7 @@ import {
   createPugEngine,
   createReactEmailEngine,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
   type TemplateEngine,
@@ -123,3 +124,6 @@ expectType<false>(missing.retryable);
 expectType<readonly string[]>(missing.tried);
 const broken = new TemplateRenderError('welcome', 'compile', 'x', { engine: 'handlebars' });
 expectType<'MAILER_TEMPLATE_RENDER'>(broken.code);
+const failed = new TemplateLoadError('welcome.hbs', { from: 'layout', cause: new Error('EMFILE') });
+expectType<'MAILER_TEMPLATE_LOAD'>(failed.code);
+expectType<true | undefined>(failed.retryable);

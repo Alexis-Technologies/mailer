@@ -23,8 +23,80 @@ const RESERVED = new Set([
   'cache',
 ]);
 
-// A name no loader has: where a reference leads out of the root.
+// A name no loader has: where a reference leads out of the root, and, before
+// the name written, where liquidjs looks last for a template it did not find.
 const NOWHERE = '\u0000';
+
+const isMissing = (name) => name.length > 1 && name[0] === NOWHERE;
+
+// liquidjs keeps the error it wraps as `originalError`: it is made the cause,
+// so that the renderer finds a missing include or a loader's failure in it.
+const withCauses = (error) => {
+  let current = error;
+  for (let depth = 0; depth < 8 && typeof current === 'object' && current !== null; depth++) {
+    if (current.cause === undefined && current.originalError !== undefined) {
+      Object.defineProperty(current, 'cause', {
+        value: current.originalError,
+        configurable: true,
+        writable: true,
+      });
+    }
+    current = current.cause;
+  }
+  return error;
+};
+
+// The file system of liquidjs over the includes of a renderer.
+const fileSystemOf = (includes, roots, extname) => {
+  const resolve = (dir, file, extension) => {
+    const relative = dir === '' ? file : `${dir}/${file}`;
+    const name = includes.join(undefined, `/${relative}`);
+    if (name === undefined) return NOWHERE;
+    return name.lastIndexOf('.') > name.lastIndexOf('/') ? name : name + extension;
+  };
+  // The template liquidjs did not find, by the names it looked up.
+  const missing = (name) => {
+    const file = name.slice(1);
+    const tried = [];
+    for (const root of roots) {
+      const candidate = resolve(root, file, extname);
+      if (candidate !== NOWHERE) tried.push(candidate);
+    }
+    return new TemplateNotFoundError(file, tried);
+  };
+  return {
+    sep: '/',
+    async exists(name) {
+      if (name[0] === NOWHERE) return isMissing(name);
+      return (await includes.read(name)) !== undefined;
+    },
+    existsSync(name) {
+      if (name[0] === NOWHERE) return isMissing(name);
+      return includes.readSync(name) !== undefined;
+    },
+    async readFile(name) {
+      if (isMissing(name)) throw missing(name);
+      const found = await includes.read(name);
+      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      return found.source;
+    },
+    readFileSync(name) {
+      if (isMissing(name)) throw missing(name);
+      const found = includes.readSync(name);
+      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      return found.source;
+    },
+    resolve,
+    // Tried after every directory, so that a template not found is told by
+    // the name written, rather than by liquidjs's ENOENT.
+    fallback: (file) => NOWHERE + file,
+    dirname(name) {
+      const slash = name.lastIndexOf('/');
+      return slash === -1 ? '' : name.slice(0, slash);
+    },
+    contains: () => true,
+  };
+};
 
 /**
  * Makes the Liquid engine.
@@ -50,45 +122,17 @@ const createLiquidEngine = (options = {}) => {
   const instanceOf = (includes) => {
     let liquid = instances.get(includes);
     if (liquid !== undefined) return liquid;
-    const source = async (name) => (await includes.read(name))?.source;
-    const fs = {
-      sep: '/',
-      async exists(name) {
-        return name !== NOWHERE && (await includes.read(name)) !== undefined;
-      },
-      existsSync: (name) => name !== NOWHERE && includes.readSync(name) !== undefined,
-      async readFile(name) {
-        const text = await source(name);
-        if (text === undefined) throw new TemplateNotFoundError(name, [name]);
-        return text;
-      },
-      readFileSync(name) {
-        const found = includes.readSync(name);
-        if (found === undefined) throw new TemplateNotFoundError(name, [name]);
-        return found.source;
-      },
-      resolve(dir, file, extname) {
-        const relative = dir === '' ? file : `${dir}/${file}`;
-        const name = includes.join(undefined, `/${relative}`);
-        if (name === undefined) return NOWHERE;
-        return name.lastIndexOf('.') > name.lastIndexOf('/') ? name : name + extname;
-      },
-      dirname(name) {
-        const slash = name.lastIndexOf('/');
-        return slash === -1 ? '' : name.slice(0, slash);
-      },
-      contains: () => true,
-    };
+    const roots = ['', ...includes.partials];
     liquid = new Liquid({
       outputEscape: 'escape',
       ownPropertyOnly: true,
       ...given,
       root: [''],
-      partials: ['', ...includes.partials],
-      layouts: ['', ...includes.partials],
+      partials: roots,
+      layouts: roots,
       extname: extensions[0],
       relativeReference: true,
-      fs,
+      fs: fileSystemOf(includes, roots, extensions[0]),
       cache: includes.cache,
     });
     for (const name of Object.keys(filters)) liquid.registerFilter(name, filters[name]);
@@ -101,8 +145,19 @@ const createLiquidEngine = (options = {}) => {
     extensions,
     compile(source, context) {
       const liquid = instanceOf(context.includes);
-      const template = liquid.parse(source, context.name);
-      return async (scope) => String(await liquid.render(template, scope));
+      let template;
+      try {
+        template = liquid.parse(source, context.name);
+      } catch (error) {
+        throw withCauses(error);
+      }
+      return async (scope) => {
+        try {
+          return String(await liquid.render(template, scope));
+        } catch (error) {
+          throw withCauses(error);
+        }
+      };
     },
   };
 };

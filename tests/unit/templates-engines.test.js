@@ -27,6 +27,7 @@ const {
   createPugEngine,
   createReactEmailEngine,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
 } = require('../../src/templates/index.js');
@@ -470,11 +471,14 @@ test('Templates: Liquid escapes by default, its includes and layouts through the
   const missing = await failureOf(
     renderWith(engine, { 'a.liquid': '{% render "nope" %}' }, { template: 'a' }),
   );
-  assert.ok(missing instanceof TemplateRenderError || missing instanceof TemplateNotFoundError);
+  // Before: liquidjs's own ENOENT, a TemplateRenderError.
+  assert.ok(missing instanceof TemplateNotFoundError);
+  assert.deepStrictEqual([missing.template, missing.tried], ['nope', ['nope.liquid']]);
   const out = await failureOf(
     renderWith(engine, { 'a.liquid': '{% include "../../x" %}' }, { template: 'a' }),
   );
-  assert.ok(out instanceof Error);
+  assert.ok(out instanceof TemplateNotFoundError);
+  assert.deepStrictEqual(out.tried, []);
   // Own properties only: a prototype's are not read.
   const proto = Object.create({ secret: 's' });
   assert.strictEqual(
@@ -629,6 +633,35 @@ test('Templates: Eta includes and lays out through the loader, relative to the f
   assert.throws(() => createEtaEngine({}), /needs Eta/);
   assert.throws(() => createEtaEngine({ Eta, async: 'yes' }), /async must be a boolean/);
   assert.throws(() => createEtaEngine({ Eta, options: { views: '/' } }), /views/);
+});
+
+test('Templates: a loader that fails under an engine fails as a load, naming the template', async () => {
+  // Before: the loader's own error, without the template, and under
+  // Nunjucks and Liquid a TemplateRenderError, which a queue does not retry.
+  const outage = Object.assign(new Error('EMFILE: too many open files'), { code: 'EMFILE' });
+  const cases = [
+    [createHandlebarsEngine({ handlebars }), 'a.hbs', '{{> b}}', 'b.hbs'],
+    [createNunjucksEngine({ nunjucks }), 'a.njk', '{% include "b.njk" %}', 'b.njk'],
+    [createLiquidEngine({ Liquid }), 'a.liquid', '{% render "b" %}', 'b.liquid'],
+    [createEjsEngine({ ejs }), 'a.ejs', '<%- include("b") %>', 'b.ejs'],
+    [createEtaEngine({ Eta }), 'a.eta', '<%~ include("b") %>', 'b.eta'],
+    [createMustacheEngine({ mustache }), 'a.mustache', '{{> b}}', 'b.mustache'],
+    [createPugEngine({ pug }), 'a.pug', 'include b', 'b.pug'],
+  ];
+  for (const [engine, name, source, include] of cases) {
+    const read = (asked) => {
+      if (asked === include) throw outage;
+      return asked === name ? { name, source } : undefined;
+    };
+    const renderer = createTemplateRenderer({ engine, loader: { load: read, loadSync: read } });
+    const error = await failureOf(renderer.render({ template: 'a' }));
+    assert.ok(error instanceof TemplateLoadError, engine.name);
+    assert.deepStrictEqual(
+      [error.code, error.template, error.retryable, error.cause],
+      ['MAILER_TEMPLATE_LOAD', include, true, outage],
+      engine.name,
+    );
+  }
 });
 
 test('Templates: an engine that reads synchronously needs a loader with loadSync', async () => {
