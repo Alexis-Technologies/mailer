@@ -173,7 +173,8 @@ Some engines behave a little differently here than they do on their own:
 - **Mustache** fails on a partial that is not there, where it renders nothing,
   and reads `./x` against the partial it is written in, which Mustache does
   not tell. Its writer, and the cache of what it parsed, are per renderer and
-  bounded.
+  bounded: a template is parsed once, as it is compiled, and a partial once
+  per template read, where Mustache keeps what it parses by the whole source.
 - **MJML** renders after the engine inside it (`.mjml.hbs`), once the layout is
   applied, so the layout of an MJML template is MJML too. A static `.mjml` is
   rendered once. What MJML finds wrong under `validationLevel: 'soft'` goes to

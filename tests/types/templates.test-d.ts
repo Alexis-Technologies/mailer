@@ -44,7 +44,7 @@ expectType<Promise<string>>(juiced('<p>x</p>'));
 
 declare const ejs: { compile(source: string, options?: object): (data?: object) => string };
 declare const pug: { compile(source: string, options?: object): (locals?: object) => string };
-declare const mustache: { Writer: new () => object };
+declare const mustache: { Writer: new () => object; Context: new (view: object) => object };
 declare const nunjucks: {
   Environment: new (loaders: unknown, options?: object) => object;
   Template: new (

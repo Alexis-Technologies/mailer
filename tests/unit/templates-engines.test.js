@@ -1096,8 +1096,8 @@ test('Templates: every engine reads the same tree of includes by one rule', asyn
 
 test('Templates: what each engine keeps is bounded by the cache of the renderer', async () => {
   // Before: Handlebars kept every partial in one environment, Nunjucks and
-  // Eta every template they included, and Liquid 1024, whatever
-  // cache.maxEntries said.
+  // Eta every template they included, Liquid 1024, and Mustache 1000 parsed
+  // templates by their whole source, whatever cache.maxEntries said.
   const cache = { maxEntries: 2 };
   const includes = ['i1', 'i2', 'i3', 'i4'];
   // Handlebars: a new environment once one holds as many partials.
@@ -1167,6 +1167,24 @@ test('Templates: what each engine keeps is bounded by the cache of the renderer'
   assert.strictEqual(liquid.options.cache.limit, 2);
   await renderWith(liquidEngine, { 'a.liquid': 'x' }, { template: 'a' }, { cache: false });
   assert.strictEqual(liquid.options.cache, undefined);
+});
+
+test('Templates: Mustache parses a template once, and a partial once per template read', async (t) => {
+  // Before: every render parsed the template and its partials again through
+  // a cache keyed by their whole source.
+  const parse = t.mock.method(mustache.Writer.prototype, 'parse');
+  const renderer = createTemplateRenderer({
+    engine: createMustacheEngine({ mustache }),
+    loader: createMemoryLoader({ 'a.mustache': '{{n}}{{> b}}', 'b.mustache': '[{{n}}]' }),
+  });
+  for (let n = 0; n < 3; n++) {
+    assert.strictEqual(
+      (await renderer.render({ template: 'a', context: { n } })).html,
+      `${n}[${n}]`,
+    );
+  }
+  assert.strictEqual(parse.mock.callCount(), 2);
+  assert.throws(() => createMustacheEngine({ mustache: { Writer: class {} } }), /no Context/);
 });
 
 test('Templates: juice and css-inline inline the CSS and fetch nothing', async () => {

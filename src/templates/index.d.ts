@@ -670,8 +670,10 @@ export declare function createEtaEngine(options: EtaEngineOptions): TemplateEngi
 
 /** The members of `require('mustache')` the engine calls. */
 export interface MustacheModule {
-  /** A writer of its own, whose cache the engine bounds; mustache.render shares one for the process. */
+  /** A writer of its own, which keeps nothing; mustache.render shares one for the process, which keeps every source it parses. */
   readonly Writer: new () => any;
+  /** The context of a render, as the engine renders the tokens it parsed. */
+  readonly Context: new (view: object) => any;
 }
 /** The options of {@link createMustacheEngine}. */
 export interface MustacheEngineOptions {
