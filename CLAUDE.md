@@ -884,6 +884,11 @@ change. **This file wins** if they ever disagree.
 - `tests/unit/scripts.test.js` checks that every entry of the exports map has a budget in
   `scripts/size-budgets.json` and nothing else does, and runs `scripts/size.js --check` with
   budgets it always meets, budgets it never can and a missing one.
+- **Size budgets** (`scripts/size-budgets.json`, min+gzip KB, the root alone and each subpath on
+  top of it) are raised in the commit whose change needs the room, never in one of their own, by
+  the smallest half-KB step that passes, and that commit's message says what took it. A budget is
+  lowered when its entry falls a whole KB under it. The root is in the bundle of every subpath, so
+  it grows only for the contract they share; what one subpath needs stays in that subpath.
 - New behavior needs a test that fails without the change. Network transports are tested
   against local fake servers (`tests/helpers/smtp/mock-smtp-server.js` on `node:net`, servers on
   `node:http`) or a stubbed `fetch` (`t.mock.method(globalThis, 'fetch', …)`), never against a
