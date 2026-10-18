@@ -19,11 +19,14 @@ Nodemailer, emailjs or Upyo, made of two parts:
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
    of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
    of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
-   idempotency decorator whose store interface the outbox is to implement (`./idempotency`).
+   idempotency decorator (`./idempotency`), whose store the outbox of 1.2 implements.
    1.2 adds the queue (`./queue`, a driver-neutral contract, its worker and a memory queue;
    `./bullmq`, the BullMQ driver; `./mongodb`, the transactional outbox with its audit sink and
-   idempotency store), templates by name over nine engines passed in (`./templates`) and the
-   audit of the states of a message (`./audit`).
+   idempotency store), templates by name over nine engines passed in (`./templates`), the
+   audit of the states of a message (`./audit`) and the spans and metrics of the worker
+   (`instrumentHandler` of `./otel`). Jobs are signed (HMAC) and may be sealed (a codec), their
+   message dropped once done with; sources hold one contract (leases, redelivery, fencing, a
+   limit of runs that end unsettled), with tenants in turn and a pause per tenant.
 
 It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
 Node compatibility (see "Platform"; no browser entry).
@@ -52,6 +55,7 @@ pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailp
 pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
 pnpm test:bullmq                   # opt-in: tests/bullmq on BullMQ and Valkey (compose file there)
 pnpm test:mongodb                  # opt-in: tests/mongodb on a MongoDB replica set (compose file there)
+pnpm test:stores                   # both above, failing (not skipping) without MONGODB_URL and BULLMQ_REDIS_URL
 node --test tests/unit/mailer.test.js   # a single file
 node --test --test-name-pattern="Bundle" tests/unit/*.test.js   # filter by name
 pnpm run test:coverage             # c8 over src/, gated at 98 lines/statements, 90 branches, 100 functions
@@ -913,12 +917,14 @@ model of states and events. `tenantId` is in the context from the start.
   audit sink and idempotency store, and the memory queue.)
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
   (crypto-shredding), so the right to erasure does not fight an append-only log. 3–6 records per
-  message; optional hash chain for tamper evidence.
+  message; optional hash chain for tamper evidence. (Partly done in 1.2: `./audit` and the
+  MongoDB sink, events with no recipient; the crypto-shredding and the hash chain are next.)
 - **Idempotency:** a deterministic key (tenant + purpose + recipient + window) deduplicated in the
   outbox. At least once with deduplication, never a promise of exactly once. A provider without an
   idempotency key (SES) leads to `delivery_unknown` and reconciliation from events, not to a blind
-  retry. `./idempotency` (1.1) reserves keys in a store of `reserve`, `complete` and `release`,
-  which the outbox is to implement.
+  retry. `./idempotency` (1.1) reserves keys in a store of `reserve`, `complete` and `release`;
+  `createMongoIdempotencyStore` (1.2) is that store in MongoDB, and `redelivered:
+  'delivery_unknown'` of the worker stops a blind retry where no key is taken.
 - **Errors classified:** permanent (5xx, rejected address) are not retried; temporary ones are,
   with jitter and `Retry-After`, under an attempt limit.
 - **The correctness suite:** golden `.eml` files, DKIM checked by an independent verifier in CI,
@@ -939,8 +945,9 @@ store of buckets that processes share).
 
 **Phase 3, multi-tenant (P1–P2).** Provider credentials per tenant (bring your own SES), domains
 and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058, done in 1.1) and the split
-between transactional and bulk mail; scheduled sending as a queue delay (1.1 schedules through the
-providers that can); a `Renderer` interface with an optional React Email adapter (no template
+between transactional and bulk mail (tenants in turn and a pause per tenant in 1.2); scheduled
+sending as a queue delay (done in 1.2, `scheduledAt`; 1.1 schedules through the providers that
+can); a `Renderer` interface with an optional React Email adapter (no template
 engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
 
 **Decisions:**
@@ -1045,6 +1052,8 @@ separate entry with no `node:*`, and a platform test would enforce it as in prot
 - Built-ins with the `node:` prefix; relative requires always end in `.js`.
 - Self-descriptive code; comments explain *why*, not what.
 - Conventional Commits (`feat(scope):`, `fix:`, `docs:`, `chore:`, `ci:`, `test:`, `refactor!:`).
+  A commit per subpath and per fix: a feature that spans subpaths lands as a commit for each, so
+  that a review reads one at a time (the 1.2 commit of four subpaths, 88 files, was not).
 
 ## Skills
 
@@ -1098,8 +1107,10 @@ change. **This file wins** if they ever disagree.
   non-retryable `auth` failure) and `tests/bullmq/` (`pnpm test:bullmq`, serial;
   `docker compose -f tests/bullmq/docker-compose.yml up -d` and
   `BULLMQ_REDIS_URL=redis://localhost:6390`: duplicates, retries after `Retry-After`, priorities,
-  delays, a release on close and a Worker without the strategy, on BullMQ itself). The release
-  skill asks for them before a release.
+  delays, a release on close and a Worker without the strategy, on BullMQ itself).
+  `pnpm test:stores` runs `tests/mongodb` and `tests/bullmq` and fails without their variables,
+  rather than skipping: it is a step of every release (see "Release process"), as GitHub CI does
+  not run the stores. The release skill asks for all of them before a release.
 - **The template engines, BullMQ, ioredis and mongodb are devDependencies** for the tests of
   `./templates`, `./bullmq` and `./mongodb` (the real engines, a fake BullMQ in
   `tests/helpers/bullmq/`, a collection in memory in `tests/helpers/mongodb/`, and tsd against
@@ -1107,7 +1118,9 @@ change. **This file wins** if they ever disagree.
   serial; `docker compose -f tests/mongodb/docker-compose.yml up -d --wait` and
   `MONGODB_URL='mongodb://localhost:27027/?replicaSet=rs0'`) runs the outbox, the audit sink and
   the store on a replica set: transactions committed and aborted, workers of several processes,
-  leases, concurrent reserves of a key and the change stream.
+  leases, concurrent reserves of a key, the change stream, the plan of the next-due query
+  (`explain()`), and the contract of a source (`tests/helpers/queue/source-contract.js`), which
+  `pnpm test` also runs on the memory queue and a fake collection, whole and under fairness.
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
   written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to
@@ -1155,19 +1168,26 @@ published to npm, and lint/format do not cover it.
   examples in CommonJS on `@alexify/mailer/<subpath>`. `/transports/logger` is new (pino-like
   logger) and `/transports/otel` passes the providers in. The pages of 1.1 are new:
   `/messages/render`, `/guide/webhooks`, a page per provider and decorator, and Bun and Deno in
-  getting started. One sidebar (`guide` in `config.mts`) covers the guide, the messages, the
-  transports and the decorators.
+  getting started. Those of 1.2 are `/guide/queue`, `/guide/outbox`, `/guide/audit`,
+  `/messages/templates` and `/transports/bullmq` (a "Reliability" group). One sidebar (`guide`
+  in `config.mts`) covers the guide, the messages, the transports and the decorators.
 - When behavior changes, update README and the matching docs page together. Keep example outputs in
   the docs true to the code.
 
 ## Release process
 
-Manual, as in the sibling repositories. The `npm-publish` skill walks through it step by step:
+Manual, as in the sibling repositories: no workflow publishes, and GitHub CI is not changed for
+it. The `npm-publish` skill walks through it step by step:
 
 1. Bump `version` in `package.json` and in `src/version.js` (`tests/unit/version.test.js` fails
    while they differ).
 2. Turn `## [Unreleased]` in CHANGELOG.md into `## [X.Y.Z] - YYYY-MM-DD` and add its link
    reference.
-3. Commit, then tag `vX.Y.Z`.
-4. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`, which includes the size
+3. Run the gates no CI runs: `pnpm test:stores` on the compose files of `tests/mongodb` and
+   `tests/bullmq`; `pnpm test:bun` and `pnpm test:deno` where they are installed; the bench of the
+   outbox (`MONGODB_URL=… node bench/outbox.js`) when the outbox changed; and, as before,
+   `pnpm test:mailpit` and the `pnpm test:e2e` suites of the providers that changed.
+4. Commit, merge into `main` (a squash merge, as #2 and #3), then tag `vX.Y.Z` on the commit of
+   `main`, never on the feature branch.
+5. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`, which includes the size
    gate and the tarball check; `publishConfig.access` is public).

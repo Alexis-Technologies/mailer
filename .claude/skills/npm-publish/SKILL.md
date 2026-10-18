@@ -193,12 +193,28 @@ pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run tes
 
 Must exit 0. If it fails, fix and re-run.
 
+Then run the stores, which no CI runs and a release may not skip:
+
+```bash
+docker compose -f tests/mongodb/docker-compose.yml up -d --wait
+docker compose -f tests/bullmq/docker-compose.yml up -d --wait
+MONGODB_URL='mongodb://localhost:27027/?replicaSet=rs0' BULLMQ_REDIS_URL=redis://localhost:6390 pnpm test:stores
+```
+
+`test:stores` fails without either variable, rather than skipping. When the outbox changed, run
+its bench (`MONGODB_URL=… node bench/outbox.js`) and compare with the numbers in
+`docs/guide/outbox.md`. Run `pnpm test:bun` and `pnpm test:deno` where Bun and Deno are
+installed.
+
 Then ask the user whether to run the opt-in suites against the real services, which only they
 can: `pnpm test:e2e` with the sandbox credentials of the providers (each suite is skipped until
 its variables are set; `tests/e2e/providers.e2e.test.js` names those of the providers of 1.1),
 and `pnpm test:mailpit` against the local Mailpit. A release that changed a provider's mapping or
 its error handling should have run that provider's suite. Report which suites ran and which were
 skipped.
+
+The release is published by hand (`pnpm run release`), after the merge into `main` and the tag
+on the commit of `main`; no workflow publishes.
 
 ## Step 8: Summary & Next Steps
 
