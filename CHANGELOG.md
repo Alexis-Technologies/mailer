@@ -43,11 +43,17 @@ additive but the defaults listed below.
   transport that can send it; and a TLS certificate refused in the handshake is a non-retryable
   `configuration` failure at the first attempt, where SMTP reported it as `unknown` and the HTTP
   transports retried it and reported a retryable `network` failure (`deliveryUnknown` on Deno).
-- **The HTTP providers of 1.0 share one client:** Resend, SendGrid, Mailgun, Maileroo,
+- **The HTTP providers of 1.0 share one client:** SES, Resend, SendGrid, Mailgun, Maileroo,
   Lettermint, Plunk and Mailtrap request through the client of the providers of 1.1. Their errors
   (`SendGridApiError`, `MailtrapTimeoutError`…) keep their names, arguments and fields, and carry
   `provider`, `category` and `retryable` besides; an error answer whose body cannot be read keeps
   its status; and a message Mailgun cannot express is an `unsupported` failure, as elsewhere.
+- **`verify()` takes a 403 only where a key that may only send gets one:** SES, Mailgun and, of
+  1.1, SparkPost, MailerSend and Scaleway. A 403 of SendGrid or Resend fails `verify()`, where it
+  passed it.
+- **A logger that throws is told once:** the first failure of the logger of a transport or
+  decorator is a process warning (`MAILER_LOGGER_FAILED`) by the name and code of its error, not
+  every record with its text, which could name a recipient.
 - **On Deno, give the HTTP transports a `fetch` that keeps no idle connection**
   (`Deno.createHttpClient({ poolMaxIdlePerHost: 0 })`): Deno's own sends a request again when a
   reused connection closes before its answer. See
@@ -74,7 +80,8 @@ additive but the defaults listed below.
   host as written: no `localhost`, and no IP literal of a loopback, private, link-local,
   multicast, reserved or documentation range, NAT64 and 6to4 included, as written or as a name
   resolves), refuses a redirect from https to http, and bounds time and bytes; `fromPath` can be
-  held to a `root` by real path and to `maxBytes`, and reads the file it checked.
+  held to a `root` by real path and to `maxBytes`, and reads the file it checked;
+  `inlineDataUrls` refuses HTML longer than `maxLength` before it reads it.
 - **`./render`:** `renderContent(renderer, input)` for the content of `createMessage`,
   `createReactEmailRenderer({ render })` with the `render` of `@react-email/render` passed in, and
   `htmlToText`, linear in the length of its input.
@@ -105,8 +112,9 @@ additive but the defaults listed below.
   `probeTimeoutMs`.
 - **`./ratelimit`:** a token bucket per `key`, waiting first in, first out, or refusing with a
   retryable `rate-limit` receipt; an aborted send leaves the queue, and a cost over `burst` is
-  refused. At most `maxKeys` buckets are kept in the process, or a `store` of buckets that
-  processes share holds them (`take(key, cost, limits)`).
+  refused. At most `maxKeys` buckets are kept in the process, the full ones dropped first, or a
+  `store` of buckets that processes share holds them (`take(key, cost, limits)`); at most
+  `maxQueue` messages wait in a bucket.
 - **`./idempotency`:** a key reserved in a store before the send, so a repeat is answered with
   the first receipt, a send in flight as of unknown delivery, and the same key for another
   message refused. A reservation lasts `leaseMs` (10 minutes), so a key a crash left reserved is
@@ -116,10 +124,11 @@ additive but the defaults listed below.
 - **`./hooks`:** `beforeSend` may replace or refuse a message, `afterSend`, `onRetry` and
   `onError` hear each send, with a context made for each that carries its signal.
 - **A `logger` for `./breaker`, `./ratelimit`, `./idempotency` and `./tee`,** pino-like, with a
-  code for each event (`breaker.open`, `ratelimit.waiting`, `idempotency.in_flight`…).
-- **`./tee`:** mirrors each message to other transports, with one Message-ID, each with a
-  timeout of its own and not awaited by default, the primary's receipt the one returned;
-  disposal waits for the copies in flight.
+  code for each event (`breaker.open`, `breaker.refused`, `ratelimit.waiting`,
+  `ratelimit.waited`, `idempotency.in_flight`, `tee.mirror_failed`…).
+- **`./tee`:** mirrors each message to other transports once the primary has answered it, with
+  one Message-ID, each copy with a timeout of its own and not awaited by default, the primary's
+  receipt the one returned; disposal waits for the copies in flight.
 - **Delivery events and `./webhooks`:** the `DeliveryEvent` model at the root, one event per
   message and recipient, and a verifier per provider for SES, Resend, SendGrid, Mailgun,
   Postmark, MailerSend, Mailtrap, Brevo, Mailjet, SparkPost, Lettermint, Maileroo, SMTP2GO, Azure
@@ -130,12 +139,15 @@ additive but the defaults listed below.
   handled its events, so a delivery whose handler failed is taken again, and another delivery of
   it meanwhile is refused as `pending`. `replayStore` is required where a verifier keeps ids
   (`createMemoryReplayStore()` in one process, a shared store of `reserve`, `commit` and
-  `release`, or `null`), and a refusal carries the `status` to answer the provider with.
+  `release` under the token of each delivery, or `null`), and a refusal carries the `status` to
+  answer the provider with.
   `onVerify` hears each request taken or refused, and an event carries the `correlationId` of the
   message's metadata, given back by every provider but Azure, to find the events of a message of
   unknown delivery, and the `rfcMessageId` the provider reports.
 - **`./pool` `verifyAll()`:** how each transport did, `verified`, `failed` or `unverifiable`,
   where `verify()` passes when one does.
+- **Failures stand out in the metrics:** `mailer.email.messages` of `./otel` takes the category
+  and the code of a failure (`error.type`, `mailer.error.code`).
 - **A failure of unknown delivery stands out:** `./otel` sets `mailer.delivery_unknown` on its
   span and its message counter, and `./logger` writes `deliveryUnknown` in `email.failed`, for
   the messages to reconcile.
@@ -178,6 +190,10 @@ additive but the defaults listed below.
   could send (`validation`, `rejected`) stops it.
 - **A pooled SMTP connection was reused for any number of messages,** while servers limit the
   messages of one connection (`maxMessages`, above).
+- **A timeout over 2^31 - 1 ms fired at once:** `timeout: 3e9` timed out every request of an
+  HTTP provider, and an SMTP socket at once; such a timeout is now the longest a timer keeps, in
+  effect none.
+- **`verify()` of `./jmap` told `onRetry` of none of the reads it retried;** it tells it of each.
 
 ## [1.0.0] - 2026-10-17
 
