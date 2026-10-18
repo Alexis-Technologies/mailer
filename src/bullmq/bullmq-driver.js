@@ -5,7 +5,7 @@
 // 1, as 0 in BullMQ runs before every prioritized job.
 
 const { createLog } = require('../internal/log.js');
-const { checkPositiveInteger } = require('../internal/options.js');
+const { checkPositiveInteger, checkRetainData } = require('../internal/options.js');
 const { settledWithin } = require('../internal/settle.js');
 const {
   MAILER_BACKOFF_TYPE,
@@ -90,6 +90,7 @@ const createDriverConfig = (options) => {
     workerOptions: checkReserved(options.workerOptions, RESERVED_WORKER_OPTIONS, 'workerOptions'),
     priorities: checkPriorities(options.priorities),
     detectDuplicates,
+    retainData: checkRetainData(options.retainData),
   };
 };
 
@@ -134,7 +135,11 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
           ? queue.rateLimit(milliseconds)
           : holder.worker.rateLimit(milliseconds)
     : undefined;
-  const processor = createBullMQProcessor(handler, { rateLimit, signal: consumeOptions.signal });
+  const processor = createBullMQProcessor(handler, {
+    rateLimit,
+    signal: consumeOptions.signal,
+    retainData: config.retainData,
+  });
   const worker = new Worker(config.queueName, processor, {
     ...workerOptions,
     connection: config.connection,
@@ -187,7 +192,8 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
  * `connection`, `prefix`, `queueName` ('mail'); `jobOptions`, such as
  * `removeOnComplete`; `workerOptions`, such as `limiter` or
  * `lockDuration`; `priorities` (`{ high: 1, normal: 2, low: 3 }`);
- * `detectDuplicates` (true); `logger`.
+ * `detectDuplicates` (true); `retainData` ('failed'), the finished jobs whose
+ * data is kept; `logger`.
  * @returns The driver, with `queue` and `createProcessor(handler)`.
  * @throws {TypeError} If an option is invalid.
  */
@@ -230,7 +236,7 @@ const createBullMQDriver = (options = {}) => {
     consume: (handler, consumeOptions = {}) =>
       startWorker(config, queue, handler, consumeOptions, log),
     createProcessor: (handler, processorOptions) =>
-      createBullMQProcessor(handler, processorOptions),
+      createBullMQProcessor(handler, { retainData: config.retainData, ...processorOptions }),
     async close() {
       if (config.owned) await queue.close();
     },

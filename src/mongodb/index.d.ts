@@ -60,6 +60,8 @@ export interface MongoOutboxOptions extends PollingDriverOptions {
   readonly clockSkewToleranceMilliseconds?: number;
   /** The time a finished job is kept, and so the window of its duplicates. @default 604800 */
   readonly retainFinishedSeconds?: number;
+  /** The finished jobs whose data is kept: the others keep their version and hash. @default 'failed' */
+  readonly retainData?: 'all' | 'failed' | 'none';
   readonly logger?: Logger;
 }
 

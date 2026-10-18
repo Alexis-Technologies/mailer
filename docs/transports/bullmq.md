@@ -35,7 +35,9 @@ A duplicate is told by reading the job back (`detectDuplicates`, one read per
 enqueue; `'bulk'` for `enqueueMany` too). It holds while BullMQ keeps the
 job, so the retention is by time: one by count shrinks the window of
 duplicates as the queue gets busy. `deduplication` of BullMQ is not used, as
-it holds only while the first job is not finished.
+it holds only while the first job is not finished. A completed job keeps only
+`{ v, hash }` of its data (`job.updateData`, by `retainData: 'failed'`, the
+default; `'all'` or `'none'`), so its message does not wait a day in Redis.
 
 ## The workers it makes
 

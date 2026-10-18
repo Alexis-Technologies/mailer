@@ -64,7 +64,10 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   in the transaction) and `createMongoIdempotencyStore` (each step atomic, for
   `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a
   replica set. A lease is taken back `clockSkewToleranceMilliseconds` (5 s) after it ran out, so
-  that a worker whose clock is behind does not run a job beside its holder.
+  that a worker whose clock is behind does not run a job beside its holder. Every driver drops the
+  message of a job done with (`retainData`: `'failed'` keeps the failed ones, `'all'`, `'none'`),
+  keeping its version and hash, so a duplicate is still told and a reset link does not wait in the
+  store.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

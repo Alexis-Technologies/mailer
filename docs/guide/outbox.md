@@ -94,7 +94,10 @@ is only the fallback.
 
 A finished job is kept `retainFinishedSeconds` (a week), and while it is kept,
 an enqueue under its key is a duplicate: the retention is the window of
-deduplication. A key of the store goes when its time passes.
+deduplication. A key of the store goes when its time passes. A completed job
+keeps no `data`, only its hash (`retainData: 'failed'`, the default; `'all'`
+or `'none'`), so a reset link in it does not wait a week in the collection and
+its backups.
 
 ## A job as stored
 

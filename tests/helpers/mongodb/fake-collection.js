@@ -1,6 +1,6 @@
 // Not ported: a collection of MongoDB in memory for the tests of ./mongodb,
 // with what the stores call of it: filters of equality, `$lte` and `$or`;
-// `$set`, `$setOnInsert`, `$inc` and `$max`; an upsert that meets an id held
+// `$set`, `$setOnInsert`, `$unset`, `$inc` and `$max`; an upsert that meets an id held
 // fails as MongoDB does (E11000); sorts; and a change stream.
 
 const comparable = (value) => (value instanceof Date ? value.getTime() : value);
@@ -56,6 +56,9 @@ const apply = (document, update, inserting) => {
     for (const [field, value] of Object.entries(update.$setOnInsert ?? {})) {
       document[field] = clone(value);
     }
+  }
+  for (const field of Object.keys(update.$unset ?? {})) {
+    delete document[field];
   }
   for (const [field, value] of Object.entries(update.$inc ?? {})) {
     document[field] = (document[field] ?? 0) + value;

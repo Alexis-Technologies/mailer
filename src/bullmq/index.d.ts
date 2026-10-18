@@ -17,6 +17,7 @@ export interface BullMQJobLike {
   stalledCounter?: number;
   moveToDelayed?(timestamp: number, token?: string): Promise<unknown>;
   moveToWait?(token?: string): Promise<unknown>;
+  updateData?(data: any): Promise<unknown>;
 }
 
 /** The members of a BullMQ `Queue` the driver calls. */
@@ -124,6 +125,8 @@ export interface BullMQDriverOptions<Q extends BullMQQueueLike, W extends BullMQ
    * `'bulk'`, `enqueueMany` too. @default true
    */
   readonly detectDuplicates?: boolean | 'bulk';
+  /** The finished jobs whose data is kept: the others keep their version and hash. @default 'failed' */
+  readonly retainData?: 'all' | 'failed' | 'none';
   /** Hears the events of the workers: errors, jobs BullMQ failed itself, stalls. */
   readonly logger?: Logger;
 }
@@ -140,6 +143,8 @@ export interface BullMQProcessorOptions {
   /** The queue's rateLimit, for a retry of the whole queue; the worker needs its `limiter`. */
   readonly rateLimit?: (milliseconds: number) => Promise<unknown>;
   readonly signal?: AbortSignal;
+  /** The finished jobs whose data is kept, through `job.updateData`. @default 'failed' */
+  readonly retainData?: 'all' | 'failed' | 'none';
 }
 
 /** A consumer of a BullMQ driver: its worker. */

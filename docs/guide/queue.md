@@ -80,6 +80,11 @@ not the worker:
   same message;
 - a job is 256 KiB at most.
 
+Once a job is done with, the store drops its message (`retainData`, on the
+driver): `'failed'` by default keeps the data of the failed jobs only, for a
+retry by hand; `'all'` keeps every one, `'none'` none. The version and the hash
+of a job stay, so an enqueue again is still told a duplicate.
+
 A job is of version 1 (`v: 1`), and its fields are those of that version. A
 worker that meets a later version, or a field it does not know, gives the job
 back for a worker that reads it (`queue.unsupported_version`) instead of

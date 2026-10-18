@@ -80,6 +80,10 @@ const fakeJob = (extra = {}) => {
     moves,
     moveToDelayed: async (timestamp, token) => moves.push(['delayed', timestamp, token]),
     moveToWait: async (token) => moves.push(['wait', token]),
+    async updateData(data) {
+      moves.push(['data', data]);
+      this.data = data;
+    },
     ...extra,
   };
 };

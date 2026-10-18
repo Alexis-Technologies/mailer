@@ -8,7 +8,11 @@
 const { randomUUID } = require('node:crypto');
 const { Heap } = require('../internal/heap.js');
 const { createPollingDriver } = require('../internal/polling-driver.js');
-const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const {
+  checkOptionalFunction,
+  checkPositiveInteger,
+  checkRetainData,
+} = require('../internal/options.js');
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 
 // The data of a job as a store gives it back: a copy, never the object
@@ -226,6 +230,7 @@ class MemorySource {
     const entry = this.#holds(lease);
     if (entry === undefined) return false;
     entry.result = result;
+    if (this.#config.retainData !== 'all') entry.data = undefined;
     this.#finish(entry, 'completed');
     return true;
   }
@@ -245,6 +250,7 @@ class MemorySource {
     const entry = this.#holds(lease);
     if (entry === undefined) return false;
     entry.failure = failure;
+    if (this.#config.retainData === 'none') entry.data = undefined;
     this.#finish(entry, 'failed');
     return true;
   }
@@ -303,8 +309,9 @@ const viewOf = (entry, now) => {
     attempt: entry.attempt,
     maxAttempts: entry.maxAttempts,
     availableAt: entry.availableAt,
-    data: stored(entry.data),
   };
+  // Dropped once the job is done with, by `retainData`.
+  if (entry.data !== undefined) view.data = stored(entry.data);
   if (entry.failure !== undefined) view.failure = entry.failure;
   if (entry.result !== undefined) view.result = entry.result;
   return view;
@@ -315,7 +322,7 @@ const viewOf = (entry, now) => {
  *
  * @param options `now`, `sleep`, `leaseMilliseconds` (60000),
  * `pollIntervalMilliseconds` (1000), `maxJobs` (100000), `retainFinished`
- * (10000), `logger`.
+ * (10000), `retainData` ('failed'), `logger`.
  * @returns The driver, with `source`, `list()`, `get(id)`, `drain()` and
  * `wake()`.
  * @throws {TypeError} If an option is invalid.
@@ -325,6 +332,7 @@ const createMemoryQueue = (options = {}) => {
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
     maxJobs: checkPositiveInteger(options.maxJobs ?? 100_000, 'maxJobs'),
     retainFinished: checkPositiveInteger(options.retainFinished ?? 10_000, 'retainFinished'),
+    retainData: checkRetainData(options.retainData),
   };
   const source = new MemorySource(config);
   const driver = createPollingDriver(source, { ...options, now: config.now });

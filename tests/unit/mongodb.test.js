@@ -429,3 +429,27 @@ test('MongoDB: a lease is taken back only past the skew of the workers’ clocks
     /more than 3 times clockSkewToleranceMilliseconds/,
   );
 });
+
+test('MongoDB: a job done with keeps no data, unless told; its duplicates are still told', async () => {
+  const cases = [
+    [undefined, [false, true]],
+    ['all', [true, true]],
+    ['none', [false, false]],
+  ];
+  for (const [retainData, [completedKeeps, failedKeeps]] of cases) {
+    const { collection, source, outbox } = outboxOf({ extra: { retainData } });
+    await source.enqueue(requestOf('done'));
+    await source.enqueue(requestOf('refused'));
+    for (let index = 0; index < 2; index++) {
+      const { lease } = await source.reserve(1000);
+      if (lease.job.id === 'done') await source.ack(lease, { provider: 'p' });
+      else await source.fail(lease, { code: 'x', reason: 'y' });
+    }
+    assert.strictEqual('data' in collection.documents.get('done'), completedKeeps);
+    assert.strictEqual('data' in collection.documents.get('refused'), failedKeeps);
+    assert.strictEqual((await outbox.get('done')).data !== undefined, completedKeeps);
+    const again = await source.enqueue(requestOf('done'));
+    assert.deepStrictEqual([again.duplicate, typeof again.existingHash], [true, 'string']);
+  }
+  assert.throws(() => outboxOf({ extra: { retainData: 1 } }), /retainData must be/);
+});

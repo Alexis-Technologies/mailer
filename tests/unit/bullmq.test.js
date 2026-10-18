@@ -402,3 +402,47 @@ test('BullMQ: the driver checks its options', () => {
   assert.throws(() => driver.consume(async () => {}, { concurrency: 0 }), /concurrency/);
   assert.strictEqual(typeof driver.createProcessor(async () => ({ type: 'ack' })), 'function');
 });
+
+test('BullMQ: a job done with keeps its version and hash, not its message, unless told', async (t) => {
+  const warnings = [];
+  const listener = (warning) => warnings.push(warning.code);
+  process.on('warning', listener);
+  t.after(() => process.off('warning', listener));
+  const data = { v: 1, hash: 'h1', to: [{ address: 'ada@example.com' }] };
+  const run = async (outcome, options) => {
+    const job = fakeJob({ data: { ...data } });
+    let thrown;
+    const result = await createBullMQProcessor(async () => outcome, options)(job, 'tok').catch(
+      (error) => {
+        thrown = error;
+      },
+    );
+    return { job, result, thrown };
+  };
+  const acked = await run({ type: 'ack', result: { provider: 'p' } });
+  assert.deepStrictEqual(acked.result, { provider: 'p' });
+  assert.deepStrictEqual(acked.job.data, { v: 1, hash: 'h1' });
+  const kept = await run({ type: 'ack' }, { retainData: 'all' });
+  assert.deepStrictEqual(kept.job.data, data);
+  const failed = await run({ type: 'fail', code: 'x', reason: 'y' });
+  assert.strictEqual(failed.thrown.name, 'UnrecoverableError');
+  assert.deepStrictEqual(failed.job.data, data);
+  const none = await run({ type: 'fail', code: 'x', reason: 'y' }, { retainData: 'none' });
+  assert.deepStrictEqual(none.job.data, { v: 1, hash: 'h1' });
+  // A store that fails to drop it leaves the send acknowledged, and tells.
+  const job = fakeJob({
+    data: { ...data },
+    updateData: async () => {
+      throw new Error('READONLY');
+    },
+  });
+  assert.strictEqual(await createBullMQProcessor(async () => ({ type: 'ack' }))(job, 'tok'), null);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(warnings.includes('MAILER_QUEUE_RETAIN_FAILED'));
+  assert.throws(() => createBullMQProcessor(async () => ({}), { retainData: true }), /retainData/);
+  const bullmq = fakeBullMQ();
+  assert.throws(
+    () => createBullMQDriver({ bullmq: { Queue: bullmq.Queue }, retainData: 'x' }),
+    /retainData/,
+  );
+});

@@ -508,3 +508,29 @@ test('Queue: a run whose lease cannot be extended stops before the lease runs ou
   assert.ok(records.includes('queue.lease.extend_failed'));
   assert.ok(records.includes('queue.lease.lost'));
 });
+
+test('Queue: a job done with keeps no data, unless told; its duplicates are still told', async () => {
+  const cases = [
+    [undefined, [false, true]],
+    ['all', [true, true]],
+    ['none', [false, false]],
+  ];
+  for (const [retainData, [completedKeeps, failedKeeps]] of cases) {
+    const queue = createMemoryQueue({ retainData });
+    await queue.enqueue(requestOf('done'));
+    await queue.enqueue(requestOf('refused'));
+    for (let index = 0; index < 2; index++) {
+      const { lease } = await queue.source.reserve(1000);
+      if (lease.job.id === 'done') await queue.source.ack(lease, null);
+      else await queue.source.fail(lease, { code: 'x', reason: 'y' });
+    }
+    assert.strictEqual('data' in queue.get('done'), completedKeeps, `${retainData} done`);
+    assert.strictEqual('data' in queue.get('refused'), failedKeeps, `${retainData} refused`);
+    assert.deepStrictEqual(await queue.enqueue(requestOf('done')), {
+      id: 'done',
+      duplicate: true,
+      existingHash: 'h-done',
+    });
+  }
+  assert.throws(() => createMemoryQueue({ retainData: 'some' }), /retainData must be/);
+});

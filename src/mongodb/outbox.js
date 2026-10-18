@@ -13,6 +13,7 @@ const {
   checkNonNegativeInteger,
   checkOptionalFunction,
   checkPositiveInteger,
+  checkRetainData,
 } = require('../internal/options.js');
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 const { checkCollection, documentOf, sessionOf } = require('./collection.js');
@@ -81,11 +82,14 @@ class MongoOutboxSource {
     if (config.changeStream) this.subscribe = (listener) => subscribe(collection, listener, config);
   }
 
-  async #settle(lease, set, inc) {
+  async #settle(lease, set, inc, dropData = false) {
     const update = {
       $set: { ...set, token: null, leaseUntil: null, updatedAt: new Date(this.#config.now()) },
     };
     if (inc !== undefined) update.$inc = inc;
+    // The message is not kept once it is done with: its addresses, context
+    // and a reset link among it. The hash stays, by which a duplicate is told.
+    if (dropData) update.$unset = { data: '' };
     const result = await this.#collection.updateOne(leased(lease), update);
     // false: the lease was lost, and the job is another worker's.
     return (result?.matchedCount ?? 0) > 0;
@@ -176,7 +180,8 @@ class MongoOutboxSource {
 
   ack(lease, result) {
     const finishedAt = new Date(this.#config.now());
-    return this.#settle(lease, { state: 'completed', result: result ?? null, finishedAt });
+    const set = { state: 'completed', result: result ?? null, finishedAt };
+    return this.#settle(lease, set, undefined, this.#config.retainData !== 'all');
   }
 
   retry(lease, availableAt, failure) {
@@ -185,7 +190,8 @@ class MongoOutboxSource {
 
   fail(lease, failure) {
     const finishedAt = new Date(this.#config.now());
-    return this.#settle(lease, { state: 'failed', failure, finishedAt });
+    const set = { state: 'failed', failure, finishedAt };
+    return this.#settle(lease, set, undefined, this.#config.retainData === 'none');
   }
 
   release(lease, availableAt) {
@@ -223,6 +229,7 @@ const subscribe = (collection, listener, config) => {
  *
  * @param options `collection`, `db.collection('mail_outbox')`;
  * `changeStream` (false), to wake the workers on a change (a replica set);
+ * `retainData` ('failed'), the finished jobs whose data is kept;
  * `retainFinishedSeconds` (7 days), the time a finished job is kept, and so
  * the window of its duplicates; `clockSkewToleranceMilliseconds` (5000), how
  * far the clocks of the workers may be apart; `now`, `logger`, and the
@@ -249,6 +256,7 @@ const createMongoOutbox = (options = {}) => {
   }
   const config = {
     now: checkOptionalFunction(options.now, 'now') ?? Date.now,
+    retainData: checkRetainData(options.retainData),
     clockSkewToleranceMilliseconds,
     changeStream,
     retainFinishedSeconds: checkPositiveInteger(

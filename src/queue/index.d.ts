@@ -461,7 +461,8 @@ export interface MemoryQueueJob {
   readonly attempt: number;
   readonly maxAttempts: number;
   readonly availableAt: number;
-  readonly data: JsonObject;
+  /** Absent once the job is done with, by `retainData`. */
+  readonly data?: JsonObject;
   readonly failure?: { readonly code: string; readonly reason: string };
   readonly result?: JsonObject;
 }
@@ -472,7 +473,16 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
   readonly maxJobs?: number;
   /** The jobs finished it keeps, and so the window of its duplicates. @default 10000 */
   readonly retainFinished?: number;
+  /** See {@link MailQueueRetainData}. @default 'failed' */
+  readonly retainData?: MailQueueRetainData;
 }
+
+/**
+ * The finished jobs whose data, the message with its addresses and context,
+ * a store keeps: `'failed'` those that failed, for a retry by hand; `'all'`;
+ * or `'none'`. A job's version and hash stay, by which a duplicate is told.
+ */
+export type MailQueueRetainData = 'all' | 'failed' | 'none';
 
 /** The queue in memory. */
 export interface MemoryQueue extends QueueDriver {
