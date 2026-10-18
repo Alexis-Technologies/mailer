@@ -28,6 +28,7 @@ import {
   type TemplateInputOf,
   type TemplateOutput,
   type TemplateRenderer,
+  type TemplateRenderPhase,
 } from '../../src/templates/index.js';
 
 // The engines of the real packages, as typed, fit the structural modules.
@@ -129,6 +130,9 @@ expectType<false>(missing.retryable);
 expectType<readonly string[]>(missing.tried);
 const broken = new TemplateRenderError('welcome', 'compile', 'x', { engine: 'handlebars' });
 expectType<'MAILER_TEMPLATE_RENDER'>(broken.code);
+expectType<string | undefined>(broken.requested);
+expectType<TemplateRenderPhase | undefined>(missing.phase);
+expectType<string | undefined>(missing.locale);
 const failed = new TemplateLoadError('welcome.hbs', { from: 'layout', cause: new Error('EMFILE') });
 expectType<'MAILER_TEMPLATE_LOAD'>(failed.code);
 expectType<true | undefined>(failed.retryable);

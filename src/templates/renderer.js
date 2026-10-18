@@ -10,7 +10,13 @@ const { decodeEntities } = require('../render/entities.js');
 const { messageOf } = require('../internal/decorator.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { createCache, memoize } = require('./cache.js');
-const { TemplateNotFoundError, TemplateRenderError, templateErrorOf } = require('./errors.js');
+const {
+  forRender,
+  inPhase,
+  TemplateNotFoundError,
+  TemplateRenderError,
+  templateErrorOf,
+} = require('./errors.js');
 const { parseFrontMatter } = require('./front-matter.js');
 const { createIncludes, withBounds } = require('./includes.js');
 const { checkTemplateName } = require('./loader.js');
@@ -170,11 +176,11 @@ const checkInput = (input) => {
 };
 
 const wrapError = (error, template, phase, engine) => {
-  if (error instanceof TemplateRenderError) return error;
+  if (error instanceof TemplateRenderError) return inPhase(error, phase, engine?.name);
   // An engine may wrap what its include threw: a missing include stays one,
   // and a loader's failure stays the loader's, which may pass on another try.
   const found = templateErrorOf(error);
-  if (found !== undefined) return found;
+  if (found !== undefined) return inPhase(found, phase, engine?.name);
   return new TemplateRenderError(template, phase, messageOf(error), {
     cause: error,
     engine: engine?.name,
@@ -242,7 +248,11 @@ const createTemplateRenderer = (options = {}) => {
       // Without a cache, each render reads and compiles anew, includes too.
       const current = config.cache ? state : { ...state, files: makeIncludes() };
       const bounds = { includes: 0, maxIncludes: config.maxIncludes };
-      return renderTemplate(current, checked, input, bounds);
+      try {
+        return await renderTemplate(current, checked, input, bounds);
+      } catch (error) {
+        throw forRender(error, checked.template, checked.locale);
+      }
     },
     clear() {
       // Engines key what they keep by the includes, so they make it anew too.
@@ -307,7 +317,7 @@ const resolveTemplate = async (state, template, locale) => {
       };
     }
   }
-  throw new TemplateNotFoundError(template, tried);
+  throw new TemplateNotFoundError(template, tried, { phase: 'resolve' });
 };
 
 const resolvedFor = (state, template, locale) =>
@@ -397,15 +407,23 @@ const applyLayout = async (state, entry, html, scope, locale, bounds) => {
   try {
     resolution = await resolvedFor(state, name, locale);
   } catch (error) {
-    if (!(error instanceof TemplateNotFoundError)) throw error;
-    throw new TemplateNotFoundError(name, error.tried, { from: entry.name, cause: error });
+    if (!(error instanceof TemplateNotFoundError)) throw inPhase(error, 'layout');
+    throw new TemplateNotFoundError(name, error.tried, {
+      from: entry.name,
+      cause: error,
+      phase: 'layout',
+    });
   }
   if (resolution.html === undefined) {
-    throw new TemplateRenderError(entry.name, 'layout', `The layout ${name} has no HTML.`);
+    throw new TemplateRenderError(entry.name, 'layout', `The layout ${name} has no HTML.`, {
+      engine: entry.engine.name,
+    });
   }
   const layout = await compiledFor(state, resolution.html, 'html', bounds);
   if (layout.fields?.layout !== undefined) {
-    throw new TemplateRenderError(layout.name, 'layout', 'A layout has no layout of its own.');
+    throw new TemplateRenderError(layout.name, 'layout', 'A layout has no layout of its own.', {
+      engine: layout.engine.name,
+    });
   }
   const wrapped = await renderString(
     state,
@@ -420,7 +438,12 @@ const applyLayout = async (state, entry, html, scope, locale, bounds) => {
 
 const renderTemplate = async (state, checked, input, bounds) => {
   const { config } = state;
-  const resolution = await resolvedFor(state, checked.template, checked.locale);
+  let resolution;
+  try {
+    resolution = await resolvedFor(state, checked.template, checked.locale);
+  } catch (error) {
+    throw inPhase(error, 'resolve');
+  }
   const scope = { ...(await globalsOf(config, input)), ...checked.context };
   const main = await compiledFor(
     state,
@@ -479,13 +502,16 @@ const outputOf = (config, main, resolution, parts) => {
         main.name,
         'render',
         `The template gave its ${key} as no string.`,
+        { engine: main.engine.name },
       );
     }
     checkOutput(config, 'render', main.name, main.engine, parts[key]);
   }
   const text = parts.text ?? (config.autoText && html !== undefined ? htmlToText(html) : undefined);
   if (html === undefined && text === undefined) {
-    throw new TemplateRenderError(main.name, 'render', 'The template gave neither html nor text.');
+    throw new TemplateRenderError(main.name, 'render', 'The template gave neither html nor text.', {
+      engine: main.engine.name,
+    });
   }
   const output = { template: main.name };
   if (html !== undefined) output.html = html;

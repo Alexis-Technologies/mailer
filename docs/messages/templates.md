@@ -266,6 +266,12 @@ Handlebars); a partial that names itself is no deeper for it. The file loader re
 | `TemplateLoadError` (`MAILER_TEMPLATE_LOAD`) | the loader failed (`EMFILE`, a database timeout); `template` names what it read, `cause` is its error | `true`; unset for a bug of the loader (`TypeError`…) |
 | `TypeError`, `RangeError` | a name that is not one, a bad locale or context | — |
 
+Each of the three tells what a worker needs without reading its message:
+`phase`, the step that failed (`resolve`, `front-matter`, `compile`, `render`,
+`layout`, `finish`, `inline-css`); `engine`; `template`, the template that
+failed as its loader names it (`welcome.uk.hbs`, or a partial of it); and
+`requested` and `locale`, what the render was asked for.
+
 The queue fails a job at once on the first two and the last, and retries an
 outage of the loader. An engine that wraps what a loader threw in its own error
 (Nunjucks, Liquid) does not hide it: the error of ./templates is found among its

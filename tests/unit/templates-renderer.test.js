@@ -336,6 +336,100 @@ test('Templates: a template that is missing at first is found once it is there',
   assert.strictEqual((await renderer.render({ template: 'late' })).html, '<p>late</p>');
 });
 
+test('Templates: every failure tells its step, engine, template and the input it was for', async () => {
+  // Before: the template and the phase alone, and no engine for a layout or
+  // an output that was no string, so a worker had to read the message.
+  const templates = {
+    'welcome.uk.tpl': '<p>{{x}}</p>',
+    'include.tpl': '{{> missing}}',
+    'layout.tpl': '---\nlayout: other\n---\n{{{body}}}',
+    'other.tpl': '{{{body}}}',
+    'framed.tpl': '---\nlayout: layout\n---\n<p/>',
+    'lost.tpl': '---\nlayout: gone\n---\n<p/>',
+  };
+  const { renderer } = rendererOf(templates);
+  const fields = (error) => ({
+    name: error.name,
+    phase: error.phase,
+    engine: error.engine,
+    template: error.template,
+    requested: error.requested,
+    locale: error.locale,
+  });
+  const failure = (input) => renderer.render(input).catch(fields);
+  assert.deepStrictEqual(await failure({ template: 'nope', locale: 'uk' }), {
+    name: 'TemplateNotFoundError',
+    phase: 'resolve',
+    engine: undefined,
+    template: 'nope',
+    requested: 'nope',
+    locale: 'uk',
+  });
+  assert.deepStrictEqual(await failure({ template: 'include' }), {
+    name: 'TemplateNotFoundError',
+    phase: 'compile',
+    engine: 'fake',
+    template: 'missing',
+    requested: 'include',
+    locale: undefined,
+  });
+  assert.deepStrictEqual(
+    await failure({ template: 'welcome', locale: 'uk-UA', context: { explode: true } }),
+    {
+      name: 'TemplateRenderError',
+      phase: 'render',
+      engine: 'fake',
+      template: 'welcome.uk.tpl',
+      requested: 'welcome',
+      locale: 'uk-UA',
+    },
+  );
+  assert.deepStrictEqual(await failure({ template: 'framed' }), {
+    name: 'TemplateRenderError',
+    phase: 'layout',
+    engine: 'fake',
+    template: 'layout.tpl',
+    requested: 'framed',
+    locale: undefined,
+  });
+  assert.deepStrictEqual((await failure({ template: 'lost' })).phase, 'layout');
+  // Renders that wait for one compile each get their own input.
+  const { renderer: shared } = rendererOf(
+    { 'a.tpl': '{{!syntax' },
+    { engine: fakeEngine({ async: true }) },
+  );
+  const [first, second] = await Promise.all([
+    shared.render({ template: 'a', locale: 'uk' }).catch((e) => e),
+    shared.render({ template: 'a.tpl', locale: 'de' }).catch((e) => e),
+  ]);
+  assert.deepStrictEqual(
+    [first.requested, first.locale, second.requested, second.locale],
+    ['a', 'uk', 'a.tpl', 'de'],
+  );
+  assert.ok(first.cause instanceof SyntaxError);
+  assert.match(first.stack, /SyntaxError|TemplateRenderError/);
+  const load = await createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: {
+      load: () => {
+        throw new Error('down');
+      },
+    },
+  })
+    .render({ template: 'x' })
+    .catch(fields);
+  assert.deepStrictEqual(
+    [load.name, load.phase, load.requested],
+    ['TemplateLoadError', 'resolve', 'x'],
+  );
+  // The parts of an engine that are no strings name it too.
+  const parts = createTemplateRenderer({
+    engine: { name: 'parts', extensions: [], compile: () => () => ({}) },
+    loader: createMemoryLoader({ x: '' }),
+  });
+  assert.strictEqual((await parts.render({ template: 'x' }).catch((e) => e)).engine, 'parts');
+});
+
 test('Templates: failures are classified by phase, the engine error their cause', async () => {
   const { renderer } = rendererOf({
     'syntax.tpl': '<p>{{!syntax</p>',
@@ -418,7 +512,9 @@ test('Templates: a loader that fails fails as a load of its template, which may 
       },
     },
   });
-  assert.strictEqual(await own.render({ template: 'x' }).catch((e) => e), refusal);
+  const refused = await own.render({ template: 'x' }).catch((e) => e);
+  assert.ok(refused instanceof TemplateNotFoundError);
+  assert.deepStrictEqual([refused.template, refused.message], ['x', refusal.message]);
 });
 
 test('Templates: finish makes the HTML of the outermost template, then the CSS is inlined', async () => {

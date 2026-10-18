@@ -2,7 +2,7 @@
 // template: through the loader of its renderer, so that they are checked and
 // kept as its templates are, and never read from disk by the engine itself.
 
-const { TemplateLoadError, TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
+const { isTemplateError, TemplateLoadError, TemplateNotFoundError } = require('./errors.js');
 const { checkTemplateName, isTemplateName, notTemplateName } = require('./loader.js');
 const { createCache, memoize } = require('./cache.js');
 
@@ -85,11 +85,7 @@ const READ = 'The name of a template read';
 // as a TemplateLoadError, which an engine that wraps it does not make a
 // failure of the template, as it may pass on another attempt.
 const loadFailure = (name, error) =>
-  error instanceof TemplateNotFoundError ||
-  error instanceof TemplateRenderError ||
-  error instanceof TemplateLoadError
-    ? error
-    : new TemplateLoadError(name, { cause: error });
+  isTemplateError(error) ? error : new TemplateLoadError(name, { cause: error });
 
 // The bounds of the render whose engine runs now, synchronously: set around
 // each call of an engine, so that the includes it looks up before it returns

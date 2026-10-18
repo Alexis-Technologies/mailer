@@ -290,25 +290,59 @@ export declare function createTemplateRenderer<
   TSource = string,
 >(options: TemplateRendererOptions<TSource>): TemplateRenderer<TInput>;
 
+/** Where a render failed: looking up its template, or one of its steps. */
+export type TemplateRenderPhase =
+  | 'resolve'
+  | 'front-matter'
+  | 'compile'
+  | 'render'
+  | 'layout'
+  | 'finish'
+  | 'inline-css';
+
+/**
+ * What an error of ./templates tells of a render, for a worker to read
+ * without its message. A render sets `requested` and `locale`; the step and
+ * the engine are set where they are known.
+ */
+export interface TemplateErrorFields {
+  /** The step of the render that failed. */
+  readonly phase?: TemplateRenderPhase;
+  /** The name of the engine of the template that failed. */
+  readonly engine?: string;
+  /** The template the render was asked for: `welcome`, where `template` may be `welcome.uk.hbs` or a partial. */
+  readonly requested?: string;
+  /** The locale the render was asked for, canonical (`uk-UA`); none when it was asked for none. */
+  readonly locale?: string;
+}
+
 /** The options of the errors of ./templates. */
-export interface TemplateNotFoundErrorOptions extends ErrorOptions {
+export interface TemplateErrorOptions extends ErrorOptions, TemplateErrorFields {}
+
+/** The options of {@link TemplateNotFoundError}. */
+export interface TemplateNotFoundErrorOptions extends TemplateErrorOptions {
   /** The template that included it, for an include, a partial or a layout. */
   readonly from?: string;
 }
 
 /** No template, include, partial or layout by that name. Not retryable. */
-export declare class TemplateNotFoundError extends Error {
+export declare class TemplateNotFoundError extends Error implements TemplateErrorFields {
   readonly code: 'MAILER_TEMPLATE_NOT_FOUND';
   readonly retryable: false;
+  /** The name looked up: the template asked for, or an include, partial or layout of it. */
   readonly template: string;
   readonly from?: string;
   /** The names looked up, in order. */
   readonly tried: readonly string[];
+  readonly phase?: TemplateRenderPhase;
+  readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
   constructor(template: string, tried: readonly string[], options?: TemplateNotFoundErrorOptions);
 }
 
 /** The options of {@link TemplateLoadError}. */
-export interface TemplateLoadErrorOptions extends ErrorOptions {
+export interface TemplateLoadErrorOptions extends TemplateErrorOptions {
   /** The template that included it, for an include, a partial or a layout. */
   readonly from?: string;
 }
@@ -320,27 +354,24 @@ export interface TemplateLoadErrorOptions extends ErrorOptions {
  * (`TypeError`, `RangeError`…) or says `retryable: false`: then `retryable`
  * is unset, for a queue to classify by the cause.
  */
-export declare class TemplateLoadError extends Error {
+export declare class TemplateLoadError extends Error implements TemplateErrorFields {
   readonly code: 'MAILER_TEMPLATE_LOAD';
   readonly retryable?: true;
   /** The name the loader was asked for. */
   readonly template: string;
   readonly from?: string;
+  readonly phase?: TemplateRenderPhase;
+  readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
   constructor(template: string, options?: TemplateLoadErrorOptions);
 }
-
-/** Where a template failed. */
-export type TemplateRenderPhase =
-  | 'front-matter'
-  | 'compile'
-  | 'render'
-  | 'layout'
-  | 'finish'
-  | 'inline-css';
 
 /** The options of {@link TemplateRenderError}. */
 export interface TemplateRenderErrorOptions extends ErrorOptions {
   readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
 }
 
 /**
@@ -348,12 +379,15 @@ export interface TemplateRenderErrorOptions extends ErrorOptions {
  * helper that threw, MJML that does not validate. The engine's error is its
  * cause. Not retryable: the same input fails again.
  */
-export declare class TemplateRenderError extends Error {
+export declare class TemplateRenderError extends Error implements TemplateErrorFields {
   readonly code: 'MAILER_TEMPLATE_RENDER';
   readonly retryable: false;
+  /** The template that failed, as its loader names it: `welcome.uk.hbs`, a layout, a partial. */
   readonly template: string;
   readonly phase: TemplateRenderPhase;
   readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
   constructor(
     template: string,
     phase: TemplateRenderPhase,
