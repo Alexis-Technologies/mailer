@@ -119,6 +119,7 @@ export interface MongoAuditSinkOptions {
 /** An audit sink in a collection. */
 export interface MongoAuditSink extends AuditSink {
   append(event: AuditEvent, context?: { readonly transaction?: unknown }): Promise<void>;
+  has(id: string): Promise<boolean>;
   eventsOf(correlationId: string): Promise<readonly AuditEvent[]>;
   stateOf(correlationId: string): Promise<MessageState | undefined>;
   /** Makes the indexes of the events: by correlation id and time, by job. */

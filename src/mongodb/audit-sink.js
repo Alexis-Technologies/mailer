@@ -21,13 +21,14 @@ const eventOfDocument = (document) => {
  * Makes an audit sink in a collection.
  *
  * @param options `collection`, `db.collection('mail_audit')`.
- * @returns The sink, with `eventsOf(correlationId)`,
+ * @returns The sink, with `has(id)`, `eventsOf(correlationId)`,
  * `stateOf(correlationId)` and `ensureIndexes()`.
  * @throws {TypeError} If it is given no collection.
  */
 const createMongoAuditSink = (options = {}) => {
   const collection = checkCollection(options.collection, 'createMongoAuditSink', [
     'updateOne',
+    'findOne',
     'find',
     'createIndex',
   ]);
@@ -42,6 +43,10 @@ const createMongoAuditSink = (options = {}) => {
     return events;
   };
   return {
+    async has(id) {
+      const found = await collection.findOne({ _id: id }, { projection: { _id: 1 } });
+      return found !== null && found !== undefined;
+    },
     async append(event, context) {
       if (typeof event?.id !== 'string') throw new TypeError('An audit event has an id.');
       await collection.updateOne(

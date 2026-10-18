@@ -479,3 +479,22 @@ test('MongoDB: a completed job goes after the window of duplicates, a failed one
     defaults.now() + 86_400_000,
   );
 });
+
+test('MongoDB: the audit sink tells whether it holds an event', async () => {
+  const collection = fakeCollection();
+  const sink = createMongoAuditSink({ collection });
+  await sink.append({
+    id: 'e1',
+    state: 'submitted',
+    at: '2026-10-18T09:00:00.000Z',
+    source: 'worker',
+    correlationId: 'c1',
+    attempt: 1,
+  });
+  assert.deepStrictEqual([await sink.has('e1'), await sink.has('e2')], [true, false]);
+  assert.deepStrictEqual(collection.calls.at(-1), [
+    'findOne',
+    { _id: 'e2' },
+    { projection: { _id: 1 } },
+  ]);
+});

@@ -41,7 +41,10 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   lease runs out, not after another worker took the job. A source counts the runs of a job that end unsettled
   (`redeliveries`, never counted down, BullMQ's `stalledCounter`), and the worker gives up a job
   past `maxRedeliveries` (3) as `delivery_unknown`, so a job that kills or blocks its worker does
-  not take every worker down in turn for ever. The fields of a job of version 1 are fixed:
+  not take every worker down in turn for ever. `redelivered: 'delivery_unknown'` makes a run again
+  of an attempt whose run before died `delivery_unknown` rather than a second send, unless the
+  audit sink tells (`has`, new on the memory, MongoDB and combined sinks) that it died before
+  its submit. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`, given back with its attempts not spent, for a week or until it
   expires) rather than fail its hash during a rolling deploy.

@@ -564,3 +564,33 @@ test('Queue: a job whose runs keep ending unsettled is given up, unsent', async 
     assert.throws(() => handlerOf({ maxRedeliveries }), /maxRedeliveries must be a whole number/);
   }
 });
+
+test('Queue: under redelivered: delivery_unknown, a run again after a submit is not sent', async () => {
+  const { toUuid } = require('../../src/internal/uuid.js');
+  const job = jobOf({}, { redelivered: true });
+  const submittedId = toUuid(`${job.id}\u00001\u0000submitted`);
+  // The run before died after it told the sink it submitted.
+  const audit = createMemoryAuditSink();
+  audit.append({ id: submittedId, state: 'submitted', correlationId: 'c', attempt: 1 });
+  const { handler, transport } = handlerOf({ audit, redelivered: 'delivery_unknown' });
+  const unknown = await run(handler, job);
+  assert.deepStrictEqual([unknown.type, unknown.code], ['fail', 'queue.redelivered']);
+  assert.strictEqual(audit.events.at(-1).state, 'delivery_unknown');
+  assert.strictEqual(transport.calls.length, 0);
+  // One that died before its submit is sent.
+  const { handler: fresh, transport: sending } = handlerOf({ redelivered: 'delivery_unknown' });
+  assert.strictEqual((await run(fresh, job)).type, 'ack');
+  assert.strictEqual(sending.calls.length, 1);
+  // A sink that cannot tell, or none, sends nothing again.
+  const blind = { append: () => {} };
+  const { handler: unsure } = handlerOf({ audit: blind, redelivered: 'delivery_unknown' });
+  assert.strictEqual((await run(unsure, job)).code, 'queue.redelivered');
+  const failing = { append: () => {}, has: () => Promise.reject(new Error('down')) };
+  const { handler: down } = handlerOf({ audit: failing, redelivered: 'delivery_unknown' });
+  assert.strictEqual((await run(down, job)).code, 'queue.redelivered');
+  // By default a run again is sent, for IdempotencyTransport to dedupe.
+  const { handler: plain, transport: again } = handlerOf({ audit });
+  assert.strictEqual((await run(plain, job)).type, 'ack');
+  assert.strictEqual(again.calls.length, 1);
+  assert.throws(() => handlerOf({ redelivered: 'never' }), /redelivered must be/);
+});

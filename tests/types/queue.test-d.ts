@@ -155,7 +155,8 @@ prepareMailJob(
 expectError(createMailQueue({ driver, idSecret: 42 }));
 const codec = { encode: (text: string) => text, decode: async (text: string) => text };
 createMailQueue({ driver, codec });
-createMailJobHandler({ transport, codec, maxRedeliveries: 0 });
+createMailJobHandler({ transport, codec, maxRedeliveries: 0, redelivered: 'delivery_unknown' });
+expectError(createMailJobHandler({ transport, redelivered: 'never' }));
 expectError(createMailQueue({ driver, codec: { encode: (text: string) => text } }));
 createMailJobHandler({ transport, signingKeys: keys });
 expectError(createMailJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));

@@ -6,6 +6,7 @@ import type { AuditEvent, AuditSink, DeliveryEvent, Logger, MessageState } from 
 /** An audit sink in memory, with what it holds. */
 export interface MemoryAuditSink extends AuditSink {
   append(event: AuditEvent): void;
+  has(id: string): boolean;
   /** Its events, in the order they came, one per id. */
   readonly events: readonly AuditEvent[];
   /** The events of one message. */

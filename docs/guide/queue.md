@@ -169,6 +169,13 @@ attempt again is of unknown delivery (`delivery_unknown`), not a second send.
 The rendering must then be the same for the same context: no `Date.now()` in a
 template, or an attempt again is refused as another message.
 
+With a transport that takes no idempotency key (SES, SMTP) and no
+`IdempotencyTransport`, give the worker `redelivered: 'delivery_unknown'`: a
+run again of an attempt whose run before died is then of unknown delivery
+(`queue.redelivered`), not a second send, unless the audit sink can tell
+(`has(id)`, as the memory and MongoDB sinks can) that the run before died
+before it submitted the message.
+
 The id of a job is a hash of its key, and it goes where addresses do not: into
 the audit, the logs, the provider's idempotency key and the Message-ID. A key
 is an id of what the message tells of (`reset-password:${resetRequest.id}`),

@@ -73,6 +73,10 @@ const createHandlerConfig = (options = {}) => {
   if (options.auditStrict !== undefined && typeof options.auditStrict !== 'boolean') {
     throw new TypeError('auditStrict must be a boolean.');
   }
+  const redelivered = options.redelivered ?? 'send';
+  if (redelivered !== 'send' && redelivered !== 'delivery_unknown') {
+    throw new TypeError("redelivered must be 'send' or 'delivery_unknown'.");
+  }
   // Checked now, so that a bad key fails the worker, not each job.
   keyringOf(options.signingKeys);
   return {
@@ -91,6 +95,7 @@ const createHandlerConfig = (options = {}) => {
       'operatorDelayMilliseconds',
     ),
     rateLimitScope,
+    redelivered,
     maxRedeliveries: checkNonNegativeInteger(
       options.maxRedeliveries ?? DEFAULT_MAX_REDELIVERIES,
       'maxRedeliveries',
@@ -120,6 +125,10 @@ const baseAuditOf = (job, data) => {
   return base;
 };
 
+// The id of the audit event of a state of a run: the same however often it
+// is told, so that a run again of an attempt can ask whether it was told.
+const eventIdOf = (job, attempt, state) => toUuid(`${job.id}\u0000${attempt}\u0000${state}`);
+
 // Tells the audit sink a state.  A sink that fails is a warning; with
 // `auditStrict`, before the message is submitted, it makes the job retried,
 // as an attempt is not made unrecorded.
@@ -127,7 +136,7 @@ const emit = async (run, state, extra = {}, attempt = run.job.attempt) => {
   const { config, job } = run;
   if (config.audit === undefined) return undefined;
   const event = {
-    id: toUuid(`${job.id}\u0000${attempt}\u0000${state}`),
+    id: eventIdOf(job, attempt, state),
     state,
     at: new Date(config.now()).toISOString(),
     ...run.base,
@@ -399,6 +408,27 @@ const sendStep = async (run, message) => {
   return settleFailure(run, receipt);
 };
 
+// A run again of an attempt whose run before may have sent the message: of
+// unknown delivery, rather than sent blindly again, by a transport with no
+// idempotency key (SES, SMTP). A sink that tells whether that run submitted
+// lets one that died before it be sent; without one, it is not sent.
+const sentBefore = async (run) => {
+  const { audit } = run.config;
+  if (typeof audit?.has === 'function') {
+    let submitted;
+    try {
+      submitted = await audit.has(eventIdOf(run.job, run.job.attempt, 'submitted'));
+    } catch {
+      submitted = true;
+    }
+    if (!submitted) return undefined;
+  }
+  return fail(run, 'queue.redelivered', 'A run before of this attempt may have sent it.', {
+    state: 'delivery_unknown',
+    category: 'unknown',
+  });
+};
+
 const isExpired = (run) =>
   run.data.expiresAt !== undefined && run.config.now() > Date.parse(run.data.expiresAt);
 
@@ -414,6 +444,10 @@ const attempt = async (run) => {
       `${job.redeliveries} runs of the job ended unsettled, more than ${config.maxRedeliveries}.`,
       { state: 'delivery_unknown', category: 'unknown' },
     );
+  }
+  if (job.redelivered && config.redelivered === 'delivery_unknown') {
+    const unknown = await sentBefore(run);
+    if (unknown !== undefined) return unknown;
   }
   if (config.checkJob !== undefined) {
     try {
@@ -499,7 +533,7 @@ const readJob = async (config, job) => {
  * `resolveAttachment(ref, { job, attachment, signal })`;
  * `checkJob(data, job)`; `classify({ receipt, job })`; `backoff`,
  * `operatorDelayMilliseconds` (5 minutes), `rateLimitScope` ('job'),
- * `maxRedeliveries` (3);
+ * `maxRedeliveries` (3), `redelivered` ('send');
  * `logger`, `random`, `now`.
  * @returns The handler: `(job, signal) => Promise<QueueOutcome>`, which does
  * not throw.

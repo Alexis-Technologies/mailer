@@ -231,3 +231,13 @@ test('Audit: combined sinks are each told, whatever another throws', async () =>
   assert.strictEqual(twice.errors.length, 2);
   assert.throws(() => combineAuditSinks(ok, {}), /has append/);
 });
+
+test('Audit: a sink tells whether it holds an event, combined ones if any can', async () => {
+  const memory = createMemoryAuditSink();
+  memory.append({ id: 'e1', state: 'submitted', correlationId: 'c' });
+  assert.deepStrictEqual([memory.has('e1'), memory.has('e2')], [true, false]);
+  const blind = { append: () => {} };
+  assert.strictEqual(combineAuditSinks(blind, blind).has, undefined);
+  const combined = combineAuditSinks(blind, memory);
+  assert.deepStrictEqual([await combined.has('e1'), await combined.has('e2')], [true, false]);
+});

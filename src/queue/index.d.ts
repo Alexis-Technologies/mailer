@@ -346,6 +346,15 @@ export interface MailWorkerOptions {
    * in turn for ever. @default 3
    */
   readonly maxRedeliveries?: number;
+  /**
+   * What a run again of an attempt does, its run before having died:
+   * `send` (for `IdempotencyTransport` or a provider's key to dedupe), or
+   * `delivery_unknown`, which sends it only when the audit sink can tell
+   * (`has`) that the run before died before it submitted. For a transport
+   * with no idempotency key (SES, SMTP) without `IdempotencyTransport`.
+   * @default 'send'
+   */
+  readonly redelivered?: 'send' | 'delivery_unknown';
   readonly logger?: Logger;
   readonly random?: () => number;
   readonly now?: () => number;

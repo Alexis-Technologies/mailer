@@ -9,7 +9,7 @@ const { stateOf } = require('./states.js');
  * Makes an audit sink that holds its events in memory.
  *
  * @param options `maxEvents` (10000): past it, the oldest go first.
- * @returns The sink, with `events`, `eventsOf(correlationId)`,
+ * @returns The sink, with `has(id)`, `events`, `eventsOf(correlationId)`,
  * `stateOf(correlationId)` and `clear()`.
  * @throws {TypeError} If `maxEvents` is not a positive integer.
  */
@@ -31,6 +31,7 @@ const createMemoryAuditSink = (options = {}) => {
       events.set(event.id, Object.freeze({ ...event }));
       if (events.size > maxEvents) events.delete(events.keys().next().value);
     },
+    has: (id) => events.has(id),
     get events() {
       return [...events.values()];
     },
