@@ -99,6 +99,9 @@ class IdempotencyTransport {
       },
       fail: (error, admitted) => this.#thrown(admitted.entry, error, options?.signal),
       abandon: (admitted) => this.#abandon(admitted.entry),
+      // A message the wrapped transport never took was not sent: its key is
+      // free for the next attempt.
+      unsent: (admitted) => this.#release(admitted.entry),
     });
   }
 

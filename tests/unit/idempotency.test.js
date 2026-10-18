@@ -497,3 +497,26 @@ test('Idempotency: a key a batch left before its answer is held for the lease al
   const later = await idempotent.send(message({ idempotencyKey: 'k-2', subject: 'Second' }));
   assert.strictEqual(later.successful, true);
 });
+
+test('Idempotency: a key the wrapped sendMany never took is free again', async () => {
+  // Before: the first message of a batch was reserved before the wrapped
+  // sendMany() took it; one that threw at once left its key pending, every
+  // send of it answered in_flight for the lease.
+  let throws = true;
+  const inner = fakeTransport();
+  const original = inner.sendMany.bind(inner);
+  inner.sendMany = (messages, options) => {
+    if (!throws) return original(messages, options);
+    // oxlint-disable-next-line require-yield -- it throws before any message
+    return (async function* () {
+      throw new Error('not yet');
+    })();
+  };
+  const once = new IdempotencyTransport(inner);
+  const keyed = message({ idempotencyKey: 'welcome:9' });
+  await assert.rejects(collect(once.sendMany([keyed])), /not yet/);
+  throws = false;
+  const receipts = await collect(once.sendMany([keyed]));
+  assert.strictEqual(receipts[0].successful, true);
+  assert.strictEqual(inner.calls.length, 1);
+});

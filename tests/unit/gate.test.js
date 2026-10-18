@@ -95,6 +95,46 @@ test('Gate: what a transport reading ahead was handed is abandoned on a break', 
   assert.deepStrictEqual(abandoned, [1, 2]);
 });
 
+test('Gate: a message the wrapped sendMany never took is told unsent, or failed', async () => {
+  // Before: the first message of a run was admitted before the wrapped
+  // sendMany() took it, and its slot made only once taken, so a sendMany()
+  // that threw or returned at once left it neither failed nor abandoned.
+  const told = [];
+  const gate = {
+    admit: (n) => ({ message: n }),
+    fail: (error, admitted) => {
+      told.push(['fail', admitted.message, error.message]);
+    },
+    abandon: (admitted) => {
+      told.push(['abandon', admitted.message]);
+    },
+  };
+  const throwing = {
+    // oxlint-disable-next-line require-yield -- it throws before any message
+    async *sendMany() {
+      throw new Error('down');
+    },
+  };
+  const empty = {
+    async *sendMany() {},
+  };
+  await assert.rejects(collect(gatedSendMany(throwing, [1, 2], undefined, gate)), /down/);
+  assert.deepStrictEqual(await collect(gatedSendMany(empty, [3], undefined, gate)), []);
+  assert.deepStrictEqual(told, [
+    ['fail', 1, 'down'],
+    ['abandon', 3],
+  ]);
+  // A gate with unsent hears of them there: they were not sent.
+  told.length = 0;
+  const unsentGate = { ...gate, unsent: (admitted) => told.push(['unsent', admitted.message]) };
+  await assert.rejects(collect(gatedSendMany(throwing, [1], undefined, unsentGate)), /down/);
+  assert.deepStrictEqual(await collect(gatedSendMany(empty, [3], undefined, unsentGate)), []);
+  assert.deepStrictEqual(told, [
+    ['unsent', 1],
+    ['unsent', 3],
+  ]);
+});
+
 test('Gate: answers in place do not split the batch of the wrapped transport', async () => {
   // Before: each answer in place ended the run, so a batching transport got
   // batches of the messages between two of them.
