@@ -18,93 +18,101 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
 ### Added
 
 - **`./queue`**: `createMailQueue({ driver, audit, logger })` with `enqueue`, `enqueueMany` and
-  `createWorker({ transport, renderer, resolveAttachment, checkJob, classify })`. A job is a
-  template with its context, rendered by the worker, or content rendered already, as JSON
-  checked when it is enqueued (`prepareMailJob`, `parseMailJob`): its fields as `createMessage`
-  checks them, its context refused with the path to what JSON would change, attachments as bytes
-  (bounded) or references the worker resolves. Its id is a UUID of the namespace, tenant and
-  `idempotencyKey`, so the same message enqueued again is one job and another under the key is
-  refused (`queue.key_reused`, with the `jobIds` refused and, from `enqueueMany`, the `answers` of
-  the other jobs, all of them enqueued and audited first); its Message-ID and Content-IDs are fixed
-  for every attempt. The
-  worker fails a permanent failure, a missing template or a bug at once, retries a temporary one
-  never sooner than `Retry-After`, an operator's failure (`auth`, `configuration`) after five
-  minutes, and never sends again a message of unknown delivery. The renderer is given the job's
-  `signal`; a template that fails to render leaves only its name, phase and engine in the store and
-  the audit, its text in the log at `debug`. `scheduledAt` is a delay of the
-  queue and `expiresAt` a deadline. `createMailJobHandler` is the worker for any driver;
-  `createPollingDriver(source)` makes a driver of a store that lends its jobs (an outbox), and
-  `createMemoryQueue()` is one in memory for tests, its jobs on heaps so a reserve costs
-  O(log n) however many wait, its `source` held to the same contract as the outbox. A source's
-  settling writes give `false` when the token of the lease no longer holds the job, and the driver
-  logs `queue.settle_fenced`. Without a transaction, the `queued` event is told before the job is
-  enqueued, so a strict sink that fails refuses the enqueue with nothing enqueued; a driver that
-  writes no transaction refuses one (`transactional` drivers, the outbox, take it). A run whose lease the store does not extend is aborted before the
-  lease runs out, not after another worker took the job. A source counts the runs of a job that end unsettled
-  (`redeliveries`, never counted down, BullMQ's `stalledCounter`), and the worker gives up a job
-  past `maxRedeliveries` (3) as `delivery_unknown`, so a job that kills or blocks its worker does
-  not take every worker down in turn for ever. `redelivered: 'delivery_unknown'` makes a run again
-  of an attempt whose run before died `delivery_unknown` rather than a second send, unless the
-  audit sink tells (`has`, new on the memory, MongoDB and combined sinks) that it died before
-  its submit. `AuditSink.appendMany` (memory, MongoDB in one `bulkWrite`, combined) writes the
-  `queued` events of an `enqueueMany` in one call. The MongoDB sink's
-  `eventsOfProviderMessage(id)` finds the events of a message by the provider's id of it, where a
-  webhook's event without `correlationId` is filed. The fields of a job of version 1 are fixed:
-  a later version, or a field this one does not know, makes the job wait for a worker that reads
-  it (`queue.unsupported_version`, given back with its attempts not spent, for a week or until it
-  expires) rather than fail its hash during a rolling deploy.
-  `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends
-  no job they did not sign (`queue.signature_invalid`): the SHA-256 of a job tells a change, but
-  whoever writes to the store can recompute it. The first key signs and each verifies, for
-  rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the application's key) seals the
-  fields of each job in its store, its addresses, context and attachments, leaving the version,
-  hash, signature and trace context in clear; a worker without the codec gives a sealed job back
-  (`queue.codec_missing`), and one whose codec fails retries it (`queue.codec_failed`); its
-  `correlationId` stays in clear too. `idSecret` derives the id of a job from its
-  key with an HMAC, so an id that goes into the audit and the logs cannot be traced back to a key
-  that names a person.
+  `createWorker({ transport, renderer, resolveAttachment, checkJob, classify })`.
+  - **Jobs.** A job is a template with its context, rendered by the worker, or content rendered
+    already, as JSON checked when it is enqueued (`prepareMailJob`, `parseMailJob`): its fields as
+    `createMessage` checks them, its context refused with the path to what JSON would change,
+    attachments as bytes (bounded) or references the worker resolves. Its id is a UUID of the
+    namespace, tenant and `idempotencyKey`, so the same message enqueued again is one job, and
+    another under the key is refused (`MailQueueError` `queue.key_reused`, with the `jobIds`
+    refused and, from `enqueueMany`, the `answers` of the other jobs, all of them enqueued and
+    audited first). Its Message-ID and Content-IDs are fixed for every attempt. `scheduledAt` is a
+    delay of the queue and `expiresAt` a deadline. The fields of a job of version 1
+    (`MAIL_JOB_VERSION`, named `MAIL_JOB_NAME`) are fixed: a later version, or a field this one
+    does not know, makes the job wait for a worker that reads it (`queue.unsupported_version`,
+    given back with its attempts not spent, for a week or until it expires) rather than fail its
+    hash during a rolling deploy.
+  - **Security of the store.** `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and
+    a worker given them sends no job they did not sign (`queue.signature_invalid`): the SHA-256 of
+    a job tells a change, but whoever writes to the store can recompute it; the first key signs and
+    each verifies, for rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the
+    application's key) seals the fields of each job, its addresses, context and attachments,
+    leaving the version, hash, correlation id, signature and trace context in clear; a worker
+    without it gives a sealed job back (`queue.codec_missing`), one whose codec fails retries it
+    (`queue.codec_failed`). `idSecret` derives the id of a job from its key with an HMAC, so an id
+    in the audit and the logs cannot be traced back to a key that names a person.
+  - **The worker** (`createMailJobHandler`, for any driver) fails a permanent failure, a missing
+    template or a bug at once, retries a temporary one never sooner than `Retry-After`, an
+    operator's failure (`auth`, `configuration`) after five minutes, and never sends again a
+    message of unknown delivery. It gives up a job whose runs ended unsettled more than
+    `maxRedeliveries` (3) times, as `delivery_unknown`, so a job that kills or blocks its worker
+    does not take every worker down in turn for ever; with `redelivered: 'delivery_unknown'`, a
+    run again of an attempt whose run before died is of unknown delivery rather than a second send,
+    unless the audit sink tells (`has`) that it died before its submit. `rateLimitScope` makes a
+    rate limit wait for the job, the queue or the job's tenant. The renderer is given the job's
+    `signal`; a template that fails to render leaves only its name, phase and engine in the store
+    and the audit, its text in the log at `debug`. Every failure, retry and escape is logged with
+    its code and duration (the codes in one table of the queue guide).
+  - **Sources and drivers.** `createPollingDriver(source)` makes a driver of a store that lends its
+    jobs (an outbox): it keeps the lease of a run, aborts a run whose lease the store does not
+    extend before the lease runs out (`QueueLeaseLostError`), logs a settle the token fenced off
+    (`queue.settle_fenced`; the settling writes of a source give `false`), and wakes one lane per
+    change of its source. A job request carries its `tenantId` and a job gives back its
+    `redeliveries`, never counted down. A driver declares `transactional`; one that is not refuses
+    a transaction, and without one the `queued` event is told before the job, so a strict sink
+    that fails leaves nothing enqueued. `AuditSink.appendMany` takes the `queued` events of an
+    `enqueueMany` in one write. `traceContext` gives each job the producer's W3C `traceparent`.
+  - **The memory queue**, `createMemoryQueue()`, for tests and a single process: its jobs on heaps
+    (a reserve costs O(log n)), its `source` held to the same contract as the outbox
+    (`tests/helpers/queue/source-contract.js`), with `stats()`, `failed()`, `retryFailed(id)` and
+    `resume()`.
+  - **Retention and tenants**, the same on every driver: a completed job is kept
+    `dedupeWindowSeconds` (a day, its window of duplicates), a failed one `retainFailedSeconds` (a
+    week), and the message of a job done with is dropped (`retainData`: `'failed'` keeps the failed
+    ones, `'all'`, `'none'`), its version and hash kept so a duplicate is still told.
+    `fairness: 'tenant'` (memory queue, outbox) takes a high job of any tenant first, then the
+    tenants in turn, so one tenant's backlog holds no other's mail.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
-  that spend no attempt. `createBullMQProcessor` and `createBullMQBackoffStrategy` serve a Worker
-  of your own. A job BullMQ gives up itself (stalled too often) is told to the queue's audit sink
-  as `delivery_unknown` (`queue.lost`), so its trail does not end at `submitted`. `pnpm test:bullmq` runs it on BullMQ and Valkey.
-- **`./mongodb`**: the transactional outbox, `createMongoOutbox({ collection })`, a
-  `QueueSource` in a collection of the MongoDB driver passed in: a job enqueued with
-  `{ transaction: session }` is written in that transaction (by an upsert, so a duplicate does
-  not abort it), lent by one atomic `findOneAndUpdate` under a token every later write is
-  fenced by, given to another worker as `redelivered` when its lease runs out, with a pause of
-  the whole queue and an optional change stream to wake the workers; `ensureIndexes()` makes
-  its indexes and the TTL of finished jobs. `createMongoAuditSink` (each event once by its id,
-  in the transaction) and `createMongoIdempotencyStore` (each step atomic, for
-  `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a
-  replica set. A lease is taken back `clockSkewToleranceMilliseconds` (5 s) after it ran out, so
-  that a worker whose clock is behind does not run a job beside its holder. Every driver drops the
-  message of a job done with (`retainData`: `'failed'` keeps the failed ones, `'all'`, `'none'`),
-  keeping its version and hash, so a duplicate is still told and a reset link does not wait in the
-  store. Every driver keeps a completed job `dedupeWindowSeconds` (a day, its window of duplicates)
-  and a failed one `retainFailedSeconds` (a week); the outbox drops them by a TTL on `expireAt`.
-  An idle poll of the outbox is two round trips (leases taken back once a third of a lease, the
-  pause read once a poll interval, the next due time from its own index); its change stream wakes
-  one lane per change after which a job may be ready, and is opened again when it fails.
-  `fairness: 'tenant'` (memory queue, outbox) takes a high job of any tenant first, then the
-  tenants in turn, so one tenant's backlog holds no other's mail; `rateLimitScope: 'tenant'` pauses
-  one tenant's jobs alone, and `resume()` ends a pause early. `stats()` (jobs by state, the age of
-  the oldest job due, the pauses), `failed({ limit, after })` and `retryFailed(id)` read the outbox
-  and the memory queue, so a failed job does not go unseen until its retention drops it.
+  that spend no attempt; a batch read back 32 jobs at once to tell its duplicates.
+  `createBullMQProcessor` and `createBullMQBackoffStrategy` (of the type `MAILER_BACKOFF_TYPE`)
+  serve a Worker of your own. A job BullMQ gives up itself (stalled too often) is told to the
+  queue's audit sink as `delivery_unknown` (`queue.lost`). `pnpm test:bullmq` runs it on BullMQ
+  and Valkey.
+- **`./mongodb`**: the transactional outbox, `createMongoOutbox({ collection })`, a `QueueSource`
+  in a collection of the MongoDB driver passed in.
+  - A job enqueued with `{ transaction: session }` is written in that transaction (an upsert, so a
+    duplicate does not abort it), lent by one atomic `findOneAndUpdate` under a token every later
+    write is fenced by, and given to another worker as `redelivered` when its lease runs out,
+    `clockSkewToleranceMilliseconds` (5 s) after by the taker's clock.
+  - An idle poll is two round trips: leases are taken back once a third of a lease, the pauses read
+    once a poll interval, and the next due time read from its own index; its optional change
+    stream wakes one lane per change after which a job may be ready, and is opened again when it
+    fails. `bench/outbox.js` measures it (2 round trips a job, some 2300 jobs a second for one
+    worker of ten lanes on a laptop).
+  - A pause of the queue or of one tenant (`rateLimitScope: 'tenant'`), and `resume()`; `stats()`
+    (jobs by state, the age of the oldest job due, the pauses), `failed({ limit, after })` and
+    `retryFailed(id)`; `ensureIndexes()` makes its indexes and the TTL on `expireAt`.
+  - `createMongoAuditSink` (each event once by its id, in the transaction; `has`, `appendMany` in
+    one `bulkWrite`, and `eventsOfProviderMessage(id)`, which finds the events a webhook filed
+    under the provider's id of a message) and `createMongoIdempotencyStore` (each step atomic, for
+    `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a replica
+    set.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,
   `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`,
   `createReactEmailEngine`): names never paths (`createFileLoader` reads nothing outside its
-  directory), variants by locale and part, the subject in front matter, a layout, includes read
-  through the loader, each template compiled once, CSS inlined by juice or css-inline without
-  fetching a stylesheet (`createCssInliner`), and the text derived from the HTML.
-  `TemplateNotFoundError` and `TemplateRenderError` have a stable `code`.
+  directory, `createMemoryLoader` holds them by name), variants by locale and part, the subject in
+  front matter, a layout, includes read through the loader, each template compiled once, CSS inlined
+  by juice or css-inline without fetching a stylesheet (`createCssInliner`), and the text derived
+  from the HTML. `TemplateNotFoundError` and `TemplateRenderError` have a stable `code`.
 - **`./audit`**: the states of a message (`queued`, `rendered`, `submitted`, `accepted`,
   `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
-  `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks`, `stateOf`, and
-  `auditEventOfDeliveryEvent` for the events of `./webhooks`.
+  `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks` (with `has` and
+  `appendMany` where a sink of them has them), `stateOf`, `isFinalState`, and
+  `auditEventOfDeliveryEvent` and `stateOfDeliveryEvent` for the events of `./webhooks`.
 - **`./otel`**: `instrumentHandler(handler, { tracerProvider, meterProvider, withSpan })`, a span
   `mailer.queue.process` per run of a job, linked to the producer's trace (the `traceparent` the
   mail queue's `traceContext` gives each job as `trace`), and the metrics `mailer.queue.jobs` (by
@@ -113,16 +121,22 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
 - **`./render`**: `RenderOutput.subject` and `renderFields(renderer, input)`, which gives
   `{ subject, content }`.
 - **The root**: the contracts of the reliability layer as types (`QueueDriver`, `QueueSource`,
-  `QueueJob`, `QueueOutcome`, `MessageState`, `AuditEvent`, `AuditSink`), with no code.
+  `QueueJob`, `QueueJobRequest`, `QueueLease`, `QueueOutcome`, `QueueHandler`, `QueueConsumer`,
+  `QueueConsumeOptions`, `QueueEnqueueOptions`, `MessageState`, `AuditEvent`, `AuditSink`,
+  `JsonValue`, `JsonObject`), with no code.
 
 ### Tooling
 
 - **Opt-in suites on the real services:** `pnpm test:bullmq` on BullMQ and Valkey
   (`tests/bullmq/docker-compose.yml`) and `pnpm test:mongodb` on a MongoDB replica set
-  (`tests/mongodb/docker-compose.yml`), outside the gates, as `test:mailpit` is.
+  (`tests/mongodb/docker-compose.yml`), outside the gates, as `test:mailpit` is;
+  `pnpm test:stores` runs both and fails without their stores, a manual step of every release.
+- **`bench/outbox.js`**: the throughput of the outbox on a replica set, by workers and lanes.
+- **One table of the codes of the queue** in its guide, which `tests/unit/codes.test.js` keeps in
+  step with the code.
 - **devDependencies for the tests:** the nine template engines, juice and css-inline, BullMQ,
-  ioredis and the MongoDB driver; `src/` requires none of them, as
-  `tests/unit/dependencies.test.js` checks.
+  ioredis and the MongoDB driver; `src/` requires none of them, as `tests/unit/dependencies.test.js`
+  checks.
 - **Shared internals:** the backoff, the classification of thrown errors, the fingerprint of a
   message and the path check moved to `src/internal/`, with no change of behavior.
 
