@@ -33,3 +33,6 @@ expectType<Promise<Receipt<'ses'>>>(breaker.send(message));
 expectType<AsyncIterable<Receipt<'ses'>>>(breaker.sendMany([message]));
 new CircuitBreakerTransport(inner);
 expectError(new CircuitBreakerTransport(inner, { failureThreshold: '5' }));
+// A pino-like logger, or none.
+new CircuitBreakerTransport(inner, { logger: { warn() {}, info() {}, debug() {} } });
+expectError(new CircuitBreakerTransport(inner, { logger: 'pino' }));

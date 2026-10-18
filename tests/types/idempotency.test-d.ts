@@ -69,3 +69,6 @@ expectError<IdempotencyStore>({
   complete: async () => {},
   release: () => {},
 });
+// A pino-like logger.
+new IdempotencyTransport(inner, { logger: { info() {}, debug() {}, warn() {} } });
+expectError(new IdempotencyTransport(inner, { logger: 'pino' }));

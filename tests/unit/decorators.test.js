@@ -179,12 +179,55 @@ test('Decorators: a logger hears the breaker, the rate limit, idempotency and th
   await tee.send(mail());
   assert.deepStrictEqual(records, [
     ['warn', 'breaker.open', 'breaker'],
-    ['debug', 'breaker.open', 'breaker'],
+    // Changed after the review: a refusal had the code of the change of state.
+    ['debug', 'breaker.refused', 'breaker'],
     ['info', 'ratelimit.limited', 'ratelimit'],
     ['debug', 'idempotency.hit', 'idempotency'],
     ['warn', 'idempotency.key_reused', 'idempotency'],
-    ['warn', 'MAILER_TEE_MIRROR_FAILED', 'tee'],
+    // Changed after the review: the code of a process warning, not of a record.
+    ['warn', 'tee.mirror_failed', 'tee'],
   ]);
+});
+
+test('Decorators: a logger hears the circuit half-open and close, and a send in flight', async () => {
+  // The records no test heard: the other changes of state of the breaker,
+  // and a key whose send is out.
+  const records = [];
+  const logger = {};
+  for (const level of ['debug', 'info', 'warn', 'error']) {
+    logger[level] = (fields) => records.push([level, fields.code]);
+  }
+  let time = 0;
+  let fails = true;
+  const breaker = new CircuitBreakerTransport(
+    fakeTransport(() => (fails ? failed('network') : sent('ok'))),
+    { failureThreshold: 1, resetTimeoutMs: 1000, now: () => time, logger },
+  );
+  await breaker.send(message());
+  time = 1000;
+  fails = false;
+  await breaker.send(message());
+  assert.deepStrictEqual(records, [
+    ['warn', 'breaker.open'],
+    ['info', 'breaker.half-open'],
+    ['info', 'breaker.closed'],
+  ]);
+  records.length = 0;
+  const held = {};
+  const slow = fakeTransport(
+    () =>
+      new Promise((resolve) => {
+        held.release = () => resolve(sent('m'));
+      }),
+  );
+  const idempotent = new IdempotencyTransport(slow, { logger });
+  const first = idempotent.send(message({ idempotencyKey: 'out' }));
+  while (held.release === undefined) await new Promise((resolve) => setImmediate(resolve));
+  const second = await idempotent.send(message({ idempotencyKey: 'out' }));
+  held.release();
+  await first;
+  assert.strictEqual(second.errors[0].code, 'idempotency.in_flight');
+  assert.deepStrictEqual(records, [['info', 'idempotency.in_flight']]);
 });
 
 test('Decorators: a jump of the time of day moves no interval of a default clock', async (t) => {

@@ -32,3 +32,6 @@ const message = createMessage({
 expectType<Promise<Receipt<'ses'>>>(tee.send(message));
 expectType<AsyncIterable<Receipt<'ses'>>>(tee.sendMany([message]));
 expectError(new TeeTransport(primary, {}));
+// A pino-like logger.
+new TeeTransport(primary, { mirrors: [primary], logger: { warn() {} } });
+expectError(new TeeTransport(primary, { mirrors: [primary], logger: 'pino' }));

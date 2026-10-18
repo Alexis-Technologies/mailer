@@ -206,7 +206,9 @@ class CircuitBreakerTransport {
   #refusal(remaining) {
     this.#log.write(
       'debug',
-      () => ({ code: 'breaker.open', remaining }),
+      // The code of the change of state is breaker.open; this record is one
+      // per send refused, counted apart.
+      () => ({ code: 'breaker.refused', remaining }),
       'The circuit refused a send.',
     );
     const receipt = createFailedReceipt(

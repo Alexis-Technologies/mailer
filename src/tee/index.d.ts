@@ -63,7 +63,7 @@ export interface TeeConfig {
   readonly onMirror?: (outcome: MirrorOutcome) => void;
   /**
    * A pino-like logger: without `onMirror`, it hears a failed copy at `warn`
-   * (`MAILER_TEE_MIRROR_FAILED`) in place of a process warning.
+   * (`tee.mirror_failed`) in place of a process warning.
    */
   readonly logger?: Logger;
 }

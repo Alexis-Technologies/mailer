@@ -52,7 +52,7 @@ were left out.
 | `awaitMirrors` | `false` | Waits for the copies before returning. |
 | `maxPending` | `100` | The most copies in flight while not awaited. |
 | `onMirror` | | Hears every outcome of a mirror. |
-| `logger` | | A pino-like logger: without `onMirror`, a failed copy at `warn`, in place of a process warning. |
+| `logger` | | A pino-like logger: without `onMirror`, a failed copy at `warn` (`tee.mirror_failed`), in place of a process warning. |
 
 `sendMany()` goes through the `sendMany()` of the primary, each message mirrored
 once the primary has answered it. `sendRaw()` mirrors to the mirrors that send raw

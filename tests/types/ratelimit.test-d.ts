@@ -37,3 +37,7 @@ new RateLimitTransport(inner, {
   limit: 14,
   store: { take: async () => ({ taken: false, waitMs: 70 }) },
 });
+// A pino-like logger, and a bound on the queue.
+new RateLimitTransport(inner, { limit: 1, maxQueue: 100, logger: { info() {}, debug() {} } });
+expectError(new RateLimitTransport(inner, { limit: 1, logger: 'pino' }));
+expectError(new RateLimitTransport(inner, { limit: 1, maxQueue: '100' }));

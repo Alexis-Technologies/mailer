@@ -199,7 +199,7 @@ class TeeTransport {
       if (outcome.receipt?.successful !== true && this.#log.hasLogger) {
         this.#log.write(
           'warn',
-          () => ({ code: 'MAILER_TEE_MIRROR_FAILED', mirror: outcome.mirror }),
+          () => ({ code: 'tee.mirror_failed', mirror: outcome.mirror }),
           `The mirror ${outcome.mirror} failed: ${describe(outcome)}`,
         );
       } else if (outcome.receipt?.successful !== true) {
