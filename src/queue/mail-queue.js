@@ -51,10 +51,38 @@ const keyReused = (jobIds, answers) =>
     { jobIds, answers },
   );
 
-// A first enqueue is told to the sink, in the transaction of the store when
-// there is one; a job enqueued again is not, and one enqueued again for
-// another message is refused.
-const afterEnqueue = async (queue, { data, request }, result, enqueueOptions) => {
+// Tells the sink of a first enqueue. Without a transaction it is told before
+// the job is enqueued, so that a strict sink that fails refuses the enqueue
+// rather than reports a job enqueued as failed, enqueued again on a retry;
+// the event is written once by its id, a duplicate's with it.
+const appendQueued = async (queue, { data, request }, transaction) => {
+  if (queue.audit === undefined) return;
+  try {
+    await queue.audit.append(queuedEventOf(data, request), { transaction });
+  } catch (error) {
+    if (queue.auditStrict) throw error;
+    warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
+  }
+};
+
+// The transaction of an enqueue, refused by a driver that writes none: the
+// job would not go with the application's writes, as the caller believes.
+const transactionOf = (driver, enqueueOptions) => {
+  const { transaction } = enqueueOptions;
+  if (transaction === undefined || transaction === null) return undefined;
+  if (driver.transactional !== true) {
+    throw new TypeError(
+      `The ${driver.id} driver writes no transaction: the job would not go with yours.`,
+    );
+  }
+  return transaction;
+};
+
+// What an enqueue gives. A first one is told to the sink in the transaction
+// of the store when there is one; a job enqueued again is not, and one
+// enqueued again for another message is refused.
+const afterEnqueue = async (queue, prepared, result, transaction) => {
+  const { data, request } = prepared;
   const answer = { id: request.id, correlationId: data.correlationId, messageId: data.messageId };
   if (result?.duplicate === true) {
     if (result.existingHash !== undefined && result.existingHash !== request.hash) {
@@ -63,16 +91,7 @@ const afterEnqueue = async (queue, { data, request }, result, enqueueOptions) =>
     queue.log.write('debug', () => ({ jobId: request.id }), 'queue.duplicate');
     return { ...answer, duplicate: true };
   }
-  if (queue.audit !== undefined) {
-    try {
-      await queue.audit.append(queuedEventOf(data, request), {
-        transaction: enqueueOptions.transaction,
-      });
-    } catch (error) {
-      if (queue.auditStrict) throw error;
-      warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
-    }
-  }
+  if (transaction !== undefined) await appendQueued(queue, prepared, transaction);
   queue.log.write(
     'debug',
     () => ({ jobId: request.id, priority: request.priority, template: data.template }),
@@ -144,14 +163,20 @@ const createMailQueue = (options = {}) => {
     driver,
     async enqueue(input, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
+      const transaction = transactionOf(driver, enqueueOptions);
       const prepared = await prepare(input);
+      if (transaction === undefined) await appendQueued(queue, prepared, undefined);
       const result = await driver.enqueue(prepared.request, enqueueOptions);
-      return afterEnqueue(queue, prepared, result, enqueueOptions);
+      return afterEnqueue(queue, prepared, result, transaction);
     },
     async enqueueMany(inputs, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
+      const transaction = transactionOf(driver, enqueueOptions);
       const prepared = [];
       for (const input of inputs) prepared.push(await prepare(input));
+      if (transaction === undefined) {
+        for (const job of prepared) await appendQueued(queue, job, undefined);
+      }
       let results;
       if (typeof driver.enqueueMany === 'function') {
         const requests = [];
@@ -167,7 +192,7 @@ const createMailQueue = (options = {}) => {
       const reused = [];
       for (let index = 0; index < prepared.length; index++) {
         try {
-          answers.push(await afterEnqueue(queue, prepared[index], results[index], enqueueOptions));
+          answers.push(await afterEnqueue(queue, prepared[index], results[index], transaction));
         } catch (error) {
           if (error?.code !== 'queue.key_reused') throw error;
           reused.push(prepared[index].request.id);

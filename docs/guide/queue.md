@@ -215,7 +215,11 @@ enqueue (in the transaction of an outbox), `rendered`, `submitted` just before
 the send, then `accepted`, `failed` or `delivery_unknown`, and `queued` again
 for a retry. A sink that fails is a warning (`MAILER_AUDIT_FAILED`);
 `auditStrict: true` makes it retry the job before the send, so that no message
-goes unrecorded.
+goes unrecorded. Without a transaction, `queued` is told before the job is
+enqueued, so a strict sink that fails refuses the enqueue and nothing is
+enqueued, rather than a job enqueued and reported as failed. A driver that
+writes no transaction (BullMQ, the memory queue) refuses `{ transaction }` with
+a `TypeError` rather than ignore it; the outbox is `transactional`.
 
 `logger`, pino-like, hears what the queue does, never an address: the
 enqueues and the starts at `debug`, the sends at `info`, the retries,

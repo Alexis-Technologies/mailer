@@ -21,6 +21,8 @@ expectAssignable<MongoCollectionLike>(db.collection('mail_outbox'));
 declare const typed: Collection<{ _id: string; state: string }>;
 expectAssignable<MongoCollectionLike>(typed);
 
+const typedOutbox = createMongoOutbox({ collection: db.collection('x') });
+expectType<true>(typedOutbox.transactional);
 const outbox = createMongoOutbox({
   collection: db.collection('mail_outbox'),
   changeStream: true,

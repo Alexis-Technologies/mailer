@@ -271,6 +271,8 @@ const createMongoOutbox = (options = {}) => {
   const driver = createPollingDriver(source, { ...options, now: config.now });
   return {
     ...driver,
+    // An enqueue writes in the transaction it is given.
+    transactional: true,
     source,
     async ensureIndexes() {
       await collection.createIndex(

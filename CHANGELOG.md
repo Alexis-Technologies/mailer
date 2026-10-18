@@ -35,7 +35,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   `createMemoryQueue()` is one in memory for tests, its jobs on heaps so a reserve costs
   O(log n) however many wait, its `source` held to the same contract as the outbox. A source's
   settling writes give `false` when the token of the lease no longer holds the job, and the driver
-  logs `queue.settle_fenced`; a run whose lease the store does not extend is aborted before the
+  logs `queue.settle_fenced`. Without a transaction, the `queued` event is told before the job is
+  enqueued, so a strict sink that fails refuses the enqueue with nothing enqueued; a driver that
+  writes no transaction refuses one (`transactional` drivers, the outbox, take it). A run whose lease the store does not extend is aborted before the
   lease runs out, not after another worker took the job. A source counts the runs of a job that end unsettled
   (`redeliveries`, never counted down, BullMQ's `stalledCounter`), and the worker gives up a job
   past `maxRedeliveries` (3) as `delivery_unknown`, so a job that kills or blocks its worker does

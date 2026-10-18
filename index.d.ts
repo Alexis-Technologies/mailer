@@ -1560,6 +1560,12 @@ export interface QueueConsumer {
 /** A queue: BullMQ, a store's outbox, the memory one of the tests. */
 export interface QueueDriver {
   readonly id: string;
+  /**
+   * true: `enqueue` writes in the `transaction` of its options, as an outbox
+   * does. A driver without it refuses a transaction, which would not hold
+   * the job with the application's writes.
+   */
+  readonly transactional?: boolean;
   enqueue(request: QueueJobRequest, options?: QueueEnqueueOptions): Promise<QueueEnqueueResult>;
   enqueueMany?(
     requests: readonly QueueJobRequest[],

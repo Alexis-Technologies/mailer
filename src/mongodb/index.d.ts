@@ -84,6 +84,7 @@ export interface MongoOutboxJob {
 
 /** The mail queue in a collection: a driver, its source, and what it holds. */
 export interface MongoOutbox extends QueueDriver {
+  readonly transactional: true;
   readonly source: QueueSource;
   /** Makes the indexes of the outbox: the ready jobs, the leases, and the expiry of finished ones (`expireAt`). */
   ensureIndexes(): Promise<void>;

@@ -220,6 +220,7 @@ test('Queue: the queued event goes in the transaction of the enqueue; a strict s
   const sink = { append: (event, context) => contexts.push([event.state, context?.transaction]) };
   const transactional = {
     id: 'outbox',
+    transactional: true,
     enqueue: async (request, options) => ({
       id: request.id,
       duplicate: false,
@@ -290,4 +291,38 @@ test('Queue: enqueueMany refuses a key used before only once every other job is 
     assert.strictEqual(driver.get(answer.id).state, 'waiting');
     assert.strictEqual(audit.stateOf(answer.correlationId), 'queued');
   }
+});
+
+test('Queue: without a transaction, a strict sink that fails refuses the enqueue before the job', async () => {
+  const broken = { append: () => Promise.reject(new Error('audit down')) };
+  const { driver, queue } = setup({ audit: broken, auditStrict: true });
+  await assert.rejects(queue.enqueue(resetJob()), /audit down/);
+  await assert.rejects(queue.enqueueMany([resetJob({ idempotencyKey: 'b' })]), /audit down/);
+  // Nothing was enqueued: a retry of the caller is not a second message.
+  assert.strictEqual(driver.list().length, 0);
+  // A driver that writes no transaction refuses one rather than ignore it.
+  await assert.rejects(queue.enqueue(resetJob(), { transaction: {} }), {
+    name: 'TypeError',
+    message: /memory driver writes no transaction/,
+  });
+  await assert.rejects(queue.enqueueMany([resetJob()], { transaction: {} }), TypeError);
+  // The event of a first enqueue is written before it, a duplicate's once.
+  const order = [];
+  const sink = createMemoryAuditSink();
+  const recording = {
+    append: (event) => {
+      order.push(`audit:${event.state}`);
+      return sink.append(event);
+    },
+  };
+  const tracked = setup({ audit: recording });
+  const enqueue = tracked.driver.enqueue;
+  tracked.driver.enqueue = (request, options) => {
+    order.push('enqueue');
+    return enqueue(request, options);
+  };
+  const first = await tracked.queue.enqueue(resetJob());
+  await tracked.queue.enqueue(resetJob());
+  assert.deepStrictEqual(order, ['audit:queued', 'enqueue', 'audit:queued', 'enqueue']);
+  assert.strictEqual(sink.eventsOf(first.correlationId).length, 1);
 });
