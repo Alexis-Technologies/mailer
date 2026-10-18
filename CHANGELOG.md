@@ -43,6 +43,11 @@ additive but the defaults listed below.
   transport that can send it; and a TLS certificate refused in the handshake is a non-retryable
   `configuration` failure at the first attempt, where SMTP reported it as `unknown` and the HTTP
   transports retried it and reported a retryable `network` failure (`deliveryUnknown` on Deno).
+- **The HTTP providers of 1.0 share one client:** Resend, SendGrid, Mailgun, Maileroo,
+  Lettermint, Plunk and Mailtrap request through the client of the providers of 1.1. Their errors
+  (`SendGridApiError`, `MailtrapTimeoutError`…) keep their names, arguments and fields, and carry
+  `provider`, `category` and `retryable` besides; an error answer whose body cannot be read keeps
+  its status; and a message Mailgun cannot express is an `unsupported` failure, as elsewhere.
 - **On Deno, give the HTTP transports a `fetch` that keeps no idle connection**
   (`Deno.createHttpClient({ poolMaxIdlePerHost: 0 })`): Deno's own sends a request again when a
   reused connection closes before its answer. See

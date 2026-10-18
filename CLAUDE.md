@@ -126,6 +126,16 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   logger passed in, fallbacks for runtimes older than Node 22 dropped, and the `@since` tags of
   upyo versions removed. A known upstream bug is fixed afterwards in its own `fix:` commit with a
   test that fails without it, not during the port.
+- **The HTTP clients are this package's, the API of each provider upstream's.** The fixes 24 to
+  39 had to land in seven copies of the same client, and one missed a copy (Mailtrap, bug 29), so
+  since 1.1 the clients of Resend, SendGrid, Mailgun, Maileroo, Lettermint, Plunk and Mailtrap
+  are their requests over `createApiClient` (`src/internal/api-client.js`), as those of 1.1 are:
+  what stays upstream's is the provider's side (its authorization, the messages it is read for,
+  what its 2xx must hold, its error classes), passed in as hooks. Their public errors
+  (`SendGridApiError`…) extend `ProviderApiError` with the names, arguments and fields of 1.0, and
+  the transports build their receipts with `providerFailure`. SES, which signs each attempt with
+  SigV4, and JMAP, with its session, keep their own clients; `tests/unit/api.test.js` fails when
+  another provider calls `requestWithRetry` on its own.
 - A lint rule that upstream code breaks is suppressed on the line,
   `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
   refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
@@ -744,7 +754,8 @@ src/
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map: the request
-                    layer (http.js, api.js for the providers of 1.1, body.js, unsent.js,
+                    layer (http.js, api-client.js for every HTTP provider but SES and JMAP,
+                    api.js for the conversions of the providers of 1.1, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
                     receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
                     schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
