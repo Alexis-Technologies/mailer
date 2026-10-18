@@ -60,9 +60,9 @@ additive but the defaults listed below.
 - **`scheduledAt`, `tracking` and `metadata` on the message,** from unemail's model: when the
   provider should deliver it, open and click tracking for this message, and values the provider
   returns in its events. A transport that cannot schedule refuses the message with an
-  `unsupported` receipt rather than sending it at once, and `./pool` fails over with it. Resend, SendGrid, Mailgun, Maileroo,
-  Brevo, MailerSend, SparkPost and SMTP2GO schedule; ten providers take `tracking`, seventeen
-  `metadata` (each page says how).
+  `unsupported` receipt rather than sending it at once, and `./pool` fails over with it. Resend,
+  SendGrid, Mailgun, Maileroo, Brevo, MailerSend, SparkPost and SMTP2GO schedule; ten providers
+  take `tracking`, seventeen `metadata` (each page says how).
 - **`./attachments`:** `fromPath`, `fromUrl`, `fromDataUri`, `fromStream` and `inlineDataUrls`,
   for what nodemailer read through `path`, `href` and data URIs. Nothing is read implicitly:
   `fromUrl` goes through an injected `fetch`, checks each redirect with `allowUrl` (by default the
@@ -76,11 +76,13 @@ additive but the defaults listed below.
 - **`./smtp` connects through what you give it:** `connect` opens each connection (a proxy, a
   tunnel, a socket of another module) with implicit TLS or STARTTLS over it;
   `createHttpProxyConnector` makes one for an HTTP or HTTPS proxy, whose credentials go in clear
-  to an `http://` proxy only on this machine or with `allowPlaintextCredentials`; `localAddress` picks the address
-  to connect from.
+  to an `http://` proxy only on this machine or with `allowPlaintextCredentials`, under one
+  deadline for the CONNECT; `localAddress` picks the address to connect from.
 - **`./sendmail`:** the sendmail command of the system (Postfix, Exim, msmtp), one process per
-  message, composed by `./mime` with DKIM; `sendRaw` and `verify`. Only an exit with 0 succeeds, a
-  signal after the whole message is `deliveryUnknown`, and the sysexits codes are classified.
+  message, composed by `./mime` with DKIM; `sendRaw` and `verify`. Only an exit with 0 after the
+  whole message succeeds, a signal after it is `deliveryUnknown`, and the sysexits codes are
+  classified; a process has a `timeout` (60 seconds, then SIGTERM and SIGKILL) and at most
+  `maxConcurrent` (10) run at once.
 - **Raw messages and `verify()` through every decorator:** `./pool`, `./retry`, `./otel`,
   `./logger` and `./mock` pass `sendRaw` and `verify` on. `./ses` and `./mailgun` send raw MIME,
   and `./ses`, `./sendgrid`, `./resend` and `./mailgun` verify their key, one that may only send
@@ -91,13 +93,15 @@ additive but the defaults listed below.
   signed with the access key, repeatable requests), `./scaleway` and `./cloudflare` (the REST API
   of Cloudflare Email Service, raw MIME). Each goes through the request layer of the others: no
   redirect followed, a bounded body, `deliveryUnknown` when the provider may have taken the
-  message.
+  message. The batches of Postmark and Mailjet are cut by their bytes as well as their count.
 - **`./breaker`:** a circuit breaker that opens after `failureThreshold` failures of the
   provider, answers with a retryable `service-unavailable` receipt while open (which `./pool`
-  fails over with), and lets exactly one probe through after `resetTimeoutMs`.
+  fails over with), and lets exactly one probe through after `resetTimeoutMs`, for at most
+  `probeTimeoutMs`.
 - **`./ratelimit`:** a token bucket per `key`, waiting first in, first out, or refusing with a
   retryable `rate-limit` receipt; an aborted send leaves the queue, and a cost over `burst` is
-  refused.
+  refused. At most `maxKeys` buckets are kept in the process, or a `store` of buckets that
+  processes share holds them (`take(key, cost, limits)`).
 - **`./idempotency`:** a key reserved in a store before the send, so a repeat is answered with
   the first receipt, a send in flight as of unknown delivery, and the same key for another
   message refused. A reservation lasts `leaseMs` (10 minutes), so a key a crash left reserved is
@@ -105,7 +109,9 @@ additive but the defaults listed below.
   kept `ttlMs` (a day). `createMemoryIdempotencyStore` is the in-process store; a shared one
   implements `reserve`, `complete` and `release` with the token.
 - **`./hooks`:** `beforeSend` may replace or refuse a message, `afterSend`, `onRetry` and
-  `onError` hear each send, with a context made for each.
+  `onError` hear each send, with a context made for each that carries its signal.
+- **A `logger` for `./breaker`, `./ratelimit`, `./idempotency` and `./tee`,** pino-like, with a
+  code for each event (`breaker.open`, `ratelimit.waiting`, `idempotency.in_flight`…).
 - **`./tee`:** mirrors each message to other transports, with one Message-ID, each with a
   timeout of its own and not awaited by default, the primary's receipt the one returned;
   disposal waits for the copies in flight.
@@ -120,6 +126,13 @@ additive but the defaults listed below.
   it meanwhile is refused as `pending`. `replayStore` is required where a verifier keeps ids
   (`createMemoryReplayStore()` in one process, a shared store of `reserve`, `commit` and
   `release`, or `null`), and a refusal carries the `status` to answer the provider with.
+  `onVerify` hears each request taken or refused, and an event carries the `rfcMessageId` it was
+  sent with, where the provider tells it, to find the events of a message of unknown delivery.
+- **`./pool` `verifyAll()`:** how each transport did, `verified`, `failed` or `unverifiable`,
+  where `verify()` passes when one does.
+- **A failure of unknown delivery stands out:** `./otel` sets `mailer.delivery_unknown` on its
+  span and its message counter, and `./logger` writes `deliveryUnknown` in `email.failed`, for
+  the messages to reconcile.
 - **Bun and Deno:** CI runs the unit suite and the new `tests/runtime` (the package by its name,
   with no mock: sockets, TLS, DKIM, `fetch`, a child process) on Bun 1.4.3 and Deno 2.9.6, as
   well as on Node 22 and 24. `package.json` declares `"type": "commonjs"`, which Deno needs and

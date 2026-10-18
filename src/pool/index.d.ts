@@ -265,7 +265,10 @@ export declare class PoolTransport<TProviderId extends string = string>
    */
   sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
   /**
-   * Verifies the enabled transports that can verify: it resolves when one of them verifies, and throws an `AggregateError` of their errors when none does; it has nothing to check when none can verify.  {@link PoolTransport.verifyAll} tells how each did.
+   * Verifies the enabled transports that can verify: it resolves when one of
+   * them verifies, and throws an `AggregateError` of their errors when none
+   * does; it has nothing to check when none can verify.
+   * {@link PoolTransport.verifyAll} tells how each did.
    */
   verify(options?: TransportOptions): Promise<void>;
   /**

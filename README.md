@@ -34,8 +34,9 @@ audit log and suppression. Zero runtime dependencies.
   verified, AUTH never goes over plain text, CRLF in a header is rejected, and no file or URL is
   read for an attachment unless you ask.
 - **What happens after `send()`.** The webhooks of fifteen providers, each verified before it is
-  read, give one model of delivery events (delivered, bounced, complained, …). Next: a persistent
-  queue and outbox, an append-only audit log and suppression. None of the
+  read and taken as handled only once your handler commits it, give one model of delivery events
+  (delivered, bounced, complained, …). Next: a persistent queue and outbox, an append-only audit
+  log and suppression. None of the
   [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has the three.
 - **Sent once, or known to be unknown.** Errors are classified as permanent or temporary, and a
   failure after which the provider may have taken the message is marked `deliveryUnknown`:

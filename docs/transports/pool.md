@@ -491,6 +491,17 @@ resolves when one of them does: the pool can send when one of its transports can
 When none does, it throws an `AggregateError` of their errors; when none can
 verify, it has nothing to check.
 
+`verifyAll()` verifies every enabled transport, all at once, and never throws for
+one: it gives `{ id, index, status, error? }` for each, `status` being
+`verified`, `failed` or `unverifiable` (no `verify()`). A key revoked at one
+provider shows there while `verify()` still passes on the others:
+
+```js
+for (const { id, status, error } of await pool.verifyAll()) {
+  if (status === 'failed') logger.error({ id, err: error }, 'a transport of the pool cannot send');
+}
+```
+
 ## Testing with pools
 
 Pool transports integrate seamlessly with testing workflows using mock
