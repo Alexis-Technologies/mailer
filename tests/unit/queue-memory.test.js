@@ -569,3 +569,44 @@ test('Queue: the memory queue keeps a completed job for the window of duplicates
   );
   assert.throws(() => createMemoryQueue({ dedupeWindowSeconds: 0 }), /dedupeWindowSeconds/);
 });
+
+test('Queue: a change wakes one waiting lane, not every lane, and is kept when all are busy', async () => {
+  const clock = manualClock(0);
+  let listener;
+  let reserves = 0;
+  const source = {
+    id: 'waking',
+    enqueue: async () => ({ id: 'x', duplicate: false }),
+    reserve: async () => {
+      reserves++;
+      return {};
+    },
+    extend: async () => true,
+    ack: async () => true,
+    retry: async () => true,
+    fail: async () => true,
+    release: async () => true,
+    subscribe: (wake) => {
+      listener = wake;
+      return () => {};
+    },
+  };
+  const driver = createPollingDriver(source, {
+    now: clock.now,
+    sleep: clock.sleep,
+    pollIntervalMilliseconds: 60_000,
+  });
+  const consumer = driver.consume(async () => ({ type: 'ack' }), { concurrency: 4 });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  await settle();
+  assert.strictEqual(reserves, 4);
+  listener();
+  await settle();
+  // One job enqueued: one lane reserves, three wait on.
+  assert.strictEqual(reserves, 5);
+  listener();
+  listener();
+  await settle();
+  assert.strictEqual(reserves, 7);
+  await consumer.close({ timeoutMilliseconds: 10 });
+});

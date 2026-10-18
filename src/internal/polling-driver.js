@@ -47,19 +47,37 @@ const createPollingConfig = (options) => {
   return config;
 };
 
-// A wake that the source's listener and close() both pull, renewed after.
+// The wakes of the source's listener, each for one lane: a change (a job
+// enqueued) wakes the lane that waited longest rather than every lane of the
+// process, which would all reserve at once for one job. A wake that comes
+// while every lane is busy is kept for the next one to wait.
 const createWaker = (source) => {
-  let controller = new AbortController();
+  const waiting = new Set();
+  let pending = false;
   const wake = () => {
-    controller.abort();
-    controller = new AbortController();
+    for (const controller of waiting) {
+      waiting.delete(controller);
+      controller.abort();
+      return;
+    }
+    pending = true;
   };
   const unsubscribe = typeof source.subscribe === 'function' ? source.subscribe(wake) : undefined;
   return {
-    get signal() {
-      return controller.signal;
+    // The signal of one wait, aborted by a wake.
+    take() {
+      const controller = new AbortController();
+      if (pending) {
+        pending = false;
+        controller.abort();
+      } else {
+        waiting.add(controller);
+      }
+      return controller;
     },
-    wake,
+    release(controller) {
+      waiting.delete(controller);
+    },
     unsubscribe: () => unsubscribe?.(),
   };
 };
@@ -201,13 +219,15 @@ const startConsumer = (source, handler, concurrency, outerSignal, config, log) =
   outerSignal?.addEventListener('abort', onOuterAbort, { once: true });
   if (outerSignal?.aborted) stopping.abort();
   const wait = async (milliseconds) => {
-    const { signal, cleanup } = combineSignals(stopping.signal, waker.signal);
+    const woken = waker.take();
+    const { signal, cleanup } = combineSignals(stopping.signal, woken.signal);
     try {
       await config.sleep(milliseconds, signal);
     } catch {
       // Woken: a job may be ready, or the consumer stops.
     } finally {
       cleanup();
+      waker.release(woken);
     }
   };
   const lane = async () => {
@@ -235,7 +255,6 @@ const startConsumer = (source, handler, concurrency, outerSignal, config, log) =
   return {
     async close(closeOptions = {}) {
       stopping.abort();
-      waker.wake();
       const timeout = closeOptions.timeoutMilliseconds ?? 30_000;
       // The jobs still running past the timeout are told to stop: one not
       // yet sent goes back. One that does not hear it is left, its lease to
