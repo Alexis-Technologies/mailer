@@ -146,3 +146,73 @@ test('API: a refusal of the converter is a non-retryable unsupported failure', (
   const range = providerFailure('x', new RangeError('The body is over 4 MiB.'));
   assert.notStrictEqual(range.errors[0].category, 'unsupported');
 });
+
+test('API: every HTTP provider requests through createApiClient, but SES and JMAP', () => {
+  // Before: the seven clients ported from upyo each carried their own fetch,
+  // retry wiring, timeouts and truncation, and a fix of one (bug 29) missed
+  // another. SES signs each attempt with SigV4 and JMAP has its own session.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = path.join(__dirname, '../../src');
+  const direct = [];
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const file = path.join(src, entry.name, 'http-client.js');
+    if (!entry.isDirectory() || !fs.existsSync(file)) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    if (text.includes('requestWithRetry')) direct.push(entry.name);
+    else assert.match(text, /createApiClient\(/, entry.name);
+  }
+  assert.deepStrictEqual(direct.sort(), ['jmap', 'ses']);
+});
+
+test('API: the errors of 1.0 keep their names, arguments and fields over the shared error', () => {
+  const { SendGridApiError } = require('../../src/sendgrid/index.js');
+  const { MailgunApiError } = require('../../src/mailgun/index.js');
+  const maileroo = require('../../src/maileroo/index.js');
+  const lettermint = require('../../src/lettermint/index.js');
+  const mailtrap = require('../../src/mailtrap/index.js');
+  const sendgrid = new SendGridApiError('bad', 400, [{ message: 'x' }], 1000, 2, { cause: 'c' });
+  assert.ok(sendgrid instanceof Error && sendgrid instanceof ProviderApiError);
+  assert.deepStrictEqual(
+    [sendgrid.name, sendgrid.message, sendgrid.statusCode, sendgrid.retryAfterMilliseconds],
+    ['SendGridApiError', 'bad', 400, 1000],
+  );
+  assert.deepStrictEqual(sendgrid.errors, [{ message: 'x' }]);
+  assert.deepStrictEqual([sendgrid.attempts, sendgrid.cause], [2, 'c']);
+  assert.deepStrictEqual(providerFailure('sendgrid', sendgrid).errors[0].providerDetails, [
+    { message: 'x' },
+  ]);
+  const mailgun = new MailgunApiError('down', 503, undefined, 3);
+  assert.deepStrictEqual(
+    [mailgun.name, mailgun.statusCode, mailgun.attempts],
+    ['MailgunApiError', 503, 3],
+  );
+  for (const [module, prefix] of [
+    [maileroo, 'Maileroo'],
+    [lettermint, 'Lettermint'],
+    [mailtrap, 'Mailtrap'],
+  ]) {
+    const api = new module[`${prefix}ApiError`]('no', 401, 5, 1);
+    assert.deepStrictEqual(
+      [api.name, api.statusCode, api.retryAfterMilliseconds, api.attempts],
+      [`${prefix}ApiError`, 401, 5, 1],
+    );
+    const timeout = new module[`${prefix}TimeoutError`](1500, 2);
+    assert.deepStrictEqual(
+      [timeout.name, timeout.timeout, timeout.attempts],
+      [`${prefix}TimeoutError`, 1500, 2],
+    );
+    assert.strictEqual(timeout.message, `${prefix} API request timed out after 1500 ms.`);
+    const receipt = providerFailure(prefix.toLowerCase(), timeout);
+    assert.deepStrictEqual(
+      [receipt.errors[0].category, receipt.errors[0].code, receipt.retryable, receipt.attempts],
+      ['timeout', 'timeout', true, 2],
+    );
+  }
+  const read = new mailtrap.MailtrapResponseError(new mailtrap.MailtrapTimeoutError(10), 1);
+  assert.deepStrictEqual(
+    [read.name, read.attempts, read.retryable],
+    ['MailtrapResponseError', 1, false],
+  );
+  assert.strictEqual(providerFailure('mailtrap', read).errors[0].category, 'timeout');
+});
