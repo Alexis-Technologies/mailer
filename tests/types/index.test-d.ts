@@ -178,3 +178,32 @@ expectType<'hard' | 'soft' | 'undetermined' | undefined>(event.bounce?.kind);
 expectType<readonly string[]>(event.tags);
 expectAssignable<DeliveryBounce>({ kind: 'hard', code: '5.1.1' });
 expectError<DeliveryEventType>('sent');
+
+// The contracts of the reliability layer are types of the root.
+import type {
+  AuditEvent as RootAuditEvent,
+  AuditSink as RootAuditSink,
+  JsonObject as RootJsonObject,
+  MessageState as RootMessageState,
+  QueueDriver as RootQueueDriver,
+  QueueOutcome as RootQueueOutcome,
+  QueueSource as RootQueueSource,
+} from '../../index.js';
+const reliabilityState: RootMessageState = 'delivery_unknown';
+expectError<RootMessageState>('lost');
+const reliabilityOutcome: RootQueueOutcome = {
+  type: 'retry',
+  delayMilliseconds: 1,
+  code: 'c',
+  reason: 'r',
+};
+expectError<RootQueueOutcome>({ type: 'retry' });
+const reliabilitySink: RootAuditSink = {
+  append: (event: RootAuditEvent) => void event.correlationId,
+};
+const reliabilityJson: RootJsonObject = { a: [1, 'b', null, { c: true }] };
+declare const reliabilityDriver: RootQueueDriver;
+declare const reliabilitySource: RootQueueSource;
+expectType<string>(reliabilityDriver.id);
+expectType<string>(reliabilitySource.id);
+void [reliabilityState, reliabilityOutcome, reliabilitySink, reliabilityJson];

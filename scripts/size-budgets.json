@@ -3,6 +3,7 @@
   "./mime": 7.5,
   "./attachments": 4.5,
   "./render": 3,
+  "./templates": 12,
   "./webhooks": 15.5,
   "./smtp": 23.5,
   "./sendmail": 12,
@@ -34,5 +35,8 @@
   "./ratelimit": 4,
   "./idempotency": 4.5,
   "./hooks": 3,
-  "./tee": 3.5
+  "./tee": 3.5,
+  "./audit": 2,
+  "./queue": 14.5,
+  "./bullmq": 3.5
 }

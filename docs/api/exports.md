@@ -41,6 +41,10 @@ model of delivery events.
 - **Delivery events:** the `DeliveryEvent`, `DeliveryEventType` and
   `DeliveryBounce` types, which `./webhooks` gives. See
   [webhooks and events](/guide/webhooks).
+- **The reliability layer:** the `QueueDriver`, `QueueSource`, `QueueJob`,
+  `QueueJobRequest`, `QueueOutcome` and `QueueHandler` types every driver
+  shares, and `MessageState`, `AuditEvent` and `AuditSink`, as types only. See
+  [the queue](/guide/queue) and [the audit](/guide/audit).
 
 ## Subpaths
 
@@ -48,7 +52,11 @@ model of delivery events.
 | --- | --- | --- |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
-| `@alexify/mailer/render` | `renderContent`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
+| `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
+| `@alexify/mailer/templates` | `createTemplateRenderer`, `createFileLoader`, `createMemoryLoader`, `createCssInliner`, `createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`, `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`, `createReactEmailEngine`, `TemplateNotFoundError`, `TemplateRenderError` | [Templates by name](/messages/templates) |
+| `@alexify/mailer/queue` | `createMailQueue`, `createMailJobHandler`, `createMemoryQueue`, `createPollingDriver`, `prepareMailJob`, `parseMailJob`, `MailQueueError`, `QueueLeaseLostError`, `MAIL_JOB_NAME`, `MAIL_JOB_VERSION` | [The queue](/guide/queue) |
+| `@alexify/mailer/bullmq` | `createBullMQDriver`, `createBullMQProcessor`, `createBullMQBackoffStrategy`, `MAILER_BACKOFF_TYPE` | [BullMQ](/transports/bullmq) |
+| `@alexify/mailer/audit` | `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks`, `stateOf`, `stateOfDeliveryEvent`, `auditEventOfDeliveryEvent`, `isFinalState` | [The audit](/guide/audit) |
 | `@alexify/mailer/webhooks` | `createSesWebhookVerifier`, `createResendWebhookVerifier`, `createSendGridWebhookVerifier`, `createMailgunWebhookVerifier`, `createPostmarkWebhookVerifier`, `createMailerSendWebhookVerifier`, `createMailtrapWebhookVerifier`, `createBrevoWebhookVerifier`, `createMailjetWebhookVerifier`, `createSparkPostWebhookVerifier`, `createLettermintWebhookVerifier`, `createMailerooWebhookVerifier`, `createSmtp2goWebhookVerifier`, `createAzureWebhookVerifier`, `createScalewayWebhookVerifier`, `createMemoryReplayStore`, `WebhookVerificationError` | [Webhooks](/guide/webhooks) |
 | `@alexify/mailer/smtp` | `SmtpTransport` and its error classes (`SmtpResponseError`, `SmtpAuthError`, …), `isSmtpResponseProviderDetails`, `createHttpProxyConnector` | [SMTP](/transports/smtp) |
 | `@alexify/mailer/sendmail` | `SendmailTransport` | [Sendmail](/transports/sendmail) |

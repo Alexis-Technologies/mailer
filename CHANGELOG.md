@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The reliability layer: a persistent queue whose workers render templates, and the audit of the
+states of a message. Everything is additive.
+
+### Added
+
+- **`./queue`**: `createMailQueue({ driver, audit, logger })` with `enqueue`, `enqueueMany` and
+  `createWorker({ transport, renderer, resolveAttachment, checkJob, classify })`. A job is a
+  template with its context, rendered by the worker, or content rendered already, as JSON
+  checked when it is enqueued (`prepareMailJob`, `parseMailJob`): its fields as `createMessage`
+  checks them, its context refused with the path to what JSON would change, attachments as bytes
+  (bounded) or references the worker resolves. Its id is a UUID of the namespace, tenant and
+  `idempotencyKey`, so the same message enqueued again is one job and another under the key is
+  refused (`queue.key_reused`); its Message-ID and Content-IDs are fixed for every attempt. The
+  worker fails a permanent failure, a missing template or a bug at once, retries a temporary one
+  never sooner than `Retry-After`, an operator's failure (`auth`, `configuration`) after five
+  minutes, and never sends again a message of unknown delivery. `scheduledAt` is a delay of the
+  queue and `expiresAt` a deadline. `createMailJobHandler` is the worker for any driver;
+  `createPollingDriver(source)` makes a driver of a store that lends its jobs (an outbox), and
+  `createMemoryQueue()` is one in memory for tests.
+- **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
+  passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
+  read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
+  that spend no attempt. `createBullMQProcessor` and `createBullMQBackoffStrategy` serve a Worker
+  of your own. `pnpm test:bullmq` runs it on BullMQ and Valkey.
+- **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
+  defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
+  (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,
+  `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`,
+  `createReactEmailEngine`): names never paths (`createFileLoader` reads nothing outside its
+  directory), variants by locale and part, the subject in front matter, a layout, includes read
+  through the loader, each template compiled once, CSS inlined by juice or css-inline without
+  fetching a stylesheet (`createCssInliner`), and the text derived from the HTML.
+  `TemplateNotFoundError` and `TemplateRenderError` have a stable `code`.
+- **`./audit`**: the states of a message (`queued`, `rendered`, `submitted`, `accepted`,
+  `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
+  `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks`, `stateOf`, and
+  `auditEventOfDeliveryEvent` for the events of `./webhooks`.
+- **`./render`**: `RenderOutput.subject` and `renderFields(renderer, input)`, which gives
+  `{ subject, content }`.
+- **The root**: the contracts of the reliability layer as types (`QueueDriver`, `QueueSource`,
+  `QueueJob`, `QueueOutcome`, `MessageState`, `AuditEvent`, `AuditSink`), with no code.
+
 ## [1.1.0] - 2026-10-18
 
 The features of three libraries of the [comparison](https://mailerat.vercel.app/guide/comparison)

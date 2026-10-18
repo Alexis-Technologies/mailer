@@ -339,9 +339,9 @@
           "text": "`signal` + timeout over the body"
         },
         "queue": {
-          "mark": "🔜",
-          "text": "MongoDB outbox, BullMQ driver",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "✅",
+          "text": "BullMQ driver, memory queue, any outbox as a `QueueSource`",
+          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again. A MongoDB outbox is next on the [roadmap](/guide/why#the-plan)."
         },
         "attachments": {
           "mark": "✅",
@@ -373,8 +373,9 @@
           "text": "RFC 8058 one-click, DKIM-signed"
         },
         "templates": {
-          "mark": "⚠️",
-          "text": "`Renderer` interface, no engine by design"
+          "mark": "✅",
+          "text": "9 engines passed in: EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email",
+          "note": "Names, never paths; locales, layouts, front-matter subjects, CSS inlined without remote fetches, text derived."
         },
         "reactEmail": {
           "mark": "✅",
@@ -385,8 +386,8 @@
           "text": "native: Resend, Postmark, Mailjet, Mailtrap, JMAP; concurrency elsewhere"
         },
         "scheduled": {
-          "mark": "⚠️",
-          "text": "native in 8 providers; queue delay planned",
+          "mark": "✅",
+          "text": "queue delay; native in 8 providers",
           "note": "A transport that cannot schedule refuses the message before sending it, rather than sending it at once."
         },
         "tags": {
@@ -476,9 +477,9 @@
           "text": "`./mock`"
         },
         "auditLog": {
-          "mark": "🔜",
-          "text": "append-only, crypto-shredding",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "⚠️",
+          "text": "state model + sinks; crypto-shredding next",
+          "note": "Each state of a message, from the queue to the webhooks, one event per change. The keyed HMAC and encrypted recipients are on the [roadmap](/guide/why#the-plan)."
         },
         "types": {
           "mark": "✅",

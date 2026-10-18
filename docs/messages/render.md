@@ -49,6 +49,26 @@ const content = await renderContent(markdown, '# Hello\n\nYour order has shipped
 When a renderer gives HTML without text, `renderContent` derives the text with
 `htmlToText`; `{ autoText: false }` leaves it without one.
 
+## The subject
+
+A renderer may give the subject of the message with its content, as the
+templates of [`./templates`](/messages/templates) do from their front matter.
+`renderContent` leaves it out; `renderFields` gives `{ subject, content }`, the
+content rendered as `renderContent` renders it:
+
+```js
+const { renderFields } = require('@alexify/mailer/render');
+
+const { subject, content } = await renderFields(templates, {
+  template: 'welcome',
+  context: { name: user.name },
+});
+const message = createMessage({ from: 'shop@example.com', to: user.email, subject, content });
+```
+
+`subject` is undefined when the renderer gives none; a subject that is not a
+string fails the render.
+
 ## htmlToText
 
 `htmlToText(html)` gives the plain text an HTML body reads as, for the text

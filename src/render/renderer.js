@@ -20,12 +20,55 @@ const { htmlToText } = require('./html-to-text.js');
  * @throws {TypeError} If the renderer is not one, or gives no string.
  */
 const renderContent = async (renderer, input, options = {}) => {
+  const autoText = checkRender(renderer, options);
+  return toContent(await renderer.render(input), autoText);
+};
+
+/**
+ * Renders the subject and the content of a message: what `renderContent`
+ * gives, and the subject the renderer gave with it, if any.
+ *
+ * @param renderer An object with `render(input)`, sync or async, which gives
+ * `{ html?, text?, subject? }`.
+ * @param input What the renderer takes.
+ * @param options `autoText` (true): derive the text when there is none.
+ * @returns `{ subject, content }`, `subject` undefined when the renderer gave
+ * none.
+ * @throws {TypeError} As `renderContent` does, or if the subject is not a
+ * string.
+ */
+const renderFields = async (renderer, input, options = {}) => {
+  const autoText = checkRender(renderer, options);
+  const output = await renderer.render(input);
+  const subject = output?.subject;
+  if (subject !== undefined && typeof subject !== 'string') {
+    throw new TypeError('A renderer gives the subject as a string.');
+  }
+  const content = toContent(output, autoText);
+  return subject === undefined ? { content } : { subject, content };
+};
+
+// Checks the renderer and the options of a render, and gives `autoText`.
+const checkRender = (renderer, options) => {
   if (typeof renderer?.render !== 'function') {
     throw new TypeError('renderer must have a render method.');
   }
   const autoText = options.autoText ?? true;
   if (typeof autoText !== 'boolean') throw new TypeError('autoText must be a boolean.');
-  const output = await renderer.render(input);
+  return autoText;
+};
+
+/**
+ * The content of a message from what a renderer gave: its HTML and its text,
+ * the text derived from the HTML when it gave none and `autoText` is on.
+ *
+ * @param output What the renderer gave.
+ * @param autoText Whether to derive the text.
+ * @returns The content.
+ * @throws {TypeError} If the output holds no string.
+ * @internal
+ */
+const toContent = (output, autoText) => {
   const html = output?.html;
   const text = output?.text;
   if (
@@ -42,4 +85,4 @@ const renderContent = async (renderer, input, options = {}) => {
   return plain === undefined ? { html } : { html, text: plain };
 };
 
-module.exports = { renderContent };
+module.exports = { renderContent, renderFields, toContent };

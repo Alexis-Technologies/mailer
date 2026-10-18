@@ -20,14 +20,19 @@ Nodemailer, emailjs or Upyo, made of two parts:
    of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
    of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
    idempotency decorator whose store interface the outbox is to implement (`./idempotency`).
+   Unreleased: the queue (`./queue`, a driver-neutral contract, its worker and a memory queue;
+   `./bullmq`, the BullMQ driver), templates by name over nine engines passed in (`./templates`)
+   and the audit of the states of a message (`./audit`).
 
 It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
 Node compatibility (see "Platform"; no browser entry).
 
 **Status: 1.1 is the transport and the first parts of the reliability layer.** The root entry
-exports the message model and the transport contract of upyo, with the delivery events of 1.1;
-each transport, decorator and helper is a subpath, and their API is under semver from 1.0.0. The
-queue, the audit log and suppression have no API yet; their direction is in "Roadmap" below.
+exports the message model and the transport contract of upyo, with the delivery events of 1.1
+and, unreleased, the contracts of the reliability layer as types; each transport, decorator and
+helper is a subpath, and their API is under semver from 1.0.0. The MongoDB outbox, the
+crypto-shredding of the audit and suppression have no API yet; their direction is in "Roadmap"
+below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -45,6 +50,7 @@ pnpm test:bun                      # tests/unit and tests/runtime on Bun (bun te
 pnpm test:deno                     # tests/unit and tests/runtime on Deno (deno test --parallel)
 pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailpit (compose file there)
 pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
+pnpm test:bullmq                   # opt-in: tests/bullmq on BullMQ and Valkey (compose file there)
 node --test tests/unit/mailer.test.js   # a single file
 node --test --test-name-pattern="Bundle" tests/unit/*.test.js   # filter by name
 pnpm run test:coverage             # c8 over src/, gated at 98 lines/statements, 90 branches, 100 functions
@@ -816,7 +822,9 @@ src/
                     receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
                     schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
-                    the base of the transports of 1.1 (provider-transport.js), and abort.js,
+                    the base of the transports of 1.1 (provider-transport.js), what the
+                    decorators and the queue share (backoff.js, thrown.js, fingerprint.js,
+                    path.js), the driver of a QueueSource (polling-driver.js), and abort.js,
                     iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
@@ -855,15 +863,27 @@ The root entry is the contract every subpath shares, ported from `@upyo/core` (`
   `retryAfterMilliseconds`; `classifyHttpStatus` and `classifyReceiptError` classify. A transport
   reports a failure in a receipt rather than by throwing.
 
-The contracts of the reliability layer, still to be designed (Phase 0):
+The contracts of the reliability layer (Phase 0), types of the root with no code, so that
+`./queue`, `./bullmq`, `./audit` and a store's driver share them without requiring each other:
 
-- **`QueueDriver`**: enqueue, reserve, ack, retry with a delay; drivers for an outbox in MongoDB,
-  BullMQ and an in-memory one for tests.
-- **`AuditSink`**: append-only records of state changes; sinks for MongoDB, stdout/OTel logs and a
-  custom one.
+- **`QueueDriver`**: `enqueue`, `enqueueMany`, `consume(handler) → QueueConsumer`; a
+  `QueueHandler` makes of each run of a job a `QueueOutcome` (`ack`, `retry` after a delay,
+  `fail`, `release` without spending the attempt), and never throws. BullMQ is a driver
+  (`./bullmq`); a store that lends its jobs (an outbox) is a **`QueueSource`** (`reserve`,
+  `extend`, `ack`, `retry`, `fail`, `release`, fenced by the token of the lease), which
+  `createPollingDriver` (`src/internal/polling-driver.js`) makes a driver of, as it does the
+  memory queue. The queue retries, not the transport: a worker's chain has `retries: 1` and no
+  `RetryTransport`.
+- **A mail job** (`./queue`): JSON, `v: 1`, a template with its context or content rendered
+  already, its id a UUID of namespace, tenant and `idempotencyKey`, its Message-ID and
+  Content-IDs fixed (derived from the id under a key of the caller's), and a SHA-256 of all but
+  `enqueuedAt` that tells a duplicate from a key used again.
+- **`AuditSink`**: `append(event, { transaction })`, append-only, an event written once by its
+  deterministic `id`; sinks in memory, of a logger, and combined (`./audit`). A MongoDB sink and
+  the crypto-shredding of recipients are next.
 - **The states and events of a message:** `queued → rendered → submitted → accepted → delivered |
   bounced | complained | failed | delivery_unknown`, with correlationId, tenantId, attempt, the
-  provider's message id and a hash of the payload.
+  provider's message id and the hashes of the payload and of the message; no recipient.
 - **`DeliveryEvent`** (root types, 1.1), what `./webhooks` reads from a provider: one per message
   and recipient, its `id` the same on every redelivery, its `messageId` that of the receipt.
   `accepted`, `delivered`, `bounced` and `complained` are the states above; `rejected` is
@@ -888,6 +908,8 @@ model of states and events. `tenantId` is in the context from the start.
   providers.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
+  (Unreleased: `./queue` and `./bullmq`, with the memory queue; the outbox is next, a
+  `QueueSource`.)
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
   (crypto-shredding), so the right to erasure does not fight an append-only log. 3–6 records per
   message; optional hash chain for tamper evidence.
@@ -934,6 +956,12 @@ engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
   more would be fifteen more parts of the API to keep under semver, for less than a kilobyte
   each. If that cost is ever measured to matter, the entries can come later without a change
   to the one there is.
+- **One `./templates` entry, not one per engine.** The nine adapters weigh under a kilobyte
+  each, the engines are passed in, and the core (loaders, variants, front matter, cache) is most
+  of the entry, as the verifiers of `./webhooks` are of theirs.
+- **Templates are named, never pathed, and read through the loader.** No engine reads a file
+  itself: includes, partials and layouts go through the renderer's loader, which holds them to
+  its root; the one exception, MJML's `mj-include`, is off unless asked for.
 - **Eighteen providers, then few new ones.** The eight HTTP providers of upyo came with the port;
   1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
   SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare). Each
@@ -954,8 +982,9 @@ accepted but never read (Upyo `validateSsl`); no CRLF sanitization and `os.EOL` 
 inbound mail; the management APIs of the providers (domains, templates, statistics), which the
 official SDKs cover.
 
-**To check before designing:** whether per-tenant fairness (groups) is a paid BullMQ Pro feature;
-whether Fly.io restricts outgoing SMTP (it would make HTTP-first a requirement).
+**To check before designing:** whether Fly.io restricts outgoing SMTP (it would make HTTP-first
+a requirement). Checked: per-tenant fairness (groups) is a feature of BullMQ Pro only; the type
+definitions of BullMQ 6 have no group options.
 
 ## Platform
 
@@ -1065,7 +1094,14 @@ change. **This file wins** if they ever disagree.
   /mailpit sendmail"` for the sendmail case) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
   until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`; the providers of
   1.1 in one table, `providers.e2e.test.js`, which also checks that refused credentials are a
-  non-retryable `auth` failure). The release skill asks for them before a release.
+  non-retryable `auth` failure) and `tests/bullmq/` (`pnpm test:bullmq`, serial;
+  `docker compose -f tests/bullmq/docker-compose.yml up -d` and
+  `BULLMQ_REDIS_URL=redis://localhost:6390`: duplicates, retries after `Retry-After`, priorities,
+  delays, a release on close and a Worker without the strategy, on BullMQ itself). The release
+  skill asks for them before a release.
+- **The template engines, BullMQ and ioredis are devDependencies** for the tests of `./templates`
+  and `./bullmq` (the real engines, a fake BullMQ in `tests/helpers/bullmq/`, and tsd against the
+  real classes); `src/` requires none of them.
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
   written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to

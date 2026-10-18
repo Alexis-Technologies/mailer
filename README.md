@@ -9,8 +9,10 @@
 
 **Email for Node.js, with a reliability layer.** Its own SMTP client, MIME builder, DKIM signing
 and eighteen HTTP providers, and on top of them what the other libraries leave to the
-application: one model of delivery events, idempotency, and next a persistent queue and outbox, an
-audit log and suppression. Zero runtime dependencies.
+application: a persistent queue whose workers render templates of the engine you use and know a
+permanent failure from a temporary one, an audit of every state of a message, one model of
+delivery events and idempotency; next an outbox in MongoDB and suppression. Zero runtime
+dependencies.
 
 > **Status: 1.1 is the transport layer and the first parts of the reliability layer.** 1.0 ported
 > the transport from [upyo](https://github.com/dahlia/upyo) 0.7.0; 1.1 adds what
@@ -19,7 +21,9 @@ audit log and suppression. Zero runtime dependencies.
 > [sently](https://github.com/omqkhafi/sently) did better: sendmail, ten more HTTP providers,
 > attachments from paths and URLs, one-click List-Unsubscribe, verified webhooks into one model of
 > delivery events, and decorators for circuit breaking, rate limits, idempotency, hooks and
-> mirroring. The persistent queue, the audit log and suppression are being designed.
+> mirroring. Unreleased: the queue (`./queue`, with a BullMQ driver in `./bullmq`), templates by
+> name over nine engines (`./templates`) and the audit of the states of a message (`./audit`).
+> The MongoDB outbox and suppression are next.
 
 ### 📖 [Read the documentation →](https://mailerat.vercel.app/)
 
@@ -35,9 +39,10 @@ audit log and suppression. Zero runtime dependencies.
   read for an attachment unless you ask.
 - **What happens after `send()`.** The webhooks of fifteen providers, each verified before it is
   read and taken as handled only once your handler commits it, give one model of delivery events
-  (delivered, bounced, complained, …). Next: a persistent queue and outbox, an append-only audit
-  log and suppression. None of the
-  [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has the three.
+  (delivered, bounced, complained, …). A queue on BullMQ or a store of yours sends each message
+  once per key, retries what may pass and fails what will not, and an audit sink hears every state
+  from `queued` to `bounced`. Next: an outbox in MongoDB and suppression. None of the
+  [fourteen libraries compared](https://mailerat.vercel.app/guide/comparison) has them.
 - **Sent once, or known to be unknown.** Errors are classified as permanent or temporary, and a
   failure after which the provider may have taken the message is marked `deliveryUnknown`:
   `./retry` and `./pool` never send it again. `./idempotency` reserves a key before the send,
@@ -47,9 +52,10 @@ audit log and suppression. Zero runtime dependencies.
   golden `.eml` messages and fuzzing of headers, `multipart/related`, dot-stuffing and
   internationalized addresses are planned.
 - **Zero dependencies.** Built on `node:*` modules and `fetch`. What a part needs from your
-  application is passed in: the OpenTelemetry providers, a pino-like logger, the `render` of React
-  Email, and later the driver of a queue or a database (BullMQ, MongoDB). CommonJS with ESM named
-  imports and hand-written TypeScript typings, no build step.
+  application is passed in: the OpenTelemetry providers, a pino-like logger, BullMQ's classes,
+  your template engine (EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email),
+  and later a database driver (MongoDB). CommonJS with ESM named imports and hand-written
+  TypeScript typings, no build step.
 
 ## Installation
 
@@ -92,7 +98,9 @@ if (!receipt.successful) console.error(receipt.errorMessages);
 | --- | --- |
 | `@alexify/mailer` | messages, attachments, calendar parts, the `Transport` contract, receipts, delivery events |
 | `/mime` | MIME composition and DKIM signing |
-| `/attachments`, `/render` | attachments from a path, a URL, a data URI or a stream; templates and React Email |
+| `/attachments`, `/render` | attachments from a path, a URL, a data URI or a stream; the content of a renderer, React Email |
+| `/templates` | templates by name over EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache or React Email: locales, layouts, subjects, CSS inlined |
+| `/queue`, `/bullmq`, `/audit` | the mail queue and its worker, the BullMQ driver, the states of a message and their sinks |
 | `/smtp`, `/sendmail`, `/jmap` | SMTP, sendmail and JMAP transports |
 | `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`, `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`, `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk` | HTTP providers |
 | `/webhooks` | verified webhooks of fifteen providers, read into delivery events |
@@ -103,6 +111,37 @@ Every transport takes `generateId` for the identifiers it makes (a ULID or a cui
 UUID) and a pino-like `logger` for what happens inside it, and every HTTP transport a `fetch`,
 such as one bound to an undici `Agent` or a proxy; see
 [your own fetch and identifiers](https://mailerat.vercel.app/guide/getting-started#your-own-fetch-and-identifiers).
+
+Through a queue, the worker renders the template and sends the message, and the queue retries
+what may pass:
+
+```js
+const { Queue, Worker } = require('bullmq');
+const ejs = require('ejs');
+const { createMailQueue } = require('@alexify/mailer/queue');
+const { createBullMQDriver } = require('@alexify/mailer/bullmq');
+const { createEjsEngine, createFileLoader, createTemplateRenderer } = require('@alexify/mailer/templates');
+
+const queue = createMailQueue({
+  driver: createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'localhost' } }),
+});
+await queue.enqueue({
+  kind: 'template',
+  template: 'reset-password', // emails/reset-password.ejs, its subject in its front matter
+  context: { url },
+  from: 'no-reply@example.com',
+  to: user.email,
+  idempotencyKey: `reset-password:${token}`,
+});
+
+queue.createWorker({
+  transport,
+  renderer: createTemplateRenderer({
+    engine: createEjsEngine({ ejs }),
+    loader: createFileLoader({ dir: 'emails' }),
+  }),
+});
+```
 
 The same names import from ESM (`import { SmtpTransport } from '@alexify/mailer/smtp'`). The
 [API reference](https://mailerat.vercel.app/api/exports) lists every member, and the

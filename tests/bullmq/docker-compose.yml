@@ -1,0 +1,17 @@
+# Not ported: a local Valkey for `pnpm test:bullmq`, which runs the BullMQ
+# driver of ./bullmq on BullMQ itself:
+#   docker compose -f tests/bullmq/docker-compose.yml up -d
+#   BULLMQ_REDIS_URL=redis://localhost:6390 pnpm test:bullmq
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: mailer-valkey
+    # BullMQ warns unless the store evicts nothing.
+    command: ['valkey-server', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '6390:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10

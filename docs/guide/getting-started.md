@@ -4,7 +4,8 @@
 Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo)
 0.7.0; 1.1 adds sendmail, ten more HTTP providers, verified webhooks into delivery
 events, and decorators for circuit breaking, rate limits, idempotency, hooks and
-mirroring. The queue and the audit log are still being designed.
+mirroring. Unreleased: [the queue](/guide/queue), [templates by name](/messages/templates)
+and [the audit](/guide/audit).
 :::
 
 ## Installation
@@ -215,6 +216,7 @@ their own unless the part is given a store they share:
 | --- | --- | --- | --- |
 | [`./ratelimit`](/transports/ratelimit) | the token buckets | at most `maxKeys` buckets | a `store` of `take()`, such as a script on Redis, so that N processes send no more than the one limit |
 | [`./idempotency`](/transports/idempotency) | the keys reserved and the receipts | `createMemoryIdempotencyStore()` | a store of `reserve`, `complete` and `release`, the outbox to come among them |
+| [`./queue`](/guide/queue) | the jobs | `createMemoryQueue()` | a driver they share: [BullMQ](/transports/bullmq), or a store's outbox |
 | [`./webhooks`](/guide/webhooks#time-and-replays) | the ids of the requests taken | `createMemoryReplayStore()` | a store of `reserve`, `commit` and `release`; required, `null` to keep none |
 | [`./breaker`](/transports/breaker) | the state of the circuit | one per transport | none: each process opens its own circuit on the failures it sees |
 | [`./pool`](/transports/pool) | the turn of round-robin | one per transport | none |
