@@ -125,6 +125,8 @@ const { createEjsEngine, createFileLoader, createTemplateRenderer } = require('@
 
 const queue = createMailQueue({
   driver: createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'localhost' } }),
+  // Whoever can write to Redis cannot make the worker send a message of theirs.
+  signingKeys: [{ id: '2026-10', secret: process.env.MAIL_JOB_KEY }],
 });
 await queue.enqueue({
   kind: 'template',
@@ -143,6 +145,11 @@ queue.createWorker({
   }),
 });
 ```
+
+A job holds its message only until it is done with (`retainData`), and may be sealed by a codec
+of yours; a job that kills its worker is given up rather than sent round for ever; tenants can
+take turns (`fairness: 'tenant'` on the outbox), and `instrumentHandler` of `/otel` gives the
+worker its spans and metrics. See the [queue guide](https://mailerat.vercel.app/guide/queue).
 
 The same names import from ESM (`import { SmtpTransport } from '@alexify/mailer/smtp'`). The
 [API reference](https://mailerat.vercel.app/api/exports) lists every member, and the
