@@ -261,3 +261,38 @@ sourceContract(
   },
   { skip, fairness: 'tenant' },
 );
+
+test(
+  'MongoDB (replica set): a context with keys of $ and dots is stored, read back and sent',
+  { skip },
+  async (t) => {
+    const { client, outbox, queue, worker } = await setup(t);
+    const { createMemoryLoader, createTemplateRenderer } = require('../../src/templates/index.js');
+    const { fakeEngine } = require('../helpers/templates/fake-engine.js');
+    const renderer = createTemplateRenderer({
+      engine: fakeEngine(),
+      loader: createMemoryLoader({ 'price.tpl': '---\nsubject: Price\n---\n<p>{{name}}</p>' }),
+    });
+    const session = client.startSession();
+    let enqueued;
+    await session.withTransaction(async () => {
+      enqueued = await queue.enqueue(
+        {
+          kind: 'template',
+          template: 'price',
+          context: { name: 'Ada', $amount: 5, 'a.b': 1, price: { $gt: 1 } },
+          from: 'app@example.com',
+          to: 'ada@example.com',
+          idempotencyKey: randomUUID(),
+        },
+        { transaction: session },
+      );
+    });
+    await session.endSession();
+    const transport = fakeTransport();
+    worker({ transport, renderer });
+    await until(async () => (await outbox.get(enqueued.id))?.state === 'completed');
+    // Its hash held after the round trip: the keys came back as they went.
+    assert.equal(transport.calls.length, 1);
+  },
+);
