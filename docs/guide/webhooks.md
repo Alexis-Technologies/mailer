@@ -118,7 +118,8 @@ function that makes its verifier for each request, a store they share; `null`
 for an application that deduplicates the events by their `id` itself. A shared
 store implements three methods. The ids it is given are the provider and a
 SHA-256 of the provider's id (`mailtrap:3q2+7w…`), as some ids name a
-recipient:
+recipient. The ids of a batch go to it up to 64 at a time, so a store must
+take calls that run at once, as a Redis client does by pipelining them:
 
 ```js
 // Redis, with node-redis: an atomic reservation, a commit, and a release

@@ -64,7 +64,8 @@ export type ReplayState = 'reserved' | 'pending' | 'done';
  * application commits it, so that a request whose handler failed is taken
  * again on the provider's next delivery.  A store shared by several
  * processes, on Redis or a database, makes `reserve` one atomic operation
- * (`SET NX PX`, an insert under a unique index).
+ * (`SET NX PX`, an insert under a unique index).  The ids of a batch are
+ * passed up to 64 at a time, so its methods are called while others run.
  */
 export interface ReplayStore {
   /**

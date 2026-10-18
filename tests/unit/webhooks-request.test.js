@@ -240,6 +240,55 @@ test('Webhooks: a store that fails releases the ids reserved before it', async (
     replayStore: { ...store, reserve: () => true },
   });
   await assert.rejects(odd.verify(signMailtrap(mailtrapBatch('ev-9'))), /answered true/);
+  const silent = createMailtrapWebhookVerifier({
+    secret: 'mt',
+    replayStore: { ...store, reserve: async () => {} },
+  });
+  await assert.rejects(silent.verify(signMailtrap(mailtrapBatch('ev-8'))), /answered undefined/);
+});
+
+test('Webhooks: the ids of a batch go to the store together, the events in their order', async () => {
+  // Before: each id of a batch waited for the store's answer to the one
+  // before it, a round trip per event of a batch of a thousand.
+  let inFlight = 0;
+  let most = 0;
+  const answers = [];
+  const call = () =>
+    new Promise((resolve) => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      answers.push(() => {
+        inFlight--;
+        resolve();
+      });
+    });
+  const store = {
+    reserve: async (id) => {
+      await call();
+      return 'reserved';
+    },
+    commit: call,
+    release: call,
+  };
+  // The store answers the last id first.
+  const answer = async () => {
+    while (answers.length === 0) await new Promise((resolve) => setImmediate(resolve));
+    while (answers.length > 0) answers.pop()();
+  };
+  const mailtrap = createMailtrapWebhookVerifier({ secret: 'mt', replayStore: store });
+  const verified = mailtrap.verify(signMailtrap(mailtrapBatch('ev-1', 'ev-2', 'ev-3')));
+  await answer();
+  const delivery = await verified;
+  assert.strictEqual(most, 3);
+  assert.deepStrictEqual(
+    delivery.events.map((event) => event.id),
+    ['ev-1', 'ev-2', 'ev-3'],
+  );
+  most = 0;
+  const committed = delivery.commit();
+  await answer();
+  await committed;
+  assert.strictEqual(most, 3);
 });
 
 test('Webhooks: an id is kept in the store by its digest, never with an address', async () => {

@@ -223,6 +223,43 @@ const resolveUntimedOptions = (options) => {
 const resolveCredentialOptions = (options) =>
   resolveUntimedOptions({ ...options, replayStore: null });
 
+// The key of an id in the replay store: its provider, and a digest of the id,
+// which may name a recipient (an event of Mailtrap without an event_id).
+const storeKeyOf = (key) => {
+  const colon = key.indexOf(':');
+  const digest = createHash('sha256')
+    .update(key.slice(colon + 1))
+    .digest('base64url');
+  return `${key.slice(0, colon + 1)}${digest}`;
+};
+
+// The calls to a store go out a window at a time, so that a batch of a
+// thousand events waits for a few round trips rather than a thousand.
+const STORE_WINDOW = 64;
+
+/**
+ * Calls `call` for each key and its index, a window of them at a time, and
+ * settles every call of a window before the next.
+ *
+ * @returns The keys whose call succeeded, and the first error, if any.
+ * @internal
+ */
+const callEach = async (keys, call) => {
+  const succeeded = [];
+  let failure;
+  for (let start = 0; start < keys.length && failure === undefined; start += STORE_WINDOW) {
+    const end = Math.min(start + STORE_WINDOW, keys.length);
+    const calls = [];
+    for (let i = start; i < end; i++) calls.push(call(keys[i], i));
+    const settled = await Promise.allSettled(calls);
+    for (let i = 0; i < settled.length; i++) {
+      if (settled[i].status === 'fulfilled') succeeded.push(keys[start + i]);
+      else failure ??= { error: settled[i].reason };
+    }
+  }
+  return { succeeded, failure };
+};
+
 /**
  * The events of a verified request, whose ids stay reserved in the replay
  * store until the application commits them, or releases them so that the
@@ -266,25 +303,20 @@ class WebhookDelivery {
    */
   async commit(events) {
     if (this.#store === null) return;
+    const keys = [];
     if (events === undefined) {
-      for (const key of this.#left.keys()) {
-        await this.#store.commit(key, this.#ttlMs);
-        this.#left.delete(key);
+      for (const key of this.#left.keys()) keys.push(key);
+    } else {
+      for (const event of events) {
+        const key = this.#keyOf.get(event);
+        const left = key === undefined ? undefined : this.#left.get(key);
+        if (left === undefined) continue;
+        this.#keyOf.delete(event);
+        if (left > 1) this.#left.set(key, left - 1);
+        else keys.push(key);
       }
-      return;
     }
-    for (const event of events) {
-      const key = this.#keyOf.get(event);
-      const left = key === undefined ? undefined : this.#left.get(key);
-      if (left === undefined) continue;
-      this.#keyOf.delete(event);
-      if (left > 1) {
-        this.#left.set(key, left - 1);
-        continue;
-      }
-      await this.#store.commit(key, this.#ttlMs);
-      this.#left.delete(key);
-    }
+    await this.#settle(keys, (key) => this.#store.commit(key, this.#ttlMs));
   }
 
   /**
@@ -293,10 +325,16 @@ class WebhookDelivery {
    */
   async release() {
     if (this.#store === null) return;
-    for (const key of this.#left.keys()) {
-      await this.#store.release(key);
-      this.#left.delete(key);
-    }
+    const keys = [];
+    for (const key of this.#left.keys()) keys.push(key);
+    await this.#settle(keys, (key) => this.#store.release(key));
+  }
+
+  // A key whose call failed stays, to be committed or released again.
+  async #settle(keys, call) {
+    const { succeeded, failure } = await callEach(keys, call);
+    for (const key of succeeded) this.#left.delete(key);
+    if (failure !== undefined) throw failure.error;
   }
 }
 
@@ -317,35 +355,36 @@ class WebhookDelivery {
  * @returns The delivery.
  * @internal
  */
-// The key of an id in the replay store: its provider, and a digest of the id,
-// which may name a recipient (an event of Mailtrap without an event_id).
-const storeKeyOf = (key) => {
-  const colon = key.indexOf(':');
-  const digest = createHash('sha256')
-    .update(key.slice(colon + 1))
-    .digest('base64url');
-  return `${key.slice(0, colon + 1)}${digest}`;
-};
-
 const claimDelivery = async (common, entries, fields = {}, ttlMs = common.toleranceMs * 2) => {
   const store = common.replayStore;
   const delivery = new WebhookDelivery(fields, store, ttlMs);
   let done = 0;
   let pending = 0;
-  try {
-    for (const entry of entries) {
-      const key = store === null ? undefined : storeKeyOf(entry.key);
-      const state = store === null ? 'reserved' : await store.reserve(key, common.leaseMs);
-      if (state === 'reserved') delivery.add(key, entry.events);
-      else if (state === 'pending') pending++;
-      else if (state === 'done') done++;
-      else throw new TypeError(`replayStore.reserve answered ${String(state)}.`);
-    }
-  } catch (error) {
-    await delivery.release();
-    throw error;
+  if (store === null) {
+    for (const entry of entries) delivery.add(undefined, entry.events);
+    return delivery;
   }
-  if (store === null || delivery.reserved > 0 || done + pending === 0) return delivery;
+  const keys = [];
+  for (const entry of entries) keys.push(storeKeyOf(entry.key));
+  const states = [];
+  const { failure } = await callEach(keys, async (key, index) => {
+    states[index] = await store.reserve(key, common.leaseMs);
+  });
+  // The events keep the order of the request, whatever order the store
+  // answered in.
+  let invalid;
+  for (let i = 0; i < keys.length; i++) {
+    const state = states[i];
+    if (state === 'reserved') delivery.add(keys[i], entries[i].events);
+    else if (state === 'pending') pending++;
+    else if (state === 'done') done++;
+    else invalid ??= { state };
+  }
+  if (failure !== undefined || invalid !== undefined) {
+    await delivery.release();
+    throw failure?.error ?? new TypeError(`replayStore.reserve answered ${String(invalid.state)}.`);
+  }
+  if (delivery.reserved > 0 || done + pending === 0) return delivery;
   const single = entries.length === 1;
   if (pending > 0) {
     throw new WebhookVerificationError(
