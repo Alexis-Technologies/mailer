@@ -520,3 +520,21 @@ test('Idempotency: a key the wrapped sendMany never took is free again', async (
   assert.strictEqual(receipts[0].successful, true);
   assert.strictEqual(inner.calls.length, 1);
 });
+
+test('Idempotency: the logger hears a key with the addresses in it redacted', async () => {
+  // Before: the records of a hit, a send in flight and a key used again
+  // carried the key as it was, though a key built of a recipient names one.
+  const records = [];
+  const logger = {
+    debug: (record) => records.push(record),
+    info: (record) => records.push(record),
+    warn: (record) => records.push(record),
+  };
+  const once = new IdempotencyTransport(fakeTransport(), { logger });
+  const keyed = message({ idempotencyKey: 'welcome:bob@example.com' });
+  await once.send(keyed);
+  await once.send(keyed);
+  const hit = records.find((record) => record.code === 'idempotency.hit');
+  assert.ok(hit);
+  assert.doesNotMatch(hit.key, /bob@example\.com/);
+});

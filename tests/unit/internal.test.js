@@ -620,3 +620,24 @@ test('Internal: a timeout past what a timer keeps is a long one, not one of 1 ms
   );
   assert.deepStrictEqual(outcomes, [true]);
 });
+
+test('Internal: a logger that throws is told once, by its name, not its text', (t) => {
+  // Before: every record a broken logger threw on was a process warning, with
+  // its error text as it was, such as the recipient it failed to write.
+  const { createLog } = require('../../src/internal/log.js');
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push([options.code, text]));
+  const log = createLog(
+    {
+      info: () => {
+        throw new Error('cannot write bob@example.com');
+      },
+    },
+    {},
+  );
+  for (let i = 0; i < 25; i++) log.write('info', {}, 'x');
+  assert.strictEqual(warnings.length, 1);
+  assert.strictEqual(warnings[0][0], 'MAILER_LOGGER_FAILED');
+  assert.match(warnings[0][1], /threw Error; its later failures are not told/);
+  assert.doesNotMatch(warnings[0][1], /bob@example\.com/);
+});

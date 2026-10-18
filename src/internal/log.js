@@ -2,6 +2,13 @@
 // the pino-like logger the application passes in.  Without one a transport
 // writes nothing, except the warnings of warnDegradation.
 
+// What a logger's failure is, by its name and code alone: its text may name
+// a recipient of the record it failed to write.
+const failureOf = (error) => {
+  const name = typeof error?.name === 'string' ? error.name : typeof error;
+  return typeof error?.code === 'string' ? `${name} (${error.code})` : name;
+};
+
 /**
  * Makes the log of a component: the logger bound to `bindings` through
  * `child()` when it has one, or with them merged into each record otherwise.
@@ -18,6 +25,9 @@ const createLog = (logger, bindings) => {
   if (logger == null) return SILENT;
   const bound = typeof logger.child === 'function' ? logger.child(bindings) : logger;
   const merge = bound === logger;
+  // A logger that throws for every record would fill the output: its first
+  // failure is told, the others not.
+  let failed = false;
   const isEnabled = (level) =>
     typeof bound[level] === 'function' && (bound.isLevelEnabled?.(level) ?? true);
   return {
@@ -33,9 +43,12 @@ const createLog = (logger, bindings) => {
       try {
         bound[level](merge ? { ...bindings, ...built } : built, message);
       } catch (error) {
-        process.emitWarning(`A logger passed to the mailer threw: ${error?.message ?? error}`, {
-          code: 'MAILER_LOGGER_FAILED',
-        });
+        if (failed) return;
+        failed = true;
+        process.emitWarning(
+          `A logger passed to the mailer threw ${failureOf(error)}; its later failures are not told.`,
+          { code: 'MAILER_LOGGER_FAILED' },
+        );
       }
     },
   };

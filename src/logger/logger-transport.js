@@ -5,6 +5,7 @@
 const { inspect } = require('node:util');
 const { generateId } = require('../core/id.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
+const { warnLimited } = require('../internal/warn.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
 const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
@@ -369,9 +370,10 @@ class LoggerTransport {
     try {
       this.logger[level](properties, message);
     } catch (error) {
-      process.emitWarning(`The logger of LoggerTransport threw: ${describe(error)}`, {
-        code: 'MAILER_LOGGER_FAILED',
-      });
+      warnLimited(
+        'MAILER_LOGGER_FAILED',
+        `The logger of LoggerTransport threw: ${redactAddresses(describe(error))}`,
+      );
     }
   }
 }

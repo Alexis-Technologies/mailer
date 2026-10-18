@@ -18,6 +18,7 @@ const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { refuseRaw } = require('../internal/capabilities.js');
 const { disposeOf, isAbortOf, messageOf, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createIdempotencyConfig } = require('./config.js');
 const { fingerprintOf } = require('./fingerprint.js');
@@ -159,7 +160,11 @@ class IdempotencyTransport {
 
   #replyOf(record, fingerprint, key) {
     if (record.fingerprint !== fingerprint) {
-      this.#log.write('warn', { code: 'idempotency.key_reused', key }, 'A key was used again.');
+      this.#log.write(
+        'warn',
+        () => ({ code: 'idempotency.key_reused', key: redactAddresses(key) }),
+        'A key was used again.',
+      );
       return createFailedReceipt(
         `The idempotency key ${key} was used for another message; this one was not sent.`,
         {
@@ -171,10 +176,18 @@ class IdempotencyTransport {
       );
     }
     if (record.state === 'done' && record.receipt !== undefined) {
-      this.#log.write('debug', { code: 'idempotency.hit', key }, 'A send was answered as before.');
+      this.#log.write(
+        'debug',
+        () => ({ code: 'idempotency.hit', key: redactAddresses(key) }),
+        'A send was answered as before.',
+      );
       return record.receipt;
     }
-    this.#log.write('info', { code: 'idempotency.in_flight', key }, 'A send of the key is out.');
+    this.#log.write(
+      'info',
+      () => ({ code: 'idempotency.in_flight', key: redactAddresses(key) }),
+      'A send of the key is out.',
+    );
     // The category is given, as the words of the text, which hold the key,
     // would otherwise choose one (a key `order-timeout-1` made it a timeout,
     // which a circuit breaker counts against the provider).
