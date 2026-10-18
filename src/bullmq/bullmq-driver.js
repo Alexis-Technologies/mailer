@@ -6,6 +6,7 @@
 
 const { createLog } = require('../internal/log.js');
 const { checkPositiveInteger } = require('../internal/options.js');
+const { settledWithin } = require('../internal/settle.js');
 const {
   MAILER_BACKOFF_TYPE,
   createBullMQBackoffStrategy,
@@ -113,19 +114,6 @@ const duplicateOf = async (queue, request) => {
   const answer = { id: request.id, duplicate: true };
   if (typeof held.data?.hash === 'string') answer.existingHash = held.data.hash;
   return answer;
-};
-
-// Settles within the time, or says it did not.
-const settledWithin = async (promise, milliseconds) => {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(resolve, milliseconds, 'timeout');
-  });
-  try {
-    return await Promise.race([promise, late]);
-  } finally {
-    clearTimeout(timer);
-  }
 };
 
 const startWorker = (config, queue, handler, consumeOptions, log) => {

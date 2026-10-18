@@ -10,27 +10,15 @@ const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const { isJobRequest, rankOf } = require('../internal/priority.js');
 const { checkCollection, documentOf, sessionOf } = require('./collection.js');
 
-const RANK = new Map([
-  ['high', 0],
-  ['normal', 1],
-  ['low', 2],
-]);
 // The document of a pause of the whole queue: no job id has a colon.
 const PAUSE_ID = 'mailer:pause';
 const DEFAULT_RETAIN_SECONDS = 7 * 24 * 60 * 60;
 
-const isRequest = (request) =>
-  typeof request?.id === 'string' &&
-  request.id !== '' &&
-  !request.id.includes(':') &&
-  typeof request.name === 'string' &&
-  typeof request.data === 'object' &&
-  request.data !== null &&
-  RANK.has(request.priority) &&
-  Number.isInteger(request.maxAttempts) &&
-  request.maxAttempts >= 1;
+// A job id has no colon, which the pause's id has.
+const isRequest = (request) => isJobRequest(request) && !request.id.includes(':');
 
 const documentOfRequest = (request, now) => ({
   _id: request.id,
@@ -38,7 +26,7 @@ const documentOfRequest = (request, now) => ({
   data: request.data,
   hash: request.hash,
   priority: request.priority,
-  rank: RANK.get(request.priority),
+  rank: rankOf(request.priority),
   maxAttempts: request.maxAttempts,
   enqueuedAt: new Date(request.enqueuedAt ?? now),
   availableAt: new Date(request.availableAt ?? request.enqueuedAt ?? now),

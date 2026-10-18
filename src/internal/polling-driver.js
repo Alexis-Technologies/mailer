@@ -7,6 +7,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { warnThrown } = require('./callback.js');
 const { createLog } = require('./log.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('./options.js');
+const { settledWithin } = require('./settle.js');
 const { sleep } = require('./sleep.js');
 
 const DEFAULTS = Object.freeze({
@@ -171,19 +172,6 @@ const runLease = async (source, handler, lease, jobsSignal, config, log) => {
       () => ({ jobId: lease.job.id, error: error?.message }),
       'queue.settle_failed',
     );
-  }
-};
-
-// Whether a promise settles within a time: `'timeout'` when it does not.
-const settledWithin = async (promise, milliseconds) => {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(resolve, milliseconds, 'timeout');
-  });
-  try {
-    return await Promise.race([promise, late]);
-  } finally {
-    clearTimeout(timer);
   }
 };
 

@@ -7,22 +7,7 @@
 const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
-
-const RANK = new Map([
-  ['high', 0],
-  ['normal', 1],
-  ['low', 2],
-]);
-
-const isRequest = (request) =>
-  typeof request?.id === 'string' &&
-  request.id !== '' &&
-  typeof request.name === 'string' &&
-  typeof request.data === 'object' &&
-  request.data !== null &&
-  RANK.has(request.priority) &&
-  Number.isInteger(request.maxAttempts) &&
-  request.maxAttempts >= 1;
+const { isJobRequest, rankOf } = require('../internal/priority.js');
 
 // The data of a job as a store gives it back: a copy, never the object
 // enqueued.
@@ -30,7 +15,7 @@ const stored = (data) => JSON.parse(JSON.stringify(data));
 
 // Whether `a` runs before `b`.
 const before = (a, b) => {
-  const rank = RANK.get(a.priority) - RANK.get(b.priority);
+  const rank = rankOf(a.priority) - rankOf(b.priority);
   if (rank !== 0) return rank < 0;
   if (a.availableAt !== b.availableAt) return a.availableAt < b.availableAt;
   return a.seq < b.seq;
@@ -87,7 +72,7 @@ class MemorySource {
   }
 
   async enqueue(request) {
-    if (!isRequest(request)) throw new TypeError('The memory queue takes a job request.');
+    if (!isJobRequest(request)) throw new TypeError('The memory queue takes a job request.');
     const held = this.jobs.get(request.id);
     if (held !== undefined) return { id: request.id, duplicate: true, existingHash: held.hash };
     if (this.#open.size >= this.#config.maxJobs) {
