@@ -35,21 +35,33 @@ const trustChainOf = (pem) => {
   }
   const authorities = [];
   for (const match of pem.matchAll(PEM_CERTIFICATE)) {
-    authorities.push(new X509Certificate(match[0]));
+    const authority = new X509Certificate(match[0]);
+    // A certificate that is no authority issues none: pinned, it would let
+    // any certificate it signed, one served from any Scaleway host, through.
+    if (!authority.ca) {
+      throw new TypeError(`trustChain holds a certificate that is no CA: ${authority.subject}`);
+    }
+    authorities.push(authority);
   }
   if (authorities.length === 0) throw new TypeError('trustChain holds no certificate.');
   return authorities;
 };
 
+const isValidAt = (certificate, now) =>
+  now >= Date.parse(certificate.validFrom) && now <= Date.parse(certificate.validTo);
+
 const eventOf = (record, snsMessageId) => {
   const type = TYPES.get(record.type) ?? 'unknown';
+  // A deferral carries a soft bounce only when it gives its code or reason.
+  const code = record.email_response_code ?? undefined;
+  const diagnostic = stringOf(record.email_response_message) ?? stringOf(record.email_error);
   let bounce;
-  if (type === 'bounced' || type === 'deferred') {
-    bounce = { kind: type === 'bounced' ? 'hard' : 'soft' };
-    if (record.email_response_code !== undefined && record.email_response_code !== null) {
-      bounce.code = String(record.email_response_code);
-    }
-    const diagnostic = stringOf(record.email_response_message) ?? stringOf(record.email_error);
+  if (type === 'bounced') bounce = { kind: 'hard' };
+  else if (type === 'deferred' && (code !== undefined || diagnostic !== undefined)) {
+    bounce = { kind: 'soft' };
+  }
+  if (bounce !== undefined) {
+    if (code !== undefined) bounce.code = String(code);
     if (diagnostic !== undefined) bounce.diagnostic = diagnostic;
   }
   return createEvent({
@@ -89,11 +101,19 @@ const createScalewayWebhookVerifier = (options = {}) => {
     // not the host, is what a certificate is taken by.
     isCertificateUrl: isScalewayUrl,
     isSubscribeUrl: isScalewayUrl,
-    trust: (certificate) => {
+    trust: (certificate, now) => {
       for (const authority of authorities) {
-        if (certificate.checkIssued(authority) && certificate.verify(authority.publicKey)) return;
+        if (
+          isValidAt(authority, now) &&
+          certificate.checkIssued(authority) &&
+          certificate.verify(authority.publicKey)
+        ) {
+          return;
+        }
       }
-      throw certificateError('The signing certificate was not issued by the trust chain.');
+      throw certificateError(
+        'The signing certificate was not issued by an authority of the trust chain valid now.',
+      );
     },
     eventsOf: (message, record) => [
       record === undefined

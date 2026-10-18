@@ -251,12 +251,15 @@ test('Webhooks mapping: Mailgun, a failure by its severity and reason', async ()
   assert.deepStrictEqual(actual, expectedOf(rows));
 });
 
-test('Webhooks mapping: Maileroo, by event, a failure hard and a deferral soft', async () => {
+test('Webhooks mapping: Maileroo, by event, a failure of a kind not said', async () => {
+  // Changed after the review: a failure was hard and a deferral soft though
+  // Maileroo says neither; a deferral with its reason carries a soft bounce.
   const rows = [
     ['accepted', 'accepted'],
     ['delivered', 'delivered'],
-    ['deferred', 'deferred', 'soft'],
-    ['failed', 'bounced', 'hard'],
+    ['deferred', 'deferred'],
+    [{ event_type: 'deferred', reason: '421 try later' }, 'deferred', 'soft'],
+    ['failed', 'bounced', 'undetermined'],
     ['rejected', 'rejected'],
     ['complained', 'complained'],
     ['opened', 'opened'],
@@ -264,13 +267,14 @@ test('Webhooks mapping: Maileroo, by event, a failure hard and a deferral soft',
     ['no_such_event', 'unknown'],
   ];
   const verifier = createMailerooWebhookVerifier({ secret: 'mr-secret', replayStore: null });
-  const actual = await eachOf(rows, (type, index) => {
+  const actual = await eachOf(rows, (input, index) => {
+    const fields = typeof input === 'string' ? { event_type: input } : input;
     const body = JSON.stringify({
       event_id: `mr-${index}`,
-      event_type: type,
+      event_type: fields.event_type,
       event_time: 1_800_000_000,
       message_reference_id: 'ref-1',
-      event_data: { to: 'bob@example.com' },
+      event_data: { to: 'bob@example.com', reason: fields.reason },
     });
     return verifier.verify({
       body,
@@ -487,7 +491,9 @@ test('Webhooks mapping: Scaleway, by type, a drop hard and a deferral soft', asy
   const rows = [
     ['email_queued', 'accepted'],
     ['email_delivered', 'delivered'],
-    ['email_deferred', 'deferred', 'soft'],
+    // Changed after the review: a deferral carries a soft bounce only with its
+    // code or reason.
+    ['email_deferred', 'deferred'],
     ['email_dropped', 'bounced', 'hard'],
     ['email_mailbox_not_found', 'bounced', 'hard'],
     ['email_blocklisted', 'rejected'],
@@ -628,11 +634,18 @@ test('Webhooks mapping: SparkPost, a bounce by its bounce class', async () => {
     [classed('delay', '20'), 'deferred'],
     [classed('bounce', '10'), 'bounced', 'hard'],
     [classed('bounce', 30), 'bounced', 'hard'],
-    [classed('bounce', '90'), 'bounced', 'hard'],
+    // Changed after the review: 90 was a hard bounce, 25 and 26 soft ones, 60,
+    // 80 and 100 soft ones, though they are an unsubscribe, refusals by
+    // SparkPost's policy, and no failure.
+    [classed('bounce', '90'), 'unsubscribed'],
+    [classed('bounce', '25'), 'rejected'],
+    [classed('bounce', '26'), 'rejected'],
+    [classed('bounce', '60'), 'unknown'],
+    [classed('bounce', '80'), 'unknown'],
+    [classed('bounce', '100'), 'unknown'],
     [classed('bounce', '20'), 'bounced', 'soft'],
-    [classed('bounce', '25'), 'bounced', 'soft'],
     [classed('bounce', '50'), 'bounced', 'soft'],
-    [classed('bounce', '100'), 'bounced', 'soft'],
+    [classed('bounce', '70'), 'bounced', 'soft'],
     [classed('bounce', '1'), 'bounced', 'undetermined'],
     ['bounce', 'bounced', 'undetermined'],
     [classed('out_of_band', '10'), 'bounced', 'hard'],

@@ -470,7 +470,8 @@ export interface ScalewayWebhookVerifierOptions extends SnsWebhookVerifierOption
   readonly topicArns: readonly string[];
   /**
    * The PEM of Scaleway's SNS trust chain, which issued the certificate a
-   * message is signed with.
+   * message is signed with: each certificate of it a CA, or the verifier is
+   * not made, and one valid when it is trusted.
    */
   readonly trustChain: string;
   /**

@@ -392,7 +392,9 @@ messages, verified as those of SES are, from a listed topic, within an hour and
 once, but with a certificate on a Scaleway host that must have been issued by
 Scaleway's SNS trust chain. Download that chain once, from
 `https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem`, and pass
-it as `trustChain`: the verifier trusts no certificate the chain did not issue.
+it as `trustChain`: the verifier trusts no certificate the chain did not issue,
+refuses a chain that holds a certificate that is no CA, and takes an authority
+of it only while it is valid.
 A subscription confirmation is handed back, as for SES.
 
 ## Providers without a verifier

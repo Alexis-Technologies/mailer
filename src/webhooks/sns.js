@@ -224,8 +224,8 @@ const topicsOf = (topicArns) => {
  * `certificateTimeoutMs`, and the options every verifier takes.
  * @param service `provider`, `defaultToleranceMs`, `isCertificateUrl` and
  * `isSubscribeUrl` (where its certificates and subscriptions are),
- * `trust(certificate)`, which throws for a certificate the service did not
- * issue, and `eventsOf(message, record)`, the events of a notification,
+ * `trust(certificate, now)`, which throws for a certificate the service did
+ * not issue, and `eventsOf(message, record)`, the events of a notification,
  * `record` its parsed message when it is a JSON object.
  * @internal
  */
@@ -233,9 +233,10 @@ const createSnsVerifier = (options, service) => {
   const topics = topicsOf(options.topicArns);
   const common = resolveCommonOptions(options, service.defaultToleranceMs);
   const algorithms = algorithmsOf(options.signatureVersions);
+  const trust = service.trust;
   const certificates = createCertificateCache(
     checkOptionalFunction(options.fetch, 'fetch'),
-    service.trust ?? (() => {}),
+    trust === undefined ? () => {} : (certificate) => trust(certificate, common.now()),
     checkPositiveNumber(
       options.certificateTimeoutMs ?? DEFAULT_CERTIFICATE_TIMEOUT_MS,
       'certificateTimeoutMs',

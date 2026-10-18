@@ -38,15 +38,32 @@ const TYPES = new Map([
   ['click', 'clicked'],
   ['amp_click', 'clicked'],
 ]);
-// SparkPost's bounce classes: 10 Invalid Recipient, 30 Generic Bounce (No
-// RCPT) and 90 Unsubscribe are hard; 1 Undetermined; the others soft.
-const HARD_CLASSES = new Set(['10', '30', '90']);
+// SparkPost's bounce classes, read by the rule of the guide: 10 Invalid
+// Recipient and 30 Generic Bounce (No RCPT) are hard; 25 Admin Failure and 26
+// Smart Send Suppression, which SparkPost failed by its own policy, nothing
+// sent, are rejections; 60 Auto-Reply, 80 Subscribe and 100
+// Challenge-Response are no failure; 90 Unsubscribe is one; 1 Undetermined
+// says nothing; the others (soft, blocks, transient) are soft.
+const BOUNCE_CLASSES = new Map([
+  ['1', { type: 'bounced', kind: 'undetermined' }],
+  ['10', { type: 'bounced', kind: 'hard' }],
+  ['30', { type: 'bounced', kind: 'hard' }],
+  ['25', { type: 'rejected' }],
+  ['26', { type: 'rejected' }],
+  ['60', { type: 'unknown' }],
+  ['80', { type: 'unknown' }],
+  ['100', { type: 'unknown' }],
+  ['90', { type: 'unsubscribed' }],
+]);
+const SOFT = { type: 'bounced', kind: 'soft' };
+const UNDETERMINED = { type: 'bounced', kind: 'undetermined' };
 
-const bounceOf = (event) => {
-  const bounceClass = event.bounce_class === undefined ? undefined : String(event.bounce_class);
-  let kind = 'soft';
-  if (bounceClass === undefined || bounceClass === '1') kind = 'undetermined';
-  else if (HARD_CLASSES.has(bounceClass)) kind = 'hard';
+const classOf = (event) =>
+  event.bounce_class === undefined
+    ? UNDETERMINED
+    : (BOUNCE_CLASSES.get(String(event.bounce_class)) ?? SOFT);
+
+const bounceOf = (event, kind) => {
   const bounce = { kind };
   if (stringOf(event.error_code) !== undefined) bounce.code = event.error_code;
   const diagnostic = stringOf(event.raw_reason) ?? stringOf(event.reason);
@@ -66,7 +83,13 @@ const innerOf = (record) => {
 };
 
 const eventOf = (inner, index) => {
-  const type = TYPES.get(inner.type) ?? 'unknown';
+  let type = TYPES.get(inner.type) ?? 'unknown';
+  let bounce;
+  if (type === 'bounced') {
+    const classed = classOf(inner);
+    type = classed.type;
+    if (classed.kind !== undefined) bounce = bounceOf(inner, classed.kind);
+  }
   return createEvent({
     provider: 'sparkpost',
     type,
@@ -75,7 +98,7 @@ const eventOf = (inner, index) => {
     messageId: stringOf(inner.transmission_id),
     recipient: stringOf(inner.rcpt_to) ?? stringOf(inner.raw_rcpt_to),
     occurredAt: dateOf(inner.timestamp),
-    bounce: type === 'bounced' ? bounceOf(inner) : undefined,
+    bounce,
     reason: stringOf(inner.reason) ?? stringOf(inner.raw_reason),
     url: stringOf(inner.target_link_url),
     tags: stringsOf(inner.rcpt_tags),

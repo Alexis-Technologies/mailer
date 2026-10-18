@@ -113,6 +113,41 @@ test('Webhooks Scaleway: an SNS message signed by a certificate the trust chain 
   assert.strictEqual(served.requests.length, 1);
 });
 
+test('Webhooks Scaleway: a pinned certificate must be a CA, valid when it is trusted', async () => {
+  // Before: any certificate of the trust chain issued, a CA or not, valid or
+  // not, so a pinned leaf let what it signed through from any Scaleway host.
+  const fixtures = require('node:path').join(__dirname, '..', 'fixtures', 'webhooks');
+  const read = (name) => require('node:fs').readFileSync(`${fixtures}/${name}`, 'utf8');
+  assert.throws(
+    () =>
+      createScalewayWebhookVerifier({
+        topicArns: [SCW_TOPIC],
+        trustChain: scaleway.certificate,
+        replayStore: null,
+      }),
+    /no CA/,
+  );
+  // A CA valid in 2020, which issued a leaf valid until 2120.
+  const expired = (now) =>
+    createScalewayWebhookVerifier({
+      topicArns: [SCW_TOPIC],
+      trustChain: read('scaleway-expired-ca.pem'),
+      fetch: certificateFetch(read('scaleway-cert-of-expired-ca.pem')).fetch,
+      now: () => Date.parse(now),
+      replayStore: null,
+    });
+  const at = (timestamp) =>
+    JSON.stringify(scwMessage({ type: 'email_spam' }, { Timestamp: timestamp }));
+  await rejects(
+    expired('2027-01-01T12:00:30Z').verify({ body: at('2027-01-01T12:00:00.000Z') }),
+    'certificate',
+  );
+  const { events } = await expired('2020-06-01T12:00:30Z').verify({
+    body: at('2020-06-01T12:00:00.000Z'),
+  });
+  assert.strictEqual(events[0].type, 'complained');
+});
+
 test('Webhooks Scaleway: a certificate the trust chain did not issue, or off Scaleway, is refused', async () => {
   // The SES test certificate is self-signed, not issued by the test CA.
   const foreign = createScalewayWebhookVerifier({
@@ -303,7 +338,11 @@ test('Webhooks Maileroo: the HMAC of the body, an event per recipient, once', as
       }),
     ),
   );
-  assert.deepStrictEqual(failed.events[0].bounce, { kind: 'hard', diagnostic: 'no user' });
+  // Changed after the review: Maileroo does not say a failure is permanent.
+  assert.deepStrictEqual(failed.events[0].bounce, {
+    kind: 'undetermined',
+    diagnostic: 'no user',
+  });
   const nobody = await verifier.verify(
     sign(JSON.stringify({ event_id: 'n', event_type: 'opened' })),
   );

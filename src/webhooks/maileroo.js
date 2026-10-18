@@ -36,11 +36,13 @@ const eventsOf = (payload) => {
   const data = isRecord(payload.event_data) ? payload.event_data : {};
   const type = TYPES.get(payload.event_type) ?? 'unknown';
   const reason = stringOf(data.reason) ?? stringOf(data.reject_reason);
+  // Maileroo says neither whether a failure is permanent nor whether a
+  // deferral is a bounce: a failure is of a kind not said, and a deferral
+  // carries a soft bounce only when it gives its reason.
   let bounce;
-  if (type === 'bounced' || type === 'deferred') {
-    bounce = { kind: type === 'bounced' ? 'hard' : 'soft' };
-    if (reason !== undefined) bounce.diagnostic = reason;
-  }
+  if (type === 'bounced') bounce = { kind: 'undetermined' };
+  else if (type === 'deferred' && reason !== undefined) bounce = { kind: 'soft' };
+  if (bounce !== undefined && reason !== undefined) bounce.diagnostic = reason;
   const { tags, metadata } = splitNamedTags(payload.tags);
   const recipients = stringListOf(data.to);
   const list = recipients.length > 0 ? recipients : [undefined];
