@@ -6,10 +6,8 @@
 // the account.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure } = require('../internal/api.js');
+const { sendConverted, sendManyConcurrently, verifyByGet } = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createSmtp2goConfig } = require('./config.js');
 const { createSmtp2goClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
@@ -75,28 +73,20 @@ class Smtp2goTransport {
    * @returns The receipt, with the `email_id` of the answer.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      return receiptOf((await this.httpClient.send(payload, options)).json);
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('smtp2go', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'smtp2go',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) => receiptOf(answer.json),
+    });
   }
 
   /**
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 
   /**
@@ -107,26 +97,15 @@ class Smtp2goTransport {
    * @param options Optional abort signal.
    * @throws {Error} If SMTP2GO refuses the key or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    await verifyByRequest({
-      provider: 'SMTP2GO',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.config.baseUrl}/v3/stats/email_summary`,
-          {
-            method: 'POST',
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-            body: '{}',
-          },
-          signal,
-        ),
+  verify(options) {
+    return verifyByGet(this, 'SMTP2GO', `${this.config.baseUrl}/v3/stats/email_summary`, options, {
+      init: {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: '{}',
+      },
       // SMTP2GO answers a key that may not read the summary with a 400.
       check: (status, text) => status === 400 && text.includes('ENDPOINT_PERMISSION_DENIED'),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
     });
   }
 }

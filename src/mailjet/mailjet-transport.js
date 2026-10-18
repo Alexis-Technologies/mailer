@@ -15,9 +15,9 @@ const {
   isCallerAbort,
   mergeBatch,
   providerFailure,
+  verifyByGet,
 } = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createMailjetConfig } = require('./config.js');
 const { createMailjetClient } = require('./http-client.js');
 const { MAX_RECIPIENTS, convertMessage, recipientCount } = require('./message-converter.js');
@@ -187,21 +187,8 @@ class MailjetTransport {
    * @param options Optional abort signal.
    * @throws {Error} If Mailjet refuses the keys or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    await verifyByRequest({
-      provider: 'Mailjet',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.config.baseUrl}/v3/REST/myprofile`,
-          { method: 'GET', headers: { Accept: 'application/json' } },
-          signal,
-        ),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
-    });
+  verify(options) {
+    return verifyByGet(this, 'Mailjet', `${this.config.baseUrl}/v3/REST/myprofile`, options);
   }
 }
 

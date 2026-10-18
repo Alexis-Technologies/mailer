@@ -11,10 +11,14 @@
 // delivery already made, not a failure to retry.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure } = require('../internal/api.js');
+const {
+  providerFailure,
+  sendConverted,
+  sendManyConcurrently,
+  sentWith,
+  verifyByGet,
+} = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createBrevoConfig } = require('./config.js');
 const { createBrevoClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
@@ -58,36 +62,26 @@ class BrevoTransport {
    * @returns The receipt, with Brevo's messageId.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      const answer = await this.httpClient.send(payload, options);
-      const messageId = answer.json?.messageId ?? answer.json?.messageIds?.[0];
-      if (typeof messageId !== 'string') {
-        return createFailedReceipt('Brevo answered without a messageId.', {
-          provider: 'brevo',
-          deliveryUnknown: true,
-        });
-      }
-      return { successful: true, messageId, provider: 'brevo' };
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return failureOf(error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'brevo',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) =>
+        sentWith(
+          'brevo',
+          answer.json?.messageId ?? answer.json?.messageIds?.[0],
+          'Brevo answered without a messageId.',
+        ),
+      failureOf,
+    });
   }
 
   /**
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 
   /**
@@ -96,21 +90,8 @@ class BrevoTransport {
    * @param options Optional abort signal.
    * @throws {Error} If Brevo refuses the key or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    await verifyByRequest({
-      provider: 'Brevo',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.config.baseUrl}/v3/account`,
-          { method: 'GET', headers: { Accept: 'application/json' } },
-          signal,
-        ),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
-    });
+  verify(options) {
+    return verifyByGet(this, 'Brevo', `${this.config.baseUrl}/v3/account`, options);
   }
 }
 

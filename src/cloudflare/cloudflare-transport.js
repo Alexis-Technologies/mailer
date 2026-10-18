@@ -12,8 +12,13 @@
 
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure, ProviderApiError } = require('../internal/api.js');
+const {
+  ProviderApiError,
+  isCallerAbort,
+  providerFailure,
+  sendConverted,
+  sendManyConcurrently,
+} = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createCloudflareConfig } = require('./config.js');
@@ -96,16 +101,13 @@ class CloudflareTransport {
    * @returns The receipt, with the `message_id` of the answer.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, options?.signal);
-      options?.signal?.throwIfAborted();
-      return receiptOf((await this.httpClient.send(payload, options)).json, this.config);
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('cloudflare', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'cloudflare',
+      convert: (sent, signal) => convertMessage(sent, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) => receiptOf(answer.json, this.config),
+    });
   }
 
   /**
@@ -133,12 +135,7 @@ class CloudflareTransport {
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 
   /**

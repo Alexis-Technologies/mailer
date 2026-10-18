@@ -6,11 +6,15 @@
 // are counted on the receipt, or fail it when it took none.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure } = require('../internal/api.js');
+const {
+  isCallerAbort,
+  providerFailure,
+  sendConverted,
+  sendManyConcurrently,
+  verifyByGet,
+} = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createSparkPostConfig } = require('./config.js');
 const { createSparkPostClient } = require('./http-client.js');
 const { convertMessage, convertRawMessage } = require('./message-converter.js');
@@ -69,16 +73,13 @@ class SparkPostTransport {
    * @returns The receipt, with the id of the transmission.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const transmission = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      return receiptOf((await this.httpClient.send(transmission, options)).json);
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('sparkpost', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'sparkpost',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) => receiptOf(answer.json),
+    });
   }
 
   /**
@@ -107,12 +108,7 @@ class SparkPostTransport {
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 
   /**
@@ -122,21 +118,8 @@ class SparkPostTransport {
    * @param options Optional abort signal.
    * @throws {Error} If SparkPost refuses the key or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    await verifyByRequest({
-      provider: 'SparkPost',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.config.baseUrl}/api/v1/account`,
-          { method: 'GET', headers: { Accept: 'application/json' } },
-          signal,
-        ),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
-    });
+  verify(options) {
+    return verifyByGet(this, 'SparkPost', `${this.config.baseUrl}/api/v1/account`, options);
   }
 }
 

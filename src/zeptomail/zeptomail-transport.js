@@ -5,9 +5,7 @@
 // `/email/batch` of one message to many recipients, whose one answer every
 // message shared.
 
-const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure } = require('../internal/api.js');
+const { sendConverted, sendManyConcurrently, sentWith } = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createZeptoMailConfig } = require('./config.js');
 const { createZeptoMailClient } = require('./http-client.js');
@@ -40,36 +38,21 @@ class ZeptoMailTransport {
    * @returns The receipt, with the `request_id` of the answer.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      const answer = await this.httpClient.send(payload, options);
-      const messageId = answer.json?.request_id;
-      if (typeof messageId !== 'string' || messageId === '') {
-        return createFailedReceipt('ZeptoMail answered without a request_id.', {
-          provider: 'zeptomail',
-          deliveryUnknown: true,
-        });
-      }
-      return { successful: true, messageId, provider: 'zeptomail' };
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('zeptomail', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'zeptomail',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) =>
+        sentWith('zeptomail', answer.json?.request_id, 'ZeptoMail answered without a request_id.'),
+    });
   }
 
   /**
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 }
 

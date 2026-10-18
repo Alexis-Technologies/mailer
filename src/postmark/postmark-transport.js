@@ -10,9 +10,15 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { chunks, jsonBytes } = require('../internal/batch.js');
-const { convertBatch, isCallerAbort, mergeBatch, providerFailure } = require('../internal/api.js');
+const {
+  convertBatch,
+  isCallerAbort,
+  mergeBatch,
+  providerFailure,
+  sendConverted,
+  verifyByGet,
+} = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createPostmarkConfig } = require('./config.js');
 const { classifyErrorCode, createPostmarkClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
@@ -71,17 +77,13 @@ class PostmarkTransport {
    * @returns The receipt, with Postmark's MessageID.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      const answer = await this.httpClient.send(payload, options);
-      return receiptOf(answer.json);
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('postmark', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'postmark',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) => receiptOf(answer.json),
+    });
   }
 
   /**
@@ -146,21 +148,8 @@ class PostmarkTransport {
    * @param options Optional abort signal.
    * @throws {Error} If Postmark refuses the token or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
-    await verifyByRequest({
-      provider: 'Postmark',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.config.baseUrl}/server`,
-          { method: 'GET', headers: { Accept: 'application/json' } },
-          signal,
-        ),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
-    });
+  verify(options) {
+    return verifyByGet(this, 'Postmark', `${this.config.baseUrl}/server`, options);
   }
 }
 

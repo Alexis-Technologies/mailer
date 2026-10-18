@@ -3,11 +3,13 @@
 // https://github.com/productdevbook/unemail — MIT, Copyright 2025 Wind
 // Changed in the port: `verify` lists the domains of the project.
 
-const { createFailedReceipt } = require('../core/receipt.js');
-const { sendConcurrently } = require('../internal/batch.js');
-const { isCallerAbort, providerFailure } = require('../internal/api.js');
+const {
+  sendConverted,
+  sendManyConcurrently,
+  sentWith,
+  verifyByGet,
+} = require('../internal/api.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { verifyByRequest } = require('../internal/verify.js');
 const { createScalewayConfig } = require('./config.js');
 const { createScalewayClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
@@ -40,37 +42,25 @@ class ScalewayTransport {
    * @returns The receipt.
    * @throws The reason of the signal if it aborts.
    */
-  async send(message, options) {
-    options?.signal?.throwIfAborted();
-    try {
-      const payload = await convertMessage(message, this.config, options?.signal);
-      options?.signal?.throwIfAborted();
-      const answer = await this.httpClient.send(payload, options);
-      const emails = answer.json?.emails;
-      const messageId = Array.isArray(emails) ? emails[0]?.id : undefined;
-      if (typeof messageId !== 'string' || messageId === '') {
-        return createFailedReceipt('Scaleway answered without an email id.', {
-          provider: 'scaleway',
-          deliveryUnknown: true,
-        });
-      }
-      return { successful: true, messageId, provider: 'scaleway' };
-    } catch (error) {
-      if (isCallerAbort(error, options?.signal)) throw error;
-      return providerFailure('scaleway', error);
-    }
+  send(message, options) {
+    return sendConverted(message, options, {
+      provider: 'scaleway',
+      convert: (sent, signal) => convertMessage(sent, this.config, signal),
+      request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
+      receiptOf: (answer) =>
+        sentWith(
+          'scaleway',
+          answer.json?.emails?.[0]?.id,
+          'Scaleway answered without an email id.',
+        ),
+    });
   }
 
   /**
    * Sends messages `concurrency` at a time, the receipts in their order.
    */
   sendMany(messages, options) {
-    return sendConcurrently(
-      messages,
-      this.config.concurrency,
-      (message) => this.send(message, options),
-      options?.signal,
-    );
+    return sendManyConcurrently(this, messages, options);
   }
 
   /**
@@ -80,22 +70,9 @@ class ScalewayTransport {
    * @param options Optional abort signal.
    * @throws {Error} If Scaleway refuses the key or cannot be reached.
    */
-  async verify(options) {
-    options?.signal?.throwIfAborted();
+  verify(options) {
     const query = `project_id=${encodeURIComponent(this.config.projectId)}&page_size=1`;
-    await verifyByRequest({
-      provider: 'Scaleway',
-      send: (signal) =>
-        this.httpClient.fetchWithAuth(
-          `${this.httpClient.base}/domains?${query}`,
-          { method: 'GET', headers: { Accept: 'application/json' } },
-          signal,
-        ),
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      signal: options?.signal,
-      log: this.httpClient.log,
-    });
+    return verifyByGet(this, 'Scaleway', `${this.httpClient.base}/domains?${query}`, options);
   }
 }
 
