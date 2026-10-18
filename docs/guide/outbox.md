@@ -93,6 +93,29 @@ only the fallback; the outbox's own leases and settlings wake none. A stream
 that fails is opened again a second later, then up to every 30 seconds
 (`queue.change_stream_failed`).
 
+## Throughput
+
+`bench/outbox.js` measures the queue alone (a handler that acknowledges at
+once) on a replica set of one, MongoDB 7 in Docker on a laptop: numbers to
+compare on one machine, not a promise.
+
+| Workers × lanes | Jobs a second (change stream) | Round trips a job |
+| --- | --- | --- |
+| 1 × 1 | 354 (261) | 2.1 |
+| 1 × 10 | 2308 (2214) | 2.0 |
+| 4 × 1 | 1081 (1084) | 2.1 |
+| 4 × 10 | 4723 (4707) | 2.1 |
+
+A job costs its lease and its settling; before 1.2.0 was released, the same
+bench gave 4 round trips a job and 837 jobs a second for 1 × 10. A send through
+a provider takes tens to hundreds of milliseconds, so the outbox is rarely what
+limits a worker: past a few thousand jobs a second, or for delays and rate
+limits at that scale, take [BullMQ](/transports/bullmq) on Valkey.
+
+```bash
+MONGODB_URL='mongodb://localhost:27027/?replicaSet=rs0' node bench/outbox.js 2000
+```
+
 ## Indexes and retention
 
 `ensureIndexes()` makes:
