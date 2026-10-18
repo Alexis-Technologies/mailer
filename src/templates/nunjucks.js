@@ -13,7 +13,7 @@ const {
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
-const { perIncludes } = require('./environment.js');
+const { boundedRecord, perIncludes } = require('./environment.js');
 
 const isRelative = (name) => name.startsWith('./') || name.startsWith('../');
 
@@ -23,8 +23,6 @@ const UNESCAPED = new Map([['autoescape', (value) => value != null && !value]]);
 
 // What Nunjucks says of a template no loader has.
 const NOT_FOUND = 'template not found: ';
-// The failed lookups an environment keeps, to tell which names were tried.
-const MAX_FAILURES = 1000;
 
 // The template Nunjucks found missing, by its error, whose message ends a
 // line with `template not found: <name>`: the error is made anew, without
@@ -72,7 +70,7 @@ const createNunjucksEngine = (options = {}) => {
     // The lookups that found nothing, by name: Nunjucks is told there is no
     // such template, which it fails on itself unless `ignore missing`, and
     // its error names the template, so each render finds its own.
-    const failures = createCache(MAX_FAILURES);
+    const failures = createCache(includes.maxEntries);
     const loader = {
       async: true,
       isRelative,
@@ -100,6 +98,9 @@ const createNunjucksEngine = (options = {}) => {
     };
     // `dev` keeps the error Nunjucks wraps as its cause, such as a loader's.
     const env = new nunjucks.Environment([loader], { autoescape: true, dev: true, ...given });
+    // Nunjucks keeps every template it reads in the cache of its loader, as
+    // it renders: bounded, as the renderer's are.
+    loader.cache = boundedRecord(createCache(includes.cache ? includes.maxEntries : 0));
     for (const name of Object.keys(filters)) env.addFilter(name, filters[name]);
     configure?.(env);
     return { env, failures };

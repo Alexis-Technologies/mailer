@@ -3,6 +3,7 @@
 // so `include()` and `layout()` read nothing from disk, a name relative to the
 // template it is written in; output is escaped, as Eta does by default.
 
+const { createCache } = require('./cache.js');
 const { missingTemplate, perIncludes } = require('./environment.js');
 const {
   checkEngineExtensions,
@@ -17,6 +18,21 @@ const UNESCAPED = new Map([
   ['autoEscape', (value) => !value],
   ['escapeFunction', () => true],
 ]);
+
+// A Cacher of Eta, which keeps every template it includes, as it renders,
+// bounded as the caches of the renderer are.
+const cacherOf = (maxEntries) => {
+  const cache = createCache(maxEntries);
+  return {
+    define: (key, value) => cache.set(key, value),
+    get: (key) => cache.get(key),
+    remove: (key) => cache.delete(key),
+    reset: () => cache.clear(),
+    load(record) {
+      for (const key of Object.keys(record)) cache.set(key, record[key]);
+    },
+  };
+};
 
 /**
  * Makes the Eta engine.
@@ -40,6 +56,8 @@ const createEtaEngine = (options = {}) => {
   const extensions = checkEngineExtensions(options.extensions, ['.eta']);
   const instanceOf = perIncludes((includes) => {
     const eta = new Eta({ ...given, cache: includes.cache, cacheFilepaths: false });
+    eta.templatesSync = cacherOf(includes.maxEntries);
+    eta.templatesAsync = cacherOf(includes.maxEntries);
     eta.resolvePath = (template, resolveOptions) =>
       includes.lookupSync(template, resolveOptions?.filepath, extensions).name;
     eta.readFile = (name) => {

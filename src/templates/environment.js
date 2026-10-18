@@ -11,20 +11,41 @@ const { TemplateNotFoundError } = require('./errors.js');
  * each render without a cache.
  *
  * @param make Makes it, given the includes.
+ * @param sizeOf How many entries it keeps, if it keeps them as it compiles:
+ * once that is `maxEntries` of the includes, the next template is compiled in
+ * a new one, the old one kept by the templates compiled in it alone.
  * @returns `(includes) => instance`.
  * @internal
  */
-const perIncludes = (make) => {
+const perIncludes = (make, sizeOf) => {
   const instances = new WeakMap();
   return (includes) => {
     let instance = instances.get(includes);
-    if (instance === undefined) {
+    if (
+      instance === undefined ||
+      (sizeOf !== undefined && sizeOf(instance) >= includes.maxEntries)
+    ) {
       instance = make(includes);
       instances.set(includes, instance);
     }
     return instance;
   };
 };
+
+/**
+ * A cache of an engine, an object it reads and writes by key, bounded by the
+ * cache of the renderer: Nunjucks's `loader.cache`.
+ *
+ * @internal
+ */
+const boundedRecord = (cache) =>
+  new Proxy(Object.create(null), {
+    get: (target, key) => cache.get(key),
+    set: (target, key, value) => {
+      cache.set(key, value);
+      return true;
+    },
+  });
 
 /**
  * A template an engine read by its name, which is not there.
@@ -65,4 +86,4 @@ const checkExtensions = (extensions, what) => {
   return Object.freeze([...extensions]);
 };
 
-module.exports = { checkExtensions, hasExtension, missingTemplate, perIncludes };
+module.exports = { boundedRecord, checkExtensions, hasExtension, missingTemplate, perIncludes };

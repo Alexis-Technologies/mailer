@@ -1094,6 +1094,81 @@ test('Templates: every engine reads the same tree of includes by one rule', asyn
   }
 });
 
+test('Templates: what each engine keeps is bounded by the cache of the renderer', async () => {
+  // Before: Handlebars kept every partial in one environment, Nunjucks and
+  // Eta every template they included, and Liquid 1024, whatever
+  // cache.maxEntries said.
+  const cache = { maxEntries: 2 };
+  const includes = ['i1', 'i2', 'i3', 'i4'];
+  // Handlebars: a new environment once one holds as many partials.
+  const environments = [];
+  const hbs = createHandlebarsEngine({ handlebars, configure: (env) => environments.push(env) });
+  const partials = createTemplateRenderer({
+    engine: hbs,
+    loader: createMemoryLoader({
+      'a.hbs': '{{> p1}}{{> p2}}',
+      'b.hbs': '{{> p3}}',
+      'p1.hbs': '1',
+      'p2.hbs': '2',
+      'p3.hbs': '3',
+    }),
+    cache,
+  });
+  assert.strictEqual((await partials.render({ template: 'a' })).html, '12');
+  assert.strictEqual((await partials.render({ template: 'b' })).html, '3');
+  assert.strictEqual(environments.length, 2);
+  // Nunjucks: the cache of its loader.
+  let env;
+  const njk = createNunjucksEngine({ nunjucks, configure: (made) => (env = made) });
+  // An async loader needs asyncEach around an include.
+  const sources = { 'a.njk': '{% asyncEach n in names %}{% include n + ".njk" %}{% endeach %}' };
+  for (const name of includes) sources[`${name}.njk`] = name;
+  const looped = createTemplateRenderer({
+    engine: njk,
+    loader: createMemoryLoader(sources),
+    cache,
+  });
+  assert.strictEqual(
+    (await looped.render({ template: 'a', context: { names: includes } })).html,
+    'i1i2i3i4',
+  );
+  assert.strictEqual(env.loaders[0].cache['i1.njk'], undefined);
+  assert.ok(env.loaders[0].cache['i4.njk'] !== undefined);
+  // Eta: what it includes, compiled again once dropped.
+  let compiles = 0;
+  class CountingEta extends Eta {
+    constructor(config) {
+      super(config);
+      const compile = this.compile;
+      this.compile = (...args) => {
+        compiles++;
+        return compile.apply(this, args);
+      };
+    }
+  }
+  const eta = createTemplateRenderer({
+    engine: createEtaEngine({ Eta: CountingEta }),
+    loader: createMemoryLoader({
+      'a.eta': '<%~ include("i1") %><%~ include("i2") %><%~ include("i3") %>',
+      'i1.eta': '1',
+      'i2.eta': '2',
+      'i3.eta': '3',
+    }),
+    cache,
+  });
+  await eta.render({ template: 'a' });
+  const first = compiles;
+  assert.strictEqual((await eta.render({ template: 'a' })).html, '123');
+  assert.ok(compiles > first);
+  // Liquid: an LRU of as many.
+  let liquid;
+  const liquidEngine = createLiquidEngine({ Liquid, configure: (made) => (liquid = made) });
+  await renderWith(liquidEngine, { 'a.liquid': 'x' }, { template: 'a' }, { cache });
+  assert.strictEqual(liquid.options.cache.limit, 2);
+  await renderWith(liquidEngine, { 'a.liquid': 'x' }, { template: 'a' }, { cache: false });
+  assert.strictEqual(liquid.options.cache, undefined);
+});
+
 test('Templates: juice and css-inline inline the CSS and fetch nothing', async () => {
   const html =
     '<html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"><style>p{color:red}</style></head><body><p>x</p></body></html>';

@@ -92,13 +92,18 @@ const createHandlebarsEngine = (options = {}) => {
   checkEscaping(options, given, UNESCAPED, 'handlebars');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.hbs', '.handlebars']);
-  // The environment of each renderer.
-  const environmentOf = perIncludes(() => {
-    const env = handlebars.create();
-    for (const name of Object.keys(helpers)) env.registerHelper(name, helpers[name]);
-    configure?.(env);
-    return { env, partials: new Map() };
-  });
+  // The environment of each renderer, made anew once it holds as many
+  // partials as the cache of the renderer keeps: partials are registered as a
+  // template is compiled, so an environment grows by none after.
+  const environmentOf = perIncludes(
+    () => {
+      const env = handlebars.create();
+      for (const name of Object.keys(helpers)) env.registerHelper(name, helpers[name]);
+      configure?.(env);
+      return { env, partials: new Map() };
+    },
+    (environment) => environment.partials.size,
+  );
   // Compiles and registers a partial once per environment however many
   // templates name it at once, under the name of its template, and gives the
   // partials it names, which it does not wait for: a partial that names

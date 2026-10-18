@@ -145,7 +145,8 @@ const createLiquidEngine = (options = {}) => {
       extname: extensions[0],
       relativeReference: true,
       fs: fileSystemOf(includes, roots, extensions[0]),
-      cache: includes.cache,
+      // An LRU of as many templates as the renderer's caches keep.
+      cache: includes.cache ? includes.maxEntries : false,
     });
     for (const name of Object.keys(filters)) liquid.registerFilter(name, filters[name]);
     configure?.(liquid);

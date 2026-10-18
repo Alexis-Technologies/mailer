@@ -32,6 +32,9 @@ const createCache = (maxEntries, onDrop) => {
         onDrop?.(oldest);
       }
     },
+    delete(key) {
+      entries.delete(key);
+    },
     // Forgets an entry, unless another value took its place meanwhile.
     forget(key, value) {
       if (entries.get(key) === value) entries.delete(key);
