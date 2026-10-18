@@ -37,7 +37,7 @@
   "./hooks": 3,
   "./tee": 3.5,
   "./audit": 2,
-  "./queue": 14.5,
+  "./queue": 15,
   "./bullmq": 3.5,
   "./mongodb": 5.5
 }

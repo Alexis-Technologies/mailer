@@ -4,7 +4,7 @@
 
 const { MailQueueError } = require('./errors.js');
 const { hashJson } = require('./hash.js');
-const { MAIL_JOB_VERSION, UNHASHED } = require('./job.js');
+const { MAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
 
 const invalid = (message) => new MailQueueError('queue.invalid_job', `Invalid job: ${message}`);
 
@@ -69,7 +69,8 @@ const checkAttachments = (attachments) => {
  * @param data The data of the job.
  * @returns The same data, checked.
  * @throws {MailQueueError} `queue.invalid_job` if it is not the data of a
- * mail job, `queue.unsupported_version` if a later version wrote it, and
+ * mail job, `queue.unsupported_version` if a later version wrote it (its
+ * version, or a field this one does not know), and
  * `queue.hash_mismatch` if it is not what was enqueued.
  */
 const parseMailJob = (data) => {
@@ -83,6 +84,16 @@ const parseMailJob = (data) => {
     }
     throw invalid(`its version is ${JSON.stringify(data.v)}.`);
   }
+  // A field this version does not know was written by a later one: the job
+  // waits for its worker, rather than failing here for a hash of other fields.
+  for (const key of Object.keys(data)) {
+    if (!V1_KEYS.has(key)) {
+      throw new MailQueueError(
+        'queue.unsupported_version',
+        `The job holds the field ${JSON.stringify(key)}, which this worker does not read.`,
+      );
+    }
+  }
   checkBody(data);
   checkAddress(data.from, 'from');
   checkAddresses(data.to, 'to', true);
@@ -92,6 +103,7 @@ const parseMailJob = (data) => {
   checkAttachments(data.attachments);
   checkStrings(data, ['idempotencyKey', 'messageId', 'correlationId', 'hash', 'enqueuedAt']);
   checkStrings(data, ['subject', 'locale', 'tenantId', 'date', 'notBefore', 'expiresAt']);
+  checkStrings(data, ['mac', 'kid', 'trace']);
   for (const name of ['messageId', 'correlationId', 'hash', 'enqueuedAt']) {
     if (data[name] === undefined) throw invalid(`it has no ${name}.`);
   }

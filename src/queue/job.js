@@ -18,8 +18,49 @@ const { toJson } = require('./json.js');
 const MAIL_JOB_VERSION = 1;
 const MAIL_JOB_NAME = 'mail';
 const KINDS = new Set(['template', 'content']);
-// What the hash of a job leaves out: when it was enqueued, and itself.
-const UNHASHED = new Set(['enqueuedAt', 'hash']);
+// What the hash of a job leaves out: when it was enqueued, itself, and what
+// is written over it once it is made: the HMAC and its key id, and the trace
+// context of the producer.
+const UNHASHED = new Set(['enqueuedAt', 'hash', 'mac', 'kid', 'trace']);
+// The fields of a job of version 1. A field beyond them was written by a
+// later version, whose worker reads it: a job here does not fail its hash for
+// it, it waits (see parse.js). A field more is a new version.
+const V1_KEYS = new Set([
+  'v',
+  'kind',
+  'template',
+  'context',
+  'locale',
+  'subject',
+  'content',
+  'from',
+  'to',
+  'cc',
+  'bcc',
+  'replyTo',
+  'attachments',
+  'priority',
+  'tags',
+  'headers',
+  'list',
+  'messageId',
+  'date',
+  'inReplyTo',
+  'references',
+  'calendar',
+  'tracking',
+  'metadata',
+  'idempotencyKey',
+  'tenantId',
+  'correlationId',
+  'notBefore',
+  'expiresAt',
+  'enqueuedAt',
+  'hash',
+  'mac',
+  'kid',
+  'trace',
+]);
 const MAX_KEY_LENGTH = 256;
 const DEFAULTS = Object.freeze({
   namespace: 'mail',
@@ -272,4 +313,4 @@ const prepareMailJob = (input, options = {}) => {
   return { data, request };
 };
 
-module.exports = { MAIL_JOB_NAME, MAIL_JOB_VERSION, UNHASHED, prepareMailJob };
+module.exports = { MAIL_JOB_NAME, MAIL_JOB_VERSION, UNHASHED, V1_KEYS, prepareMailJob };

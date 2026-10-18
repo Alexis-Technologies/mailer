@@ -144,8 +144,14 @@ interface MailJobDataBase {
   readonly notBefore?: string;
   readonly expiresAt?: string;
   readonly enqueuedAt: string;
-  /** The SHA-256 of the job, all but `enqueuedAt` and itself. */
+  /** The SHA-256 of the job, all but `enqueuedAt`, `mac`, `kid`, `trace` and itself. */
   readonly hash: string;
+  /** The HMAC-SHA256 of the job under the key `kid`, when the queue signs its jobs. */
+  readonly mac?: string;
+  /** The id of the signing key of `mac`. */
+  readonly kid?: string;
+  /** The W3C `traceparent` of the producer, when the queue is given one. */
+  readonly trace?: string;
 }
 
 /** The data of a template job, as stored. */
@@ -201,7 +207,9 @@ export declare function prepareMailJob(
 /**
  * Checks the data of a job read from its queue.
  *
- * @throws {MailQueueError} `queue.invalid_job`, `queue.unsupported_version` or `queue.hash_mismatch`.
+ * @throws {MailQueueError} `queue.invalid_job`; `queue.unsupported_version`
+ * for a later version, or a field this version does not know; or
+ * `queue.hash_mismatch`.
  */
 export declare function parseMailJob(data: unknown): MailJobData;
 

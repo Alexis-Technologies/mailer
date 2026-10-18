@@ -30,7 +30,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   minutes, and never sends again a message of unknown delivery. `scheduledAt` is a delay of the
   queue and `expiresAt` a deadline. `createMailJobHandler` is the worker for any driver;
   `createPollingDriver(source)` makes a driver of a store that lends its jobs (an outbox), and
-  `createMemoryQueue()` is one in memory for tests.
+  `createMemoryQueue()` is one in memory for tests. The fields of a job of version 1 are fixed:
+  a later version, or a field this one does not know, makes the job wait for a worker that reads
+  it (`queue.unsupported_version`) rather than fail its hash during a rolling deploy.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases

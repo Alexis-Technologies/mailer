@@ -350,3 +350,58 @@ test('Queue: a job read from its store is checked, its hash among it', () => {
   assert.strictEqual(parseMailJob(content), content);
   assert.throws(() => parseMailJob({ ...content, content: null }), /no subject or content/);
 });
+
+test('Queue: a job holds only the fields of its version', () => {
+  const { V1_KEYS } = require('../../src/queue/job.js');
+  const template = prepare({
+    idempotencyKey: 'all',
+    cc: 'c@example.com',
+    bcc: 'd@example.com',
+    replyTo: 'e@example.com',
+    subject: 'Hi',
+    attachments: [{ filename: 'a.txt', content: new Uint8Array([1]) }],
+    priority: 'low',
+    tags: ['t'],
+    headers: { 'X-A': 'b' },
+    list: { unsubscribe: { url: 'https://example.com/u' } },
+    messageId: '<m@example.com>',
+    date: new Date(NOW),
+    inReplyTo: '<a@example.com>',
+    references: '<a@example.com>',
+    calendar: { content: 'BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nEND:VCALENDAR' },
+    tracking: { opens: false },
+    metadata: { a: 'b' },
+    tenantId: 'acme',
+    locale: 'uk',
+    scheduledAt: new Date(NOW + 1000),
+    expiresAt: new Date(NOW + 2000),
+  }).data;
+  const content = prepareMailJob({
+    kind: 'content',
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 's',
+    content: { html: '<p>h</p>', text: 't' },
+  }).data;
+  for (const data of [template, content]) {
+    for (const key of Object.keys(data)) assert.ok(V1_KEYS.has(key), key);
+  }
+});
+
+test('Queue: a field a later version adds makes the job wait, not fail its hash', () => {
+  const { data } = prepare({ idempotencyKey: 'later' });
+  assert.throws(
+    () => parseMailJob({ ...data, priorityClass: 'bulk' }),
+    (error) =>
+      error instanceof MailQueueError &&
+      error.code === 'queue.unsupported_version' &&
+      /priorityClass/.test(error.message),
+  );
+  // What is written over a job once it is made does not change its hash.
+  const traced = { ...data, trace: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' };
+  assert.strictEqual(parseMailJob(traced), traced);
+  assert.throws(
+    () => parseMailJob({ ...data, trace: 1 }),
+    (error) => error.code === 'queue.invalid_job',
+  );
+});

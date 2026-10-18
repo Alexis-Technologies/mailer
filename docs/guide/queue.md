@@ -80,6 +80,13 @@ not the worker:
   same message;
 - a job is 256 KiB at most.
 
+A job is of version 1 (`v: 1`), and its fields are those of that version. A
+worker that meets a later version, or a field it does not know, gives the job
+back for a worker that reads it (`queue.unsupported_version`) instead of
+failing it for a hash it cannot recompute: during a rolling deploy, the jobs
+the new producers write wait for the new workers. A field is never added to
+version 1; a new field is a new version.
+
 ## Once per key
 
 The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the
