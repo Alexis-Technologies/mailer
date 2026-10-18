@@ -83,6 +83,11 @@ export interface TemplateLoader<TSource = string> {
   loadSync?(name: string): TemplateSource<TSource> | undefined;
 }
 
+/** A loader that reads synchronously too, as the file and memory loaders do. */
+export interface SyncTemplateLoader<TSource = string> extends TemplateLoader<TSource> {
+  loadSync(name: string): TemplateSource<TSource> | undefined;
+}
+
 /** The options of {@link createFileLoader}. */
 export interface FileLoaderOptions {
   /** The directory of the templates. Nothing outside it is read, through `..` or a symbolic link. */
@@ -98,7 +103,7 @@ export interface FileLoaderOptions {
  *
  * @throws {TypeError} If an option is invalid.
  */
-export declare function createFileLoader(options: FileLoaderOptions): TemplateLoader<string>;
+export declare function createFileLoader(options: FileLoaderOptions): SyncTemplateLoader<string>;
 
 /**
  * Makes a loader of templates held in memory, by name.
@@ -107,7 +112,7 @@ export declare function createFileLoader(options: FileLoaderOptions): TemplateLo
  */
 export declare function createMemoryLoader<TSource = string>(
   templates: Readonly<Record<string, TSource>>,
-): TemplateLoader<TSource>;
+): SyncTemplateLoader<TSource>;
 
 /** What an engine compiles: the HTML of a message, its text, or its subject. */
 export type TemplatePart = 'html' | 'text' | 'subject';
@@ -273,7 +278,11 @@ export interface TemplateRendererOptions<TSource = string> {
   readonly frontMatter?: boolean;
   /** Inlines the CSS of the HTML, after MJML and before the text. None by default. */
   readonly inlineCss?: CssInliner;
-  /** The text from the HTML with htmlToText when there is no text template. @default true */
+  /**
+   * The text from the HTML with htmlToText when there is no text template.
+   * The renderer derives it itself, so `autoText: false` of `renderFields`
+   * or `renderContent` leaves it: give it to the renderer. @default true
+   */
   readonly autoText?: boolean;
   /** false reads and compiles every template on each render, for development. @default true */
   readonly cache?: boolean | TemplateCacheOptions;
@@ -318,6 +327,7 @@ export interface TemplateRenderer<
    * @throws {TemplateRenderError} If it does not render.
    * @throws {TemplateLoadError} If the loader failed to read one.
    * @throws {TypeError} If the input is invalid.
+   * @throws {RangeError} If the locale is no BCP 47 tag.
    */
   render(input: TInput): Promise<TemplateOutput>;
   /** Forgets compiled templates and includes; the next render reads them again. */
@@ -341,6 +351,7 @@ export interface TemplateRenderer<
  * ```
  * @throws {TypeError} If an option is invalid, or a layout is given with an
  * engine that gives its parts at once.
+ * @throws {RangeError} If `defaultLocale` or one of `locales` is no BCP 47 tag.
  */
 export declare function createTemplateRenderer<
   TInput extends TemplateInput<any> = TemplateInput,

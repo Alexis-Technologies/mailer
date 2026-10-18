@@ -125,6 +125,7 @@ createMessage({
   content: fields.content,
 });
 createTemplateRenderer({ engines: [hbs, react], loader: createMemoryLoader({ welcome: '<p/>' }) });
+expectType<string | undefined>(createFileLoader({ dir: 'emails' }).loadSync('welcome.hbs')?.source);
 expectType<boolean | undefined>(react.parts);
 expectError(templates.render({ context: {} }));
 

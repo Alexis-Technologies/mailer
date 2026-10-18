@@ -63,7 +63,9 @@ subject: Reset your password, <%= name %>
 
 `render()` gives `{ html, text, subject, template, locale }`: the text is
 derived from the HTML unless a text template is there, and `template` names the
-file the message came from.
+file the message came from. The renderer derives the text itself, so
+`autoText: false` of `renderFields` leaves it; give `autoText: false` to the
+renderer instead.
 
 ## Names, variants and locales
 
