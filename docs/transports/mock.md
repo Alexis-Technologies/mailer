@@ -369,6 +369,13 @@ The mock transport handles bulk sending efficiently and provides detailed
 verification of each message, making it perfect for testing newsletter
 systems, notification broadcasts, and other high-volume email features.
 
+## Raw messages and verification
+
+`sendRaw()` takes serialized MIME as `send()` takes a message: it applies the
+delay and answers with the next response, and keeps the message apart, in
+`getSentRawMessages()`.  `clearSentMessages()` clears both lists.  `verify()` has
+nothing to check and resolves, unless its signal is aborted.
+
 ## Test cleanup and isolation
 
 When running multiple tests, it's important to ensure that each test starts

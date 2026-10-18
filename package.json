@@ -1,8 +1,9 @@
 {
   "name": "@alexify/mailer",
-  "version": "1.0.0",
-  "description": "Zero-dependency email for Node.js: its own SMTP client, MIME builder, DKIM, Amazon SES and seven more HTTP providers, JMAP, failover, retries and OpenTelemetry; a reliability layer (persistent queue, audit log, delivery events) is next",
+  "version": "1.1.0",
+  "description": "Zero-dependency email for Node.js, Bun and Deno: its own SMTP client, sendmail, MIME builder and DKIM, eighteen HTTP providers and JMAP, verified webhooks into one model of delivery events, and decorators for failover, retries, circuit breaking, rate limits, idempotency and OpenTelemetry; a persistent queue and audit log are next",
   "license": "MIT",
+  "type": "commonjs",
   "author": "Alex Dolid <dolid.sasha@gmail.com>",
   "repository": {
     "type": "git",
@@ -28,9 +29,25 @@
       "types": "./src/mime/index.d.ts",
       "default": "./src/mime/index.js"
     },
+    "./attachments": {
+      "types": "./src/attachments/index.d.ts",
+      "default": "./src/attachments/index.js"
+    },
+    "./render": {
+      "types": "./src/render/index.d.ts",
+      "default": "./src/render/index.js"
+    },
+    "./webhooks": {
+      "types": "./src/webhooks/index.d.ts",
+      "default": "./src/webhooks/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"
+    },
+    "./sendmail": {
+      "types": "./src/sendmail/index.d.ts",
+      "default": "./src/sendmail/index.js"
     },
     "./jmap": {
       "types": "./src/jmap/index.d.ts",
@@ -68,6 +85,46 @@
       "types": "./src/plunk/index.d.ts",
       "default": "./src/plunk/index.js"
     },
+    "./postmark": {
+      "types": "./src/postmark/index.d.ts",
+      "default": "./src/postmark/index.js"
+    },
+    "./brevo": {
+      "types": "./src/brevo/index.d.ts",
+      "default": "./src/brevo/index.js"
+    },
+    "./mailjet": {
+      "types": "./src/mailjet/index.d.ts",
+      "default": "./src/mailjet/index.js"
+    },
+    "./mailersend": {
+      "types": "./src/mailersend/index.d.ts",
+      "default": "./src/mailersend/index.js"
+    },
+    "./sparkpost": {
+      "types": "./src/sparkpost/index.d.ts",
+      "default": "./src/sparkpost/index.js"
+    },
+    "./zeptomail": {
+      "types": "./src/zeptomail/index.d.ts",
+      "default": "./src/zeptomail/index.js"
+    },
+    "./smtp2go": {
+      "types": "./src/smtp2go/index.d.ts",
+      "default": "./src/smtp2go/index.js"
+    },
+    "./azure": {
+      "types": "./src/azure/index.d.ts",
+      "default": "./src/azure/index.js"
+    },
+    "./scaleway": {
+      "types": "./src/scaleway/index.d.ts",
+      "default": "./src/scaleway/index.js"
+    },
+    "./cloudflare": {
+      "types": "./src/cloudflare/index.d.ts",
+      "default": "./src/cloudflare/index.js"
+    },
     "./pool": {
       "types": "./src/pool/index.d.ts",
       "default": "./src/pool/index.js"
@@ -87,6 +144,26 @@
     "./logger": {
       "types": "./src/logger/index.d.ts",
       "default": "./src/logger/index.js"
+    },
+    "./breaker": {
+      "types": "./src/breaker/index.d.ts",
+      "default": "./src/breaker/index.js"
+    },
+    "./ratelimit": {
+      "types": "./src/ratelimit/index.d.ts",
+      "default": "./src/ratelimit/index.js"
+    },
+    "./idempotency": {
+      "types": "./src/idempotency/index.d.ts",
+      "default": "./src/idempotency/index.js"
+    },
+    "./hooks": {
+      "types": "./src/hooks/index.d.ts",
+      "default": "./src/hooks/index.js"
+    },
+    "./tee": {
+      "types": "./src/tee/index.d.ts",
+      "default": "./src/tee/index.js"
     }
   },
   "directories": {
@@ -106,6 +183,9 @@
   },
   "scripts": {
     "test": "node --test tests/unit/*.test.js",
+    "test:runtime": "node --test tests/runtime/*.test.js",
+    "test:bun": "bun test --parallel --timeout 30000 tests/unit tests/runtime",
+    "test:deno": "deno test -A --no-check --parallel tests/unit/ tests/runtime/",
     "test:mailpit": "node --test --test-concurrency=1 tests/mailpit/*.test.js",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
@@ -121,7 +201,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "docs:comparison": "node scripts/comparison.js",
-    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack",
+    "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:runtime && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack",
     "release": "pnpm publish"
   },
   "tsd": {
@@ -147,7 +227,13 @@
     "suppression",
     "bounce",
     "deliverability",
-    "zero-dependency"
+    "zero-dependency",
+    "sendmail",
+    "circuit-breaker",
+    "rate-limit",
+    "react-email",
+    "bun",
+    "deno"
   ],
   "devDependencies": {
     "@opentelemetry/api": "^1.9.1",
@@ -156,6 +242,7 @@
     "@opentelemetry/sdk-metrics": "^1.30.1",
     "@opentelemetry/sdk-trace-base": "^1.30.1",
     "@opentelemetry/semantic-conventions": "^1.43.0",
+    "@react-email/render": "^2.1.1",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "c8": "^12.0.0",
@@ -164,6 +251,8 @@
     "oxlint": "^1.75.0",
     "pino": "^10.4.0",
     "postal-mime": "^3.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsd": "^0.33.0",
     "typescript": "^7.0.2",
     "vitepress": "^1.6.4"

@@ -155,6 +155,12 @@ can start and gives the receipts in the order of the messages.
 const transport = new PlunkTransport({ apiKey: process.env.PLUNK_API_KEY, concurrency: 4 });
 ```
 
+## Scheduling, metadata and tracking
+
+Plunk takes none of the three. A message with `scheduledAt` is refused as an
+`unsupported` failure rather than sent at once, and its `tracking` and
+`metadata` are not sent, as over SMTP.
+
 ## Advanced features and reliability
 
 The Plunk transport includes comprehensive configuration options for timeout
@@ -301,3 +307,10 @@ delivery without affecting production systems.
 > sending test emails to real users. For self-hosted instances, consider
 > setting up separate testing environments with isolated email delivery
 > to prevent accidental sends to production email addresses.
+
+## Verification
+
+This transport has no `verify()`: Plunk offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

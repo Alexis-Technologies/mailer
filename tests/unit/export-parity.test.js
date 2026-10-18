@@ -45,8 +45,11 @@ for (const { specifier, runtimeFile, dtsFile } of entryPoints) {
     assert.deepStrictEqual(phantom, [], `absent from ${runtimeFile} at runtime`);
   });
 
-  test(`Exports: ${specifier} resolves to ${runtimeFile} and imports by name from ESM`, () => {
+  test(`Exports: ${specifier} resolves to ${runtimeFile} and imports by name from ESM`, (t) => {
     assert.strictEqual(require(specifier), require(path.join(ROOT, runtimeFile)));
+    // The import runs in a child of the node CLI, whose flags Deno does not
+    // take; tests/runtime imports by name in the process on every runtime.
+    if (globalThis.Deno !== undefined) return t.skip('spawns the node CLI');
     const names = [...declaredValueExports(dtsFile)].sort();
     const source = [
       `import { ${names.join(', ')} } from '${specifier}';`,

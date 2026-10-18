@@ -3,15 +3,10 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailtrapConfig } = require('./config.js');
-const {
-  MailtrapApiError,
-  MailtrapHttpClient,
-  MailtrapResponseError,
-  MailtrapTimeoutError,
-} = require('./http-client.js');
+const { MailtrapHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -99,7 +94,7 @@ class MailtrapTransport {
       return responseToReceipt(response);
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      return createMailtrapFailure(error instanceof Error ? error.message : String(error), error);
+      return providerFailure('mailtrap', error);
     }
   }
 
@@ -138,9 +133,7 @@ class MailtrapTransport {
         receipts.push(undefined);
       } catch (error) {
         if (isCallerAbort(error, options?.signal)) throw error;
-        receipts.push(
-          createMailtrapFailure(error instanceof Error ? error.message : String(error), error),
-        );
+        receipts.push(providerFailure('mailtrap', error));
       }
     }
 
@@ -192,13 +185,12 @@ class MailtrapTransport {
       }
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      const errorMessage = error instanceof Error ? error.message : String(error);
       for (const receipt of receipts) {
         if (receipt !== undefined) {
           yield receipt;
           continue;
         }
-        yield createMailtrapFailure(errorMessage, error);
+        yield providerFailure('mailtrap', error);
       }
     }
   }
@@ -249,66 +241,9 @@ const toReceipt = (response, options) => {
   };
 };
 
-const createMailtrapFailure = (message, error) => {
-  if (error instanceof MailtrapResponseError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: true,
-      provider: 'mailtrap',
-      ...(error.cause instanceof MailtrapTimeoutError
-        ? { category: 'timeout', code: 'timeout' }
-        : {}),
-      retryable: false,
-      attempts: error.attempts,
-    });
-  }
-
-  if (error instanceof MailtrapApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'mailtrap',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  if (error instanceof MailtrapTimeoutError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'mailtrap',
-      category: 'timeout',
-      code: 'timeout',
-      retryable: true,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'mailtrap',
-    attempts: getErrorAttempts(error),
-  });
-};
-
 const formatErrors = (errors) => {
   if (errors == null || errors.length === 0) return undefined;
   return errors.join('; ');
-};
-
-const getErrorAttempts = (error) => {
-  if (typeof error !== 'object' || error == null || !('attempts' in error)) {
-    return undefined;
-  }
-  const attempts = error.attempts;
-  return typeof attempts === 'number' ? attempts : undefined;
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
 module.exports = { MailtrapTransport };

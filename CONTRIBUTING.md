@@ -36,7 +36,9 @@ the runtime exports and the declarations drift apart.
 Node's built-in `node:test`, no external framework.
 
 - `tests/unit/*.test.js`: one file per area. Run one with `node --test tests/unit/mailer.test.js`.
-- `tests/types/*.test-d.ts`: `tsd` assertions against `index.d.ts`.
+- `tests/runtime/*.test.js`: the package by its name, with no mock (sockets, TLS, `fetch`, a child
+  process), on Node, Bun (`pnpm test:bun`) and Deno (`pnpm test:deno`).
+- `tests/types/*.test-d.ts`: `tsd` assertions, one file per entry of the exports map.
 
 `pnpm run test:coverage` enforces 98% lines and statements, 90% branches and 100% functions.
 
@@ -47,17 +49,21 @@ the bug, not the implementation.
 
 ```bash
 pnpm run lint
-pnpm run format
+pnpm run format:check
 pnpm run test:coverage
+pnpm run test:runtime
 pnpm run test:types
 pnpm run check:dts
 pnpm size --check
+pnpm run check:pack
 ```
 
-`prepublishOnly` runs lint, format check, coverage, tsd and `check:dts`; CI adds the bundle-size
-gate (a min+gzip budget per entry of the exports map, in `scripts/size-budgets.json`), the
-comparison drift check and the docs build. Treat that as the merge gate. A new subpath needs a
-budget there, or `pnpm size --check` fails.
+These are the gates of `prepublishOnly`, in its order (`tests/unit/scripts.test.js` keeps the two
+lists equal); `pnpm run format` fixes what `format:check` finds. `pnpm size --check` holds every
+entry of the exports map to its min+gzip budget in `scripts/size-budgets.json`, so a new subpath
+needs one; `check:pack` holds the tarball to the exports map and the `files` allowlist. CI adds
+the comparison drift check, the docs build, and the unit and runtime suites on Bun and Deno.
+Treat that as the merge gate.
 
 The comparison table in `docs/guide/comparison.md` is generated: edit `docs/comparison.json` and
 run `pnpm docs:comparison`.

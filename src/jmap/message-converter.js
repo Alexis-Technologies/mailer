@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { resolveCalendarContent } = require('../core/calendar.js');
+const { toAsciiAddress } = require('../core/address.js');
 const { parseMessageId } = require('../core/message-id.js');
 
 /**
@@ -11,7 +12,7 @@ const { parseMessageId } = require('../core/message-id.js');
  */
 const formatAddress = (address) => {
   const result = {
-    email: address.address,
+    email: toAsciiAddress(address.address),
   };
 
   if (address.name) {

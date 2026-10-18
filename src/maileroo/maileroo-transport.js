@@ -3,10 +3,10 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailerooConfig } = require('./config.js');
-const { MailerooApiError, MailerooHttpClient, MailerooTimeoutError } = require('./http-client.js');
+const { MailerooHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
 
 /**
@@ -91,7 +91,7 @@ class MailerooTransport {
       return responseToReceipt(response);
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      return createMailerooFailure(error instanceof Error ? error.message : String(error), error);
+      return providerFailure('maileroo', error);
     }
   }
 
@@ -140,51 +140,6 @@ const responseToReceipt = (response) => {
     messageId,
     provider: 'maileroo',
   };
-};
-
-const createMailerooFailure = (message, error) => {
-  if (error instanceof MailerooApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'maileroo',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  if (error instanceof MailerooTimeoutError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'maileroo',
-      category: 'timeout',
-      code: 'timeout',
-      retryable: true,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'maileroo',
-    attempts: getErrorAttempts(error),
-  });
-};
-
-const getErrorAttempts = (error) => {
-  if (typeof error !== 'object' || error == null || !('attempts' in error)) {
-    return undefined;
-  }
-  const attempts = error.attempts;
-  return typeof attempts === 'number' ? attempts : undefined;
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
 module.exports = { MailerooTransport };

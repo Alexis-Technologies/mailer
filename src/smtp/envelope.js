@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/envelope.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { isEmailAddress } = require('../core/address.js');
+const { isEmailAddress, toAsciiAddress } = require('../core/address.js');
 
 /**
  * Error produced when an effective SMTP envelope is invalid.
@@ -68,7 +68,7 @@ const resolveSmtpEnvelope = (message, override) => {
     }
   }
 
-  return { from, to: [...recipients] };
+  return toAsciiEnvelope({ from, to: recipients });
 };
 
 /**
@@ -121,9 +121,28 @@ const hasNonAsciiAddress = (envelope) => {
   return false;
 };
 
+/**
+ * Writes the domains of an envelope as A-labels where the local part is ASCII
+ * (`toAsciiAddress`), so that only a local part beyond ASCII asks for SMTPUTF8.
+ *
+ * @param envelope A validated envelope.
+ * @returns A new envelope.
+ * @internal
+ */
+const toAsciiEnvelope = (envelope) => {
+  const to = [];
+  for (let i = 0; i < envelope.to.length; i++) to.push(toAsciiAddress(envelope.to[i]));
+  return {
+    ...envelope,
+    from: envelope.from == null ? envelope.from : toAsciiAddress(envelope.from),
+    to,
+  };
+};
+
 module.exports = {
   SmtpEnvelopeValidationError,
   checkSmtpPath,
   hasNonAsciiAddress,
   resolveSmtpEnvelope,
+  toAsciiEnvelope,
 };

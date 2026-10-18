@@ -110,11 +110,12 @@ describe('DKIM Signing', () => {
       });
 
       // Changed after the port: the default signs more fields, and over-signs
-      // From, Reply-To and Subject (upstream signed from, to, subject, date).
+      // From, Reply-To and Subject (upstream signed from, to, subject, date),
+      // and the two fields of one-click unsubscription (RFC 8058 §4).
       assert.ok(
         result.signature.includes(
           'h=from:from:reply-to:reply-to:subject:subject:to:cc:date:message-id:in-reply-to:' +
-            'references:mime-version:content-type;',
+            'references:mime-version:content-type:list-unsubscribe:list-unsubscribe-post;',
         ),
       );
     });

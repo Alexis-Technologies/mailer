@@ -7,6 +7,8 @@ import {
 } from '../../index.js';
 import {
   SmtpTransport,
+  createHttpProxyConnector,
+  type SmtpSocket,
   SmtpResponseError,
   isSmtpResponseProviderDetails,
   type DkimConfig,
@@ -58,3 +60,30 @@ expectAssignable<SmtpConfig>({
   fetch: globalThis.fetch,
 });
 expectError(new SmtpTransport({ host: 'smtp.example.com', generateId: 'ulid' }));
+
+// A connection opened through an HTTP proxy, or a connector of one's own.
+new SmtpTransport({
+  host: 'smtp.example.com',
+  localAddress: '192.0.2.10',
+  connect: createHttpProxyConnector({
+    url: 'https://user:pass@proxy.example.com:3128',
+    headers: { 'X-Team': 'mail' },
+    tls: { ca: ['-----BEGIN CERTIFICATE-----'] },
+    timeout: 5000,
+  }),
+});
+new SmtpTransport({
+  host: 'smtp.example.com',
+  connect: async ({ host, port, signal }) => {
+    expectType<string>(host);
+    expectType<number>(port);
+    expectType<AbortSignal>(signal);
+    return {} as SmtpSocket;
+  },
+});
+expectError(createHttpProxyConnector({}));
+expectError(new SmtpTransport({ host: 'smtp.example.com', connect: 'proxy' }));
+
+// maxMessages
+new SmtpTransport({ host: 'smtp.example.com', maxMessages: 50 });
+expectError(new SmtpTransport({ host: 'smtp.example.com', maxMessages: '50' }));

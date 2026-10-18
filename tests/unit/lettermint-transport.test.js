@@ -822,6 +822,10 @@ describe('LettermintTransport - sendMany', { concurrency: false }, () => {
           assert.deepEqual(receipts[1].errorMessages, [
             'Lettermint supports at most one tag per message.',
           ]);
+          // Changed after the port: a refusal another transport may not
+          // share is `unsupported`, which a pool fails over with.
+          assert.equal(receipts[1].errors[0].category, 'unsupported');
+          assert.equal(receipts[1].retryable, false);
         }
       },
     );

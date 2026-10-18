@@ -5,6 +5,7 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { JmapApiError } = require('./errors.js');
 const { readJson, readText } = require('../internal/body.js');
 const { Buffer } = require('node:buffer');
+const { timerMs } = require('../internal/sleep.js');
 
 /**
  * Upload a blob to the JMAP server.
@@ -43,7 +44,7 @@ const uploadBlob = async (config, uploadUrl, accountId, blob, signal) => {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), config.timeout);
+  const timeoutId = setTimeout(() => controller.abort(), timerMs(config.timeout));
 
   // Combine signals if an external signal is provided
   const combinedSignal = combineSignals(controller.signal, signal);

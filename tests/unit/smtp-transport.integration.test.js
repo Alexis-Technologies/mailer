@@ -753,7 +753,9 @@ describe('SmtpTransport Integration Tests', () => {
         assert.match(receipt.errorMessages[0], /Message size \d+ octets/);
         assert.equal(receipt.retryable, false);
         assert.equal(receipt.errors?.[0]?.code, 'smtp.message-size-exceeded');
-        assert.equal(receipt.errors?.[0]?.category, 'rejected');
+        // Changed after the port: `rejected` stopped the failover of a pool to
+        // a transport whose limit the message is under.
+        assert.equal(receipt.errors?.[0]?.category, 'unsupported');
         const providerDetails = receipt.errors?.[0]?.providerDetails;
         if (providerDetails == null || typeof providerDetails !== 'object') {
           assert.fail('Expected provider details for the SIZE rejection.');
@@ -1195,8 +1197,9 @@ describe('SmtpTransport Integration Tests', () => {
       const receivedMessages = server.getReceivedMessages();
       const receivedMessage = receivedMessages[0];
 
-      assert.ok(receivedMessage.data.includes('x-custom-header: Custom Value'));
-      assert.ok(receivedMessage.data.includes('x-mailer: Test Mailer'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(receivedMessage.data.includes('X-Custom-Header: Custom Value'));
+      assert.ok(receivedMessage.data.includes('X-Mailer: Test Mailer'));
     } finally {
       await teardownTest(server, transport);
     }

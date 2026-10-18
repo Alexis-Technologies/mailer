@@ -6,6 +6,7 @@
 const SPAN_KIND_CLIENT = 2;
 const SPAN_STATUS_OK = 1;
 const SPAN_STATUS_ERROR = 2;
+const { messageOf } = require('../internal/decorator.js');
 const { EmailAttributeExtractor } = require('./attributes.js');
 const metadata = require('../version.js');
 
@@ -67,6 +68,24 @@ class TracingCollector {
       span.setAttributes(networkAttributes);
     }
 
+    return new LiveEmailSpan(span, this.attributeExtractor);
+  }
+
+  /**
+   * Creates a span for the send of serialized MIME, whose envelope is all
+   * that is known of it.
+   */
+  createRawSendSpan(message, networkAttributes, messageSize) {
+    if (!this.shouldSample()) {
+      return new NoOpEmailSpan();
+    }
+    const span = this.tracer.startSpan(`${this.config.spanPrefix} send_raw`, {
+      kind: SPAN_KIND_CLIENT,
+    });
+    span.setAttributes(this.attributeExtractor.extractRawMessageAttributes(message, messageSize));
+    if (networkAttributes) {
+      span.setAttributes(networkAttributes);
+    }
     return new LiveEmailSpan(span, this.attributeExtractor);
   }
 
@@ -134,9 +153,7 @@ class LiveEmailSpan {
     const stacktrace = error instanceof Error ? describeStack(error, extractor) : undefined;
     this.span.addEvent('exception', {
       'exception.type': error instanceof Error ? error.constructor.name : 'unknown',
-      'exception.message': extractor.describeError(
-        error instanceof Error ? error.message : String(error),
-      ),
+      'exception.message': extractor.describeError(messageOf(error)),
       ...(stacktrace && { 'exception.stacktrace': stacktrace }),
     });
   }

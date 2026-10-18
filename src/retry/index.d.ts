@@ -11,6 +11,9 @@ import type {
   ReceiptError,
   Transport,
   TransportOptions,
+  RawMessage,
+  RawTransport,
+  VerifiableTransport,
 } from '../../index.js';
 
 /**
@@ -198,7 +201,7 @@ interface ResolvedRetryConfig<TProviderId extends string = string> {
  * Transport decorator that retries transient delivery failures.
  */
 export declare class RetryTransport<TProviderId extends string = string>
-  implements Transport<TProviderId>, AsyncDisposable
+  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
 {
   readonly id: TProviderId;
   /**
@@ -222,6 +225,16 @@ export declare class RetryTransport<TProviderId extends string = string>
    * @throws {DOMException} If the operation is aborted.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Sends serialized MIME through the wrapped transport, retrying retryable failures as `send()` does.  A wrapped
+   * transport without `sendRaw()` gives a failed receipt of the category
+   * `configuration`.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Verifies the wrapped transport once, without retries; it has nothing to check when it cannot verify.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends messages with per-message retry behavior.
    *

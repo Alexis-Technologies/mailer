@@ -97,6 +97,29 @@ class EmailAttributeExtractor {
   }
 
   /**
+   * Extracts attributes for the send of serialized MIME: its envelope and
+   * size, with the sender's address under the same rule as a message's.
+   */
+  extractRawMessageAttributes(message, messageSize) {
+    const from = message?.envelope?.from;
+    const attributes = {
+      'operation.name': 'email.send_raw',
+      'operation.type': 'email',
+      'email.to.count': message?.envelope?.to?.length ?? 0,
+      'mailer.transport.name': this.transportName,
+      'mailer.retry.count': 0,
+      'mailer.batch.size': 1,
+      'email.message.size': messageSize,
+    };
+    if (this.transportVersion) attributes['mailer.transport.version'] = this.transportVersion;
+    if (typeof from === 'string') {
+      if (this.recordSensitiveData) attributes['email.from.address'] = from;
+      else attributes['email.from.domain'] = this.extractDomain(from);
+    }
+    return attributes;
+  }
+
+  /**
    * Extracts attributes for batch send operations, from the totals of the
    * messages the batch read.
    */

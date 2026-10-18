@@ -98,6 +98,11 @@ Lettermint accepts one tag per message. If a message has exactly one
 has more than one tag, the transport returns a failed receipt instead of
 sending the message.
 
+A message's own `metadata` goes in `metadata` too, its keys over those of the
+transport, and its `tracking` sets `track_opens` and `track_clicks` over the
+transport's `settings`. Lettermint cannot schedule a message, so `scheduledAt`
+is refused as `unsupported`, as is a second tag.
+
 ## Batch sending
 
 The `sendMany()` method uses Lettermint's batch endpoint and automatically
@@ -212,3 +217,10 @@ const message = createMessage({
 
 await transport.send(message);
 ```
+
+## Verification
+
+This transport has no `verify()`: Lettermint offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

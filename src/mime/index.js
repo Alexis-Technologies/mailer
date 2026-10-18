@@ -1,6 +1,7 @@
 // Ported from upyo v0.7.0 (packages/mime/src/index.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { createRawMessagePlan } = require('../core/raw-message.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { prepareMimeMessage } = require('./message.js');
@@ -27,7 +28,7 @@ const { MimeAttachmentReplayError } = require('./stream.js');
 const envelopeRecipients = (message) => {
   const addresses = [];
   for (const list of [message.recipients, message.ccRecipients, message.bccRecipients]) {
-    for (let i = 0; i < list.length; i++) addresses.push(list[i].address);
+    for (let i = 0; i < list.length; i++) addresses.push(toAsciiAddress(list[i].address));
   }
   return addresses;
 };
@@ -38,7 +39,7 @@ const composeMessage = async (message, options = {}) => {
   const plan = prepareMimeMessage(message, options.dkim, options);
   const { envelope } = createRawMessagePlan({
     envelope: {
-      from: message.sender.address,
+      from: toAsciiAddress(message.sender.address),
       to: envelopeRecipients(message),
     },
     content: new Uint8Array(),

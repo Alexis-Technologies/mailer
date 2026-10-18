@@ -264,7 +264,8 @@ test('snapshots metadata and signing configuration before awaiting bytes', async
   signatures[0].headerFields.push('date');
   resolve(new Uint8Array());
   const wire = await collect(await composing);
-  assert.ok(wire.includes('x-test: before'));
+  // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+  assert.ok(wire.includes('X-Test: before'));
   assert.ok(wire.includes('2026'));
   assert.ok(wire.includes('s=test;'));
   assert.ok(wire.includes('h=from:subject;'));

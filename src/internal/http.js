@@ -1,14 +1,13 @@
-// Not ported from upyo: the retry loop that the HTTP providers carried as
+// Not ported: the retry loop that the HTTP providers carried as
 // copies.  A provider keeps what is its own (the request, its errors, what it
 // retries and how long it waits) and passes it in.
 
 const { combineSignals } = require('../core/abort-signal.js');
+const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
-const { abortReason, sleep } = require('./sleep.js');
+const { abortReason, isAbortError, sleep, timerMs } = require('./sleep.js');
 const { redactAddresses } = require('./redact-addresses.js');
-
-const isAbortError = (error) => error instanceof Error && error.name === 'AbortError';
 
 /**
  * The delay before retry `attempt` (from 0): one second, doubled each time.
@@ -58,7 +57,7 @@ const startDeadline = (timeoutMs, signal) => {
   const controller = new AbortController();
   const timer =
     timeoutMs > 0 && Number.isFinite(timeoutMs)
-      ? setTimeout(() => controller.abort(), timeoutMs)
+      ? setTimeout(() => controller.abort(), timerMs(timeoutMs))
       : undefined;
   const combined = combineSignals(controller.signal, signal);
   return {
@@ -89,7 +88,9 @@ const startDeadline = (timeoutMs, signal) => {
  *
  * @param request What the provider passes in:
  * - `send(signal, attempt)`: one fetch, with the signal of the attempt;
- * - `read(response, attempt)`: the result of a 2xx response;
+ * - `read(response, attempt)`: the result of a 2xx response, or of one
+ *   `accepts(status)` takes (a check that reads a refusal), which is not
+ *   taken for a delivery: what `read` throws for it is retried by its status;
  * - `reject(response, attempt)`: the error of any other response;
  * - `retries`, `timeoutMs`, `signal`;
  * - `isRetryable(error)`: by default, a failure without a status or with a
@@ -131,7 +132,9 @@ const requestWithRetry = async (request) => {
       const response = await request.send(deadline.signal, attempt);
       hasResponse = true;
       isAccepted = response.ok;
-      if (response.ok) return await request.read(response, attempt);
+      if (response.ok || request.accepts?.(response.status) === true) {
+        return await request.read(response, attempt);
+      }
       failure = await request.reject(response, attempt);
     } catch (error) {
       const isTimeout = deadline.isExpired && !signal?.aborted && isAbortError(error);
@@ -151,6 +154,10 @@ const requestWithRetry = async (request) => {
         const wrapped = isAccepted ? request.wrapAccepted?.(failure, attempt + 1) : undefined;
         throw markDeliveryUnknown(wrapped ?? request.finalError?.(failure, attempt + 1) ?? failure);
       }
+    }
+    // A certificate refused in the handshake refuses every attempt alike.
+    if (isCertificateFailure(failure)) {
+      throw settle(request.finalError?.(failure, attempt + 1) ?? failure);
     }
     const isRetryable = isAccepted || (request.isRetryable ?? isRetryableFailure)(failure);
     if (!isRetryable) throw settle(failure);
@@ -183,6 +190,7 @@ module.exports = {
   abortReason,
   exponentialDelayMs,
   isAbortError,
+  isRetryableFailure,
   isRetryableStatus,
   jitteredDelayMs,
   requestWithRetry,

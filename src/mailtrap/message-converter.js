@@ -1,8 +1,10 @@
 // Ported from upyo v0.7.0 (packages/mailtrap/src/message-converter.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -40,6 +42,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  */
 const convertMessage = async (message, config, signal) => {
   signal?.throwIfAborted();
+  refuseScheduledAt(message, 'mailtrap');
 
   const attachments = withCalendarAttachment(message);
 
@@ -75,7 +78,7 @@ const convertMessage = async (message, config, signal) => {
     throw new RangeError('Mailtrap requires at least one of text or HTML content.');
   }
 
-  const customVariables = buildCustomVariables(message.tags, config.metadata);
+  const customVariables = buildCustomVariables(message.tags, config.metadata, message.metadata);
   if (Object.keys(customVariables).length > 0) {
     emailData.custom_variables = customVariables;
   }
@@ -101,13 +104,18 @@ const resolveCategory = (tags, fallback) => {
   return tags[0] ?? fallback;
 };
 
-const buildCustomVariables = (tags, metadata) => {
+// The metadata of the configuration, that of the message over it, then the
+// tags after the first.
+const buildCustomVariables = (tags, metadata, messageMetadata) => {
   const customVariables = {};
 
   if (metadata != null) {
     for (const [key, value] of Object.entries(metadata)) {
       customVariables[key] = value;
     }
+  }
+  if (messageMetadata !== undefined) {
+    for (const key in messageMetadata) customVariables[key] = messageMetadata[key];
   }
 
   for (const tag of tags.slice(1)) {
@@ -119,9 +127,9 @@ const buildCustomVariables = (tags, metadata) => {
 
 const formatAddress = (address) => {
   if (address.name) {
-    return { email: address.address, name: address.name };
+    return { email: toAsciiAddress(address.address), name: address.name };
   }
-  return { email: address.address };
+  return { email: toAsciiAddress(address.address) };
 };
 
 const convertAttachment = async (attachment, signal) => {

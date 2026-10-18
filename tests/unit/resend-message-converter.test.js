@@ -248,6 +248,8 @@ describe('Message Converter', () => {
       assert.equal(result.headers?.['x-another'], 'another-value');
     });
 
+    // Changed after the port: the time is the message's `scheduledAt`, not an
+    // option of the conversion.
     it('should handle scheduled sending', async () => {
       const scheduledDate = new Date('2024-12-01T10:00:00Z');
       const message = {
@@ -262,11 +264,10 @@ describe('Message Converter', () => {
         priority: 'normal',
         tags: [],
         headers: new Headers(),
+        scheduledAt: scheduledDate,
       };
 
-      const result = await convertMessage(message, config, {
-        scheduledAt: scheduledDate,
-      });
+      const result = await convertMessage(message, config);
 
       assert.equal(result.scheduled_at, '2024-12-01T10:00:00.000Z');
     });

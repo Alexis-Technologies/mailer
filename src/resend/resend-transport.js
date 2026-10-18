@@ -1,16 +1,16 @@
 // Ported from upyo v0.7.0 (packages/resend/src/resend-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { createResendConfig } = require('./config.js');
-const { ResendApiError, ResendHttpClient } = require('./http-client.js');
+const { verifyByRequest } = require('../internal/verify.js');
+const { ResendHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const {
   convertMessage,
   convertMessagesBatch,
   generateIdempotencyKey,
 } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
 
 /**
@@ -79,6 +79,27 @@ class ResendTransport {
   }
 
   /**
+   * Verifies the API key with `GET /domains`.  A key that may only send,
+   * which Resend answers with `restricted_api_key`, is verified too.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Resend refuses the key or cannot be reached.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    await verifyByRequest({
+      provider: 'Resend',
+      send: (signal) =>
+        this.httpClient.fetchWithAuth(`${this.config.baseUrl}/domains`, { method: 'GET' }, signal),
+      check: (status, body) => status === 401 && isRestrictedKey(body),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
+  }
+
+  /**
    * Sends a single email message via Resend API.
    *
    * This method converts the message to Resend format, makes an HTTP request
@@ -143,9 +164,7 @@ class ResendTransport {
         throw error;
       }
 
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return createResendFailure(errorMessage, error);
+      return providerFailure('resend', error);
     }
   }
 
@@ -279,11 +298,9 @@ class ResendTransport {
         throw error;
       }
 
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
       // If batch fails, yield error receipt for each message
       for (let i = 0; i < messages.length; i++) {
-        yield createResendFailure(errorMessage, error);
+        yield providerFailure('resend', error);
       }
     }
   }
@@ -305,7 +322,13 @@ class ResendTransport {
       // API forbids, and `sendBatch()` fails a whole chunk on one conversion
       // error.  Sending these individually keeps the failure — or the success
       // — confined to the message it belongs to.
-      if (message.attachments.length > 0 || message.tags.length > 0 || message.calendar != null) {
+      if (
+        message.attachments.length > 0 ||
+        message.tags.length > 0 ||
+        message.metadata !== undefined ||
+        message.calendar != null ||
+        message.scheduledAt != null
+      ) {
         return false;
       }
     }
@@ -313,29 +336,13 @@ class ResendTransport {
   }
 }
 
-const createResendFailure = (message, error) => {
-  if (error instanceof ResendApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'resend',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
+// Resend answers a key that may only send with `restricted_api_key`.
+const isRestrictedKey = (body) => {
+  try {
+    return JSON.parse(body).name === 'restricted_api_key';
+  } catch {
+    return false;
   }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'resend',
-  });
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
 module.exports = { ResendTransport };

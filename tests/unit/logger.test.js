@@ -186,3 +186,27 @@ test('Logger: generateId makes the message ID of a log-only receipt', async () =
   const transport = new LoggerTransport({ logger, generateId: () => '01JLOG' });
   assert.strictEqual((await transport.send(message())).messageId, 'logger-01JLOG');
 });
+
+test('Logger: a failure of unknown delivery says so at the top of its line', async () => {
+  // Before: it was only inside the receipt of the line.
+  const lines = [];
+  const logger = { ...methods('debug', 'info', 'warn'), error: (fields) => lines.push(fields) };
+  const unknown = {
+    successful: false,
+    errorMessages: ['The request timed out after it went out.'],
+    deliveryUnknown: true,
+  };
+  const transport = new LoggerTransport({
+    transport: { id: 'p', send: async () => unknown },
+    logger,
+  });
+  await transport.send(message());
+  assert.strictEqual(lines[0].event, 'email.failed');
+  assert.strictEqual(lines[0].deliveryUnknown, true);
+  const known = new LoggerTransport({
+    transport: { id: 'p', send: async () => ({ successful: false, errorMessages: ['no'] }) },
+    logger,
+  });
+  await known.send(message());
+  assert.strictEqual('deliveryUnknown' in lines[1], false);
+});

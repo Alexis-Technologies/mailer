@@ -5,12 +5,14 @@ const { Buffer } = require('node:buffer');
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { refuseScheduledAt } = require('../internal/schedule.js');
 const {
   convertAttachments,
   formatAddresses,
   visitCustomHeaders,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 // The header fields SES sets itself and refuses in Headers, lower-cased.
 const SES_HEADERS = new Set([
@@ -27,11 +29,32 @@ const SES_HEADERS = new Set([
   'subject',
   'to',
 ]);
+// The name and value of an SES tag: "only ASCII letters (a–z, A–Z), numbers
+// (0–9), underscores (_), or dashes (-)", fewer than 256 characters.
+const TAG_TEXT = /^[A-Za-z0-9_-]{1,255}$/;
+// The tags this converter writes of its own.
+const OWN_TAGS = new Set(['category', 'priority']);
+
+// The metadata of a message as tags, which SES returns in its events.
+const metadataTagsOf = (metadata, tags) => {
+  for (const key in metadata) {
+    const value = metadata[key];
+    if (!TAG_TEXT.test(key) || !TAG_TEXT.test(value) || OWN_TAGS.has(key)) {
+      throw new RefusalError(
+        'SES takes metadata as tags, whose name and value are ASCII letters, digits, _ or -, ' +
+          `and a name other than category and priority: ${key}`,
+      );
+    }
+    tags.push({ Name: key, Value: value });
+  }
+};
+
 // The most fields SES takes in Headers, and the longest field it takes.
 const MAX_SES_HEADERS = 15;
 const MAX_SES_HEADER_LENGTH = 996;
 
 const convertMessage = async (message, config, signal) => {
+  refuseScheduledAt(message, 'ses');
   const destination = {};
 
   if (message.recipients.length > 0) {
@@ -74,8 +97,14 @@ const convertMessage = async (message, config, signal) => {
     tags.push({ Name: 'priority', Value: message.priority });
   }
 
+  if (message.metadata !== undefined) metadataTagsOf(message.metadata, tags);
+
+  // A default tag gives way to a key of the metadata.
   for (const name in config.defaultTags) {
-    if (Object.hasOwn(config.defaultTags, name)) {
+    if (
+      Object.hasOwn(config.defaultTags, name) &&
+      (message.metadata === undefined || !Object.hasOwn(message.metadata, name))
+    ) {
       tags.push({ Name: name, Value: config.defaultTags[name] });
     }
   }
@@ -84,6 +113,31 @@ const convertMessage = async (message, config, signal) => {
     sesMessage.Tags = tags;
   }
 
+  return sesMessage;
+};
+
+/**
+ * The request of a raw message: its bytes as Raw content, its envelope as the
+ * destination and the sender.
+ *
+ * @param raw The envelope and bytes of `readRawMessage`.
+ * @param config The configuration.
+ * @returns The SES v2 SendEmail request.
+ */
+const convertRawMessage = (raw, config) => {
+  const sesMessage = {
+    Destination: { ToAddresses: raw.envelope.to },
+    Content: { Raw: { Data: toBase64(raw.bytes) } },
+  };
+  if (raw.envelope.from != null) sesMessage.FromEmailAddress = raw.envelope.from;
+  if (config.configurationSetName) sesMessage.ConfigurationSetName = config.configurationSetName;
+  const tags = [];
+  for (const name in config.defaultTags) {
+    if (Object.hasOwn(config.defaultTags, name)) {
+      tags.push({ Name: name, Value: config.defaultTags[name] });
+    }
+  }
+  if (tags.length > 0) sesMessage.Tags = tags;
   return sesMessage;
 };
 
@@ -146,13 +200,13 @@ const convertHeaders = (message) => {
       if (value === '') return;
       const encoded = encodeHeaderValue(value);
       if (name.length + encoded.length > MAX_SES_HEADER_LENGTH) {
-        throw new RangeError(`SES takes a header field of at most 996 characters: ${name}`);
+        throw new RefusalError(`SES takes a header field of at most 996 characters: ${name}`);
       }
       headers.push({ Name: name, Value: encoded });
     },
   );
   if (headers.length > MAX_SES_HEADERS) {
-    throw new RangeError(
+    throw new RefusalError(
       `SES takes at most ${MAX_SES_HEADERS} custom header fields, and the message has ${headers.length}.`,
     );
   }
@@ -197,4 +251,4 @@ const convertAttachment = async (attachment, signal) => {
   return converted;
 };
 
-module.exports = { convertMessage };
+module.exports = { convertMessage, convertRawMessage };

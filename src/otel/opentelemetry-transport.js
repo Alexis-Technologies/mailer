@@ -5,6 +5,7 @@ const { createOpenTelemetryConfig, defaultErrorClassifier } = require('./config.
 const { MetricsCollector } = require('./metrics.js');
 const { TracingCollector } = require('./tracing.js');
 const { estimateMessageSize } = require('./message-size.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 
 // How many error messages of a failed batch its span keeps; the count says how
 // many there were in all.
@@ -144,6 +145,54 @@ class OpenTelemetryTransport {
     this.metricsCollector?.recordSendStart(this.transportName);
     this.metricsCollector?.recordMessage(message, this.transportName, messageSize);
 
+    return this.observe(
+      { startTime, span, messageSize, priority: message.priority },
+      (sendOptions) => this.wrappedTransport.send(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the wrapped transport, in a span of its own
+   * (`send_raw`) and in the metrics of a send.  A wrapped transport without
+   * `sendRaw()` gives a failed receipt of the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options including abort signal.
+   * @returns The receipt of the wrapped transport.
+   */
+  async sendRaw(message, options) {
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
+    const startTime = performance.now();
+    const messageSize = message?.content instanceof Uint8Array ? message.content.byteLength : 0;
+    const span = this.tracingCollector?.createRawSendSpan(
+      message,
+      this.extractNetworkAttributes(),
+      messageSize,
+    );
+    this.metricsCollector?.recordSendStart(this.transportName);
+    return this.observe(
+      { startTime, span, messageSize, priority: 'normal' },
+      (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Verifies the wrapped transport, which has nothing to check when it
+   * cannot verify.
+   */
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
+  }
+
+  /**
+   * Runs one send in its span and metrics: the custom attributes, the
+   * outcome, the error and the end.
+   */
+  async observe(context, deliver, options) {
+    const { startTime, span, messageSize, priority } = context;
     try {
       // Apply custom attributes if configured
       if (this.config.attributeExtractor && span) {
@@ -157,16 +206,9 @@ class OpenTelemetryTransport {
       }
 
       // Delegate to wrapped transport
-      const receipt = await this.wrappedTransport.send(
-        message,
-        this.withRetryRecording(options, span),
-      );
+      const receipt = await deliver(this.withRetryRecording(options, span));
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
-      this.metricsCollector?.recordMessageOutcome(
-        this.transportName,
-        message.priority,
-        receipt.successful,
-      );
+      this.metricsCollector?.recordMessageOutcome(this.transportName, priority, receipt);
 
       // Record success/failure
       if (receipt.successful) {
@@ -175,6 +217,7 @@ class OpenTelemetryTransport {
       } else {
         const errorCategory = this.classifyReceipt(receipt);
         span?.recordFailure(receipt.errorMessages);
+        if (receipt.deliveryUnknown === true) span?.setAttributes(DELIVERY_UNKNOWN);
         this.metricsCollector?.recordAttempt(
           this.transportName,
           'send',
@@ -255,7 +298,8 @@ class OpenTelemetryTransport {
           pending.length = 0;
           head = 0;
         }
-        metrics?.recordMessageOutcome(transportName, priority, receipt.successful);
+        metrics?.recordMessageOutcome(transportName, priority, receipt);
+        if (receipt.deliveryUnknown === true) span?.setAttributes(DELIVERY_UNKNOWN);
 
         if (receipt.successful) {
           successCount++;
@@ -311,20 +355,7 @@ class OpenTelemetryTransport {
    * Cleanup resources if the wrapped transport supports Disposable or AsyncDisposable.
    */
   async [Symbol.asyncDispose]() {
-    if (!this.wrappedTransport) {
-      return;
-    }
-
-    // Try AsyncDisposable first
-    if (typeof this.wrappedTransport[Symbol.asyncDispose] === 'function') {
-      await this.wrappedTransport[Symbol.asyncDispose]();
-      return;
-    }
-
-    // Fall back to synchronous Disposable
-    if (typeof this.wrappedTransport[Symbol.dispose] === 'function') {
-      this.wrappedTransport[Symbol.dispose]();
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   extractTransportName(transport) {
@@ -443,6 +474,10 @@ class OpenTelemetryTransport {
     return this.classifyError(syntheticError);
   }
 }
+
+// A failure the provider may have taken: the message is to be reconciled
+// from its events, not sent again.
+const DELIVERY_UNKNOWN = { 'mailer.delivery_unknown': true };
 
 // Keeps the messages of a failed receipt while fewer than the bound are kept,
 // and counts all of them.

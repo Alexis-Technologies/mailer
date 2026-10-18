@@ -165,3 +165,16 @@ test('Mailtrap: a 200 that is not JSON is sent once, of unknown delivery', async
   assert.strictEqual(receipt.deliveryUnknown, true);
   assert.strictEqual(receipt.retryable, false);
 });
+
+test('Mailtrap: a Retry-After past a day is read as a day, as for the other providers', async (t) => {
+  // Before: Mailtrap had a parser of its own, without the bound of the
+  // others, so 99999999999 seconds came back as about 3,170 years.
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response('', { status: 429, headers: { 'Retry-After': '99999999999' } }),
+  );
+  const receipt = await new MailtrapTransport({ ...config, retries: 0 }).send(message());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.errors[0].retryAfterMilliseconds, 24 * 60 * 60 * 1000);
+});

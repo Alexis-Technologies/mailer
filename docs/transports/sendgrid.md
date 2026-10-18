@@ -207,6 +207,36 @@ while retry configuration determines how many times to retry failed requests.
 The transport uses exponential backoff for retries, reducing load on SendGrid's
 servers during temporary outages and improving overall reliability.
 
+
+## Scheduling, metadata and tracking
+
+`scheduledAt` is SendGrid's `send_at`, at most 72 hours ahead (the `now` option
+is the clock it is measured by); a later one is refused before the request.
+`metadata` is `custom_args`, which SendGrid returns in its events. A message's
+`tracking` sets its open and click tracking over `openTracking` and
+`clickTracking` of the configuration.
+
+```js
+const receipt = await transport.send(
+  createMessage({
+    from: 'shop@example.com',
+    to: 'user@example.com',
+    subject: 'Your order has shipped',
+    content: { html: '<p>On its way.</p>' },
+    scheduledAt: new Date(Date.now() + 60 * 60 * 1000),
+    tracking: { opens: false },
+    metadata: { orderId: '42' },
+  }),
+);
+```
+
+## Verifying the configuration
+
+`verify()` reads the scopes of the API key (`GET /v3/scopes`) and checks that one
+of them is `mail.send`, so a restricted key that may not send fails before the
+first message.  It throws an error with the `statusCode` of the answer when
+SendGrid refuses the key.
+
 ## Development and testing
 
 For development and testing, you can configure the SendGrid transport for

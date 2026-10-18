@@ -150,6 +150,34 @@ Tags appear in Mailgun's analytics dashboard, allowing you to track open rates,
 click rates, and delivery statistics for specific message categories.
 This helps you understand which types of emails perform best with your audience.
 
+## Scheduling, metadata and tracking
+
+`scheduledAt` is Mailgun's `o:deliverytime`; how far ahead depends on the plan
+(three days, or seven), and Mailgun refuses a later one. `metadata` goes in
+`v:<key>` variables, which Mailgun returns in its events as user variables. A
+message's `tracking` sets `o:tracking-opens` and `o:tracking-clicks` over
+`openTracking` and `clickTracking` of the configuration.
+
+```js
+const receipt = await transport.send(
+  createMessage({
+    from: 'shop@example.com',
+    to: 'user@example.com',
+    subject: 'Your order has shipped',
+    content: { html: '<p>On its way.</p>' },
+    scheduledAt: new Date(Date.now() + 60 * 60 * 1000),
+    tracking: { clicks: false },
+    metadata: { orderId: '42' },
+  }),
+);
+```
+
+## Raw MIME
+
+`sendRaw()` sends serialized MIME through the `messages.mime` endpoint, to the
+recipients of its envelope.  The message is checked line by line as the SMTP
+transport checks it, then read into memory; composition is bypassed.
+
 ## Bulk email sending
 
 For sending newsletters, notifications, or other bulk emails, the Mailgun
@@ -241,6 +269,13 @@ Timeout settings control how long to wait for Mailgun's API responses,
 while retry configuration determines how many times to retry failed requests.
 The transport uses exponential backoff for retries, reducing load on Mailgun's
 servers during temporary outages.
+
+## Verifying the configuration
+
+`verify()` reads the sending domain (`GET /v3/domains/<domain>`), so it checks the
+key, the region and the domain.  A domain sending key, which may not read the
+domain (403), is verified too; a domain the account does not have fails with
+404.
 
 ## Development and testing
 

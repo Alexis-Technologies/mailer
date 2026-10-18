@@ -10,17 +10,24 @@ Nodemailer, emailjs or Upyo, made of two parts:
 1. **The transport,** ported from upyo 0.7.0 (see "Code ported from upyo"): the message model,
    its own SMTP client, MIME builder and DKIM signing, Amazon SES v2 and seven more HTTP providers
    on `fetch`, JMAP, and the pool, retry, mock, OpenTelemetry and logger decorators, one subpath
-   each.
+   each. 1.1 adds what nodemailer, unemail and sently did better (see "Code ported from
+   nodemailer, unemail and sently"): sendmail, an injected `connect` and an HTTP CONNECT proxy for
+   SMTP, ten more HTTP providers, attachments from paths and URLs, List-* fields with one-click,
+   templates with React Email passed in, and the circuit breaker, rate limit, hooks and tee
+   decorators.
 2. **A reliability layer on top of it,** which none of the fourteen libraries in
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
-   of delivery events, suppression, idempotency and failover between providers.
+   of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
+   of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
+   idempotency decorator whose store interface the outbox is to implement (`./idempotency`).
 
-It has zero runtime dependencies and runs on Node.js ≥ 22 only (no browser entry).
+It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
+Node compatibility (see "Platform"; no browser entry).
 
-**Status: 1.0.0 is the ported transport, the reliability layer is being designed.** The root
-entry exports the message model and the transport contract of upyo, each transport and decorator
-is a subpath, and their API is under semver from 1.0.0. The reliability layer (queue, audit log, delivery events) has no API yet; its direction
-is in "Roadmap" below.
+**Status: 1.1 is the transport and the first parts of the reliability layer.** The root entry
+exports the message model and the transport contract of upyo, with the delivery events of 1.1;
+each transport, decorator and helper is a subpath, and their API is under semver from 1.0.0. The
+queue, the audit log and suppression have no API yet; their direction is in "Roadmap" below.
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -33,6 +40,9 @@ Package manager is **pnpm** (pinned in `packageManager`).
 
 ```bash
 pnpm test                          # node --test tests/unit/*.test.js
+pnpm test:runtime                  # tests/runtime: the package by its name, no mock (sockets, TLS, fetch, spawn)
+pnpm test:bun                      # tests/unit and tests/runtime on Bun (bun test --parallel)
+pnpm test:deno                     # tests/unit and tests/runtime on Deno (deno test --parallel)
 pnpm test:mailpit                  # opt-in: tests/mailpit against a local Mailpit (compose file there)
 pnpm test:e2e                      # opt-in: tests/e2e against real providers, from env variables
 node --test tests/unit/mailer.test.js   # a single file
@@ -49,9 +59,9 @@ pnpm docs:comparison               # renders docs/comparison.json into docs/guid
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
 ```
 
-`prepublishOnly` runs lint + format:check + test:coverage + test:types + check:dts + the size
-gate + check:pack. CI adds the comparison drift check and the docs build. Treat that as the
-pre-merge gate. There is no build step.
+`prepublishOnly` runs lint + format:check + test:coverage + test:runtime + test:types + check:dts +
+the size gate + check:pack. CI adds the comparison drift check, the docs build, and the unit and
+runtime suites on Bun and Deno. Treat that as the pre-merge gate. There is no build step.
 
 ## No build step: CommonJS + hand-written types
 
@@ -66,7 +76,8 @@ pre-merge gate. There is no build step.
   runtime exports with the declared value exports and imports every name from ESM.
   `tests/types/index.test-d.ts` (tsd) pins signatures. `check:dts` needs `--target es2022` because
   there is no tsconfig.
-- `package.json` has a closed `exports` map (`types` first, then `default`), `sideEffects: false`
+- `package.json` has a closed `exports` map (`types` first, then `default`), `sideEffects: false`,
+  `"type": "commonjs"` (Node's default, declared for Deno, which otherwise reads `.js` as ESM)
   and a `files` allowlist: `index.js`, `index.d.ts`, `src`, README, CHANGELOG, LICENSE and
   SECURITY.
 - **Subpaths, not a monorepo.** A subpath is a directory `src/<subpath>/` with an `index.js` that
@@ -108,13 +119,24 @@ Copyright 2025 Hong Minhee; the notice is in `LICENSE`): one subpath per upyo pa
   A d.ts names the directory of its package (`// Types ported from upyo v0.7.0
   (packages/smtp/src)`), as its types come from several files, and lines that say how a file
   was adapted may come between the two. A file that is not a port starts with
-  `// Not ported from upyo:` and what it is. `tests/unit/attribution.test.js` checks one or the
-  other in every file the package ships.
+  `// Not ported:` and what it is. `tests/unit/attribution.test.js` checks one or the other in
+  every file the package ships.
 - **The port keeps upstream's behavior.** What changes is the platform: CommonJS and the code
   style below, `node:crypto` instead of `@noble/hashes`, the OpenTelemetry providers and the
   logger passed in, fallbacks for runtimes older than Node 22 dropped, and the `@since` tags of
   upyo versions removed. A known upstream bug is fixed afterwards in its own `fix:` commit with a
   test that fails without it, not during the port.
+- **The HTTP clients are this package's, the API of each provider upstream's.** The fixes 24 to
+  39 had to land in seven copies of the same client, and one missed a copy (Mailtrap, bug 29), so
+  since 1.1 the clients of SES, Resend, SendGrid, Mailgun, Maileroo, Lettermint, Plunk and
+  Mailtrap are their requests over `createApiClient` (`src/internal/api-client.js`), as those of
+  1.1 are, SES's SigV4 signature the `authorize` of each attempt:
+  what stays upstream's is the provider's side (its authorization, the messages it is read for,
+  what its 2xx must hold, its error classes), passed in as hooks. Their public errors
+  (`SendGridApiError`…) extend `ProviderApiError` with the names, arguments and fields of 1.0, and
+  the transports build their receipts with `providerFailure`. JMAP, with its session, keeps its
+  own client; `tests/unit/api.test.js` fails when another provider calls `requestWithRetry` on
+  its own. The transports of 1.1 extend `ProviderTransport` (`src/internal/provider-transport.js`).
 - A lint rule that upstream code breaks is suppressed on the line,
   `// oxlint-disable-next-line <rule> -- upstream`, rather than rewritten; lifting those is a later
   refactor, like TS `private` fields, which stay plain properties (the tests reach into them).
@@ -341,7 +363,9 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 62. DKIM: `signingDomain`, `selector`, the names in `headerFields`, the algorithm and the
     canonicalization went into the DKIM-Signature field unchecked, so a domain with a line
     break added a header field such as Bcc to the message, and a `;` ended a tag early.
-    `checkDkimConfig` refuses them, from the SMTP constructor and at every composition.
+    `checkDkimConfig` refuses them, from the SMTP constructor and at every composition. A name
+    with a tab, CR or LF, which the WHATWG parser behind `domainToASCII` removes before it reads
+    the name, is refused before it gets there; the first version of this fix let one through.
 63. DKIM (known bug 6): a PEM was stripped of its armor and imported as PKCS#8, so a PKCS#1
     key (`BEGIN RSA PRIVATE KEY`) failed. `createPrivateKey` of node:crypto reads either and
     the key reaches Web Crypto as PKCS#8; the import error keeps its cause.
@@ -428,6 +452,354 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
 85. pool (known bug 7): `continueOnSuccess` was accepted and never read; honored, it would send
     a message that went out through one transport again through the others. It is gone from
     the type, and `continueOnSuccess: true` throws a `TypeError` when the pool is made.
+86. smtp: a failure without a reply of the server was classified by the words of its message
+    alone, so a certificate refused during the TLS handshake was `unknown`; and
+    `classifyReceiptError` (36) took only the codes that name a certificate, which the leaf of an
+    unknown issuer does not (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report for an
+    untrusted CA). The receipt takes the classification of the error, by the code along its
+    causes, and `isCertificateCode` (`src/core/receipt.js`) knows that code: a refused
+    certificate is a `configuration` failure, not retried, on Node, Bun and Deno.
+87. every HTTP provider and jmap: a TLS certificate refused in the handshake was retried, as
+    `requestWithRetry` retries any failure without a status, and its receipt was classified by
+    the words of its message (`fetch failed`), a retryable `network` failure; on Deno, whose
+    `fetch` gives it no code, `isUnsentRequestError` found no sign of an unsent request and it was
+    `deliveryUnknown`. `isCertificateFailure` (`src/core/receipt.js`) knows it by the code along
+    the causes or by Deno's text (`invalid peer certificate`), for `classifyReceiptError` and
+    `isUnsentRequestError`; `requestWithRetry` throws it at the first attempt; and
+    `certificateFailure` (`internal/refusal.js`), first in the failure of every HTTP transport,
+    makes its receipt a non-retryable `configuration` failure.
+
+## Code ported from nodemailer, unemail and sently
+
+From 1.1 the package also takes the features of three libraries of `docs/comparison.json` where
+they lead it: [nodemailer](https://github.com/nodemailer/nodemailer) 10.0.16 (MIT-0, Copyright
+2011-2023 Andris Reinman), [unemail](https://github.com/productdevbook/unemail) 0.7.0 (MIT,
+Copyright 2025 Wind) and [sently](https://github.com/omqkhafi/sently) 1.2.2 (MIT, Copyright 2026
+sendx contributors). Their notices are in `LICENSE`.
+
+- **What is ported is the feature, onto the contracts of this package:** the mapping of a
+  provider's fields, an algorithm (a token bucket, a circuit breaker), the formatting of header
+  fields, and the test cases. The code lands on `Receipt`, `src/internal/http.js` and the injected
+  options; the HTTP paths, retries and error models of the sources are not kept.
+- **Known upstream bugs are fixed in the port,** unlike upyo's: in the same `feat:` commit, each
+  with a test that fails on upstream's behavior and an entry in the list below (N for nodemailer,
+  U for unemail, S for sently). A ported test that pinned upstream's behavior says "Changed in the
+  port".
+- A ported file starts with the header of its source, as for upyo:
+  ```js
+  // Ported from nodemailer v10.0.16 (src/sendmail-transport/index.ts)
+  // https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
+  ```
+  The notice of unemail is `// https://github.com/productdevbook/unemail — MIT, Copyright 2025
+  Wind`, that of sently `// https://github.com/omqkhafi/sently — MIT, Copyright 2026 sendx
+  contributors`. A file with a second source names it further down, `// Also ported from <name>
+  v<version> (<path>)` followed by its notice. Ported test suites keep their `describe`/`it`, as
+  upyo's do; the `expect` of vitest and bun:test becomes `node:assert`.
+- **Not ported, on purpose:** the DKIM, SES over the AWS SDK, `addressparser`, `fetch`, `punycode`
+  and plugin pipeline of nodemailer (this package does each better or has it); the SMTP client,
+  MIME builder, DKIM, fallback, round-robin and retry of unemail (`./smtp`, `./mime`, `./pool` and
+  `./retry` are safer); the `{{var}}` engine, SMS, WhatsApp and push, socket adapters, pool, retry,
+  fallback, rate limiter and idempotency of sently (unemail's are the base where one is needed).
+
+**Upstream bugs fixed in the port** (each in the `feat:` commit of the feature, with a test that
+fails on upstream's behavior):
+
+- N1. nodemailer: nothing wrote `List-Unsubscribe-Post` (a `list.unsubscribePost` key became
+  `List-Unsubscribepost`), and the default DKIM `h=` of neither nodemailer nor unemail covered it
+  or `List-Unsubscribe`, as RFC 8058 §4 requires. `oneClick` of `list` writes it, and the default
+  `h=` of `./mime` ends with `list-unsubscribe:list-unsubscribe-post`.
+- N2. nodemailer: any `path` or `href` of an attachment (and of `html` and `text`) was read, a
+  file from disk or a URL through its own HTTP client, unless `disableFileAccess` and
+  `disableUrlAccess` were set; the client followed five redirects to any address, cloud metadata
+  included, with no bound on the body. In `./attachments` nothing is read but through `fromPath`
+  and `fromUrl`, which the application calls; `fromUrl` goes through the injected `fetch` with
+  `redirect: 'manual'`, checks each URL with `allowUrl` (by default `isPublicUrl`: no
+  `localhost`, loopback, private or link-local address), sends `headers` to the first origin
+  only, and bounds time and bytes.
+- N3. nodemailer: a data URL over 50 MB became an empty attachment, and one that did not parse
+  was read as a file path. `fromDataUri` refuses both and checks base64, and percent-encoded
+  bytes stay bytes rather than going through `decodeURIComponent`.
+- S1. sently (`resolveAttachments`): `basePath` compared the paths as written, so a symbolic link
+  inside it led out of it. `fromPath` compares the `realpath` of the file with that of `root`.
+- N4. nodemailer (`http-proxy-client.ts`): an IPv6 destination went bare into the CONNECT
+  request line and Host field (`CONNECT ::1:25`), which a proxy reads as another port; an HTTPS
+  proxy took `rejectUnauthorized` alone, no `ca` and no SNI; the credentials of the proxy URL
+  went through without percent-decoding. `createHttpProxyConnector` (`src/smtp/http-proxy.js`)
+  brackets it, passes the `tls` options and the proxy's name, decodes the credentials as UTF-8,
+  and puts back what came with the reply in the paused socket. A connection opened by `connect`
+  counts as local for plain-text AUTH only by its `host`, never by the proxy it reaches.
+- N5. nodemailer (`sendmail-transport`): a process killed by a signal (`code === null`) was a
+  success, the code of `close` was handed on as an error value, stderr was never read, the
+  recipients followed the options with no `--`, and the message kept its Bcc field for the MTA to
+  strip. `./sendmail` succeeds on an exit with 0 alone, reports a signal after the whole message
+  as `deliveryUnknown`, classifies the sysexits codes, reads stderr bounded and redacted, ends the
+  options with `--`, and puts blind recipients on the command line only.
+- U4. unemail (`src/drivers/_fetch.ts`), behind every HTTP driver ported: redirects were followed,
+  so `X-Postmark-Server-Token`, `api-key` and the other custom credentials went wherever one
+  pointed; the body was read whole, with no bound; and a timeout or a 5xx after which the
+  provider may have taken the message was retried by the middleware. The providers of 1.1 go
+  through `createApiClient` (`src/internal/api.js`) on `requestWithRetry`, as the ported ones do.
+- S2. sently (`src/transports/postmark.ts`): an inline part went with its Content-ID alone, while
+  Postmark wants `cid:` before it, and the JSON of an answer was parsed before its status, so a
+  non-JSON 5xx failed with a `SyntaxError` and no status. `./postmark` writes `cid:`, and the
+  shared client reads the status first.
+- U5. unemail (`src/drivers/brevo.ts`): a batch went as the `messageVersions` of one request
+  when its messages agreed on the file names and lengths of their attachments, so a recipient
+  could get another's file, and the idempotency key of a batch folded only the keys present, so
+  two batches could share one. `./brevo` sends single requests, each with its own key, generated
+  when the message has none, so a retry after an unknown delivery cannot send twice; Brevo's
+  `duplicate_parameter` is reported as `deliveryUnknown`.
+- U6. unemail (`src/drivers/mailersend.ts`): `sendBatch` went through the bulk endpoint, which
+  answers with one `bulk_email_id` for every message and accepts what may fail later, so each
+  receipt said "sent" for a message whose fate was unknown. `./mailersend` sends single requests,
+  the id of each the `X-Message-Id` of its answer. sently's MailerSend driver dropped custom
+  headers; they are sent, with the threading fields and List-Unsubscribe in MailerSend's own.
+- U1. unemail (`src/core/message.ts`): `List-Unsubscribe` was built from the `unsubscribe` URL
+  after the check for line breaks in header values, so a CR or LF in the URL added header fields.
+  `listFieldsOf` (`src/core/list.js`) refuses whitespace, controls and angle brackets in a URL and
+  writes what `URL` serializes.
+- U2. unemail: one-click went with any `unsubscribe.url`, `http:` included, and was on by
+  default. RFC 8058 §3.1 asks for an https URI; `oneClick` is opt-in and needs one.
+- U3. unemail: the keys and values of `metadata` became `X-Metadata-<key>` header fields in eight
+  drivers with no check, so a key or value with a line break added header fields. `createMessage`
+  holds a key to 1 to 128 of `[A-Za-z0-9_.-]` and a value to a string without control characters.
+- S3. sently (`src/transports/sparkpost.ts`): cc and bcc recipients went into `recipients` with no
+  `header_to` and no Cc field, so the message lost its Cc field and each copy named only its own
+  recipient in To; every address was reported accepted whatever `total_rejected_recipients` said,
+  and an answer without an id was a success with an empty one. `./sparkpost` gives each recipient
+  the shared To in `header_to` and the Cc field in `content.headers`, counts the rejected ones on
+  the receipt (`rejectedRecipientCount`), fails it as `rejected` when none was accepted, and
+  reports an answer without an id as `deliveryUnknown`.
+- U7. unemail (`src/drivers/azure-communication.ts`): with no option the connection string came
+  from `COMMUNICATION_SERVICES_CONNECTION_STRING` of `process.env`, an endpoint could be `http:`
+  to any host, and its idempotency was the `Operation-Id`, while the API takes a repeat as one
+  only by the `Repeatability-Request-Id` and `Repeatability-First-Sent` of OASIS Repeatable
+  Requests, which it never sent; tracking with opens on and clicks off turned both on. `./azure`
+  reads only its options, holds the endpoint to HTTPS or loopback HTTP, sends both headers with
+  the key as `Operation-Id` too, reports a repeat Azure answers 409 or 412 as `deliveryUnknown`,
+  and refuses tracking it cannot express.
+- U8. unemail (`src/drivers/scaleway.ts`): an inline attachment went as an ordinary file without
+  its Content-ID, which the API has no field for, so the `cid:` of the HTML matched nothing.
+  `./scaleway` refuses it before the request.
+- U9. unemail (`src/drivers/cloudflare-email-rest.ts`): the REST driver wrote the addresses as
+  `{ email, name }`, the reply-to as `replyTo` and the Content-ID as `contentId`, the shapes of the
+  Workers binding, where the REST API takes `{ address, name }`, `reply_to` and `content_id`
+  (Cloudflare's API reference and SDK 7.3.0); and the receipt's id was made of the delivered
+  addresses and the clock, which put the recipients into every log of a receipt and could repeat
+  within a millisecond, while the answer has a `message_id`. `./cloudflare` writes the REST
+  shapes and takes the `message_id`.
+- U10. unemail (`src/middleware/circuit-breaker.ts`): half-open let every send through, not one
+  probe, so a provider coming back met the whole backlog at once; any failure but a malformed
+  message counted, a rate limit and a caller's abort among them. `./breaker` lets one probe
+  through, answers the others as while open, counts only network, timeout, server and
+  unavailability failures and a thrown error that is not the caller's abort, and ignores a late
+  result of a send made in another state.
+- U11. unemail (`src/middleware/rate-limit.ts`): the wait for tokens did not hear the caller's
+  signal, so an aborted send kept its place and its tokens; `maxWaitMs` counted from the turn of
+  a message, not its arrival, so one queued behind others waited past it; and a batch costing
+  more than the capacity was cut to it and went through, over the limit. `./ratelimit` serves the
+  waiters in turn from one timer and drops one whose caller aborts, refuses at once a message the
+  queue ahead would hold past `maxWaitMs`, and refuses a cost over `burst`.
+- U12. unemail (`src/middleware/idempotency.ts`): the key was looked up before the send and
+  written after it, so two concurrent sends under one key both went; the same key for another
+  message was answered with the first's receipt; and only successes were kept, so a send of
+  unknown delivery went again on a retry. `./idempotency` reserves the key in the store first
+  (`reserve`, `complete`, `release`), answers a send in flight as of unknown delivery, refuses a
+  key whose fingerprint differs, keeps a key whose delivery is unknown, and fails only the
+  message whose store call failed.
+- S4. sently (`src/mailer.ts`): `onRetry` and `onFallback` were set on the shared transport for
+  each send and unset when it ended, so of two concurrent sends one told its retries to the
+  other's hooks, and the first to end unset the hooks of the other; a hook that threw was written
+  with `console.warn` outside production and dropped in it. `./hooks` makes the context of each
+  send and passes `onRetry` in the options of that send, and a hook that throws after the send
+  becomes a process warning (`MAILER_HOOK_FAILED`).
+- U13. unemail (`src/drivers/tee.ts`): every leg was awaited with no bound, so the primary's
+  result waited for the slowest mirror, and a mirror that hung held the send for as long as it
+  hung. `./tee` gives each mirror a timeout of its own and by default does not await it, bounds
+  the copies in flight, and awaits them, bounded, only with `awaitMirrors`.
+- U14. unemail (`src/render/_html.ts`, `src/render/react.ts`): `htmlToText` threw a RangeError on
+  a numeric reference past U+10FFFF (`&#99999999;`), left comments and the doctype in the text
+  (React Email writes `<!--$-->` into every body), read an `href` in double quotes only, and its
+  lazy patterns rescanned the rest of the input for each unclosed `<a` or `<script`, quadratic in
+  its length (reproduced); the React renderer imported `@react-email/render` itself and hid a
+  failed plain-text pass. `./render` reads HTML in one linear pass (`html-to-text.js`), decodes
+  an invalid number as U+FFFD, takes `render` as an option and lets its failure through.
+- S5. sently (`src/webhooks/ses.ts`): the SNS message was parsed and never verified, so anyone
+  who knew the URL could post bounces and complaints; a notification of several recipients
+  became one event, of the first; a Permanent and a Transient bounce were both `bounced`; and a
+  reject or a rendering failure, which SES never attempted, was a bounce. `./webhooks` takes an
+  SNS message only from a listed topic, signed (versions 1 and 2) with the certificate of an
+  `sns.<region>.amazonaws.com` URL read through the injected `fetch`, within an hour and once;
+  it makes an event per recipient, says whether a bounce is hard or soft, makes a reject
+  `rejected`, and hands a subscription confirmation to the caller.
+- S6. sently (`src/webhooks/{resend,sendgrid,mailgun,postmark}.ts`): `parse` was exported apart
+  from any check; SendGrid's signature and Postmark's credentials were never checked; Resend's
+  and Mailgun's signatures were, with no window of time and no replay check, and a Resend secret
+  that was not base64 threw at each request. An unsubscribe was a spam complaint (SendGrid,
+  Brevo), a drop or a suppression a bounce (SendGrid, Mailgun), a block a deferral (SendGrid), a
+  failed Resend email a bounce, and every Postmark bounce `bounced` whatever its type.
+  `./webhooks` verifies first: Svix for Resend, ECDSA P-256 for SendGrid, HMAC for Mailgun, all
+  within five minutes and once by id; Basic credentials, required, for Postmark.
+- S7. sently (`src/webhooks/brevo.ts`): any request was parsed, Brevo signing nothing; a blocked
+  or invalid address and a soft bounce were all `bounced`, and an unsubscribe a complaint.
+  `./webhooks` requires the token the webhook is configured with (`Authorization: Bearer` or a
+  custom header), compared in constant time; a blocked or invalid address is `rejected`, a soft
+  bounce soft, and the metadata comes back from `X-Mailin-custom`, as `./brevo` sends it.
+  MailerSend, Mailtrap, Mailjet and SparkPost, which sently and unemail lack, are verified from
+  their documentation: an HMAC of the body (MailerSend, Mailtrap; no time is signed, so each
+  event is taken once by its id for a day and an hour), Basic credentials (Mailjet, SparkPost).
+  So are Lettermint (HMAC of the time and body), Maileroo (HMAC of the body), SMTP2GO (Basic),
+  Azure (Event Grid, a token in a secret delivery property, the validation handed back) and
+  Scaleway (SNS messages of Topics and Events, the certificate checked against the trust chain
+  the application pins). ZeptoMail, whose signing is not documented, Plunk, which posts no
+  events, and Cloudflare, whose events go to a Queue, have none.
+
+**Bugs of 1.1 found in review before its release** (each in its own `fix:` commit, or `perf:`,
+with a test that fails without it; R for review):
+
+- R1. webhooks: an id was kept as taken inside `verify()`, before the application handled its
+  events, so a delivery whose handler failed came back as a replay, was answered 2xx and lost;
+  and a store was made silently per verifier, which neither several processes nor a verifier
+  made per request share. `verify()` reserves the id for `leaseMs` and returns the events with
+  `commit()` and `release()`, over a store of `reserve`, `commit` and `release` (`claimDelivery`
+  in `request.js`); another delivery meanwhile is `pending` (503); `replayStore` is required,
+  `null` to keep none; a refusal carries the `status` to answer.
+- R2. render: `htmlToText` read the end of a string built with `+=`, which V8 flattens at each
+  read, so 1 MB of HTML took ten seconds, against the "linear" of U14. The text is built in
+  chunks, its last character and trailing whitespace kept aside.
+- R3. attachments: the media type in the pattern of `inlineDataUrls` was unbounded, quadratic on
+  `<img src=data:x` repeated; `isPublicUrl` judged the host as written, so a name resolving to a
+  private address passed, and so did NAT64, 6to4, site-local, multicast and reserved ranges; a
+  redirect could go from https to http. The type is bounded, the default `allowUrl` resolves the
+  name (`lookup`) and checks every address, and a downgrade is refused; DNS rebinding between
+  the check and the connection stays, as the docs say.
+- R4. attachments: `fromPath` checked the real path once and read the file later, with no bound.
+  It takes `maxBytes` (25 MiB), and each read checks the path again and that the file is the one
+  checked (`dev`, `ino`).
+- R5. webhooks: SNS read the certificate of any `SigningCertURL` on an `sns.*.amazonaws.com` host,
+  its path and query unchecked, behind a cache keyed by the whole URL, so a query per request
+  made a read per request; Azure handed back a `validationUrl` of any host. The SNS path must be
+  `/SimpleNotificationService-<id>.pem` with no query, four reads at most at once, and
+  `certificateTimeoutMs` and `signatureVersions` are options; a `validationUrl` must be on
+  `*.eventgrid.azure.net`, and a token is checked when the request carries one.
+- R6. smtp: `createHttpProxyConnector` sent `Proxy-Authorization` over `http:` to any host and had
+  only an idle timeout. Credentials go in clear to a loopback proxy alone, unless
+  `allowPlaintextCredentials`, and the CONNECT has one deadline.
+- R7. ratelimit: `maxKeys` only started a sweep, so the buckets grew without bound; disposal left
+  its timers and waiters; an abort between the messages of a `sendMany` was not heard. The least
+  recently used bucket goes past `maxKeys`, disposal rejects the waiters with an `AbortError`,
+  and each wait checks the signal.
+- R8. tee and every warning of a decorator: disposal closed the mirrors with copies in flight; a
+  failed copy, a hook or a store that threw became a warning with its raw text, addresses
+  included, one per failure. Disposal waits for the copies, a copy carries the primary's
+  Message-ID, and warnings are redacted (`describeThrown`) and held to ten a minute per code
+  (`warnLimited`, `internal/callback.js`).
+- R9. idempotency: one `ttlMs` held a reservation and a result, so a crash or a `break` after
+  `reserve` left the key pending for a day, every send of it `in_flight`; a holder whose time
+  ran out could complete another's reservation; the receipts of the decorator had no category
+  and were classified by the words of the key (`order-timeout-1` was a `timeout`). A reservation
+  has `leaseMs` (10 minutes) and a token that `complete` and `release` take, a message abandoned
+  is released, and every receipt names its category.
+- R10. core, pool: a refusal by a provider's limits before any request (`scheduledAt` where it
+  cannot schedule, a second tag for Postmark) was `validation`, at which `./pool` stops its
+  failover. It is the category `unsupported`: not retried, failed over, not counted by the
+  breaker.
+- R11. mailtrap: its own `parseRetryAfter` had not the bound of bug 29, and gave 0 for a past date.
+  It uses the core one.
+- R12. the gate of the decorators (`internal/gate.js`): a `sendMany` its caller left (`break`) did
+  not settle the messages read ahead, so a probe stayed out, keys stayed pending and hooks went
+  unheard; and every answer given in place ended the wrapped `sendMany`, cutting the batches of a
+  batch API to one or two messages. `abandon` settles them in a `finally`, and one wrapped
+  `sendMany` runs, the answers in place put in the order of their messages.
+- R13. breaker: a probe that never ended kept the circuit half-open for good, an `isFailure` that
+  threw broke its state, a failed batch counted a failure per message, and a late result counted
+  in a later period. A probe has `probeTimeoutMs`, the callbacks are guarded, a batch counts one
+  failure, and a result counts in the period it was sent in.
+- R14. sendmail: no timeout, no bound on the processes, success on an exit with 0 before the whole
+  message was written, and an abort sent SIGTERM alone. `timeout` (60 seconds; SIGTERM, then
+  SIGKILL 5 seconds on; `deliveryUnknown` once the message was written), `maxConcurrent` (10),
+  and such an exit fails.
+- R15. postmark, mailjet: a batch was cut by its count alone (500, 50), so its attachments were
+  held whole and could pass the provider's limit, which refuses the whole batch. It is cut by its
+  bytes too (50 MB, 15 MB).
+- R16. hooks: the hooks had no signal, a rejection of an async `onRetry` went unheard, and
+  `beforeSend` could return anything. The context carries the signal, an abort during
+  `beforeSend` sends nothing, a rejected `onRetry` is a warning, and a value not shaped as a
+  message refuses it.
+- R17. breaker, ratelimit, the memory stores and the replay store: intervals on `Date.now`, which
+  a step of the clock moves. They are measured on `performance.now()`.
+- R18. webhooks: Basic and Bearer credentials were compared with an early exit on a length apart;
+  the store was given ids as they came, one of which names a recipient (Mailtrap without
+  `event_id`); the verifiers of providers that sign no time took `toleranceMs` and `now` and
+  never read them; a batch reserved its ids one round trip at a time. Credentials compare as
+  HMACs, the store is given a SHA-256 of each id, those options throw, and the store is called
+  64 ids at a time.
+- R19. core: `metadata` had no bound on its keys or values. 64 keys, values of 1024 characters.
+- R20. webhooks: the mapping of events guessed where the provider did not say. An Azure
+  engagement of any type but a click was an open, and a quarantined message deferred, which
+  Azure does not try again; a Mailgun failure of no severity, a SendGrid bounce of no type and a
+  Mailjet bounce without `hard_bounce` had a kind (and SendGrid's `expired`, given up after its
+  retries, was hard); a Resend bounce without its detail and an SES bounce of no recipient had
+  none; Postmark made any undocumented bounce type a bounce, and any suppression an
+  unsubscribe. The rule of `docs/guide/webhooks.md` (`deferred` while the provider tries again;
+  `bounced` hard, soft or undetermined as it says; `rejected` with nothing sent; `unknown` rather
+  than a guess) holds for all, and `tests/unit/webhooks-mapping.test.js` pins every provider's
+  table.
+- R21. gate: the first message of a run was admitted before the wrapped `sendMany()` took it,
+  so one that threw or returned at once left it neither failed nor abandoned (a key pending, a
+  probe held). Its slot is there from the start, and a message never taken goes to
+  `gate.unsent`, which `./idempotency` answers by freeing its key.
+- R22. breaker: a `now()` that threw fell back to `Date.now`, another clock, and put a circuit
+  some fifty years off; it gives the last time it gave.
+- R23. ratelimit: a bucket not yet full was dropped as readily as a full one, silently; any
+  number of messages could wait; a message whose tokens were there missed an abort between two
+  of a batch; a shared store that gave no `waitMs` was asked every millisecond. Full buckets go
+  first and an early drop is told (`MAILER_RATELIMIT_EVICTED`), `maxQueue` bounds the waiters,
+  the signal is read before the tokens, a store is asked again after the rate, and
+  `ratelimit.waited` tells the wait.
+- R24. sendmail: a message that could not be read sent SIGINT alone, which a process could
+  ignore for good; it gets SIGKILL after the grace.
+- R25. tee: the copies started before the primary's send; they start once it has answered.
+- R26. hooks: a copy a `beforeSend` returned skipped the checks of `createMessage`, so a line
+  break in a name or an address reached the converters; `checkMessage` of `src/core/message.js`
+  runs them again.
+- R27. webhooks: SNS certificates were cached by the URL as written, and kept though the
+  signature failed, so spellings and forged messages read certificates and pushed the one in use
+  out. A certificate URL is taken only as the URL parser writes it, and kept once it verified.
+- R28. webhooks: a Scaleway anchor that was no CA, or no longer valid, issued; the chain must
+  hold CAs, valid when they are trusted.
+- R29. webhooks: SparkPost's classes 25 and 26 (its own refusals), 60, 80 and 100 (no failure)
+  and 90 (an unsubscribe) were bounces; a Maileroo failure was hard and a Maileroo or Scaleway
+  deferral a soft bounce, though neither provider said so. They follow the rule of the guide.
+- R30. webhooks: the verifiers of providers that sign no id took `replayStore` and `leaseMs`
+  and never read them; an Azure `validationUrl` with a password passed; the lease was said to
+  be shorter than SNS's first retry, which it is not.
+- R31. webhooks: `commit` and `release` of the replay store took the id alone, so a request
+  whose lease ran out could free the reservation of the next; a delivery reserves under a token
+  of its own, and the memory store tells when it drops committed ids early.
+- R32. webhooks: the guide found a message of unknown delivery by `rfcMessageId`, which the HTTP
+  APIs write themselves; an event carries `correlationId` of the message's metadata.
+- R33. a timeout over 2^31 - 1 ms fired at once, and `AbortSignal.timeout` threw past 2^32 - 1;
+  `timerMs` of `internal/sleep.js` cuts each to the longest a timer keeps.
+- R34. a logger that threw was a warning per record with its text as it was; it is told once
+  per log by its name, and `./idempotency` redacts the addresses of a key in its records.
+- R35. receipts of the library's own conditions had no category; each names one, or the status
+  it is told by, and `tests/unit/internal.test.js` fails on a call that names none.
+- R36. api: `classify()` of a provider reached the receipt alone, so a retryable 420 of
+  SparkPost was not retried in the send; the shared client passes `isRetryable`.
+- R37. verify: a 403 verified the key of every provider; only those whose sending keys are
+  refused the read with one (`acceptForbidden`: SES, Mailgun, SparkPost, MailerSend,
+  Scaleway), and with no error marked verified to carry it.
+- R38. postmark, mailjet: a batch was converted whole, its files in base64, before its first
+  request; a request goes as soon as the next message would not fit.
+- R39. breaker, tee: `breaker.open` named the change of state and every refused send, and the
+  tee wrote the code of its process warning in its records: `breaker.refused`,
+  `tee.mirror_failed`.
+- R40. jmap: `verify()` retried its reads with no `onRetry`.
+- R41. attachments: `inlineDataUrls` read HTML of any length; `maxLength` bounds it.
+- R42. tee: the deadline of an awaited mirror was unref'd, as that of a detached one is, so a
+  script whose mirror hung on nothing that kept the process alive ended with its send unsettled
+  (on Node 22, so did the suite of `./tee`). The caller waits for it, so it keeps the process.
 
 ## Repository layout
 
@@ -437,14 +809,20 @@ src/
   index.js          public barrel (explicit named exports)
   version.js        the package name and version (OpenTelemetry scope), kept equal to package.json
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
-  internal/         private modules shared by subpaths, not in the exports map (redact.js,
-                    redact-addresses.js, unsent.js, delivery-unknown.js, http.js,
-                    config.js, loopback.js, body.js, sleep.js, log.js, base64.js,
-                    headers.js, provider.js, batch.js, validate-ssl.js)
+  internal/         private modules shared by subpaths, not in the exports map: the request
+                    layer (http.js, api-client.js for every HTTP provider but JMAP,
+                    api.js for the conversions of the providers of 1.1, body.js, unsent.js,
+                    delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
+                    receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
+                    schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
+                    the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
+                    the base of the transports of 1.1 (provider-transport.js), and abort.js,
+                    iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
+  runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock
   helpers/<sub>/    shared test code of a subpath (fake servers, fixtures builders)
-  fixtures/<sub>/   static fixtures (certificates)
+  fixtures/<sub>/   static fixtures (certificates; tls/ is a CA and a certificate it issued)
   types/*.test-d.ts tsd assertions, one file per entry
 scripts/
   size.js           bundle-size report; --check gates each entry of the exports map
@@ -472,10 +850,10 @@ The root entry is the contract every subpath shares, ported from `@upyo/core` (`
   `verify()`.
 - **`Receipt`**: `{ successful: true, messageId }` or
   `{ successful: false, errorMessages, errors, retryable }`. A `ReceiptError` carries a `category`
-  (auth, rate-limit, network, timeout, validation, rejected, server-error, service-unavailable,
-  configuration, unknown), `retryable`, `statusCode` and `retryAfterMilliseconds`;
-  `classifyHttpStatus` and `classifyReceiptError` classify. A transport reports a failure in a
-  receipt rather than by throwing.
+  (auth, rate-limit, network, timeout, validation, rejected, unsupported, server-error,
+  service-unavailable, configuration, unknown), `retryable`, `statusCode` and
+  `retryAfterMilliseconds`; `classifyHttpStatus` and `classifyReceiptError` classify. A transport
+  reports a failure in a receipt rather than by throwing.
 
 The contracts of the reliability layer, still to be designed (Phase 0):
 
@@ -486,6 +864,11 @@ The contracts of the reliability layer, still to be designed (Phase 0):
 - **The states and events of a message:** `queued → rendered → submitted → accepted → delivered |
   bounced | complained | failed | delivery_unknown`, with correlationId, tenantId, attempt, the
   provider's message id and a hash of the payload.
+- **`DeliveryEvent`** (root types, 1.1), what `./webhooks` reads from a provider: one per message
+  and recipient, its `id` the same on every redelivery, its `messageId` that of the receipt.
+  `accepted`, `delivered`, `bounced` and `complained` are the states above; `rejected` is
+  `failed` before any attempt; `deferred` keeps a message `accepted`; `opened`, `clicked` and
+  `unsubscribed` are engagement, not states; `unknown` keeps the provider's `raw` record.
 
 ## Roadmap
 
@@ -499,9 +882,10 @@ model of states and events. `tenantId` is in the context from the start.
 **Phase 1, reliable sending (P0).**
 
 - **The transport of its own** (done, ported from upyo 0.7.0; its known bugs are on the list of
-  "Code ported from upyo"): the MIME builder; the SMTP client (pool, STARTTLS with `requireTls`, not RFC 8689 REQUIRETLS,
-  AUTH PLAIN/LOGIN/XOAUTH2, DSN, PIPELINING); DKIM (RSA-SHA256, Ed25519); SES v2 over `fetch` with
-  SigV4; seven more HTTP providers and JMAP.
+  "Code ported from upyo"): the MIME builder; the SMTP client (pool, STARTTLS with `requireTls`,
+  not RFC 8689 REQUIRETLS, AUTH PLAIN/LOGIN/XOAUTH2, DSN, PIPELINING); DKIM (RSA-SHA256, Ed25519);
+  SES v2 over `fetch` with SigV4; seven more HTTP providers and JMAP. 1.1 added sendmail and ten
+  providers.
 - **A persistent queue:** the outbox in MongoDB (transactional outbox, no Redis needed) and a
   BullMQ driver (Valkey) for throughput and delays; priorities (auth codes before newsletters).
 - **The audit log** of every state, with a keyed HMAC plus an encrypted block for the recipient
@@ -510,7 +894,8 @@ model of states and events. `tenantId` is in the context from the start.
 - **Idempotency:** a deterministic key (tenant + purpose + recipient + window) deduplicated in the
   outbox. At least once with deduplication, never a promise of exactly once. A provider without an
   idempotency key (SES) leads to `delivery_unknown` and reconciliation from events, not to a blind
-  retry.
+  retry. `./idempotency` (1.1) reserves keys in a store of `reserve`, `complete` and `release`,
+  which the outbox is to implement.
 - **Errors classified:** permanent (5xx, rejected address) are not retried; temporary ones are,
   with jitter and `Retry-After`, under an attempt limit.
 - **The correctness suite:** golden `.eml` files, DKIM checked by an independent verifier in CI,
@@ -519,19 +904,21 @@ model of states and events. `tenantId` is in the context from the start.
   wrong result).
 
 **Phase 2, a closed loop (P1).** Webhooks of the providers into the one event model, with the
-signature mandatory and replay protection, starting with SES (SNS) and one HTTP provider; a
+signature mandatory and replay protection (done in 1.1: `./webhooks`, fifteen providers); a
 suppression list per tenant and stream, checked before a message is queued, with a bypass policy
 for transactional mail (password reset, MFA); failover over a pool of providers with health, a
 circuit breaker with a single probe in half-open, and no switch after an ambiguous "submitted"
-without an idempotency key (`./pool` of the port has strategies and failover, not yet health or a
-breaker); OpenTelemetry spans and metrics (time in queue, attempts, failure rate per provider,
-outbox size; `./otel` of the port covers sends); token-bucket rate limits per provider and per
-tenant (SES quotas).
+without an idempotency key (`./pool` has strategies and failover, `./breaker` of 1.1 takes a
+failing provider out of it; no health checks yet); OpenTelemetry spans and metrics (time in
+queue, attempts, failure rate per provider, outbox size; `./otel` covers sends); token-bucket rate
+limits per provider and per tenant (SES quotas; `./ratelimit` of 1.1, by any key, with a
+store of buckets that processes share).
 
 **Phase 3, multi-tenant (P1–P2).** Provider credentials per tenant (bring your own SES), domains
-and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058) and the split between
-transactional and bulk mail; scheduled sending as a queue delay; a `Renderer` interface with an
-optional React Email adapter (no template engine of its own); more providers.
+and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058, done in 1.1) and the split
+between transactional and bulk mail; scheduled sending as a queue delay (1.1 schedules through the
+providers that can); a `Renderer` interface with an optional React Email adapter (no template
+engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
 
 **Decisions:**
 
@@ -542,8 +929,16 @@ optional React Email adapter (no template engine of its own); more providers.
   ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
-- **Few new providers.** The eight HTTP providers of upyo come with the port. Each provider adds
-  its webhooks and API drift to maintain, so another one waits for a user who needs it.
+- **One `./webhooks` entry, not one per provider.** Its fifteen verifiers come to some 15 KB
+  min+gzip, which a function that verifies one provider pays at its cold start; fifteen entries
+  more would be fifteen more parts of the API to keep under semver, for less than a kilobyte
+  each. If that cost is ever measured to matter, the entries can come later without a change
+  to the one there is.
+- **Eighteen providers, then few new ones.** The eight HTTP providers of upyo came with the port;
+  1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
+  SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare). Each
+  provider adds its webhooks and API drift to maintain, so another one waits for a user who needs
+  it.
 
 **What the competitors appear to get wrong, to not repeat** (findings from reading their code in
 October 2026, not reproduced except for emailjs, which was run against fake SMTP servers): no
@@ -564,11 +959,29 @@ whether Fly.io restricts outgoing SMTP (it would make HTTP-first a requirement).
 
 ## Platform
 
-Node.js ≥ 22 only: `engines` is `>=22.0.0`, CI runs 22 and 24 on Linux and Windows. There is no
-`browser.js` and no `browser` field: sending from a browser would expose the credentials, and
-SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not a target for
-now; if they become one, the transport over `fetch` and the core would move behind a separate
-entry with no `node:*`, and a platform test would enforce it as in protoarray.
+Node.js ≥ 22 is the target: `engines` is `>=22.0.0`, and CI runs 22 and 24 on Linux and Windows.
+Bun 1.4.3 and Deno 2.9.6 run the unit suite and `tests/runtime` in CI too, on Linux, through
+their Node compatibility; their versions are pinned in `ci.yml` and named in the docs
+(getting started), and `engines` names neither. A Deno user imports `npm:@alexify/mailer`. What
+differs on them, as of those versions:
+
+- **Deno's `fetch` sends a request again** when a reused HTTP/1.1 connection closes before its
+  answer (hyper retries it), so a message the provider took may go twice where Node and Bun
+  report it as `deliveryUnknown`; upstream streamed the JMAP bodies against it (bug 81), and the
+  HTTP providers always sent a buffer. A streamed body or a client that keeps no idle connection
+  stops it. The docs give Deno users a `fetch` on `Deno.createHttpClient({ poolMaxIdlePerHost:
+  0 })` (known issues, getting started), rather than the library sniffing the runtime;
+  `tests/runtime/http.test.js` pins both the replay and that `fetch`.
+- **Deno's permissions:** `--allow-net`; `--allow-read` for `fromPath`; `--allow-run` and
+  `--allow-env` for `./sendmail` (its `child_process` passes the environment on); and
+  `--allow-sys=hostname` for the default EHLO name, which is `[127.0.0.1]` without it.
+- **Bun's TLS (BoringSSL)** takes no self-signed certificate that is not a CA as a root of
+  trust, as Node and Deno do, so the tests that pass `ca` use `tests/fixtures/tls`.
+
+There is no `browser.js` and no `browser` field: sending from a browser would expose the
+credentials, and SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not
+a target for now; if they become one, the transport over `fetch` and the core would move behind a
+separate entry with no `node:*`, and a platform test would enforce it as in protoarray.
 
 ## Conventions (oxlint/oxfmt + review)
 
@@ -637,14 +1050,22 @@ change. **This file wins** if they ever disagree.
 - `tests/unit/scripts.test.js` checks that every entry of the exports map has a budget in
   `scripts/size-budgets.json` and nothing else does, and runs `scripts/size.js --check` with
   budgets it always meets, budgets it never can and a missing one.
+- **Size budgets** (`scripts/size-budgets.json`, min+gzip KB, the root alone and each subpath on
+  top of it) are raised in the commit whose change needs the room, never in one of their own, by
+  the smallest half-KB step that passes, and that commit's message says what took it. A budget is
+  lowered when its entry falls a whole KB under it. The root is in the bundle of every subpath, so
+  it grows only for the contract they share; what one subpath needs stays in that subpath.
 - New behavior needs a test that fails without the change. Network transports are tested
   against local fake servers (`tests/helpers/smtp/mock-smtp-server.js` on `node:net`, servers on
   `node:http`) or a stubbed `fetch` (`t.mock.method(globalThis, 'fetch', …)`), never against a
   real provider in `pnpm test`.
 - **Opt-in suites**, outside the gates: `tests/mailpit/` (`pnpm test:mailpit`, serial, as the
   inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
-  `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
-  until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`).
+  `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`, plus `MAILPIT_SENDMAIL="docker exec -i mailer-mailpit
+  /mailpit sendmail"` for the sendmail case) and `tests/e2e/` (`pnpm test:e2e`, each suite skipped
+  until its provider's variables are set; Stalwart for JMAP in `tests/e2e/jmap/`; the providers of
+  1.1 in one table, `providers.e2e.test.js`, which also checks that refused credentials are a
+  non-retryable `auth` failure). The release skill asks for them before a release.
 - **Platform-dependent tests:** the mock SMTP server takes a client that has gone as no failure:
   a reset (`ECONNRESET`; macOS and Windows send an RST where Linux sends a FIN) and a reply
   written after the client closed (`EPIPE` on Linux, `ECONNABORTED` on Windows), which the 221 to
@@ -653,6 +1074,18 @@ change. **This file wins** if they ever disagree.
   401 to a raw message of unknown size, which streams, is `todo` on Node 24 (known upstream bug
   14). `tests/unit/export-parity.test.js` also checks that every d.ts using `AsyncDisposable`
   references `esnext.disposable` itself.
+- **`tests/runtime/`** runs the package as a consumer does, by its name, with no mock: every entry
+  required and imported by name; SMTP over plain TCP, implicit TLS, STARTTLS and an HTTP CONNECT
+  proxy, with DKIM checked by `tests/helpers/mime/verify-dkim.js`; an HTTP provider and
+  `fromUrl` on the runtime's own `fetch` (a redirect, a body over 4 MiB, a lost answer); and
+  `./sendmail` spawning a shell script (POSIX only). The same files run on Node, Bun and Deno, so
+  they use `node:test` and `node:assert` alone, never `t.mock`.
+- **Bun and Deno** (`pnpm test:bun`, `pnpm test:deno`) run each file in a fresh global
+  (`--parallel`), as `node --test` runs each in a process of its own; in one global, the mocks of
+  one file reach the next. Deno keeps mocked timers enabled after a test (`t.after` resets
+  them), a TLS server reads no SNI as `null` on Deno and `undefined` on Bun (`false` on Node), the
+  JMAP tests of a lost answer are skipped on Deno, whose `fetch` sends it again, and the import
+  by name of `export-parity` spawns the node CLI, which Deno is not.
 
 ## Documentation site
 
@@ -678,8 +1111,10 @@ published to npm, and lint/format do not cover it.
 - **The guides of upyo are adapted, not generated:** `docs/messages/` (compose, attachments,
   calendar, MIME) and `docs/transports/` (one page per subpath, plus custom transports), with
   examples in CommonJS on `@alexify/mailer/<subpath>`. `/transports/logger` is new (pino-like
-  logger) and `/transports/otel` passes the providers in. One sidebar (`guide` in
-  `config.mts`) covers the guide, the messages and the transports.
+  logger) and `/transports/otel` passes the providers in. The pages of 1.1 are new:
+  `/messages/render`, `/guide/webhooks`, a page per provider and decorator, and Bun and Deno in
+  getting started. One sidebar (`guide` in `config.mts`) covers the guide, the messages, the
+  transports and the decorators.
 - When behavior changes, update README and the matching docs page together. Keep example outputs in
   the docs true to the code.
 

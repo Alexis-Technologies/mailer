@@ -2,13 +2,17 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
-const { convertMessage } = require('./message-converter.js');
+const { convertMessage, convertRawMessage } = require('./message-converter.js');
+const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
+const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
+const { verifyByRequest } = require('../internal/verify.js');
+const { isCallerAbort } = require('../internal/sleep.js');
 
 /**
  * Amazon SES email transport implementation.
@@ -82,6 +86,29 @@ class SesTransport {
   }
 
   /**
+   * Verifies the credentials and the region with GetAccount.  A key that may
+   * send but not read the account (AccessDenied) is verified too.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If SES refuses the credentials or cannot be reached.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const url = `https://email.${this.config.region}.amazonaws.com/v2/email/account`;
+    await verifyByRequest({
+      provider: 'SES',
+      // A 403 is a known key that may not read: an IAM key that may only send
+      // is refused GetAccount (AccessDenied).
+      acceptForbidden: true,
+      send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
+  }
+
+  /**
    * Sends a single email message through Amazon SES.
    *
    * This method converts the message to SES format, sends it via the SES v2 API,
@@ -137,6 +164,33 @@ class SesTransport {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       return createSesFailure(errorMessage, error);
+    }
+  }
+
+  /**
+   * Sends serialized MIME as the Raw content of SendEmail, to the recipients
+   * of its envelope and from its sender.  The message is checked as SMTP
+   * checks it and read into memory; DKIM and composition are bypassed.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipt.
+   */
+  async sendRaw(message, options) {
+    if (message?.content instanceof Promise) message.content.catch(() => {});
+    options?.signal?.throwIfAborted();
+    try {
+      const raw = await readRawMessage(message, options?.signal);
+      const response = await this.httpClient.sendMessage(
+        convertRawMessage(raw, this.config),
+        options?.signal,
+        options?.onRetry,
+      );
+      return { successful: true, messageId: this.extractMessageId(response), provider: 'ses' };
+    } catch (error) {
+      if (isCallerAbort(error, options?.signal)) throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return rawMessageFailure('ses', error) ?? createSesFailure(errorMessage, error);
     }
   }
 
@@ -229,6 +283,8 @@ const checkAuthentication = (authentication) => {
 };
 
 const createSesFailure = (message, error) => {
+  const known = refusalFailure('ses', error) ?? certificateFailure('ses', message, error);
+  if (known !== undefined) return known;
   if (error instanceof SesApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),
@@ -240,18 +296,14 @@ const createSesFailure = (message, error) => {
     });
   }
 
+  // By the codes along its causes first, then by its words.
+  const { category, retryable } = classifyReceiptError(error);
   return createFailedReceipt(message, {
     deliveryUnknown: isDeliveryUnknown(error),
     provider: 'ses',
+    category,
+    retryable,
   });
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
 };
 
 module.exports = { SesTransport };

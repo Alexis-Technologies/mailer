@@ -258,3 +258,49 @@ test('Pool: continueOnSuccess, which would deliver a message twice, is refused',
   );
   assert.ok(new PoolTransport({ strategy: 'priority', transports, continueOnSuccess: false }));
 });
+
+test('Pool: verifyAll tells how each transport did, a revoked key among them', async () => {
+  // Before: verify() passed when any transport verified, so a key a provider
+  // had revoked did not show while another still sent.
+  const ok = {
+    id: 'ok',
+    send: async () => ({ successful: true, messageId: 'm' }),
+    verify: async () => {},
+  };
+  const revoked = {
+    id: 'revoked',
+    send: async () => ({ successful: true, messageId: 'm' }),
+    verify: async () => {
+      throw new Error('401 Unauthorized');
+    },
+  };
+  const plain = { id: 'plain', send: async () => ({ successful: true, messageId: 'm' }) };
+  const off = {
+    id: 'off',
+    send: async () => ({ successful: true, messageId: 'm' }),
+    verify: async () => {},
+  };
+  const pool = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: ok },
+      { transport: revoked },
+      { transport: plain },
+      { transport: off, enabled: false },
+    ],
+  });
+  await pool.verify();
+  const results = await pool.verifyAll();
+  assert.deepStrictEqual(
+    results.map((result) => [result.id, result.index, result.status]),
+    [
+      ['ok', 0, 'verified'],
+      ['revoked', 1, 'failed'],
+      ['plain', 2, 'unverifiable'],
+    ],
+  );
+  assert.match(results[1].error.message, /401/);
+  const controller = new AbortController();
+  controller.abort(new Error('stop'));
+  await assert.rejects(pool.verifyAll({ signal: controller.signal }), /stop/);
+});

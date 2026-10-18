@@ -10,6 +10,14 @@ const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
+const { abortReason } = require('../internal/sleep.js');
+const {
+  disposeOf,
+  messageOf,
+  refuseUnlessRaw,
+  verifyWrapped,
+} = require('../internal/decorator.js');
+const { iteratorOf } = require('../internal/iterate.js');
 
 /**
  * Transport decorator that retries transient delivery failures.
@@ -62,13 +70,56 @@ class RetryTransport {
     options?.signal?.throwIfAborted();
 
     const pinned = pinMessageId(message, this.config.generateId);
+    return this.#withRetries(
+      (sendOptions) => this.wrappedTransport.send(pinned, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the wrapped transport, retrying retryable
+   * failures as `send()` does; the content of a raw message can be read
+   * again.  A wrapped transport without `sendRaw()` gives a failed receipt of
+   * the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options.
+   * @returns The final delivery receipt.
+   * @throws {DOMException} If the operation is aborted.
+   */
+  async sendRaw(message, options) {
+    const refusal = refuseUnlessRaw(this.wrappedTransport, options);
+    if (refusal !== undefined) return refusal;
+    return this.#withRetries(
+      (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Verifies the wrapped transport once, without retries; it has nothing to
+   * check when it cannot verify.
+   */
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
+  }
+
+  /**
+   * Sends once, then again while the failure is retryable and attempts are
+   * left, waiting between attempts.
+   *
+   * @param sendOnce Sends the message once with the given options.
+   * @param options Optional transport options.
+   * @returns The final delivery receipt.
+   */
+  async #withRetries(sendOnce, options) {
     let lastThrownError;
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
       options?.signal?.throwIfAborted();
 
       let receipt;
       try {
-        receipt = await this.wrappedTransport.send(pinned, options);
+        receipt = await sendOnce(options);
       } catch (error) {
         options?.signal?.throwIfAborted();
         // A bug of the wrapped transport is not a delivery failure to retry
@@ -145,7 +196,7 @@ class RetryTransport {
     const controller = new AbortController();
     const combinedSignal = combineSignals(controller.signal, options?.signal);
     const signal = combinedSignal.signal;
-    const run = new SendManyRun(this, toAsyncIterator(messages), { ...options, signal });
+    const run = new SendManyRun(this, iteratorOf(messages), { ...options, signal });
     try {
       run.launch();
       while (run.isActive()) {
@@ -180,21 +231,7 @@ class RetryTransport {
    *   throws or rejects.
    */
   async [Symbol.asyncDispose]() {
-    const wrappedTransport = Object(this.wrappedTransport);
-    const asyncDisposeSymbol = Symbol.asyncDispose;
-    if (typeof asyncDisposeSymbol === 'symbol') {
-      const asyncDispose = wrappedTransport[asyncDisposeSymbol];
-      if (typeof asyncDispose === 'function') {
-        await asyncDispose.call(wrappedTransport);
-        return;
-      }
-    }
-
-    const disposeSymbol = Symbol.dispose;
-    if (typeof disposeSymbol === 'symbol') {
-      const dispose = wrappedTransport[disposeSymbol];
-      if (typeof dispose === 'function') dispose.call(wrappedTransport);
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
   withSuccessMetadata(receipt, attempts) {
@@ -326,7 +363,7 @@ class RetryTransport {
       });
     }
 
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     const classification =
       error instanceof Error && error.name === 'AbortError'
         ? {
@@ -526,33 +563,13 @@ class SendManyRun {
   }
 }
 
-const toAsyncIterator = (values) => {
-  const asyncIterator = values[Symbol.asyncIterator];
-  if (typeof asyncIterator === 'function') return asyncIterator.call(values);
-
-  const iterator = values[Symbol.iterator]();
-  return {
-    async next() {
-      return await Promise.resolve(iterator.next());
-    },
-    async return(value) {
-      return await Promise.resolve(
-        iterator.return?.(value) ?? {
-          done: true,
-          value,
-        },
-      );
-    },
-  };
-};
-
 const raceWithAbort = (promise, signal) => {
-  if (signal.aborted) return Promise.reject(getAbortReason(signal));
+  if (signal.aborted) return Promise.reject(abortReason(signal));
 
   return new Promise((resolve, reject) => {
     const abort = () => {
       cleanup();
-      reject(getAbortReason(signal));
+      reject(abortReason(signal));
     };
     const cleanup = () => {
       signal.removeEventListener('abort', abort);
@@ -570,10 +587,6 @@ const raceWithAbort = (promise, signal) => {
       },
     );
   });
-};
-
-const getAbortReason = (signal) => {
-  return signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 };
 
 const toReceiptError = (value) => {

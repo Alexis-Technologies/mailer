@@ -7,6 +7,195 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-18
+
+The features of three libraries of the [comparison](https://mailerat.vercel.app/guide/comparison)
+where they led this package, ported onto its contracts:
+[nodemailer](https://github.com/nodemailer/nodemailer) 10.0.16 (MIT-0, © 2011-2023 Andris
+Reinman), [unemail](https://github.com/productdevbook/unemail) 0.7.0 (MIT, © 2025 Wind) and
+[sently](https://github.com/omqkhafi/sently) 1.2.2 (MIT, © 2026 sendx contributors). What is
+ported is the feature, the mapping of a provider's fields, an algorithm or a test case; the HTTP
+layer, the retries and the receipts are this package's. The known bugs of the sources are fixed in
+the port, each with a test that fails on the source's behavior, and listed in `CLAUDE.md`. The
+release adds sendmail, ten HTTP providers, attachments from paths and URLs, templates, verified
+webhooks into one model of delivery events, five decorators, and Bun and Deno in CI. Everything is
+additive but the defaults listed below.
+
+### Upgrading from 1.0
+
+- **EHLO names the machine:** the default is its host name when that is a fully qualified domain
+  name, its address otherwise (`[127.0.0.1]` at worst), no longer `localhost`, which servers such
+  as Postfix with `reject_non_fqdn_helo_hostname` refuse. Set `localName` to choose it.
+- **A pooled SMTP connection carries at most 100 messages** (`maxMessages`), then is closed with
+  `QUIT` and replaced; `Infinity` keeps the old behavior.
+- **Bodies are encoded by their content:** 7bit for short ASCII lines, quoted-printable for mostly
+  Latin text, base64 otherwise (Cyrillic, CJK), always with CRLF line breaks. Every body was
+  quoted-printable.
+- **Custom header fields are written capitalized** (`X-Custom-Header`, `List-Unsubscribe-Post`)
+  rather than in lower case. Field names are case-insensitive, so readers and DKIM see no
+  difference.
+- **The default DKIM `h=` signs `List-Unsubscribe` and `List-Unsubscribe-Post`** too, as
+  RFC 8058 asks.
+- **Failures are classified more precisely:** a message a transport cannot send as it is (a
+  provider's limit, a field it cannot express, `scheduledAt` where nothing schedules, a message
+  over the SMTP server's `SIZE`) is a non-retryable failure of the new category `unsupported`,
+  where it was `unknown`, `validation` or `rejected`, and `./pool` fails over with it to a
+  transport that can send it; and a TLS certificate refused in the handshake is a non-retryable
+  `configuration` failure at the first attempt, where SMTP reported it as `unknown` and the HTTP
+  transports retried it and reported a retryable `network` failure (`deliveryUnknown` on Deno).
+- **The HTTP providers of 1.0 share one client:** SES, Resend, SendGrid, Mailgun, Maileroo,
+  Lettermint, Plunk and Mailtrap request through the client of the providers of 1.1. Their errors
+  (`SendGridApiError`, `MailtrapTimeoutError`…) keep their names, arguments and fields, and carry
+  `provider`, `category` and `retryable` besides; an error answer whose body cannot be read keeps
+  its status; and a message Mailgun cannot express is an `unsupported` failure, as elsewhere.
+- **`verify()` takes a 403 only where a key that may only send gets one:** SES, Mailgun and, of
+  1.1, SparkPost, MailerSend and Scaleway. A 403 of SendGrid or Resend fails `verify()`, where it
+  passed it.
+- **A logger that throws is told once:** the first failure of the logger of a transport or
+  decorator is a process warning (`MAILER_LOGGER_FAILED`) by the name and code of its error, not
+  every record with its text, which could name a recipient.
+- **On Deno, give the HTTP transports a `fetch` that keeps no idle connection**
+  (`Deno.createHttpClient({ poolMaxIdlePerHost: 0 })`): Deno's own sends a request again when a
+  reused connection closes before its answer. See
+  [known issues](https://mailerat.vercel.app/guide/known-issues#deno).
+
+### Added
+
+- **Internationalized domains as A-labels:** `user@bücher.de` goes out as
+  `user@xn--bcher-kva.de` in header fields, SMTP envelopes, JMAP and every provider, so it needs
+  no SMTPUTF8; a local part beyond ASCII still does. The `Message` keeps the address as given.
+- **`list` on the message:** the `List-Id` of RFC 2919, the URL fields of RFC 2369 (help,
+  unsubscribe, subscribe, post, owner, archive), and with `oneClick` the `List-Unsubscribe-Post`
+  of RFC 8058 that Gmail and Yahoo ask of bulk senders. Formatted as nodemailer does; a URL with
+  whitespace, controls or angle brackets is refused, and one-click needs an `https` URL.
+- **`scheduledAt`, `tracking` and `metadata` on the message,** from unemail's model: when the
+  provider should deliver it, open and click tracking for this message, and values the provider
+  returns in its events. A transport that cannot schedule refuses the message with an
+  `unsupported` receipt rather than sending it at once, and `./pool` fails over with it. Resend,
+  SendGrid, Mailgun, Maileroo, Brevo, MailerSend, SparkPost and SMTP2GO schedule; ten providers
+  take `tracking`, seventeen `metadata` (each page says how).
+- **`./attachments`:** `fromPath`, `fromUrl`, `fromDataUri`, `fromStream` and `inlineDataUrls`,
+  for what nodemailer read through `path`, `href` and data URIs. Nothing is read implicitly:
+  `fromUrl` goes through an injected `fetch`, checks each redirect with `allowUrl` (by default the
+  host as written: no `localhost`, and no IP literal of a loopback, private, link-local,
+  multicast, reserved or documentation range, NAT64 and 6to4 included, as written or as a name
+  resolves), refuses a redirect from https to http, and bounds time and bytes; `fromPath` can be
+  held to a `root` by real path and to `maxBytes`, and reads the file it checked;
+  `inlineDataUrls` refuses HTML longer than `maxLength` before it reads it.
+- **`./render`:** `renderContent(renderer, input)` for the content of `createMessage`,
+  `createReactEmailRenderer({ render })` with the `render` of `@react-email/render` passed in, and
+  `htmlToText`, linear in the length of its input.
+- **`./smtp` connects through what you give it:** `connect` opens each connection (a proxy, a
+  tunnel, a socket of another module) with implicit TLS or STARTTLS over it;
+  `createHttpProxyConnector` makes one for an HTTP or HTTPS proxy, whose credentials go in clear
+  to an `http://` proxy only on this machine or with `allowPlaintextCredentials`, under one
+  deadline for the CONNECT; `localAddress` picks the address to connect from.
+- **`./sendmail`:** the sendmail command of the system (Postfix, Exim, msmtp), one process per
+  message, composed by `./mime` with DKIM; `sendRaw` and `verify`. Only an exit with 0 after the
+  whole message succeeds, a signal after it is `deliveryUnknown`, and the sysexits codes are
+  classified; a process has a `timeout` (60 seconds, then SIGTERM and SIGKILL) and at most
+  `maxConcurrent` (10) run at once.
+- **Raw messages and `verify()` through every decorator:** `./pool`, `./retry`, `./otel`,
+  `./logger` and `./mock` pass `sendRaw` and `verify` on. `./ses` and `./mailgun` send raw MIME,
+  and `./ses`, `./sendgrid`, `./resend` and `./mailgun` verify their key, one that may only send
+  included.
+- **Ten HTTP providers:** `./postmark` (with `/email/batch`), `./brevo` (an idempotency key on
+  every request), `./mailjet` (the Send API v3.1 batch), `./mailersend`, `./sparkpost` (US or EU,
+  raw MIME), `./zeptomail`, `./smtp2go` (US, EU or AU), `./azure` (Azure Communication Services,
+  signed with the access key, repeatable requests), `./scaleway` and `./cloudflare` (the REST API
+  of Cloudflare Email Service, raw MIME). Each goes through the request layer of the others: no
+  redirect followed, a bounded body, `deliveryUnknown` when the provider may have taken the
+  message. The batches of Postmark and Mailjet are cut by their bytes as well as their count.
+- **`./breaker`:** a circuit breaker that opens after `failureThreshold` failures of the
+  provider, answers with a retryable `service-unavailable` receipt while open (which `./pool`
+  fails over with), and lets exactly one probe through after `resetTimeoutMs`, for at most
+  `probeTimeoutMs`.
+- **`./ratelimit`:** a token bucket per `key`, waiting first in, first out, or refusing with a
+  retryable `rate-limit` receipt; an aborted send leaves the queue, and a cost over `burst` is
+  refused. At most `maxKeys` buckets are kept in the process, the full ones dropped first, or a
+  `store` of buckets that processes share holds them (`take(key, cost, limits)`); at most
+  `maxQueue` messages wait in a bucket.
+- **`./idempotency`:** a key reserved in a store before the send, so a repeat is answered with
+  the first receipt, a send in flight as of unknown delivery, and the same key for another
+  message refused. A reservation lasts `leaseMs` (10 minutes), so a key a crash left reserved is
+  free again, and its token fences it: only its owner completes or releases it; the receipt is
+  kept `ttlMs` (a day). `createMemoryIdempotencyStore` is the in-process store; a shared one
+  implements `reserve`, `complete` and `release` with the token.
+- **`./hooks`:** `beforeSend` may replace or refuse a message, `afterSend`, `onRetry` and
+  `onError` hear each send, with a context made for each that carries its signal.
+- **A `logger` for `./breaker`, `./ratelimit`, `./idempotency` and `./tee`,** pino-like, with a
+  code for each event (`breaker.open`, `breaker.refused`, `ratelimit.waiting`,
+  `ratelimit.waited`, `idempotency.in_flight`, `tee.mirror_failed`…).
+- **`./tee`:** mirrors each message to other transports once the primary has answered it, with
+  one Message-ID, each copy with a timeout of its own and not awaited by default (with
+  `awaitMirrors`, awaited until that timeout at most, which keeps the process alive for it), the
+  primary's receipt the one returned; disposal waits for the copies in flight.
+- **Delivery events and `./webhooks`:** the `DeliveryEvent` model at the root, one event per
+  message and recipient, and a verifier per provider for SES, Resend, SendGrid, Mailgun,
+  Postmark, MailerSend, Mailtrap, Brevo, Mailjet, SparkPost, Lettermint, Maileroo, SMTP2GO, Azure
+  and Scaleway. Nothing is read before it is verified: a signature where the provider signs (SNS
+  with a topic allowlist, Svix, ECDSA, HMAC), its Basic credentials or token where it does not,
+  within a window of time and once by its id. `verify()` reserves the id for `leaseMs` and gives
+  the events with `commit()` and `release()`: an id is kept as taken once the application has
+  handled its events, so a delivery whose handler failed is taken again, and another delivery of
+  it meanwhile is refused as `pending`. `replayStore` is required where a verifier keeps ids
+  (`createMemoryReplayStore()` in one process, a shared store of `reserve`, `commit` and
+  `release` under the token of each delivery, or `null`), and a refusal carries the `status` to
+  answer the provider with.
+  `onVerify` hears each request taken or refused, and an event carries the `correlationId` of the
+  message's metadata, given back by every provider but Azure, to find the events of a message of
+  unknown delivery, and the `rfcMessageId` the provider reports.
+- **`./pool` `verifyAll()`:** how each transport did, `verified`, `failed` or `unverifiable`,
+  where `verify()` passes when one does.
+- **Failures stand out in the metrics:** `mailer.email.messages` of `./otel` takes the category
+  and the code of a failure (`error.type`, `mailer.error.code`).
+- **A failure of unknown delivery stands out:** `./otel` sets `mailer.delivery_unknown` on its
+  span and its message counter, and `./logger` writes `deliveryUnknown` in `email.failed`, for
+  the messages to reconcile.
+- **Bun and Deno:** CI runs the unit suite and the new `tests/runtime` (the package by its name,
+  with no mock: sockets, TLS, DKIM, `fetch`, a child process) on Bun 1.4.3 and Deno 2.9.6, as
+  well as on Node 22 and 24. `package.json` declares `"type": "commonjs"`, which Deno needs and
+  Node assumes.
+- **Documentation** for every new subpath, a guide to webhooks and events, Bun and Deno in
+  getting started, and the comparison updated.
+
+### Security
+
+- **An attachment reads no file or URL it was not given by the application** (nodemailer read
+  any `path` or `href`, following redirects to any address, cloud metadata included), and a data
+  URI that does not parse is refused rather than read as a path.
+- **A List-Unsubscribe URL or a metadata entry cannot add a header field:** a line break,
+  whitespace or angle bracket in a URL is refused, and a metadata key is held to
+  `[A-Za-z0-9_.-]`, its value to a string without control characters, with at most 64 keys and
+  1024 characters to a value.
+- **A DKIM signing domain or selector with a tab, CR or LF is refused** before it reaches the
+  host parser, which removed them and let the name, line break and all, into the
+  `DKIM-Signature` field (the fix of 1.0 missed it).
+- **The webhooks of a provider are verified before they are read,** where sently parsed SES,
+  SendGrid, Postmark and Brevo events unverified and checked Resend and Mailgun with no window
+  of time or replay check. Basic credentials and tokens are compared by an HMAC of each, so the
+  time of a refusal tells nothing of their length; a replay store is given the provider and a
+  SHA-256 of each id, never an id that names a recipient; and a verifier whose provider signs no
+  time refuses `toleranceMs` and `now` rather than ignore them.
+
+### Fixed
+
+- **A TLS certificate refused in the handshake was misclassified everywhere:** `unknown` in an
+  SMTP receipt, a retried and retryable `network` failure on the HTTP transports (their receipts
+  read the words `fetch failed`), and `deliveryUnknown` on Deno, whose `fetch` gives it no code;
+  `classifyReceiptError` also missed `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, what Node and Bun report
+  for an untrusted CA. It is now a non-retryable `configuration` failure at the first attempt, on
+  every transport and runtime.
+- **A message refused by a provider's limits before any request was `unknown`;** it is a
+  non-retryable `unsupported` failure, which `./pool` fails over with, as a message no transport
+  could send (`validation`, `rejected`) stops it.
+- **A pooled SMTP connection was reused for any number of messages,** while servers limit the
+  messages of one connection (`maxMessages`, above).
+- **A timeout over 2^31 - 1 ms fired at once:** `timeout: 3e9` timed out every request of an
+  HTTP provider, and an SMTP socket at once; such a timeout is now the longest a timer keeps, in
+  effect none.
+- **`verify()` of `./jmap` told `onRetry` of none of the reads it retried;** it tells it of each.
+
 ## [1.0.0] - 2026-10-17
 
 The first release: the transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0
@@ -427,5 +616,6 @@ for code written against upyo 0.7:
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...HEAD
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0

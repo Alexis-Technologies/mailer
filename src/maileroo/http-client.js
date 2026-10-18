@@ -1,21 +1,21 @@
 // Ported from upyo v0.7.0 (packages/maileroo/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Changed after the port: the request goes through createApiClient of
+// internal/api-client.js, as that of every HTTP provider does, and the
+// errors extend its error; the messages and the errors of upstream stay.
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { requestWithRetry } = require('../internal/http.js');
-const { createLog } = require('../internal/log.js');
-const { readText } = require('../internal/body.js');
-
-const maxErrorMessageLength = 500;
+const {
+  ProviderApiError,
+  createApiClient,
+  parseAnswer,
+  truncateErrorText,
+} = require('../internal/api-client.js');
 
 /**
  * Maileroo API error class for API-specific failures.
  */
-class MailerooApiError extends Error {
-  statusCode;
-  retryAfterMilliseconds;
-  attempts;
-
+class MailerooApiError extends ProviderApiError {
   /**
    * Creates a Maileroo API error.
    *
@@ -25,27 +25,19 @@ class MailerooApiError extends Error {
    * @param attempts Number of attempts made before this error.
    */
   constructor(message, statusCode, retryAfterMilliseconds, attempts) {
-    super(message);
+    super('maileroo', message, { statusCode, retryAfterMilliseconds, attempts });
     this.name = 'MailerooApiError';
-    this.statusCode = statusCode;
-    this.retryAfterMilliseconds = retryAfterMilliseconds;
-    this.attempts = attempts;
   }
 }
 
 /**
  * Maileroo request timeout error.
  */
-class MailerooTimeoutError extends Error {
+class MailerooTimeoutError extends ProviderApiError {
   /**
    * Request timeout in milliseconds.
    */
   timeout;
-
-  /**
-   * Number of attempts made before this error was produced.
-   */
-  attempts;
 
   /**
    * Creates a Maileroo request timeout error.
@@ -54,85 +46,14 @@ class MailerooTimeoutError extends Error {
    * @param attempts Number of attempts made before this error.
    */
   constructor(timeout, attempts) {
-    super(`Maileroo API request timed out after ${timeout} ms.`);
+    super('maileroo', `Maileroo API request timed out after ${timeout} ms.`, {
+      attempts,
+      category: 'timeout',
+      code: 'timeout',
+      retryable: true,
+    });
     this.name = 'MailerooTimeoutError';
     this.timeout = timeout;
-    this.attempts = attempts;
-  }
-}
-
-/**
- * HTTP client wrapper for Maileroo API requests.
- */
-class MailerooHttpClient {
-  config;
-
-  /**
-   * Creates a new Maileroo HTTP client.
-   *
-   * @param config Resolved Maileroo configuration.
-   */
-  constructor(config) {
-    this.config = config;
-    this.log = createLog(config.logger, { transport: 'maileroo' });
-  }
-
-  /**
-   * Sends a single message via Maileroo API.
-   *
-   * @param messageData The JSON data to send to Maileroo.
-   * @param signal Optional AbortSignal for cancellation.
-   * @returns Promise that resolves to the Maileroo response.
-   * @throws {MailerooApiError} If Maileroo returns an API error.
-   * @throws {MailerooTimeoutError} If the request timeout elapses.
-   */
-  sendMessage(messageData, signal, onRetry) {
-    const url = `${this.config.baseUrl}/emails`;
-    return this.makeRequest(url, messageData, signal, onRetry);
-  }
-
-  makeRequest(url, body, signal, onRetry) {
-    // Serialized once rather than on every attempt.
-    const json = JSON.stringify(body);
-    return requestWithRetry({
-      log: this.log,
-      signal,
-      onRetry,
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      send: (attemptSignal) => this.fetchWithAuth(url, json, attemptSignal),
-      read: async (response) => parseResponse(await readText(response)),
-      reject: async (response, attempt) =>
-        new MailerooApiError(
-          parseErrorMessage(await readText(response), response.status),
-          response.status,
-          parseRetryAfter(response.headers.get('Retry-After')),
-          attempt + 1,
-        ),
-      createTimeoutError: () => new MailerooTimeoutError(this.config.timeout),
-      finalError: withAttempts,
-    });
-  }
-
-  fetchWithAuth(url, json, signal) {
-    const headers = new Headers({
-      'Content-Type': 'application/json',
-      'X-API-Key': this.config.apiKey,
-    });
-
-    for (const [key, value] of Object.entries(this.config.headers)) {
-      headers.set(key, value);
-    }
-
-    // A redirect comes back as a response rather than being followed, so the
-    // credentials in the headers never reach another origin.
-    return (this.config.fetch ?? globalThis.fetch)(url, {
-      method: 'POST',
-      headers,
-      body: json,
-      signal,
-      redirect: 'manual',
-    });
   }
 }
 
@@ -150,45 +71,84 @@ const parseErrorMessage = (text, statusCode) => {
   try {
     const errorBody = JSON.parse(text);
     if (errorBody != null && typeof errorBody === 'object') {
-      const mailerooError = errorBody;
-      if (typeof mailerooError.message === 'string' && mailerooError.message !== '') {
-        return truncateErrorMessage(mailerooError.message);
+      if (typeof errorBody.message === 'string' && errorBody.message !== '') {
+        return truncateErrorText(errorBody.message);
       }
-      if (typeof mailerooError.error === 'string' && mailerooError.error !== '') {
-        return truncateErrorMessage(mailerooError.error);
+      if (typeof errorBody.error === 'string' && errorBody.error !== '') {
+        return truncateErrorText(errorBody.error);
       }
-      if (Array.isArray(mailerooError.errors) && mailerooError.errors.length > 0) {
-        return truncateErrorMessage(JSON.stringify(mailerooError.errors));
+      if (Array.isArray(errorBody.errors) && errorBody.errors.length > 0) {
+        return truncateErrorText(JSON.stringify(errorBody.errors));
       }
     }
   } catch {
     // Ignore if JSON parsing fails, as the body may be non-JSON.
   }
 
-  return truncateErrorMessage(text) || `HTTP ${statusCode}`;
+  return truncateErrorText(text) || `HTTP ${statusCode}`;
 };
+
+const invalidJson = (error) =>
+  new SyntaxError(`Invalid JSON response from Maileroo API: ${error.message}.`, { cause: error });
 
 const parseResponse = (text) => {
-  try {
-    const response = JSON.parse(text);
-    if (response == null || typeof response !== 'object') {
-      throw new SyntaxError('response is not an object');
-    }
-    return response;
-  } catch (error) {
-    throw new SyntaxError(
-      `Invalid JSON response from Maileroo API: ${
-        error instanceof Error ? error.message : String(error)
-      }.`,
-      { cause: error },
-    );
+  const response = parseAnswer(text, invalidJson);
+  if (response == null || typeof response !== 'object') {
+    throw invalidJson(new SyntaxError('response is not an object'));
   }
+  return response;
 };
 
-const truncateErrorMessage = (message) => {
-  return message.length > maxErrorMessageLength
-    ? `${message.slice(0, maxErrorMessageLength)}...`
-    : message;
-};
+/**
+ * HTTP client wrapper for Maileroo API requests.
+ */
+class MailerooHttpClient {
+  config;
+  #request;
+
+  /**
+   * Creates a new Maileroo HTTP client.
+   *
+   * @param config Resolved Maileroo configuration.
+   */
+  constructor(config) {
+    this.config = config;
+    const client = createApiClient(config, {
+      id: 'maileroo',
+      label: 'Maileroo',
+      authorize: (headers) => headers.set('X-API-Key', config.apiKey),
+      read: (_response, text) => parseResponse(text),
+      reject: (response, text, attempt) =>
+        new MailerooApiError(
+          parseErrorMessage(text ?? '', response.status),
+          response.status,
+          parseRetryAfter(response.headers.get('Retry-After')),
+          attempt + 1,
+        ),
+      timeoutError: () => new MailerooTimeoutError(config.timeout),
+      finalError: withAttempts,
+    });
+    this.log = client.log;
+    this.fetchWithAuth = client.fetchWithAuth;
+    this.#request = client.request;
+  }
+
+  /**
+   * Sends a message via Maileroo API.
+   *
+   * @param messageData The JSON data to send to Maileroo.
+   * @param signal Optional AbortSignal for cancellation.
+   * @param onRetry Optional callback told of each retry.
+   * @returns Promise that resolves to the Maileroo response.
+   */
+  sendMessage(messageData, signal, onRetry) {
+    return this.#request({
+      url: `${this.config.baseUrl}/emails`,
+      body: messageData,
+      signal,
+      onRetry,
+    });
+  }
+}
 
 module.exports = { MailerooApiError, MailerooTimeoutError, MailerooHttpClient };

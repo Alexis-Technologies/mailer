@@ -91,6 +91,10 @@ const SUBPATH_EDGES = [
   // The transport checks the DKIM keys when it is made.
   'smtp/smtp-transport.js -> mime/dkim/sign.js',
   'smtp/smtp-transport.js -> mime/dkim/types.js',
+  // ./sendmail composes and signs as ./mime does, and checks its DKIM
+  // configuration when it is made.
+  'sendmail/config.js -> mime/dkim/types.js',
+  'sendmail/sendmail-transport.js -> mime/index.js',
 ];
 
 const subpathOf = (name) => {

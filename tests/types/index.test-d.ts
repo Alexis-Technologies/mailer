@@ -11,10 +11,15 @@ import {
   type Address,
   type IdGenerator,
   type IdKind,
+  type MessageTracking,
   type Message,
   type RawTransport,
   type Receipt,
+  type DeliveryBounce,
+  type DeliveryEvent,
+  type DeliveryEventType,
   type ReceiptError,
+  type ReceiptErrorCategory,
   type RetryEvent,
   type Transport,
   type VerifiableTransport,
@@ -33,6 +38,61 @@ expectType<readonly Address[]>(message.recipients);
 expectError(createMessage({ from: 'alex@example.com', subject: 'Hello' }));
 expectError(createMessage({ from: 'alex', to: 'bob@example.com', subject: 'x', content: {} }));
 expectType<Address | undefined>(parseAddress('Alex <alex@example.com>'));
+
+// Scheduling, tracking and metadata.
+const fields = createMessage({
+  from: 'a@example.com',
+  to: 'b@example.com',
+  subject: 'x',
+  content: { text: 'x' },
+  scheduledAt: new Date(),
+  tracking: { opens: true },
+  metadata: { orderId: '42' },
+});
+expectType<Date | undefined>(fields.scheduledAt);
+expectType<MessageTracking | undefined>(fields.tracking);
+expectType<Readonly<Record<string, string>> | undefined>(fields.metadata);
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    metadata: { orderId: 42 },
+  }),
+);
+
+// The List-* fields of a newsletter.
+createMessage({
+  from: 'news@example.com',
+  to: 'reader@example.com',
+  subject: 'Weekly',
+  content: { text: 'Hi' },
+  list: {
+    id: { id: 'news.example.com', name: 'Weekly News' },
+    unsubscribe: ['https://example.com/u', { url: 'unsub@example.com', comment: 'mail' }],
+    help: 'https://example.com/help',
+    oneClick: true,
+  },
+});
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    list: { unsubscribe: 42 },
+  }),
+);
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    list: { oneClick: 'yes' },
+  }),
+);
 
 // A receipt narrows on `successful`.
 const receipt = {} as Receipt<'smtp'>;
@@ -60,6 +120,17 @@ const unknownDelivery = createFailedReceipt('Connection closed after DATA', {
 if (!unknownDelivery.successful) {
   expectType<boolean | undefined>(unknownDelivery.deliveryUnknown);
 }
+// A message this transport cannot send as it is, which a pool fails over with.
+const unsupported = createFailedReceipt('Postmark takes one tag per message.', {
+  provider: 'postmark',
+  category: 'unsupported',
+  retryable: false,
+});
+if (!unsupported.successful) {
+  expectAssignable<ReceiptErrorCategory | undefined>(unsupported.errors?.[0]?.category);
+}
+expectAssignable<ReceiptErrorCategory>('unsupported');
+expectError(createReceiptError('x', { category: 'not-supported' }));
 
 const transport: Transport<'smtp'> = {
   id: 'smtp',
@@ -98,3 +169,12 @@ expectType<Promise<Receipt>>(
 const ulid: IdGenerator = (kind: IdKind) => `01J${kind.length}`;
 expectType<string>(generateMessageId('example.com', { generateId: ulid }));
 expectError(generateMessageId('example.com', { generateId: () => 42 }));
+
+// The events of ./webhooks: one per recipient, the type a closed union.
+const event = {} as DeliveryEvent<'ses'>;
+expectType<'ses'>(event.provider);
+expectType<DeliveryEventType>(event.type);
+expectType<'hard' | 'soft' | 'undetermined' | undefined>(event.bounce?.kind);
+expectType<readonly string[]>(event.tags);
+expectAssignable<DeliveryBounce>({ kind: 'hard', code: '5.1.1' });
+expectError<DeliveryEventType>('sent');

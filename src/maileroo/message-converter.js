@@ -2,14 +2,17 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
+const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
+const { trackingSwitchOf } = require('../internal/tracking.js');
 const {
   convertAttachments,
   formatAddresses,
   visitCustomHeaders,
   withCalendarAttachment,
 } = require('../internal/provider.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -34,6 +37,8 @@ const STANDARD_HEADERS = new Set([
  * @param signal Optional abort signal for cancellation.
  * @returns JSON object ready for Maileroo API submission.
  * @throws {TypeError} If the message carries an invalid message identifier.
+ * @throws {RangeError} If it asks for opens without clicks, or the reverse,
+ * or its metadata cannot be tags.
  * @throws {Error} If the caller aborts the operation.
  */
 const convertMessage = async (message, config, signal) => {
@@ -68,8 +73,14 @@ const convertMessage = async (message, config, signal) => {
     emailData.plain = message.content.text;
   }
 
-  if (config.tracking !== undefined) {
-    emailData.tracking = config.tracking;
+  // One switch for opens and clicks, the message's over the configuration's.
+  const tracking = trackingSwitchOf(message.tracking, 'Maileroo') ?? config.tracking;
+  if (tracking !== undefined) {
+    emailData.tracking = tracking;
+  }
+
+  if (message.scheduledAt !== undefined) {
+    emailData.scheduled_at = message.scheduledAt.toISOString();
   }
 
   const tags = convertTags(message, config);
@@ -119,8 +130,8 @@ const hashReference = (value) => {
 
 const convertAddress = (address) => {
   return address.name == null || address.name === ''
-    ? { address: address.address }
-    : { address: address.address, display_name: address.name };
+    ? { address: toAsciiAddress(address.address) }
+    : { address: toAsciiAddress(address.address), display_name: address.name };
 };
 
 const convertAddressList = (addresses) => {
@@ -133,8 +144,27 @@ const convertOptionalAddressList = (addresses) => {
   return addresses.length === 0 ? undefined : convertAddressList(addresses);
 };
 
+// "Maximum key length is 128 characters, and maximum value length is 768".
+const MAX_TAG_VALUE = 768;
+const NUMBERED_TAG = /^tag\d+$/;
+
+// The tags of the configuration, the metadata of the message over them, then
+// `tag1`… of its tags, which a key of the metadata may not take.
 const convertTags = (message, config) => {
   const tags = config.tags == null ? {} : { ...config.tags };
+
+  if (message.metadata !== undefined) {
+    for (const key in message.metadata) {
+      const value = message.metadata[key];
+      if (value.length > MAX_TAG_VALUE || NUMBERED_TAG.test(key)) {
+        throw new RefusalError(
+          `Maileroo takes metadata as tags, whose value has at most ${MAX_TAG_VALUE} ` +
+            `characters and whose name is not tag1, tag2…: ${key}`,
+        );
+      }
+      tags[key] = value;
+    }
+  }
 
   for (let index = 0; index < message.tags.length; index++) {
     tags[`tag${index + 1}`] = message.tags[index];

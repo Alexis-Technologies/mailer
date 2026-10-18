@@ -23,11 +23,18 @@ const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { SmtpDeliveryUnknownError } = require('./data-stream.js');
 const { checkDkimConfig } = require('../mime/dkim/types.js');
 const { checkDkimKeys } = require('../mime/dkim/sign.js');
-const { checkAuthMethod } = require('./config.js');
+const {
+  checkAuthMethod,
+  checkConnect,
+  checkLocalAddress,
+  checkLocalName,
+  checkMaxMessages,
+} = require('./config.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
 const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
+const { RefusalError } = require('../internal/refusal.js');
 
 /**
  * SMTP transport implementation for sending emails via SMTP protocol.
@@ -128,6 +135,10 @@ class SmtpTransport {
     checkDkimConfig(config.dkim);
     checkDkimKeys(config.dkim);
     checkAuthMethod(config.auth);
+    checkLocalAddress(config.localAddress);
+    if (config.localName != null) checkLocalName(config.localName);
+    checkMaxMessages(config.maxMessages);
+    checkConnect(config.connect);
     this.config = config;
     const poolSize = config.poolSize ?? 5;
     if (
@@ -380,11 +391,10 @@ class SmtpTransport {
           }
         }
 
+        let receipt;
         try {
           options?.signal?.throwIfAborted();
-          const result = await connection.sendMessage(smtpMessage, options?.signal);
-
-          yield sentReceipt(result);
+          receipt = sentReceipt(await connection.sendMessage(smtpMessage, options?.signal));
         } catch (error) {
           // Cancellation rejects rather than producing a receipt.
           options?.signal?.throwIfAborted();
@@ -393,8 +403,16 @@ class SmtpTransport {
             connectionValid = false;
           }
 
-          yield failureOf(error);
+          receipt = failureOf(error);
         }
+        // A connection that has started `maxMessages` transactions is closed,
+        // and the next message of the batch takes a new one.
+        if (connectionValid && connection.exhausted) {
+          const used = connection;
+          connection = undefined;
+          await this.returnConnection(used);
+        }
+        yield receipt;
       }
     } catch (error) {
       // Error during iteration setup or while reading the messages
@@ -512,7 +530,7 @@ class SmtpTransport {
     let pooled = this.connectionPool.pop();
     while (pooled != null) {
       if (pooled.usable) {
-        pooled.socket.ref();
+        pooled.socket.ref?.();
         if (!pooled.needsReset) return pooled;
         try {
           await pooled.reset(signal);
@@ -664,7 +682,12 @@ class SmtpTransport {
    * waiting caller.
    */
   async returnConnection(connection) {
-    if (!connection.usable || !connection.config.pool || this.closing != null) {
+    if (
+      !connection.usable ||
+      !connection.config.pool ||
+      connection.exhausted ||
+      this.closing != null
+    ) {
       await this.discardConnection(connection);
       return;
     }
@@ -674,7 +697,7 @@ class SmtpTransport {
     // wait for it, and it finds a connection the server dropped while idle.
     connection.needsReset = true;
     // An idle connection does not keep the process alive.
-    connection.socket.unref();
+    connection.socket.unref?.();
 
     // The connection keeps its slot while it sits idle, so no separate check
     // against `poolSize` is needed here: at most `poolSize` connections can be
@@ -812,15 +835,18 @@ const createSmtpFailure = (message, error) => {
   if (error instanceof SmtpResponseError || error instanceof SmtpAuthResponseError) {
     return createReplyFailure(message, error);
   }
-  return createFailedReceipt(message, {
-    provider: 'smtp',
-    attempts: 1,
-  });
+  // No reply to read: what the error is, by the code along its causes (a
+  // refused certificate, a reset), and only then by its words.
+  const { category, retryable } = classifyReceiptError(error);
+  return createFailedReceipt(message, { provider: 'smtp', category, retryable, attempts: 1 });
 };
 
 // Failures found before or without a reply of the server, which no retry
-// fixes: the code and category of each, and what the receipt tells of it.
+// fixes: the code and category of each, and what the receipt tells of it.  A
+// message over the server's SIZE, or one it cannot schedule, is `unsupported`:
+// another transport of a pool may send it.
 const LOCAL_FAILURES = [
+  { type: RefusalError, code: 'smtp.unsupported', category: 'unsupported' },
   {
     type: Smtp8BitMimeUnsupportedError,
     code: 'smtp.8bitmime-unsupported',
@@ -838,7 +864,7 @@ const LOCAL_FAILURES = [
   {
     type: SmtpMessageSizeError,
     code: 'smtp.message-size-exceeded',
-    category: 'rejected',
+    category: 'unsupported',
     details: (error) => ({
       actualSize: error.actualSize,
       maximumSize: error.maximumSize.toString(),

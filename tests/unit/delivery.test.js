@@ -12,6 +12,16 @@ const { ResendTransport } = require('../../src/resend/index.js');
 const { SendGridTransport } = require('../../src/sendgrid/index.js');
 const { SesTransport } = require('../../src/ses/index.js');
 const { JmapTransport } = require('../../src/jmap/index.js');
+const { AzureTransport } = require('../../src/azure/index.js');
+const { BrevoTransport } = require('../../src/brevo/index.js');
+const { CloudflareTransport } = require('../../src/cloudflare/index.js');
+const { MailerSendTransport } = require('../../src/mailersend/index.js');
+const { MailjetTransport } = require('../../src/mailjet/index.js');
+const { PostmarkTransport } = require('../../src/postmark/index.js');
+const { ScalewayTransport } = require('../../src/scaleway/index.js');
+const { Smtp2goTransport } = require('../../src/smtp2go/index.js');
+const { SparkPostTransport } = require('../../src/sparkpost/index.js');
+const { ZeptoMailTransport } = require('../../src/zeptomail/index.js');
 
 const message = () =>
   createMessage({
@@ -21,10 +31,12 @@ const message = () =>
     content: { text: 'Hi' },
   });
 
-// One retry: a provider that resends shows two requests, as Resend and Lettermint do with
-// the idempotency key they always send.
+// One retry: a provider that resends shows two requests, as Resend, Lettermint, Brevo and
+// Azure do with the idempotency key they always send.
 const options = { retries: 1 };
-const expectedRequests = (name) => (name === 'Resend' || name === 'Lettermint' ? 2 : 1);
+const WITH_KEYS = new Set(['Resend', 'Lettermint', 'Brevo', 'Azure']);
+const expectedRequests = (name) => (WITH_KEYS.has(name) ? 2 : 1);
+const AZURE_KEY = Buffer.from('azure-access-key').toString('base64');
 const providers = [
   [
     'SES',
@@ -53,6 +65,60 @@ const providers = [
   ],
   ['Plunk', 200, (extra) => new PlunkTransport({ ...options, ...extra, apiKey: 'key' })],
 ];
+// The providers of 1.1, on the shared client of src/internal/api.js: the same
+// contracts, every one of them.
+const providersOf11 = [
+  [
+    'Postmark',
+    200,
+    (extra) => new PostmarkTransport({ ...options, ...extra, serverToken: 'token' }),
+  ],
+  ['Brevo', 201, (extra) => new BrevoTransport({ ...options, ...extra, apiKey: 'key' })],
+  [
+    'Mailjet',
+    200,
+    (extra) => new MailjetTransport({ ...options, ...extra, apiKey: 'a', apiSecret: 'b' }),
+  ],
+  ['MailerSend', 202, (extra) => new MailerSendTransport({ ...options, ...extra, apiKey: 'key' })],
+  ['SparkPost', 200, (extra) => new SparkPostTransport({ ...options, ...extra, apiKey: 'key' })],
+  ['ZeptoMail', 201, (extra) => new ZeptoMailTransport({ ...options, ...extra, token: 'token' })],
+  ['SMTP2GO', 200, (extra) => new Smtp2goTransport({ ...options, ...extra, apiKey: 'key' })],
+  [
+    'Azure',
+    202,
+    (extra) =>
+      new AzureTransport({
+        ...options,
+        ...extra,
+        connectionString: `endpoint=https://contoso.communication.azure.com/;accesskey=${AZURE_KEY}`,
+      }),
+  ],
+  [
+    'Scaleway',
+    200,
+    (extra) =>
+      new ScalewayTransport({
+        ...options,
+        ...extra,
+        secretKey: 'key',
+        projectId: '11111111-2222-4333-8444-555555555555',
+      }),
+  ],
+  [
+    'Cloudflare',
+    200,
+    (extra) =>
+      new CloudflareTransport({
+        ...options,
+        ...extra,
+        accountId: '023e105f4ecef8ad9ca31a8372d0c353',
+        apiToken: 'token',
+      }),
+  ],
+];
+// The clients ported from upyo, which expose sendMessage of their own.
+const portedProviders = providers.slice();
+for (const provider of providersOf11) providers.push(provider);
 
 // A 2xx whose body cannot be read: the connection broke after the headers.
 const unreadable = (status) =>
@@ -219,10 +285,14 @@ test('Delivery: the failure of fetch stays the cause of the provider error', asy
     throw refused;
   });
   for (const [name, , create] of providers) {
+    const transport = create({ retries: 0 });
     const body = name === 'Mailgun' ? new FormData() : {};
-    const error = await create({ retries: 0 })
-      .httpClient.sendMessage(body, undefined)
-      .catch((caught) => caught);
+    // The clients ported from upyo send with sendMessage; those of 1.1 with
+    // the request of the shared client.
+    const sending = portedProviders.some((provider) => provider[0] === name)
+      ? transport.httpClient.sendMessage(body, undefined)
+      : transport.httpClient.request({ url: 'https://api.example.com/send', body: {} });
+    const error = await sending.catch((caught) => caught);
     assert.ok(error instanceof Error, name);
     let cause = error;
     while (cause !== refused && cause?.cause != null) cause = cause.cause;
@@ -375,4 +445,74 @@ test('Delivery: the logger of an HTTP transport hears its retries, without addre
   assert.strictEqual(properties.statusCode, 503);
   assert.ok(properties.delayMilliseconds > 0);
   assert.ok(!JSON.stringify(records).includes('bob@example.com'), JSON.stringify(records));
+});
+
+test('Delivery: the matrix holds every HTTP provider of the exports map', () => {
+  // Before: the contracts listed the providers by hand, so a provider added
+  // to the exports map was not held to them.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const pkg = require('../../package.json');
+  const root = path.join(__dirname, '../..');
+  const http = [];
+  for (const key of Object.keys(pkg.exports)) {
+    const subpath = key.slice(2);
+    if (key === '.' || subpath === 'jmap') continue;
+    if (fs.existsSync(path.join(root, 'src', subpath, 'http-client.js'))) http.push(subpath);
+  }
+  const inMatrix = [];
+  for (const [, , create] of providers) inMatrix.push(create().id);
+  assert.deepStrictEqual(inMatrix.sort(), http.sort());
+});
+
+test('Delivery: every HTTP provider refuses a plain HTTP URL but to this machine', () => {
+  // Before: the refusal was checked for the providers ported from upyo alone.
+  const insecure = 'http://api.example.com';
+  for (const [name, , create] of providers) {
+    if (name === 'SES') continue; // Its endpoint is made of its region alone.
+    if (name === 'Azure') {
+      assert.throws(
+        () =>
+          new AzureTransport({
+            connectionString: `endpoint=${insecure}/;accesskey=${AZURE_KEY}`,
+          }),
+        TypeError,
+        name,
+      );
+      continue;
+    }
+    const url = name === 'Mailtrap' ? { sendBaseUrl: insecure } : { baseUrl: insecure };
+    assert.throws(() => create(url), TypeError, name);
+  }
+});
+
+test('Delivery: every HTTP provider rejects with the reason of an abort, before or during', async (t) => {
+  // Before: no contract held the providers to the reason of the caller's
+  // signal, which a decorator tells apart from a failure.
+  for (const [name, , create] of providers) {
+    const seen = { requests: 0 };
+    t.mock.method(globalThis, 'fetch', (_url, init) => {
+      seen.requests++;
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      });
+    });
+    const early = new AbortController();
+    const reason = new Error(`stopped ${name}`);
+    early.abort(reason);
+    await assert.rejects(create().send(message(), { signal: early.signal }), (error) => {
+      assert.strictEqual(error, reason, name);
+      return true;
+    });
+    assert.strictEqual(seen.requests, 0, name);
+    const late = new AbortController();
+    const sending = create().send(message(), { signal: late.signal });
+    while (seen.requests === 0) await new Promise((resolve) => setImmediate(resolve));
+    late.abort(reason);
+    await assert.rejects(sending, (error) => {
+      assert.strictEqual(error, reason, name);
+      return true;
+    });
+    t.mock.restoreAll();
+  }
 });

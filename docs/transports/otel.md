@@ -365,7 +365,7 @@ Prometheus turns into its own (`mailer_email_attempts_total`):
 |---|---|---|---|
 | `mailer.email.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
 | `mailer.email.duration` | histogram | `s` | as `mailer.email.attempts` |
-| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status` |
+| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it |
 | `mailer.email.retries` | counter | `{retry}` | `mailer.transport.name`, `error.type` |
 | `mailer.email.message.size` | histogram | `By` | `mailer.transport.name`, `email.priority`, `email.content.type` |
 | `mailer.email.attachments` | histogram | `{attachment}` | as `mailer.email.message.size` |
@@ -373,7 +373,10 @@ Prometheus turns into its own (`mailer_email_attempts_total`):
 
 A message is counted once in `mailer.email.messages`, when its receipt comes back;
 a send operation, of one message or a whole batch, once in `mailer.email.attempts`.
-`error.type` is the category of the failure, from `errorClassifier`. The retries
+`error.type` is the category of the failure, from `errorClassifier`. A failure
+of unknown delivery, which the provider may have taken, carries
+`mailer.delivery_unknown` on its span and its count of messages: those are the
+messages to reconcile from the provider's events, not to send again. The retries
 are those of the wrapped transport, reported through `onRetry`; a span shows
 them as `retry` events and in `mailer.retry.count`.
 
@@ -493,6 +496,15 @@ Custom attributes appear in both traces and metrics, enabling you to:
  -  Correlate email performance with deployment versions
  -  Track different email campaigns or types separately
  -  Add environment-specific context for debugging
+
+## Raw messages and verification
+
+`sendRaw()` goes through the wrapped transport in a span of its own,
+`email send_raw`, whose attributes are those of the envelope (`email.to.count`,
+the sender's domain or, with `recordSensitiveData`, its address) and the size of
+the content, and in the metrics of a send.  `verify()` verifies the wrapped
+transport.  A wrapped transport without `sendRaw()` gives a failure of the
+category `configuration`.
 
 ## Bulk email monitoring
 

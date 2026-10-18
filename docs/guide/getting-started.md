@@ -2,8 +2,9 @@
 
 ::: tip Status
 Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo)
-0.7.0: messages, SMTP, eight HTTP providers, JMAP and the decorators. The reliability
-layer (queue, audit log, delivery events) is still being designed.
+0.7.0; 1.1 adds sendmail, ten more HTTP providers, verified webhooks into delivery
+events, and decorators for circuit breaking, rate limits, idempotency, hooks and
+mirroring. The queue and the audit log are still being designed.
 :::
 
 ## Installation
@@ -18,31 +19,80 @@ Node.js 22 or newer. The package has no runtime dependencies: every transport is
 package, reached through a subpath (`@alexify/mailer/smtp`), and what a decorator
 needs from your application (an OpenTelemetry provider, a logger) is passed in.
 
+### Bun and Deno
+
+The package runs on Bun and Deno through their Node compatibility. CI runs its
+tests on Bun 1.4.3 and Deno 2.9.6 (Linux), sending over real sockets, TLS and
+`fetch`.
+
+```bash
+bun add @alexify/mailer
+deno add npm:@alexify/mailer
+```
+
+On Deno, import it by its npm name, a subpath included
+(`import { SmtpTransport } from 'npm:@alexify/mailer/smtp'`), and grant what the
+transports you use need:
+
+- `--allow-net` to send: SMTP, the HTTP providers, JMAP, `fromUrl` and the
+  certificates of SNS for `./webhooks`;
+- `--allow-read` for `fromPath`;
+- `--allow-run` and `--allow-env` for `./sendmail`, as Deno's `child_process`
+  passes the environment on;
+- `--allow-sys=hostname` for the default EHLO name of `./smtp`; without it, the
+  name is `[127.0.0.1]` unless you set `localName`.
+
+Deno's `fetch` sends a request again when a reused connection closes before its
+answer, so a message the provider took may go twice, where Node and Bun report it
+as of unknown delivery. Give the HTTP transports and JMAP a `fetch` that keeps no
+idle connection:
+
+```js
+import { PostmarkTransport } from 'npm:@alexify/mailer/postmark';
+
+const client = Deno.createHttpClient({ poolMaxIdlePerHost: 0 });
+const fetchOnce = (input, init) => fetch(input, { ...init, client });
+
+const transport = new PostmarkTransport({
+  serverToken: Deno.env.get('POSTMARK_TOKEN'),
+  fetch: fetchOnce,
+});
+```
+
+Each request then opens a connection of its own, which costs a handshake; see
+[known issues](/guide/known-issues#deno).
+
 ## Choosing a transport
 
 Each transport implements the same `Transport` contract of the root entry, so they
 can be swapped without changing the code that builds messages:
 
 - [SMTP](/transports/smtp) (`@alexify/mailer/smtp`): universal email protocol, works
-  with any SMTP server; DKIM signing, pooling, STARTTLS, DSN.
-- [Amazon SES](/transports/ses) (`@alexify/mailer/ses`): cost-effective email
-  service for AWS users.
-- [Resend](/transports/resend) (`@alexify/mailer/resend`): developer-friendly API,
-  batch sending.
-- [SendGrid](/transports/sendgrid) (`@alexify/mailer/sendgrid`): popular email API
-  with a deliverability focus.
-- [Mailgun](/transports/mailgun) (`@alexify/mailer/mailgun`): HTTP API with US and
-  EU regions.
-- [Mailtrap](/transports/mailtrap) (`@alexify/mailer/mailtrap`): Email API and Email
-  Sandbox for production delivery and test inbox capture.
-- [Maileroo](/transports/maileroo) (`@alexify/mailer/maileroo`): JSON email API with
-  attachments, tags, custom headers and tracking.
-- [Lettermint](/transports/lettermint) (`@alexify/mailer/lettermint`): transactional
-  email API with routes, metadata, idempotency and batch sending.
-- [Plunk](/transports/plunk) (`@alexify/mailer/plunk`): cloud or self-hosted
-  transactional email.
+  with any SMTP server; DKIM signing, pooling, STARTTLS, DSN, an HTTP CONNECT proxy.
+- [Sendmail](/transports/sendmail) (`@alexify/mailer/sendmail`): the sendmail command
+  of the system (Postfix, Exim, msmtp).
 - [JMAP](/transports/jmap) (`@alexify/mailer/jmap`): RFC 8620/8621 mail servers
   such as Stalwart or Fastmail.
+- HTTP providers, one subpath each:
+  [Amazon SES](/transports/ses) (`ses`, SES v2 with SigV4),
+  [Resend](/transports/resend) (`resend`),
+  [SendGrid](/transports/sendgrid) (`sendgrid`),
+  [Mailgun](/transports/mailgun) (`mailgun`),
+  [Postmark](/transports/postmark) (`postmark`),
+  [Brevo](/transports/brevo) (`brevo`),
+  [Mailjet](/transports/mailjet) (`mailjet`),
+  [MailerSend](/transports/mailersend) (`mailersend`),
+  [SparkPost](/transports/sparkpost) (`sparkpost`),
+  [Mailtrap](/transports/mailtrap) (`mailtrap`),
+  [Maileroo](/transports/maileroo) (`maileroo`),
+  [Lettermint](/transports/lettermint) (`lettermint`),
+  [ZeptoMail](/transports/zeptomail) (`zeptomail`),
+  [SMTP2GO](/transports/smtp2go) (`smtp2go`),
+  [Azure Communication Services](/transports/azure) (`azure`),
+  [Scaleway](/transports/scaleway) (`scaleway`),
+  [Cloudflare](/transports/cloudflare) (`cloudflare`) and
+  [Plunk](/transports/plunk) (`plunk`). Each page lists what the provider takes of a
+  message: tags, metadata, tracking, a schedule, raw MIME.
 - [Mock](/transports/mock) (`@alexify/mailer/mock`): captures emails without
   sending, for tests.
 
@@ -52,10 +102,24 @@ And the decorators, which wrap any transport:
   a strategy, with failover.
 - [Retry](/transports/retry) (`@alexify/mailer/retry`): retries with backoff, jitter
   and `Retry-After`.
+- [Circuit breaker](/transports/breaker) (`@alexify/mailer/breaker`): stops sending
+  to a failing provider, then lets one probe through.
+- [Rate limit](/transports/ratelimit) (`@alexify/mailer/ratelimit`): a token bucket
+  per key, waiting or refusing.
+- [Idempotency](/transports/idempotency) (`@alexify/mailer/idempotency`): a key
+  reserved before each send, so a repeat is answered, not sent.
+- [Hooks](/transports/hooks) (`@alexify/mailer/hooks`): before and after each send,
+  on each retry and error.
+- [Tee](/transports/tee) (`@alexify/mailer/tee`): mirrors each message to other
+  transports, without waiting for them.
 - [OpenTelemetry](/transports/otel) (`@alexify/mailer/otel`): spans and metrics,
   with your providers.
 - [Logger](/transports/logger) (`@alexify/mailer/logger`): the delivery lifecycle,
   logged through your pino-like logger.
+
+What happens after a send comes back through the provider's webhooks:
+[`@alexify/mailer/webhooks`](/guide/webhooks) verifies them and reads their events
+into one model of delivery events.
 
 If none of these fit your needs, you can also
 [create a custom transport](/transports/custom).
@@ -119,8 +183,8 @@ const transport = new ResendTransport({
 });
 ```
 
-The JMAP transport streams its raw uploads, so its `fetch` must take a body
-stream with `duplex: 'half'`, as undici's does.
+The JMAP transport streams a raw message whose size it does not know, so its
+`fetch` must take a body stream with `duplex: 'half'`, as undici's does.
 
 Every transport also takes a pino-like `logger` for what happens inside it and
 its receipts do not tell: the retries of an HTTP request at `debug` (with the
@@ -135,8 +199,27 @@ and the message ID of a receipt the provider gave none for. See
 [identifiers of your own](/messages/compose#identifiers-of-your-own).
 
 From here, see [composing messages](/messages/compose) for HTML content, multiple
-recipients and threading, [attachments](/messages/attachments), and
-[calendar invitations](/messages/calendar).
+recipients, threading and List-Unsubscribe, [attachments](/messages/attachments),
+[rendering templates](/messages/render) and [calendar invitations](/messages/calendar).
 
 See [Why @alexify/mailer?](/guide/why) for what the library is built to do, and the
 [API](/api/exports) for every entry point.
+
+## Several processes
+
+Some parts keep state, and by default they keep it in the process. Several
+processes, or a function that makes its transports for each request, each have
+their own unless the part is given a store they share:
+
+| Part | What it keeps | In one process | Shared by several |
+| --- | --- | --- | --- |
+| [`./ratelimit`](/transports/ratelimit) | the token buckets | at most `maxKeys` buckets | a `store` of `take()`, such as a script on Redis, so that N processes send no more than the one limit |
+| [`./idempotency`](/transports/idempotency) | the keys reserved and the receipts | `createMemoryIdempotencyStore()` | a store of `reserve`, `complete` and `release`, the outbox to come among them |
+| [`./webhooks`](/guide/webhooks#time-and-replays) | the ids of the requests taken | `createMemoryReplayStore()` | a store of `reserve`, `commit` and `release`; required, `null` to keep none |
+| [`./breaker`](/transports/breaker) | the state of the circuit | one per transport | none: each process opens its own circuit on the failures it sees |
+| [`./pool`](/transports/pool) | the turn of round-robin | one per transport | none |
+| [`./smtp`](/transports/smtp) | pooled connections, OAuth 2.0 tokens | one pool per transport | none |
+
+A store of a rate limit or of idempotency that each process makes for itself
+gives no more than the memory one: the limit is spent N times over, and a key is
+sent once per process.

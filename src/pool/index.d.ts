@@ -3,7 +3,17 @@
 
 /// <reference lib="esnext.disposable" />
 
-import { IdOptions, Logger, Message, Receipt, Transport, TransportOptions } from '../../index.js';
+import {
+  IdOptions,
+  Logger,
+  Message,
+  RawMessage,
+  RawTransport,
+  Receipt,
+  Transport,
+  TransportOptions,
+  VerifiableTransport,
+} from '../../index.js';
 
 /**
  * Result of transport selection by a strategy.
@@ -147,12 +157,31 @@ export interface ResolvedTransportEntry<TProviderId extends string = string> {
  */
 
 /**
+ * How one transport of a pool did in {@link PoolTransport.verifyAll}.
+ */
+export interface PoolVerification {
+  /** The id of the transport. */
+  readonly id: string;
+  /** Its place in the pool's `transports`. */
+  readonly index: number;
+  /** `verified`, `failed`, or `unverifiable` for one without `verify()`. */
+  readonly status: 'verified' | 'failed' | 'unverifiable';
+  /** Why it failed. */
+  readonly error?: unknown;
+}
+
+/**
  * Pool transport that combines multiple transports with various load balancing
  * and failover strategies.
  *
  * This transport implements the same `Transport` interface, making it a drop-in
  * replacement for any single transport. It distributes messages across multiple
  * underlying transports based on the configured strategy.
+ *
+ * It fails over after a failure of a transport (an outage, a rate limit) or of
+ * what it can express (`unsupported`: `scheduledAt` on SMTP, a limit of the
+ * provider), and stops at a refused message (`validation`, `rejected`) or an
+ * unknown delivery.
  *
  * @example Round-robin load balancing
  * ```typescript
@@ -199,7 +228,10 @@ export interface ResolvedTransportEntry<TProviderId extends string = string> {
  * ```
  */
 export declare class PoolTransport<TProviderId extends string = string>
-  implements Transport<TProviderId | 'pool'>, AsyncDisposable
+  implements
+    RawTransport<TProviderId | 'pool'>,
+    VerifiableTransport<TProviderId | 'pool'>,
+    AsyncDisposable
 {
   readonly id = 'pool';
   /**
@@ -225,6 +257,26 @@ export declare class PoolTransport<TProviderId extends string = string>
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
+  /**
+   * Sends serialized MIME through the transports that send raw messages,
+   * with the strategy and the failover of `send()`; a selector is not asked,
+   * as it judges a `Message`.  With no such transport, the receipt is a
+   * failure of the category `configuration`.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
+  /**
+   * Verifies the enabled transports that can verify: it resolves when one of
+   * them verifies, and throws an `AggregateError` of their errors when none
+   * does; it has nothing to check when none can verify.
+   * {@link PoolTransport.verifyAll} tells how each did.
+   */
+  verify(options?: TransportOptions): Promise<void>;
+  /**
+   * Verifies every enabled transport, all at once, and tells how each did,
+   * for a health check: a key a provider revoked shows while the others
+   * still send.  It throws only for the caller's abort.
+   */
+  verifyAll(options?: TransportOptions): Promise<PoolVerification[]>;
   /**
    * Sends multiple email messages using the pool strategy.
    *

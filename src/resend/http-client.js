@@ -1,30 +1,21 @@
 // Ported from upyo v0.7.0 (packages/resend/src/http-client.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Changed after the port: the request goes through createApiClient of
+// internal/api-client.js, as that of every HTTP provider does, and ResendApiError
+// extends its error; the messages and the errors of upstream stay.
 
 const { parseRetryAfter } = require('../core/receipt.js');
-const { requestWithRetry } = require('../internal/http.js');
-const { createLog } = require('../internal/log.js');
-const { readText } = require('../internal/body.js');
+const {
+  ProviderApiError,
+  createApiClient,
+  parseAnswer,
+  truncateErrorText,
+} = require('../internal/api-client.js');
 
 /**
  * Error thrown when a Resend API request fails.
  */
-class ResendApiError extends Error {
-  /**
-   * HTTP status code returned by Resend, if the request reached the API.
-   */
-  statusCode;
-
-  /**
-   * Retry delay from Resend's `Retry-After` response header.
-   */
-  retryAfterMilliseconds;
-
-  /**
-   * Number of attempts made before this error was produced.
-   */
-  attempts;
-
+class ResendApiError extends ProviderApiError {
   /**
    * Creates a Resend API error.
    *
@@ -35,13 +26,41 @@ class ResendApiError extends Error {
    * @param options The cause of the error, such as the failure of `fetch`.
    */
   constructor(message, statusCode, retryAfterMilliseconds, attempts, options) {
-    super(message, options);
+    super('resend', message, {
+      statusCode,
+      retryAfterMilliseconds,
+      attempts,
+      cause: options?.cause,
+    });
     this.name = 'ResendApiError';
-    this.statusCode = statusCode;
-    this.retryAfterMilliseconds = retryAfterMilliseconds;
-    this.attempts = attempts;
   }
 }
+
+const messageOf = (text) => {
+  try {
+    return JSON.parse(text).message;
+  } catch {
+    // Ignore if JSON parsing fails, as the body may be non-JSON
+    return undefined;
+  }
+};
+
+const rejectionOf = (response, read, attempt) => {
+  const text = read ?? '';
+  const parsed = messageOf(text);
+  const parsedErrorMessage = parsed === '' ? undefined : parsed;
+  const responseMessage = truncateErrorText(text);
+  const fallbackMessage = responseMessage === '' ? undefined : responseMessage;
+  return new ResendApiError(
+    parsedErrorMessage ?? fallbackMessage ?? `HTTP ${response.status}`,
+    response.status,
+    parseRetryAfter(response.headers.get('Retry-After')),
+    attempt + 1,
+  );
+};
+
+const invalidJson = (error) =>
+  new Error(`Invalid JSON response from Resend API: ${error.message}`, { cause: error });
 
 /**
  * HTTP client wrapper for Resend API requests.
@@ -51,10 +70,25 @@ class ResendApiError extends Error {
  */
 class ResendHttpClient {
   config;
+  #request;
 
   constructor(config) {
     this.config = config;
-    this.log = createLog(config.logger, { transport: 'resend' });
+    const client = createApiClient(config, {
+      id: 'resend',
+      label: 'Resend',
+      authorize: (headers) => headers.set('Authorization', `Bearer ${config.apiKey}`),
+      read: (_response, text) => parseAnswer(text, invalidJson),
+      reject: rejectionOf,
+      timeoutError: () => new Error(`Resend API request timed out after ${config.timeout} ms.`),
+      finalError: (error, attempts) =>
+        error instanceof ResendApiError
+          ? error
+          : new ResendApiError(error.message, undefined, undefined, attempts, { cause: error }),
+    });
+    this.log = client.log;
+    this.fetchWithAuth = client.fetchWithAuth;
+    this.#request = client.request;
   }
 
   /**
@@ -67,25 +101,7 @@ class ResendHttpClient {
    * @returns Promise that resolves to the Resend response.
    */
   sendMessage(messageData, signal, idempotencyKey, onRetry) {
-    const url = `${this.config.baseUrl}/emails`;
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-
-    if (idempotencyKey) {
-      headers['Idempotency-Key'] = idempotencyKey;
-    }
-
-    return this.makeRequest(
-      url,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(messageData),
-        signal,
-      },
-      onRetry,
-    );
+    return this.#send('/emails', messageData, signal, idempotencyKey, onRetry);
   }
 
   /**
@@ -98,114 +114,21 @@ class ResendHttpClient {
    * @returns Promise that resolves to the Resend batch response.
    */
   sendBatch(messagesData, signal, idempotencyKey, onRetry) {
-    const url = `${this.config.baseUrl}/emails/batch`;
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-
-    if (idempotencyKey) {
-      headers['Idempotency-Key'] = idempotencyKey;
-    }
-
-    return this.makeRequest(
-      url,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(messagesData),
-        signal,
-      },
-      onRetry,
-    );
+    return this.#send('/emails/batch', messagesData, signal, idempotencyKey, onRetry);
   }
 
-  /**
-   * Makes an HTTP request to Resend API with retry logic.
-   *
-   * @param url The URL to make the request to.
-   * @param options Fetch options.
-   * @returns Promise that resolves to the parsed response.
-   */
-  makeRequest(url, options, onRetry) {
-    return requestWithRetry({
-      log: this.log,
-      signal: options.signal,
+  #send(path, body, signal, idempotencyKey, onRetry) {
+    // Resend answers a repeated Idempotency-Key with its first answer.
+    const hasKey = typeof idempotencyKey === 'string' && idempotencyKey !== '';
+    return this.#request({
+      url: `${this.config.baseUrl}${path}`,
+      body,
+      signal,
       onRetry,
-      retries: this.config.retries,
-      timeoutMs: this.config.timeout,
-      // Resend answers a repeated Idempotency-Key with its first answer.
-      hasIdempotencyKey: options.headers?.['Idempotency-Key'] != null,
-      send: (signal) => this.fetchWithAuth(url, options, signal),
-      read: async (response) => {
-        const text = await readText(response);
-        try {
-          return JSON.parse(text);
-        } catch (error) {
-          throw new Error(
-            `Invalid JSON response from Resend API: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-            { cause: error },
-          );
-        }
-      },
-      reject: async (response, attempt) => {
-        const text = await readText(response);
-        let errorMessage;
-        try {
-          errorMessage = JSON.parse(text).message;
-        } catch {
-          // Ignore if JSON parsing fails, as the body may be non-JSON
-        }
-
-        const parsedErrorMessage = errorMessage === '' ? undefined : errorMessage;
-        const responseMessage = truncateErrorBody(text);
-        const fallbackMessage = responseMessage === '' ? undefined : responseMessage;
-
-        return new ResendApiError(
-          parsedErrorMessage ?? fallbackMessage ?? `HTTP ${response.status}`,
-          response.status,
-          parseRetryAfter(response.headers.get('Retry-After')),
-          attempt + 1,
-        );
-      },
-      createTimeoutError: () =>
-        new Error(`Resend API request timed out after ${this.config.timeout} ms.`),
-      finalError: (error, attempts) =>
-        error instanceof ResendApiError
-          ? error
-          : new ResendApiError(error.message, undefined, undefined, attempts, { cause: error }),
+      headers: hasKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      hasIdempotencyKey: hasKey,
     });
   }
-
-  /**
-   * Makes a fetch request with authentication headers.
-   *
-   * @param url The URL to fetch.
-   * @param options Fetch options.
-   * @param signal The signal of the attempt, with its deadline.
-   * @returns Promise that resolves to the Response.
-   */
-  fetchWithAuth(url, options, signal) {
-    const headers = new Headers(options.headers);
-
-    // Add authentication
-    headers.set('Authorization', `Bearer ${this.config.apiKey}`);
-
-    // Add custom headers from config
-    for (const [key, value] of Object.entries(this.config.headers)) {
-      headers.set(key, value);
-    }
-
-    // A redirect comes back as a response rather than being followed, so the
-    // credentials in the headers never reach another origin.
-    const fetch = this.config.fetch ?? globalThis.fetch;
-    return fetch(url, { ...options, headers, signal, redirect: 'manual' });
-  }
 }
-
-const truncateErrorBody = (text) => {
-  return text.length > 500 ? `${text.slice(0, 500)}...` : text;
-};
 
 module.exports = { ResendApiError, ResendHttpClient };

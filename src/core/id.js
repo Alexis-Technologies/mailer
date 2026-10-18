@@ -1,4 +1,4 @@
-// Not ported from upyo: the identifiers the library generates, from a generator
+// Not ported: the identifiers the library generates, from a generator
 // the application may pass in (cuid2, ulid, nanoid, ...) to correlate them with
 // its own records, checked before they reach a header field or a request.
 

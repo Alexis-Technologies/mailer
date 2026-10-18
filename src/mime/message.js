@@ -1,8 +1,11 @@
 // Ported from upyo v0.7.0 (packages/mime/src/message.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Also ported from nodemailer v10.0.16 (src/mime-node/index.ts): the transfer
+// encoding of a text body, `getTransferEncoding` and `_getTextEncoding`.
+// https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 
 const { Buffer } = require('node:buffer');
-const { formatPhrase } = require('../core/address.js');
+const { formatPhrase, toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { checkAttachment } = require('../core/message.js');
 const {
@@ -11,6 +14,7 @@ const {
   resolveThreadingHeaders,
 } = require('../core/message-id.js');
 const { resolveCalendarContent } = require('../core/calendar.js');
+const { canonicalHeaderName } = require('../internal/headers.js');
 const { createLog } = require('../internal/log.js');
 const { checkDkimConfig } = require('./dkim/types.js');
 const { resolvePrivateKey } = require('./dkim/sign.js');
@@ -239,7 +243,7 @@ const pushHeaderFields = (lines, message, generateId) => {
     const name = key.toLowerCase();
     if (COMPOSED_HEADERS.has(name) || reservedHeaders.has(name)) continue;
     if (hasPriority && PRIORITY_HEADERS.has(name)) continue;
-    lines.push(foldHeader(key, encodeHeaderValue(value)));
+    lines.push(foldHeader(canonicalHeaderName(name), encodeHeaderValue(value)));
   }
 };
 
@@ -331,19 +335,11 @@ const buildAlternatives = (message) => {
   const alternatives = [];
 
   if ('text' in message.content && message.content.text !== undefined) {
-    alternatives.push({
-      contentType: 'text/plain; charset=utf-8',
-      encoding: 'quoted-printable',
-      body: encodeQuotedPrintable(message.content.text),
-    });
+    alternatives.push(textAlternative('text/plain; charset=utf-8', message.content.text));
   }
 
   if ('html' in message.content) {
-    alternatives.push({
-      contentType: 'text/html; charset=utf-8',
-      encoding: 'quoted-printable',
-      body: encodeQuotedPrintable(message.content.html),
-    });
+    alternatives.push(textAlternative('text/html; charset=utf-8', message.content.html));
   }
 
   if (message.calendar != null) {
@@ -362,14 +358,66 @@ const buildAlternatives = (message) => {
   }
 
   if (alternatives.length < 1) {
-    alternatives.push({
-      contentType: 'text/plain; charset=utf-8',
-      encoding: 'quoted-printable',
-      body: '',
-    });
+    alternatives.push(textAlternative('text/plain; charset=utf-8', ''));
   }
 
   return alternatives;
+};
+
+// A text body in the canonical form of RFC 2046 §4.1.1, every line ended by
+// CRLF: a bare LF or CR is a line break the writer of the text meant, which
+// quoted-printable would otherwise carry as an escaped =0A.
+const BARE_LINE_BREAK = /\r(?!\n)|(?<!\r)\n/;
+const toCrlf = (text) => (BARE_LINE_BREAK.test(text) ? text.replace(/\r\n|\r|\n/g, '\r\n') : text);
+
+/**
+ * Chooses the transfer encoding of a text body, as nodemailer does: 7bit for
+ * ASCII text whose lines fit in 76 columns, otherwise quoted-printable when it
+ * has more Latin letters than other characters, and Base64 when it has not,
+ * which keeps Cyrillic or CJK text at a third more than its bytes instead of
+ * three times.  A line that ends in whitespace goes quoted-printable too, as
+ * an MTA that trims it would break a DKIM signature over the simple body.
+ *
+ * @param text A body with CRLF line breaks.
+ * @returns `7bit`, `quoted-printable` or `base64`.
+ */
+const textEncodingOf = (text) => {
+  let latin = 0;
+  let other = 0;
+  let isPlain = true;
+  let column = 0;
+  let endsInSpace = false;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 0x0d || code === 0x0a) {
+      if (endsInSpace) isPlain = false;
+      endsInSpace = false;
+      column = 0;
+      continue;
+    }
+    column++;
+    if (column > 76) isPlain = false;
+    if ((code < 0x20 && code !== 0x09) || code > 0x7f) {
+      other++;
+      isPlain = false;
+    } else if ((code | 0x20) >= 0x61 && (code | 0x20) <= 0x7a) {
+      latin++;
+    }
+    endsInSpace = code === 0x20 || code === 0x09;
+  }
+  if (endsInSpace) isPlain = false;
+  if (isPlain) return '7bit';
+  return other < latin ? 'quoted-printable' : 'base64';
+};
+
+const textAlternative = (contentType, text) => {
+  const body = toCrlf(text);
+  const encoding = textEncodingOf(body);
+  if (encoding === 'quoted-printable') {
+    return { contentType, encoding, body: encodeQuotedPrintable(body) };
+  }
+  if (encoding === 'base64') return { contentType, encoding, body: encodeBase64Body(body) };
+  return { contentType, encoding, body };
 };
 
 /**
@@ -541,9 +589,10 @@ const encodeAddress = (address) => {
   if (/[\r\n]/.test(address.address)) {
     throw new TypeError('Address must not contain a carriage return or line feed.');
   }
+  const email = toAsciiAddress(address.address);
   if (address.name == null) {
     // No display name, just return the email address
-    return address.address;
+    return email;
   }
 
   // Encode only the display name part, leave email address as-is.  An
@@ -552,7 +601,7 @@ const encodeAddress = (address) => {
   const encodedDisplayName = encodeHeaderValue(address.name, true);
   const displayName =
     encodedDisplayName === address.name ? formatPhrase(address.name) : encodedDisplayName;
-  return `${displayName} <${address.address}>`;
+  return `${displayName} <${email}>`;
 };
 
 // Whether a word of the value, between whitespace, is longer than `limit`.

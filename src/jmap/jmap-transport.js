@@ -18,6 +18,9 @@ const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { chunks, readItems } = require('../internal/batch.js');
+const { schedulingRefusal } = require('../internal/schedule.js');
+const { certificateFailure } = require('../internal/refusal.js');
+const { timerMs } = require('../internal/sleep.js');
 
 /**
  * JMAP capabilities required for email sending.
@@ -108,39 +111,17 @@ class JmapTransport {
           `JMAP account must be writable with mail and submission capability: ${accountId}`,
         );
       }
-      // oxlint-disable-next-line no-shadow -- upstream
-      const get = async (method, args, signal) => {
-        const response = await verificationOperation(
-          this.config.timeout,
-          (owned) =>
-            this.httpClient.executeRequest(
-              session.apiUrl,
-              {
-                using:
-                  method === 'Mailbox/get'
-                    ? [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail]
-                    : [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.submission],
-                methodCalls: [[method, { accountId, ...args }, 'verify']],
-              },
-              owned,
-            ),
-          signal,
-        );
-        return verificationResult(response, method, accountId);
-      };
-      const mailboxes = await get('Mailbox/get', { properties: ['id', 'role'] }, signal);
+      const get = (method, args) =>
+        this.#verificationGet(session.apiUrl, accountId, method, args, options);
+      const mailboxes = await get('Mailbox/get', { properties: ['id', 'role'] });
       if (findDraftsMailbox(mailboxes.list, false) === undefined) {
         throw new JmapApiError(`No drafts mailbox found in JMAP account: ${accountId}`);
       }
       const identityId = this.config.identityId;
-      const identities = await get(
-        'Identity/get',
-        {
-          ids: identityId == null ? null : [identityId],
-          properties: ['id', 'email'],
-        },
-        signal,
-      );
+      const identities = await get('Identity/get', {
+        ids: identityId == null ? null : [identityId],
+        properties: ['id', 'email'],
+      });
       if (
         identities.notFound.length > 0 ||
         identities.list.length === 0 ||
@@ -160,6 +141,28 @@ class JmapTransport {
     }
   }
 
+  // One read of verify(), retried as a read is and told to onRetry.
+  async #verificationGet(apiUrl, accountId, method, args, options) {
+    const response = await verificationOperation(
+      this.config.timeout,
+      (owned) =>
+        this.httpClient.executeRequest(
+          apiUrl,
+          {
+            using:
+              method === 'Mailbox/get'
+                ? [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.mail]
+                : [JMAP_CAPABILITIES.core, JMAP_CAPABILITIES.submission],
+            methodCalls: [[method, { accountId, ...args }, 'verify']],
+          },
+          owned,
+          options?.onRetry,
+        ),
+      options?.signal,
+    );
+    return verificationResult(response, method, accountId);
+  }
+
   /**
    * Sends a single email message.
    * @param message The message to send.
@@ -171,6 +174,7 @@ class JmapTransport {
   async send(message, options) {
     const signal = options?.signal;
     signal?.throwIfAborted();
+    if (message.scheduledAt != null) return refuseScheduled();
 
     try {
       // Get or refresh session
@@ -372,8 +376,29 @@ class JmapTransport {
     // a batch over it would be refused as a whole.
     const limit = getMaxObjectsInSet(discovery.discovered.session);
     for await (const batch of chunks(prepend(first.value, input), limit)) {
-      yield* this.sendBatch(discovery.discovered, batch, signal);
+      yield* this.sendRuns(discovery.discovered, batch, signal);
     }
+  }
+
+  /**
+   * Sends the messages of a batch that can be sent, in runs between those
+   * it refuses, so that every receipt keeps the place of its message.
+   *
+   * @param discovered What the batches share.
+   * @param batch The messages, at most the limit of one Email/set.
+   * @param signal Cancellation signal.
+   * @returns Async iterable of receipts, one per message, in order.
+   */
+  async *sendRuns(discovered, batch, signal) {
+    let start = 0;
+    for (let i = 0; i < batch.length; i++) {
+      if (batch[i].scheduledAt == null) continue;
+      if (i > start) yield* this.sendBatch(discovered, batch.slice(start, i), signal);
+      yield refuseScheduled();
+      start = i + 1;
+    }
+    if (start === 0) yield* this.sendBatch(discovered, batch, signal);
+    else if (start < batch.length) yield* this.sendBatch(discovered, batch.slice(start), signal);
   }
 
   /**
@@ -959,7 +984,18 @@ const executeSubmission = async (client, apiUrl, request, signal) => {
   }
 };
 
+// JMAP holds a submission only with the FUTURERELEASE extension, which
+// this transport does not ask for.
+const refuseScheduled = () =>
+  createJmapFailure(schedulingRefusal('jmap'), undefined, {
+    category: 'unsupported',
+    code: 'jmap.scheduling_unsupported',
+    retryable: false,
+  });
+
 const createJmapFailure = (message, error, override = {}) => {
+  const certificate = certificateFailure('jmap', message, error);
+  if (certificate !== undefined) return certificate;
   const attempts = getAttemptCount(error);
 
   if (error instanceof JmapApiError) {
@@ -1025,7 +1061,7 @@ const verificationOperation = async (timeout, operation, signal) => {
   let onAbort;
   const timer = setTimeout(
     () => controller.abort(new JmapApiError('JMAP verification timed out.')),
-    timeout,
+    timerMs(timeout),
   );
   try {
     combined.signal.throwIfAborted();

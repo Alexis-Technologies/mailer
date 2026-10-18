@@ -295,6 +295,14 @@ It reads `batchSize` messages (50 by default) at a time and sends them
 together before it reads more, so an endless or very long iterable costs one
 batch of memory.
 
+## Raw MIME
+
+`sendRaw()` sends serialized MIME as the Raw content of SendEmail, to the
+recipients of its envelope and from its sender (none for a null sender), with
+the configuration set and the default tags of the transport.  The message is
+checked line by line as the SMTP transport checks it, then read into memory;
+composition and DKIM are bypassed, so sign the message before.
+
 ## Configuration sets and tracking
 
 Amazon SES provides configuration sets for advanced tracking, reputation
@@ -331,6 +339,14 @@ Consult the [SES Configuration Sets documentation] for detailed setup
 instructions and available features.
 
 [SES Configuration Sets documentation]: https://docs.aws.amazon.com/ses/latest/dg/using-configuration-sets.html
+
+A message's `metadata` goes in its tags, which SES publishes with its events,
+after the `category` tags of its `tags` and over a `defaultTags` entry of the
+same name. A key and its value must then be ASCII letters, digits, `_` or `-`,
+fewer than 256 characters, and a key neither `category` nor `priority`; any
+other is refused before the request. Tracking is set by the configuration set,
+so a message's `tracking` is not sent, and SES cannot schedule a message, so
+`scheduledAt` is refused as `unsupported`.
 
 ## Advanced configuration and reliability
 
@@ -369,6 +385,13 @@ Timeout settings control how long to wait for SES API responses, while retry
 configuration determines how many times to retry failed requests. The transport
 uses exponential backoff for retries, reducing load on SES during temporary
 issues and improving overall reliability.
+
+## Verifying the configuration
+
+`verify()` reads the account with GetAccount, signed as a send is, so it checks
+the credentials and the region.  A key whose policy allows sending but not
+`ses:GetAccount` gets AccessDenied, and is verified too: the signature it made was
+accepted.  It throws an error with the `statusCode` of the answer otherwise.
 
 ## Development and testing
 

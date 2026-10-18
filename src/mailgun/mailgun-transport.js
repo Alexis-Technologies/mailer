@@ -1,12 +1,13 @@
 // Ported from upyo v0.7.0 (packages/mailgun/src/mailgun-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { createMailgunConfig } = require('./config.js');
-const { MailgunApiError, MailgunHttpClient } = require('./http-client.js');
+const { verifyByRequest } = require('../internal/verify.js');
+const { MailgunHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { sendConcurrently } = require('../internal/batch.js');
 
 /**
@@ -71,6 +72,30 @@ class MailgunTransport {
   }
 
   /**
+   * Verifies the API key and the sending domain with `GET /v3/domains/<domain>`.
+   * A key of that domain that may only send (403) is verified too; a domain
+   * the account does not have fails.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Mailgun refuses the key or knows no such domain.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const url = `${this.config.baseUrl}/domains/${encodeURIComponent(this.config.domain)}`;
+    await verifyByRequest({
+      provider: 'Mailgun',
+      // A 403 is a known key that may not read: a domain sending key is refused
+      // the read of its domain.
+      acceptForbidden: true,
+      send: (signal) => this.httpClient.fetchWithAuth(url, { method: 'GET' }, signal),
+      retries: this.config.retries,
+      timeoutMs: this.config.timeout,
+      signal: options?.signal,
+      log: this.httpClient.log,
+    });
+  }
+
+  /**
    * Sends a single email message via Mailgun API.
    *
    * This method converts the message to Mailgun format, makes an HTTP request
@@ -126,10 +151,32 @@ class MailgunTransport {
       if (isCallerAbort(error, options?.signal)) {
         throw error;
       }
+      return providerFailure('mailgun', error);
+    }
+  }
 
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      return createMailgunFailure(errorMessage, error);
+  /**
+   * Sends serialized MIME through the `messages.mime` endpoint, to the
+   * recipients of its envelope.  The message is checked as SMTP checks it
+   * and read into memory; composition is bypassed.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional abort signal and retry callback.
+   * @returns The receipt.
+   */
+  async sendRaw(message, options) {
+    if (message?.content instanceof Promise) message.content.catch(() => {});
+    options?.signal?.throwIfAborted();
+    try {
+      const raw = await readRawMessage(message, options?.signal);
+      const formData = new FormData();
+      for (const address of raw.envelope.to) formData.append('to', address);
+      formData.append('message', new Blob([raw.bytes], { type: 'message/rfc822' }), 'message.mime');
+      const response = await this.httpClient.sendMime(formData, options?.signal, options?.onRetry);
+      return { successful: true, messageId: response.id, provider: 'mailgun' };
+    } catch (error) {
+      if (isCallerAbort(error, options?.signal)) throw error;
+      return rawMessageFailure('mailgun', error) ?? providerFailure('mailgun', error);
     }
   }
 
@@ -195,30 +242,5 @@ class MailgunTransport {
     );
   }
 }
-
-const createMailgunFailure = (message, error) => {
-  if (error instanceof MailgunApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'mailgun',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'mailgun',
-  });
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
 
 module.exports = { MailgunTransport };

@@ -89,7 +89,14 @@ The local part is limited to 64 UTF-8 octets.  @alexify/mailer preserves the spe
 Unicode normalization supplied by the caller because changing a local part can
 change the mailbox it identifies.
 
-Provider support still depends on the selected transport.  The
+A Unicode domain under an ASCII local part needs no extension: when the message is
+written, into its header fields, an SMTP envelope, a JMAP request or a provider's API,
+the domain goes as its A-label (IDNA with the mapping of UTS #46, as browsers and DNS
+resolvers apply it), so `user@bücher.de` is sent as `user@xn--bcher-kva.de`.  The
+`Message` keeps the address as you gave it.  An address literal, and a local part beyond
+ASCII with its domain, are written as given.
+
+Provider support for a UTF-8 local part still depends on the selected transport.  The
 [SMTP transport](/transports/smtp#internationalized-addresses) negotiates
 the `SMTPUTF8` extension automatically and reports a failed receipt when the
 server cannot accept an internationalized address.
@@ -211,6 +218,12 @@ The `createMessage()` function handles all the complexity of email message
 construction, ensuring that your messages are properly formatted and valid
 before sending them through your chosen transport.
 
+`Headers` keeps names in lower case, so a transport that composes the message
+writes each custom field name capitalized, as nodemailer does: `X-Custom-Header`,
+with `MIME`, `DKIM`, `ARC` and `BIMI` at the start and `-ID`, `-SPF`, `-FBL` and
+`-MD5` at the end upper-cased (`X-Entity-Ref-ID`, `Received-SPF`), and `X-SMTPAPI`
+as SendGrid spells it.
+
 [`Headers`]: https://developer.mozilla.org/en-US/docs/Web/API/Headers
 
 ### Headers the transport owns
@@ -227,6 +240,81 @@ hidden from everyone who receives it.
 described in the next section.  They differ from the fields above in that a
 custom header is still honored when the dedicated field is left unset, so the
 header form keeps working.
+
+## Scheduling, tracking and metadata
+
+Three fields ask the provider for what only some providers do:
+
+```js
+const message = createMessage({
+  from: 'shop@example.com',
+  to: 'customer@example.com',
+  subject: 'Your order has shipped',
+  content: { html: '<p>…</p>' },
+  scheduledAt: new Date('2026-10-18T09:00:00Z'),
+  tracking: { opens: false, clicks: true },
+  metadata: { orderId: '42', tenant: 'acme' },
+});
+```
+
+- `scheduledAt` is when the provider should deliver the message.  A transport
+  that cannot schedule it, SMTP and JMAP among them, refuses the message with a
+  non-retryable `unsupported` receipt rather than sending it at once, so `./pool`
+  fails over to a transport that can schedule and `./retry` does not retry it.
+- `tracking` turns open and click tracking on or off for this message, over the
+  configuration of the transport, where the provider takes it per message.
+- `metadata` holds values the provider keeps with the message and returns in its
+  events.  A key is 1 to 128 letters, digits, `_`, `-` or `.`, since it may become
+  the name of a header or form field; a value is a string of at most 1024
+  characters without control characters; and there are at most 64 keys.  Each
+  provider has tighter limits of its own (Postmark 10 fields of 80 characters).
+
+SMTP and JMAP ignore `tracking` and `metadata`, which have no meaning in the
+message itself.  Each provider's page says which of the three it takes.
+
+## Mailing lists and one-click unsubscribe
+
+The `list` field writes the List-* header fields of [RFC 2369] and [RFC 2919],
+which mail clients use to show an unsubscribe button, and, with `oneClick`, the
+`List-Unsubscribe-Post` field of [RFC 8058] that Gmail and Yahoo ask of bulk
+senders:
+
+```js
+const message = createMessage({
+  from: 'news@example.com',
+  to: 'reader@example.com',
+  subject: 'This week',
+  content: { html: '<p>…</p>' },
+  list: {
+    id: { id: 'news.example.com', name: 'Weekly News' },
+    unsubscribe: ['https://example.com/unsubscribe?u=42', 'unsubscribe@example.com'],
+    oneClick: true,
+  },
+});
+// List-ID: Weekly News <news.example.com>
+// List-Unsubscribe: <https://example.com/unsubscribe?u=42>,
+//  <mailto:unsubscribe@example.com>
+// List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
+`help`, `unsubscribe`, `subscribe`, `post`, `owner` and `archive` each take one
+URL or several, which go into one field: an `http:`, `https:` or `mailto:` URL,
+or a bare address for a `mailto:` one.  An entry may be `{ url, comment }`, with
+a comment of printable ASCII.  `id` is a dot-atom with a namespace, with an
+optional `name`.  A URL with whitespace, a control character or an angle bracket,
+a URL of another scheme or without one, and an unknown key are refused with a
+`TypeError`, never stripped or guessed.
+
+Set `oneClick: true` only when a POST to the https URL of `unsubscribe`
+unsubscribes at once, without a page to confirm; it needs such a URL.  RFC 8058
+also asks for a DKIM signature over both fields, which the default signature of
+`./mime` and `./smtp` gives.  The fields go into `Message.headers`, so every
+transport that sends custom header fields sends them; a field given in `list`
+may not also be given in `headers`.
+
+[RFC 2369]: https://www.rfc-editor.org/rfc/rfc2369
+[RFC 2919]: https://www.rfc-editor.org/rfc/rfc2919
+[RFC 8058]: https://www.rfc-editor.org/rfc/rfc8058
 
 ## Message identity and reply threading
 

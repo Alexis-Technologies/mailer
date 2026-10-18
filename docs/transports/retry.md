@@ -224,6 +224,14 @@ A `logger` in the configuration hears each retry the decorator schedules, at
 on its span and in its metrics, and the JMAP transport does not report its own
 yet.
 
+## Raw messages and verification
+
+`sendRaw()` retries serialized MIME as `send()` retries a message, since the
+content of a raw message can be read again.  `verify()` verifies the wrapped
+transport once, without retries.  When the wrapped transport has no `sendRaw()`,
+the receipt is a failure of the category `configuration`, not retried; when it
+cannot verify, `verify()` has nothing to check and resolves.
+
 ## Composition
 
 Retry transport composes with other decorators because it preserves the

@@ -306,11 +306,13 @@ test('Receipt: a failure is classified by its status, then its code, then its wo
     new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
   assert.strictEqual(classify(caused('ECONNREFUSED')), 'network');
   assert.strictEqual(classify(caused('ETIMEDOUT')), 'timeout');
-  assert.deepStrictEqual(classifyReceiptError(caused('CERT_HAS_EXPIRED')), {
-    category: 'configuration',
-    retryable: false,
-    code: 'configuration',
-  });
+  for (const code of ['CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE']) {
+    assert.deepStrictEqual(classifyReceiptError(caused(code)), {
+      category: 'configuration',
+      retryable: false,
+      code: 'configuration',
+    });
+  }
 });
 
 test('Core: generateId makes the identifiers, and what it returns is checked', () => {

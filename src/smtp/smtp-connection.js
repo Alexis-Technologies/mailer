@@ -1,5 +1,9 @@
 // Ported from upyo v0.7.0 (packages/smtp/src/smtp-connection.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Also ported from nodemailer v10.0.16 (src/smtp-connection/index.ts): a
+// connection opened by the `connect` of the caller (nodemailer's `getSocket`),
+// such as a proxy tunnel, and from `localAddress`.
+// https://github.com/nodemailer/nodemailer — MIT-0, Copyright 2011-2023 Andris Reinman
 
 const { prepareRawSmtpStream, Smtp8BitMimeUnsupportedError } = require('./raw-message.js');
 const { Buffer } = require('node:buffer');
@@ -23,6 +27,7 @@ const {
 const { prepareMessageStream } = require('./message-stream.js');
 const { prepareOnSocket, writeMessageData } = require('./data-stream.js');
 const { parseEnhancedSmtpStatusCode } = require('./smtp-status-code.js');
+const { timerMs } = require('../internal/sleep.js');
 
 // RFC 5321 §4.5.3.1.5 limits a reply line to 512 octets, but servers send
 // longer text; these bound the memory a broken or hostile server can take
@@ -104,6 +109,9 @@ const createReplyCollector = () => {
  */
 const listenToSocket = (socket, signal, onData, onError, onClose, onAbort) => {
   socket.on('data', onData);
+  // A connector may hand over its socket paused, with what came early put
+  // back; a listener alone does not start a stream that was paused.
+  if (socket.readableFlowing === false) socket.resume();
   socket.on('error', onError);
   socket.on('close', onClose);
   signal?.addEventListener('abort', onAbort, { once: true });
@@ -373,6 +381,36 @@ const replyCodes = (responses) => {
  * @param host The configured SMTP host.
  * @returns `true` if the connected peer or fallback host is loopback.
  */
+// The TLS handshake of a socket, ended by `secureConnect`, an error, a close
+// or the signal.
+const secureConnectOf = (socket, signal) =>
+  new Promise((resolve, reject) => {
+    const cleanup = () => {
+      socket.off('secureConnect', onSecure);
+      socket.off('error', onError);
+      socket.off('close', onClose);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onSecure = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    // Node's TLSSocket reports a peer that leaves during the handshake as an
+    // error before the close, so this guard does not run on Node.
+    /* c8 ignore next */
+    const onClose = () => onError(new TypeError('SMTP connection closed before establishment.'));
+    const onAbort = () => onError(signal.reason);
+    socket.once('secureConnect', onSecure);
+    socket.once('error', onError);
+    socket.once('close', onClose);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+
 const isLoopbackConnection = (socket, host) => {
   const remoteAddress = socket?.remoteAddress;
   return remoteAddress == null ? isLoopbackHost(host) : isLoopbackAddress(remoteAddress);
@@ -391,9 +429,21 @@ class SmtpConnection {
   authenticating = false;
   /** Whether the connection sits in a pool and must be reset before reuse. */
   needsReset = false;
+  /** The transactions this connection has started, for `maxMessages`. */
+  messageCount = 0;
+  /**
+   * Whether the socket came from the `connect` of the caller, whose peer, a
+   * proxy perhaps, is not the SMTP server.
+   */
+  tunneled = false;
 
   get usable() {
     return this.socket != null && !this.socket.destroyed && this.socket.writable;
+  }
+
+  /** Whether it has started as many transactions as `maxMessages` allows. */
+  get exhausted() {
+    return this.messageCount >= this.config.maxMessages;
   }
 
   observeSocket(socket) {
@@ -414,6 +464,9 @@ class SmtpConnection {
    * this machine, where plain text is allowed for local development.
    */
   isLocal() {
+    // The peer of a tunnel is the proxy, often on this machine, while the
+    // server is wherever the host says.
+    if (this.tunneled) return isLoopbackHost(this.config.host);
     return isLoopbackConnection(this.socket, this.config.host);
   }
 
@@ -423,6 +476,7 @@ class SmtpConnection {
     }
 
     signal?.throwIfAborted();
+    if (this.config.connect != null) return this.connectThrough(signal);
 
     // Implicit TLS is established once its handshake completes, not when the
     // TCP connection opens, so the connection timeout covers the handshake.
@@ -432,7 +486,7 @@ class SmtpConnection {
       const timer = setTimeout(() => {
         onError(new TypeError('Connection timeout.'));
         this.socket?.destroy();
-      }, this.config.connectionTimeout);
+      }, timerMs(this.config.connectionTimeout));
 
       const cleanup = () => {
         clearTimeout(timer);
@@ -472,24 +526,8 @@ class SmtpConnection {
       };
 
       try {
-        if (this.config.secure) {
-          this.socket = tlsConnect({
-            host: this.config.host,
-            servername: serverNameOf(this.config.host),
-            port: this.config.port,
-            rejectUnauthorized: this.config.tls?.rejectUnauthorized ?? true,
-            ca: this.config.tls?.ca,
-            key: this.config.tls?.key,
-            cert: this.config.tls?.cert,
-            minVersion: this.config.tls?.minVersion,
-            maxVersion: this.config.tls?.maxVersion,
-          });
-        } else {
-          this.socket = new Socket();
-          this.socket.connect(this.config.port, this.config.host);
-        }
-
-        this.socket.setTimeout(this.config.socketTimeout);
+        this.socket = this.openSocket();
+        this.socket.setTimeout(timerMs(this.config.socketTimeout));
         this.observeSocket(this.socket);
         this.socket.once(establishedEvent, onConnect);
         this.socket.once('error', onError);
@@ -502,6 +540,94 @@ class SmtpConnection {
         this.socket?.destroy();
         reject(error);
       }
+    });
+  }
+
+  // A TCP socket to the server, or the TLS of `secure: true` on one.
+  openSocket() {
+    if (this.config.secure) {
+      return tlsConnect({
+        host: this.config.host,
+        servername: serverNameOf(this.config.host),
+        port: this.config.port,
+        localAddress: this.config.localAddress,
+        rejectUnauthorized: this.config.tls?.rejectUnauthorized ?? true,
+        ca: this.config.tls?.ca,
+        key: this.config.tls?.key,
+        cert: this.config.tls?.cert,
+        minVersion: this.config.tls?.minVersion,
+        maxVersion: this.config.tls?.maxVersion,
+      });
+    }
+    const socket = new Socket();
+    socket.connect({
+      port: this.config.port,
+      host: this.config.host,
+      localAddress: this.config.localAddress,
+    });
+    return socket;
+  }
+
+  /**
+   * Opens the connection through the `connect` of the caller, within the
+   * connection timeout, and over it the TLS of `secure: true`.
+   *
+   * @param signal Cancels the connection.
+   * @throws The reason of `signal`, a timeout, or what the connector throws.
+   */
+  async connectThrough(signal) {
+    const timeout = new AbortController();
+    const timer = setTimeout(
+      () => timeout.abort(new TypeError('Connection timeout.')),
+      timerMs(this.config.connectionTimeout),
+    );
+    const combined = signal == null ? timeout.signal : AbortSignal.any([timeout.signal, signal]);
+    let tunnel;
+    try {
+      tunnel = await this.config.connect({
+        host: this.config.host,
+        port: this.config.port,
+        localAddress: this.config.localAddress,
+        signal: combined,
+      });
+      if (
+        tunnel == null ||
+        typeof tunnel.write !== 'function' ||
+        typeof tunnel.setTimeout !== 'function'
+      ) {
+        throw new TypeError('connect must resolve to a connected net.Socket.');
+      }
+      combined.throwIfAborted();
+      this.tunneled = true;
+      this.socket = this.config.secure ? this.wrapInTls(tunnel) : tunnel;
+      this.socket.setTimeout(timerMs(this.config.socketTimeout));
+      this.observeSocket(this.socket);
+      if (this.config.secure) await secureConnectOf(this.socket, combined);
+      this.log.write(
+        'debug',
+        () => ({ port: this.config.port, secure: this.config.secure, tunneled: true }),
+        'SMTP connected',
+      );
+    } catch (error) {
+      tunnel?.destroy?.();
+      this.socket?.destroy();
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  wrapInTls(socket) {
+    return tlsConnect({
+      socket,
+      host: this.config.host,
+      servername: serverNameOf(this.config.host),
+      rejectUnauthorized: this.config.tls?.rejectUnauthorized ?? true,
+      ca: this.config.tls?.ca,
+      key: this.config.tls?.key,
+      cert: this.config.tls?.cert,
+      minVersion: this.config.tls?.minVersion,
+      maxVersion: this.config.tls?.maxVersion,
     });
   }
 
@@ -624,7 +750,7 @@ class SmtpConnection {
       const collector = createReplyCollector();
       const timer = setTimeout(() => {
         onError(new Error('Greeting timeout.'));
-      }, this.config.socketTimeout);
+      }, timerMs(this.config.socketTimeout));
 
       // Only complete lines count: a final line still waiting for its CRLF
       // could be cut short.
@@ -774,7 +900,7 @@ class SmtpConnection {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => fail(new Error('STARTTLS upgrade timeout.')),
-        this.config.connectionTimeout,
+        timerMs(this.config.connectionTimeout),
       );
       const cleanup = () => {
         clearTimeout(timer);
@@ -795,7 +921,7 @@ class SmtpConnection {
       const onClose = () => fail(new TypeError('SMTP connection closed during STARTTLS.'));
       const onSecureConnect = () => {
         cleanup();
-        tlsSocket.setTimeout(this.config.socketTimeout);
+        tlsSocket.setTimeout(timerMs(this.config.socketTimeout));
         this.log.write('debug', () => ({ protocol: tlsSocket.getProtocol() }), 'SMTP upgraded');
         resolve();
       };
@@ -1015,11 +1141,12 @@ class SmtpConnection {
   async sendMessage(message, signal) {
     this.active = true;
     this.socket?.setTimeout(0);
+    this.messageCount++;
     try {
       return await this.sendPreparedMessage(message, signal);
     } finally {
       this.active = false;
-      if (this.usable) this.socket?.setTimeout(this.config.socketTimeout);
+      if (this.usable) this.socket?.setTimeout(timerMs(this.config.socketTimeout));
     }
   }
 

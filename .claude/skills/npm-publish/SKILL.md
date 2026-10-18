@@ -30,18 +30,23 @@ pnpm install --frozen-lockfile   # install deps exactly as locked
 pnpm run lint                    # oxlint
 pnpm run format:check            # oxfmt
 pnpm run test:coverage           # tests under the c8 coverage gate
+pnpm run test:runtime            # tests/runtime: sockets, TLS, fetch and spawn, no mock
 pnpm run test:types              # tsd
 pnpm run check:dts               # tsc over the d.ts of every entry of the exports map
 pnpm size --check                # the budgets of scripts/size-budgets.json
 pnpm run check:pack              # the tarball: every file of the exports map, nothing else
 ```
 
-These are the same gates `prepublishOnly` runs. CI adds two more; run them too:
+These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
 
 ```bash
 pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md   # the table matches docs/comparison.json
 pnpm run docs:build                                              # the docs site; a dead link fails it
+pnpm run test:bun && pnpm run test:deno                          # the unit and runtime suites on Bun and Deno
 ```
+
+The last needs the versions of Bun and Deno that `.github/workflows/ci.yml` pins; without them
+installed, say so and rely on CI.
 
 Then in parallel: `pnpm outdated` and `pnpm audit` (report to user; devDependencies only, the package has no runtime dependencies).
 
@@ -183,10 +188,17 @@ Report the file count and the bundle size from `pnpm run size` to the user.
 Run the gates one more time after all edits:
 
 ```bash
-pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack && pnpm run docs:build
+pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:runtime && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack && pnpm run docs:build
 ```
 
 Must exit 0. If it fails, fix and re-run.
+
+Then ask the user whether to run the opt-in suites against the real services, which only they
+can: `pnpm test:e2e` with the sandbox credentials of the providers (each suite is skipped until
+its variables are set; `tests/e2e/providers.e2e.test.js` names those of the providers of 1.1),
+and `pnpm test:mailpit` against the local Mailpit. A release that changed a provider's mapping or
+its error handling should have run that provider's suite. Report which suites ran and which were
+skipped.
 
 ## Step 8: Summary & Next Steps
 

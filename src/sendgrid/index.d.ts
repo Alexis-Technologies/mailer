@@ -7,6 +7,7 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  VerifiableTransport,
 } from '../../index.js';
 
 /**
@@ -96,6 +97,12 @@ export interface SendGridConfig extends TransportDependencies {
    * @default false
    */
   readonly googleAnalytics?: boolean;
+  /**
+   * The clock, in milliseconds, for the 72 hours of `scheduledAt`.
+   *
+   * @default Date.now
+   */
+  readonly now?: () => number;
 }
 /**
  * Resolved SendGrid configuration with all optional fields filled with default values.
@@ -141,7 +148,9 @@ type ResolvedSendGridConfig = Required<Omit<SendGridConfig, keyof TransportDepen
  * }
  * ```
  */
-export declare class SendGridTransport implements Transport<'sendgrid'> {
+export declare class SendGridTransport
+  implements Transport<'sendgrid'>, VerifiableTransport<'sendgrid'>
+{
   readonly id = 'sendgrid';
   /**
    * The resolved SendGrid configuration used by this transport.
@@ -187,6 +196,11 @@ export declare class SendGridTransport implements Transport<'sendgrid'> {
    *          failure.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<'sendgrid'>>;
+  /**
+   * Verifies the API key with the scopes it has, and that one of them is
+   * `mail.send`.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends multiple email messages efficiently via SendGrid API.
    *

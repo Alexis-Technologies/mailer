@@ -487,6 +487,34 @@ export interface Message {
    * necessarily the scheduling semantics; see the transport's documentation.
    */
   readonly calendar?: CalendarContent;
+  /**
+   * When the provider should deliver the message.  A transport that cannot
+   * schedule it refuses the message with a non-retryable `unsupported`
+   * receipt rather than sending it at once, and `./pool` fails over to one
+   * that can.
+   */
+  readonly scheduledAt?: Date;
+  /**
+   * Open and click tracking for this message, over what the transport is
+   * configured with, where its provider takes it per message.
+   */
+  readonly tracking?: MessageTracking;
+  /**
+   * Values the provider keeps with the message and returns in its events
+   * (custom arguments, variables), where its provider takes them: at most 64
+   * keys of 1 to 128 of `[A-Za-z0-9_.-]`, each value at most 1024 characters
+   * with no control character.
+   */
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+/**
+ * Open and click tracking of a message.
+ */
+export interface MessageTracking {
+  /** Whether the provider tracks opens, with a pixel. */
+  readonly opens?: boolean;
+  /** Whether the provider tracks clicks, by rewriting links. */
+  readonly clicks?: boolean;
 }
 /**
  * Represents the content of an email message, which can be either HTML
@@ -595,6 +623,13 @@ export interface MessageConstructor {
    */
   readonly headers?: ImmutableHeaders | Record<string, string>;
   /**
+   * The List-* header fields of a mailing list or a newsletter (RFC 2369,
+   * RFC 2919), and one-click unsubscription (RFC 8058).  They are added to
+   * {@link Message.headers}, so every transport that sends custom header
+   * fields sends them; a field given here may not also be in `headers`.
+   */
+  readonly list?: ListFields;
+  /**
    * An idempotency key to ensure that the same message is not sent multiple
    * times.  This is useful for retrying failed send operations without
    * risking duplicate delivery.
@@ -645,6 +680,75 @@ export interface MessageConstructor {
    * than overriding it.  Line endings are normalized to CRLF.
    */
   readonly calendar?: CalendarConstructor;
+  /**
+   * When the provider should deliver the message.  A transport that cannot
+   * schedule it (SMTP, JMAP, and every provider without a scheduling API)
+   * refuses the message with a non-retryable `unsupported` receipt rather
+   * than sending it at once, and `./pool` fails over to one that can.
+   */
+  readonly scheduledAt?: Date;
+  /**
+   * Open and click tracking for this message, over what the transport is
+   * configured with, where its provider takes it per message.  SMTP and JMAP
+   * ignore it.
+   */
+  readonly tracking?: MessageTracking;
+  /**
+   * Values the provider keeps with the message and returns in its events.
+   * A key is 1 to 128 letters, digits, `_`, `-` or `.`, as it may become the
+   * name of a header or form field; a value is a string without control
+   * characters.  SMTP and JMAP ignore it.
+   */
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+/**
+ * A URL of a List-* field: an `http:`, `https:` or `mailto:` URL, or a bare
+ * address for a `mailto:` one, with an optional comment of printable ASCII.
+ */
+export type ListUrl = string | { readonly url: string; readonly comment?: string };
+/**
+ * The List-* header fields of a message.
+ *
+ * @example
+ * ```js
+ * createMessage({
+ *   // ...
+ *   list: {
+ *     id: { id: 'news.example.com', name: 'Weekly News' },
+ *     unsubscribe: ['https://example.com/unsubscribe?u=42', 'unsubscribe@example.com'],
+ *     oneClick: true,
+ *   },
+ * });
+ * ```
+ */
+export interface ListFields {
+  /**
+   * `List-Id` (RFC 2919): a dot-atom with a namespace, such as
+   * `news.example.com`, with an optional name of printable ASCII.
+   */
+  readonly id?: string | { readonly id: string; readonly name?: string };
+  /** `List-Help`. */
+  readonly help?: ListUrl | readonly ListUrl[];
+  /** `List-Unsubscribe`: one field, its URLs separated by commas. */
+  readonly unsubscribe?: ListUrl | readonly ListUrl[];
+  /** `List-Subscribe`. */
+  readonly subscribe?: ListUrl | readonly ListUrl[];
+  /** `List-Post`. */
+  readonly post?: ListUrl | readonly ListUrl[];
+  /** `List-Owner`. */
+  readonly owner?: ListUrl | readonly ListUrl[];
+  /** `List-Archive`. */
+  readonly archive?: ListUrl | readonly ListUrl[];
+  /**
+   * Adds `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058),
+   * which tells a mailbox provider that a POST to the https URL of
+   * `unsubscribe` unsubscribes at once, without a page to confirm.  Gmail and
+   * Yahoo ask bulk senders for it.  Set it only when that endpoint does so;
+   * it needs an https URL in `unsubscribe`.  The DKIM signature of `./mime`
+   * and `./smtp` covers both fields by default.
+   * @default false
+   */
+  readonly oneClick?: boolean;
 }
 /**
  * Creates a new email {@link Message} based on the provided constructor
@@ -892,6 +996,13 @@ export declare function comparePriority(a: Priority, b: Priority): number;
 
 /**
  * A machine-readable category for an email delivery failure.
+ *
+ * `validation` and `rejected` say that the message itself was refused: no
+ * transport would take it, so `./pool` stops failing over.  `unsupported`
+ * says that this transport cannot send the message as it is, a field it
+ * cannot express (`scheduledAt`, a second tag) or a limit of its provider
+ * (recipients, attachments): another transport may, so `./pool` fails over
+ * with it.  Neither is retried.
  */
 export type ReceiptErrorCategory =
   | 'auth'
@@ -900,6 +1011,7 @@ export type ReceiptErrorCategory =
   | 'timeout'
   | 'validation'
   | 'rejected'
+  | 'unsupported'
   | 'server-error'
   | 'service-unavailable'
   | 'configuration'
@@ -1162,7 +1274,8 @@ export interface TransportOptions {
    * provider that retries its own requests (`retries`), and by the `./retry`
    * decorator.  The decorators pass it on to the transport they wrap, so one
    * callback hears the retries of every level.  An error it throws rejects
-   * the send.  The JMAP transport does not call it yet.
+   * the send.  The JMAP transport calls it for the reads it retries, such as
+   * its discovery; it never sends a submission again.
    */
   readonly onRetry?: (event: RetryEvent) => void;
 }
@@ -1184,6 +1297,92 @@ export interface RetryEvent {
    * first `ReceiptError` of the receipt it returned.
    */
   readonly error: unknown;
+}
+/**
+ * What a provider says happened to a message, as `./webhooks` reads it from
+ * its events: `accepted` by the provider, `delivered` to the recipient's
+ * server, `deferred` while it retries, `bounced`, `rejected` without an attempt
+ * (a suppressed address, a refused message), `complained` as spam,
+ * `unsubscribed`, `opened` and `clicked`; `unknown` for an event the model
+ * has no name for, kept with its `raw` record.
+ */
+export type DeliveryEventType =
+  | 'accepted'
+  | 'delivered'
+  | 'deferred'
+  | 'bounced'
+  | 'complained'
+  | 'rejected'
+  | 'opened'
+  | 'clicked'
+  | 'unsubscribed'
+  | 'unknown';
+/**
+ * How a recipient bounced: `hard` for good (an address that does not exist),
+ * `soft` for now (a full mailbox), `undetermined` when the provider does not
+ * say.
+ */
+export interface DeliveryBounce {
+  readonly kind: 'hard' | 'soft' | 'undetermined';
+  /** The status the provider gives, such as `5.1.1` or `550`. */
+  readonly code?: string;
+  /** The reply of the recipient's server, or the provider's description. */
+  readonly diagnostic?: string;
+}
+/**
+ * One event of one message for one recipient, from a provider's webhook.
+ * An event of several recipients is as many events.
+ */
+export interface DeliveryEvent<TProviderId extends string = string> {
+  /** The provider that told it. */
+  readonly provider: TProviderId;
+  /** What happened. */
+  readonly type: DeliveryEventType;
+  /**
+   * The id of the event, the same each time the provider sends it again:
+   * the provider's own, with the place of the recipient when one event
+   * holds several.
+   */
+  readonly id: string;
+  /**
+   * The provider's id of the message, the `messageId` of its receipt, so an
+   * event finds the send it belongs to.
+   */
+  readonly messageId?: string;
+  /**
+   * The Message-ID of the message as the provider reports it, when the event
+   * carries it (SES, SendGrid, Mailgun, MailerSend, SMTP2GO, Scaleway).  The
+   * HTTP APIs write a Message-ID of their own, so it is not the one a
+   * message was given; to find the events of a message, use
+   * `correlationId`.
+   */
+  readonly rfcMessageId?: string;
+  /**
+   * The `correlationId` of the message's `metadata`, which the providers
+   * that keep metadata (all but Azure) give back with its events: what a
+   * receipt of unknown delivery, which has no `messageId` of the provider,
+   * finds its events by.
+   */
+  readonly correlationId?: string;
+  /**
+   * The recipient, when the event names one, its domain in lower case so
+   * that an address reads the same in the events of every provider.
+   */
+  readonly recipient?: string;
+  /** When it happened, as the provider tells it. */
+  readonly occurredAt?: Date;
+  /** How the recipient bounced, for `bounced` and for a `deferred` bounce. */
+  readonly bounce?: DeliveryBounce;
+  /** Why, for a rejection, a deferral or a bounce, as the provider words it. */
+  readonly reason?: string;
+  /** The link of a click. */
+  readonly url?: string;
+  /** The tags of the message, as the transport sent them. */
+  readonly tags: readonly string[];
+  /** The metadata of the message, as the transport sent it. */
+  readonly metadata: Readonly<Record<string, string>>;
+  /** The provider's record the event was read from. */
+  readonly raw: unknown;
 }
 /**
  * Optional capability for delivering already serialized MIME messages.

@@ -2,6 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const { checkValidateSsl } = require('../internal/validate-ssl.js');
 
 /**
@@ -32,6 +33,7 @@ const createSendGridConfig = (config) => {
     openTracking: config.openTracking ?? true,
     subscriptionTracking: config.subscriptionTracking ?? false,
     googleAnalytics: config.googleAnalytics ?? false,
+    now: checkOptionalFunction(config.now, 'now') ?? Date.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
   checkConcurrency(resolved.concurrency);

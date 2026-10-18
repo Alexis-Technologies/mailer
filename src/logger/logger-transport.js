@@ -5,8 +5,15 @@
 const { inspect } = require('node:util');
 const { generateId } = require('../core/id.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
+const { warnLimited } = require('../internal/warn.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
+const { isRawTransport } = require('../core/transport.js');
+const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
+
+// A raw message has its envelope where a message has its recipients.
+const isRawMessage = (message) => message.envelope != null && message.recipients == null;
 
 /**
  * Transport that records email delivery lifecycle events through a logger the
@@ -57,6 +64,32 @@ class LoggerTransport {
    */
   send(message, options) {
     return this.sendOne(message, options, 'send');
+  }
+
+  /**
+   * Sends serialized MIME through the wrapped transport while recording its
+   * lifecycle, the envelope standing for the message.  A wrapped transport
+   * without `sendRaw()` gives a failed receipt of the category
+   * `configuration`, logged as a failure.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options, including cancellation.
+   * @returns The receipt.
+   */
+  sendRaw(message, options) {
+    return this.sendOne(message, options, 'sendRaw', (raw, sendOptions) =>
+      isRawTransport(this.wrappedTransport)
+        ? this.wrappedTransport.sendRaw(raw, sendOptions)
+        : refuseRaw(this.wrappedTransport),
+    );
+  }
+
+  /**
+   * Verifies the wrapped transport, which has nothing to check when it is
+   * absent or cannot verify.
+   */
+  verify(options) {
+    return verifyWrapped(this.wrappedTransport, options);
   }
 
   /**
@@ -114,20 +147,15 @@ class LoggerTransport {
    * management.
    */
   async [Symbol.asyncDispose]() {
-    const transport = this.wrappedTransport;
-    if (transport == null) return;
-
-    if (isAsyncDisposable(transport)) {
-      await transport[Symbol.asyncDispose]();
-      return;
-    }
-
-    if (isDisposable(transport)) {
-      transport[Symbol.dispose]();
-    }
+    await disposeOf(this.wrappedTransport);
   }
 
-  async sendOne(message, options, operation) {
+  async sendOne(
+    message,
+    options,
+    operation,
+    deliver = (sent, sendOptions) => this.wrappedTransport.send(sent, sendOptions),
+  ) {
     options?.signal?.throwIfAborted();
     const startedAt = performance.now();
     this.logSending(message, operation);
@@ -136,10 +164,7 @@ class LoggerTransport {
       const receipt =
         this.wrappedTransport == null
           ? this.createSyntheticReceipt()
-          : await this.wrappedTransport.send(
-              message,
-              this.withRetryLogging(options, message, operation),
-            );
+          : await deliver(message, this.withRetryLogging(options, message, operation));
       this.logReceipt(receipt, { message, startedAt }, operation);
       return receipt;
     } catch (error) {
@@ -245,6 +270,8 @@ class LoggerTransport {
         errorMessages: failure.errorMessages,
         errors: failure.errors,
         retryable: failure.retryable,
+        // The provider may have taken it: to reconcile, not to send again.
+        ...(failure.deliveryUnknown === true && { deliveryUnknown: true }),
         provider: failure.provider ?? this.id,
         attempts: failure.attempts,
         receipt: failure,
@@ -293,6 +320,12 @@ class LoggerTransport {
   }
 
   getMessageProperties(message) {
+    if (isRawMessage(message)) {
+      return {
+        recipientCount: message.envelope.to.length,
+        ...(this.config.recordMessage === false ? {} : { envelope: message.envelope }),
+      };
+    }
     return {
       recipientCount: message.recipients.length,
       ccRecipientCount: message.ccRecipients.length,
@@ -307,7 +340,7 @@ class LoggerTransport {
   // placeholders of a template; a pino-like logger does not, so the text is
   // built here.
   getMessageText(lifecycleMessage, message) {
-    if (this.config.recordMessage !== 'inline' || message == null) {
+    if (this.config.recordMessage !== 'inline' || message == null || isRawMessage(message)) {
       return lifecycleMessage;
     }
 
@@ -326,9 +359,10 @@ class LoggerTransport {
     try {
       this.logger[level](properties, message);
     } catch (error) {
-      process.emitWarning(`The logger of LoggerTransport threw: ${describe(error)}`, {
-        code: 'MAILER_LOGGER_FAILED',
-      });
+      warnLimited(
+        'MAILER_LOGGER_FAILED',
+        `The logger of LoggerTransport threw: ${redactAddresses(describe(error))}`,
+      );
     }
   }
 }
@@ -351,14 +385,6 @@ const redactFailure = (receipt) => {
     }
   }
   return { ...receipt, errorMessages, errors };
-};
-
-const isAsyncDisposable = (value) => {
-  return Symbol.asyncDispose in value && typeof value[Symbol.asyncDispose] === 'function';
-};
-
-const isDisposable = (value) => {
-  return Symbol.dispose in value && typeof value[Symbol.dispose] === 'function';
 };
 
 // What LogTape rendered for {error}: an Error as "TypeError: message", any

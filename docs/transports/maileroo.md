@@ -91,6 +91,12 @@ await transport.send(message);
 `Message.tags` values are added as generated Maileroo tag keys such as `tag1`
 and `tag2`, alongside any default tags configured on the transport.
 
+A message's `metadata` goes in the tags too, its keys over those of the
+transport; a key may not be `tag1`, `tag2`… and a value has at most 768
+characters. Maileroo has one switch for open and click tracking: a message's
+`tracking` sets it over the transport's `tracking`, and one that asks for opens
+without clicks, or the reverse, is refused. `scheduledAt` is `scheduled_at`.
+
 ## Sending multiple emails
 
 The `sendMany()` method sends messages through the single-message Maileroo
@@ -227,3 +233,10 @@ const receipt = await transport.send(message, {
   signal: controller.signal,
 });
 ```
+
+## Verification
+
+This transport has no `verify()`: Maileroo offers no request that checks a sending
+key without sending a message.  `isVerifiableTransport()` is `false` for it, and
+`./pool`, `./retry`, `./otel` and `./logger` have nothing to check when they wrap
+it.

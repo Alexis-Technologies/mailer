@@ -9,9 +9,12 @@ import type {
   Logger,
   LoggerLevel,
   Message,
+  RawMessage,
+  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
+  VerifiableTransport,
 } from '../../index.js';
 
 // The logger types are those of the root entry, shared by every transport;
@@ -131,7 +134,7 @@ type LoggerTransportConstructorArguments<TProviderId extends string> = [TProvide
  *                        `"logger"` in log-only mode.
  */
 export declare class LoggerTransport<TProviderId extends string = 'logger'>
-  implements Transport<TProviderId>, AsyncDisposable
+  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
 {
   /** Provider id used by receipts from this transport. */
   readonly id: TProviderId;
@@ -157,6 +160,16 @@ export declare class LoggerTransport<TProviderId extends string = 'logger'>
    * @throws {Error} If the wrapped transport throws an error.
    */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Sends serialized MIME through the wrapped transport, its lifecycle logged with the envelope for the message.  A wrapped
+   * transport without `sendRaw()` gives a failed receipt of the category
+   * `configuration`.
+   */
+  sendRaw(message: RawMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  /**
+   * Verifies the wrapped transport; it has nothing to check when there is none or it cannot verify.
+   */
+  verify(options?: TransportOptions): Promise<void>;
   /**
    * Sends multiple emails while recording each delivery lifecycle.
    *

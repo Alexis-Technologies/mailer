@@ -34,10 +34,18 @@ const CANONICALIZATIONS = new Set([
   'simple/simple',
 ]);
 
+// domainToASCII is a WHATWG host parser: it removes tabs, CR and LF before
+// it reads a name, cuts it at "/", "?" or "#" and percent-decodes it, so
+// "exa\r\nmple.com" came back as the valid "example.com" while the name,
+// line break and all, went into the DKIM-Signature field as given.
+// oxlint-disable-next-line no-control-regex -- the controls are what it finds
+const URL_PARSER_UNSAFE = /[/\\?#%\x00-\x20\x7f]/;
+
 const isDomainName = (value) => {
   if (typeof value !== 'string' || value.length === 0) return false;
+  if (URL_PARSER_UNSAFE.test(value)) return false;
   // domainToASCII gives '' for a name it cannot convert, such as one with a
-  // space, a semicolon or a line break.
+  // semicolon.
   const ascii = domainToASCII(value);
   if (ascii.length === 0 || ascii.length > 253) return false;
   for (const label of ascii.split('.')) {
@@ -79,7 +87,8 @@ const refuse = (what, value) => {
 /**
  * Default header fields to sign if not specified: those a reader trusts or a
  * client renders, present or not, since a field absent when signed cannot be
- * added afterwards without breaking the signature.  From, Reply-To and
+ * added afterwards without breaking the signature.  The two of one-click
+ * unsubscription are among them, as RFC 8058 §4 asks.  From, Reply-To and
  * Subject are listed once more than they can appear, so that a second
  * instance cannot be added either (over-signing, RFC 6376 §8.15).
  */
@@ -98,6 +107,8 @@ const DEFAULT_SIGNED_HEADERS = [
   'references',
   'mime-version',
   'content-type',
+  'list-unsubscribe',
+  'list-unsubscribe-post',
 ];
 
 /**

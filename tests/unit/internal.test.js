@@ -7,7 +7,8 @@ const fetchFailed = (code) =>
   new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
 
 test('Internal: a request whose connection was never made was not sent', () => {
-  for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'CERT_HAS_EXPIRED']) {
+  const codes = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'CERT_HAS_EXPIRED'];
+  for (const code of [...codes, 'UNABLE_TO_VERIFY_LEAF_SIGNATURE']) {
     assert.strictEqual(isUnsentRequestError(fetchFailed(code)), true, code);
   }
   const wrapped = new Error('JMAP request failed', { cause: fetchFailed('ECONNREFUSED') });
@@ -544,4 +545,146 @@ test('Internal: every provider that took validateSsl refuses false', () => {
     assert.ok(new Transport({ ...config, validateSsl: true }));
     assert.ok(new Transport(config));
   }
+});
+
+test('Config: a clock that is not a function is refused where a provider takes one', () => {
+  // Before: azure, sendgrid, mailersend and smtp2go took any `now`, and
+  // failed at the first send that read it.
+  const { AzureTransport } = require('../../src/azure/index.js');
+  const { MailerSendTransport } = require('../../src/mailersend/index.js');
+  const { SendGridTransport } = require('../../src/sendgrid/index.js');
+  const { Smtp2goTransport } = require('../../src/smtp2go/index.js');
+  const key = Buffer.from('k').toString('base64');
+  const makers = [
+    () =>
+      new AzureTransport({ endpoint: 'https://a.communication.azure.com', accessKey: key, now: 1 }),
+    () => new MailerSendTransport({ apiKey: 'k', now: 1 }),
+    () => new SendGridTransport({ apiKey: 'k', now: 1 }),
+    () => new Smtp2goTransport({ apiKey: 'k', now: 1 }),
+  ];
+  for (const make of makers) assert.throws(make, /now must be a function/);
+});
+
+test('Decorators: pool and retry keep their loops to themselves', () => {
+  const { PoolTransport } = require('../../src/pool/index.js');
+  const { RetryTransport } = require('../../src/retry/index.js');
+  const inner = { id: 'x', send: async () => ({ successful: true, messageId: 'm' }) };
+  assert.strictEqual(
+    'deliver' in new PoolTransport({ strategy: 'priority', transports: [{ transport: inner }] }),
+    false,
+  );
+  assert.strictEqual('withRetries' in new RetryTransport(inner), false);
+});
+
+test('Internal: a timeout past what a timer keeps is a long one, not one of 1 ms', async (t) => {
+  // Before: a timeout over 2^31 - 1 ms went to setTimeout as it was, which
+  // fires such a delay at once, so every request of a provider with
+  // timeout: 3e9 timed out, and AbortSignal.timeout past 2^32 - 1 threw.
+  const { timerMs } = require('../../src/internal/sleep.js');
+  assert.strictEqual(timerMs(1000), 1000);
+  assert.strictEqual(timerMs(0), 0);
+  assert.strictEqual(timerMs(3e9), 2_147_483_647);
+  assert.strictEqual(timerMs(Number.POSITIVE_INFINITY), 2_147_483_647);
+  const { createMessage } = require('../../index.js');
+  const { PostmarkTransport } = require('../../src/postmark/index.js');
+  t.mock.method(globalThis, 'fetch', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return Response.json({ MessageID: 'pm-1', ErrorCode: 0 });
+  });
+  const postmark = new PostmarkTransport({ serverToken: 'token', timeout: 3e9, retries: 0 });
+  const receipt = await postmark.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  );
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join());
+  const { TeeTransport } = require('../../src/tee/index.js');
+  const { fakeTransport, sent } = require('../helpers/decorators/fake.js');
+  const outcomes = [];
+  const tee = new TeeTransport(fakeTransport(), {
+    mirrors: [fakeTransport(async () => sent('m'))],
+    timeout: 5e9,
+    awaitMirrors: true,
+    onMirror: (outcome) => outcomes.push(outcome.receipt?.successful ?? outcome.error?.message),
+  });
+  await tee.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  );
+  assert.deepStrictEqual(outcomes, [true]);
+});
+
+test('Internal: a logger that throws is told once, by its name, not its text', (t) => {
+  // Before: every record a broken logger threw on was a process warning, with
+  // its error text as it was, such as the recipient it failed to write.
+  const { createLog } = require('../../src/internal/log.js');
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push([options.code, text]));
+  const log = createLog(
+    {
+      info: () => {
+        throw new Error('cannot write bob@example.com');
+      },
+    },
+    {},
+  );
+  for (let i = 0; i < 25; i++) log.write('info', {}, 'x');
+  assert.strictEqual(warnings.length, 1);
+  assert.strictEqual(warnings[0][0], 'MAILER_LOGGER_FAILED');
+  assert.match(warnings[0][1], /threw Error; its later failures are not told/);
+  assert.doesNotMatch(warnings[0][1], /bob@example\.com/);
+});
+
+test('Receipts: every failed receipt the library makes names its category, or its status', () => {
+  // Before: receipts of the library's own conditions (an answer without an
+  // id, a repeat, a failure of the decorators) had none, and were classified
+  // by the words of their text, which can hold the caller's data: the key
+  // `order-timeout-1` made a receipt of ./idempotency a timeout.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '../../src');
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.js')) files.push(full);
+    }
+  };
+  walk(root);
+  const unnamed = [];
+  for (const file of files) {
+    if (file.endsWith(path.join('core', 'receipt.js'))) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    let at = text.indexOf('createFailedReceipt(');
+    while (at !== -1) {
+      // The text of the call, to its closing parenthesis.
+      let depth = 0;
+      let end = at + 'createFailedReceipt'.length;
+      for (; end < text.length; end++) {
+        if (text[end] === '(') depth++;
+        else if (text[end] === ')' && --depth === 0) break;
+      }
+      const call = text.slice(at, end + 1);
+      // A category, a status it is told by, options spread that carry one, or
+      // the structured errors of other transports, which carry theirs.
+      if (
+        !/\bcategory\b|\bstatusCode\b|\.\.\.|\berrors\b|^createFailedReceipt\(receiptError/.test(
+          call,
+        )
+      ) {
+        const line = text.slice(0, at).split('\n').length;
+        unnamed.push(`${path.relative(root, file)}:${line}`);
+      }
+      at = text.indexOf('createFailedReceipt(', end);
+    }
+  }
+  assert.deepStrictEqual(unnamed, []);
 });

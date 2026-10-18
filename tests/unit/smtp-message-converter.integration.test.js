@@ -8,6 +8,22 @@ const { describe, test } = require('node:test');
 // a message), is a test helper now.
 const { convertMessage } = require('../helpers/smtp/convert-message.js');
 
+// Changed in the port: the transfer encoding of a text body is chosen by its
+// content, as nodemailer chooses it, so the tests of a body read it decoded.
+const encodingOf = (raw) => /Content-Transfer-Encoding: (\S+)/.exec(raw)[1];
+const bodyOf = (raw) => {
+  const body = raw.slice(raw.indexOf('\r\n\r\n') + 4);
+  const encoding = encodingOf(raw);
+  if (encoding === 'base64') {
+    return Buffer.from(body.replace(/\r\n/g, ''), 'base64').toString('utf8');
+  }
+  if (encoding !== 'quoted-printable') return body;
+  const bytes = body
+    .replace(/=\r\n/g, '')
+    .replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  return Buffer.from(bytes, 'latin1').toString('utf8');
+};
+
 describe('Message Converter Integration Tests', () => {
   const createTestMessage = (overrides = {}) => ({
     sender: { name: 'John Doe', address: 'john@example.com' },
@@ -117,7 +133,8 @@ describe('Message Converter Integration Tests', () => {
       const result = await convertMessage(message);
 
       assert.ok(result.raw.includes('Content-Type: text/html; charset=utf-8'));
-      assert.ok(result.raw.includes('Content-Transfer-Encoding: quoted-printable'));
+      // Changed in the port: short ASCII goes 7bit.
+      assert.ok(result.raw.includes('Content-Transfer-Encoding: 7bit'));
       assert.ok(result.raw.includes('<h1>Hello</h1><p>World!</p>'));
       assert.ok(!result.raw.includes('multipart'));
     });
@@ -279,7 +296,10 @@ describe('Message Converter Integration Tests', () => {
 
       assert.equal(sender.requiresSmtpUtf8, true);
       assert.equal(recipient.requiresSmtpUtf8, true);
-      assert.equal(replyTo.requiresSmtpUtf8, true);
+      // Changed in the port: a domain beyond ASCII under an ASCII local part
+      // goes as its A-label, which needs no SMTPUTF8.
+      assert.equal(replyTo.requiresSmtpUtf8, false);
+      assert.ok(replyTo.raw.includes('Reply-To: support@xn--r8jz45g.xn--zckzah'));
       assert.ok(sender.raw.includes('From: josé@example.com'));
     });
 
@@ -458,9 +478,10 @@ describe('Message Converter Integration Tests', () => {
       const result = await convertMessage(message);
 
       // Should include all custom headers without encoding (ASCII only)
-      assert.ok(result.raw.includes('x-custom-header: Custom Value'));
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
-      assert.ok(result.raw.includes('x-custom-info: ASCII Info'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Custom-Header: Custom Value'));
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
+      assert.ok(result.raw.includes('X-Custom-Info: ASCII Info'));
     });
 
     test('should preserve long structured ASCII header values', async () => {
@@ -538,13 +559,16 @@ describe('Message Converter Integration Tests', () => {
     });
 
     test('should handle special characters in quoted-printable', async () => {
+      // Changed in the port: 'End=' alone goes 7bit; a Latin text beyond
+      // ASCII goes quoted-printable.
       const message = createTestMessage({
-        content: { text: 'End=' },
+        content: { text: 'Café End=' },
       });
 
       const result = await convertMessage(message);
 
       // Should escape equals at end of line
+      assert.equal(encodingOf(result.raw), 'quoted-printable');
       assert.ok(result.raw.includes('=3D')); // Escaped equals
     });
 
@@ -555,11 +579,9 @@ describe('Message Converter Integration Tests', () => {
 
       const result = await convertMessage(message);
 
-      assert.ok(result.raw.includes('Content-Transfer-Encoding: quoted-printable'));
-
-      // Should encode Korean characters as UTF-8 quoted-printable
-      // 안녕하세요! = EC=95=88=EB=85=95=ED=95=98=EC=84=B8=EC=9A=94!
-      assert.ok(result.raw.includes('=EC=95=88=EB=85=95=ED=95=98=EC=84=B8=EC=9A=94!'));
+      // Changed in the port: text with more Hangul than Latin goes Base64.
+      assert.ok(result.raw.includes('Content-Transfer-Encoding: base64'));
+      assert.equal(bodyOf(result.raw), '안녕하세요! 이것은 한국어 테스트입니다.');
     });
 
     test('should handle mixed ASCII and CJK characters', async () => {
@@ -587,11 +609,11 @@ describe('Message Converter Integration Tests', () => {
 
       const result = await convertMessage(message);
 
-      // Should contain soft line breaks for long lines
-      assert.ok(result.raw.includes('=\r\n'));
-
-      // Should properly encode Korean characters
-      assert.ok(result.raw.includes('=EC=9D=B4=EA=B2=83=EC=9D=80')); // 이것은
+      // Changed in the port: Base64, wrapped at 76 columns.
+      assert.equal(encodingOf(result.raw), 'base64');
+      const lines = result.raw.slice(result.raw.indexOf('\r\n\r\n') + 4).split('\r\n');
+      assert.ok(lines.every((line) => line.length <= 76));
+      assert.equal(bodyOf(result.raw), longKoreanText);
     });
 
     test('should handle Japanese and Chinese characters', async () => {
@@ -601,15 +623,9 @@ describe('Message Converter Integration Tests', () => {
 
       const result = await convertMessage(message);
 
-      // Should encode Japanese hiragana (こんにちは)
-      assert.ok(result.raw.includes('=E3=81=93=E3=82=93=E3=81=AB=E3=81=A1=E3=81=AF'));
-
-      // Should encode Chinese characters (你好)
-      assert.ok(result.raw.includes('=E4=BD=A0=E5=A5=BD'));
-
-      // Should encode Korean characters (안녕하세요) - may be split across lines due to line length
-      const rawWithoutLineBreaks = result.raw.replace(/=\r\n/g, '');
-      assert.ok(rawWithoutLineBreaks.includes('=EC=95=88=EB=85=95=ED=95=98=EC=84=B8=EC=9A=94'));
+      // Changed in the port: Base64 rather than quoted-printable.
+      assert.equal(encodingOf(result.raw), 'base64');
+      assert.equal(bodyOf(result.raw), 'こんにちは 你好 안녕하세요');
     });
 
     test('should handle emoji and special Unicode characters', async () => {
@@ -619,10 +635,9 @@ describe('Message Converter Integration Tests', () => {
 
       const result = await convertMessage(message);
 
-      // Should encode emoji properly
-      assert.ok(result.raw.includes('=F0=9F=91=8B')); // 👋
-      assert.ok(result.raw.includes('=F0=9F=8C=8D')); // 🌍
-      assert.ok(result.raw.includes('=F0=9F=92=AC')); // 💬
+      // Changed in the port: Base64 rather than quoted-printable.
+      assert.equal(encodingOf(result.raw), 'base64');
+      assert.equal(bodyOf(result.raw), 'Hello 👋 世界 🌍 한국어 💬');
     });
 
     test('should handle line breaks with CJK characters', async () => {
@@ -632,14 +647,10 @@ describe('Message Converter Integration Tests', () => {
 
       const result = await convertMessage(message);
 
-      // Should preserve line breaks
-      assert.ok(result.raw.includes('\n'));
-      assert.ok(result.raw.includes('\r\n'));
-
-      // Should encode Korean characters properly
-      assert.ok(result.raw.includes('=EC=B2=AB')); // 첫
-      assert.ok(result.raw.includes('=EB=91=90')); // 두
-      assert.ok(result.raw.includes('=EC=84=B8')); // 세
+      // Changed in the port: the bare LF becomes CRLF, the canonical line
+      // break of a text body, and the text goes Base64.
+      assert.equal(encodingOf(result.raw), 'base64');
+      assert.equal(bodyOf(result.raw), '첫 번째 줄\r\n두 번째 줄\r\n세 번째 줄');
     });
   });
 
@@ -686,9 +697,10 @@ describe('Message Converter Integration Tests', () => {
       const message = createTestMessage({ headers });
       const result = await convertMessage(message);
 
-      assert.ok(result.raw.includes('x-custom-header: Custom Value'));
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
-      assert.ok(result.raw.includes('x-ascii-header: ASCII Value'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Custom-Header: Custom Value'));
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
+      assert.ok(result.raw.includes('X-Ascii-Header: ASCII Value'));
     });
 
     test('should handle reply-to addresses', async () => {
@@ -793,9 +805,8 @@ describe('Message Converter Integration Tests', () => {
       assert.deepStrictEqual(occurrences(result.raw, 'Content-Type'), [
         'text/plain; charset=utf-8',
       ]);
-      assert.deepStrictEqual(occurrences(result.raw, 'Content-Transfer-Encoding'), [
-        'quoted-printable',
-      ]);
+      // Changed in the port: short ASCII goes 7bit.
+      assert.deepStrictEqual(occurrences(result.raw, 'Content-Transfer-Encoding'), ['7bit']);
     });
 
     test('should keep the real Content-Type first in multipart messages', async () => {
@@ -883,7 +894,8 @@ describe('Message Converter Integration Tests', () => {
       });
       const result = await convertMessage(createTestMessage({ headers }));
 
-      assert.ok(result.raw.includes('x-mailer: Test Mailer'));
+      // Changed in the port: a custom field name is written capitalized, as nodemailer writes it.
+      assert.ok(result.raw.includes('X-Mailer: Test Mailer'));
       assert.ok(result.raw.includes('In-Reply-To: <788@example.com>'));
     });
   });

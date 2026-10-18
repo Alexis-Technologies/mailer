@@ -141,6 +141,19 @@ while `SmtpConfig.secure` determines whether to use implicit TLS and
 `SmtpConfig.requireTls` makes a STARTTLS upgrade mandatory for plaintext
 connections.  Connection and socket timeouts prevent hanging connections, and
 the `SmtpConfig.localName` identifies your server during the SMTP handshake.
+Without one, EHLO gives the host name of this machine when it is a fully
+qualified domain name, its address as an address literal, or `[127.0.0.1]`, as
+nodemailer does; a server that checks the name, such as Postfix with
+`reject_non_fqdn_helo_hostname`, refuses `localhost`.  A name with whitespace or
+a control character is refused when the transport is made.
+
+The server writes the EHLO name into the `Received` field it adds to each
+message, which every recipient can read, so the default tells them the host
+name of the machine that sent it, an internal one such as
+`ip-10-0-1-5.ec2.internal` included.  Set `localName` to the public name of
+the sending host (one whose address resolves back to it) wherever the machine's
+own name should stay private.
+
 Connection pooling improves performance by reusing connections across multiple
 messages.
 
@@ -164,6 +177,11 @@ the process alive, so a script that sends a message and returns can exit
 without `closeAllConnections()`, though closing still ends the session politely
 with QUIT.
 
+A connection sends `maxMessages` messages (100 by default, as nodemailer's pool),
+then it is closed with QUIT and the next message opens a new one, within a
+`sendMany()` batch too: servers limit the messages of one connection and answer
+the next with an error.  Pass `Infinity` to keep a connection for good.
+
 > [!NOTE]
 > Because a `SmtpTransport.sendMany()` call holds its connection until the
 > iteration ends, running more concurrent `SmtpTransport.sendMany()` calls than
@@ -178,6 +196,63 @@ without one, and the message ID of a receipt the server named none for (see
 [Identifiers of your own](/messages/compose#identifiers-of-your-own)). `fetch`
 is used for the token refresh of OAuth 2.0, in place of the global one, such as
 one bound to an undici `Agent` or a proxy.
+
+### Proxies and connections of your own
+
+`connect` opens each connection in place of a TCP connection to `host` and
+`port`, as nodemailer's `getSocket` does: through a proxy, a tunnel, or a socket
+from another module.  `createHttpProxyConnector()` makes one for an HTTP or HTTPS
+proxy that accepts `CONNECT`:
+
+```js
+const { SmtpTransport, createHttpProxyConnector } = require('@alexify/mailer/smtp');
+
+const transport = new SmtpTransport({
+  host: 'smtp.example.com',
+  port: 465,
+  auth: { user: 'user@example.com', pass: 'secret' },
+  connect: createHttpProxyConnector({
+    url: 'https://proxy-user:proxy-pass@proxy.internal:3129',
+    tls: { ca: [proxyCa] },
+  }),
+});
+```
+
+The credentials of the proxy URL go as Basic authentication, as UTF-8, which is
+the password itself: they go to an `http://` proxy only on this machine, and to
+another only with `allowPlaintextCredentials: true`, for a network where that is
+accepted. `headers` adds fields to each CONNECT request, and `timeout` bounds the
+whole exchange, from the connection to the answer (30 s).  A
+SOCKS proxy is a module of your own in `connect`, which receives `{ host, port,
+localAddress, signal }` and resolves to a connected `net.Socket`, paused or with
+nothing read from it yet:
+
+```js
+const { SocksClient } = require('socks');
+
+const transport = new SmtpTransport({
+  host: 'smtp.example.com',
+  port: 587,
+  connect: async ({ host, port }) => {
+    const { socket } = await SocksClient.createConnection({
+      proxy: { host: '127.0.0.1', port: 1080, type: 5 },
+      command: 'connect',
+      destination: { host, port },
+    });
+    return socket;
+  },
+});
+```
+
+`secure: true` and STARTTLS put TLS over the socket the connector gives, checked
+against `host` as over a TCP connection, and the connection timeout and the
+cancellation of the send abort its `signal`.  Authentication in plain text, which
+the transport allows only to this machine, is allowed through a connector only
+when `host` itself is a loopback host: the peer of a tunnel is the proxy, often
+on this machine, not the server.
+
+`localAddress` names the address of this machine to connect from, on one with
+several.
 
 ### Diagnostics
 
@@ -215,7 +290,9 @@ server advertises it.  The transport adds the encoded message size in octets to
 uploaded.
 
 If the server advertises a fixed maximum, @alexify/mailer returns a failed receipt without
-sending `MAIL FROM` when the message exceeds that limit.  A bare `SIZE`
+sending `MAIL FROM` when the message exceeds that limit, of category `unsupported`
+(code `smtp.message-size-exceeded`): not retried, and failed over by
+[`./pool`](/transports/pool) to a transport whose limit the message is under.  A bare `SIZE`
 capability, or `SIZE 0`, means that no fixed maximum was advertised, so @alexify/mailer
 still declares the message size without rejecting it locally.  Servers that do
 not advertise `SIZE` retain the existing SMTP flow.
@@ -386,11 +463,15 @@ override does not alter message headers or DKIM signatures.
 
 @alexify/mailer automatically uses the `SMTPUTF8` extension defined by [RFC 6531] when the
 effective SMTP envelope or a visible From, To, Cc, or Reply-To mailbox contains
-a non-ASCII character.  The default envelope includes the message's Bcc
+a non-ASCII local part.  The default envelope includes the message's Bcc
 addresses.  The transport requires the server to advertise both `SMTPUTF8` and
 `8BITMIME`, then adds `BODY=8BITMIME SMTPUTF8` to `MAIL FROM`.  This supports
-UTF-8 local parts and Unicode domain labels without another configuration
-option.
+UTF-8 local parts without another configuration option.
+
+A Unicode domain under an ASCII local part does not require SMTPUTF8: the envelope
+(including an `envelope` override and the envelope of a raw message) and the header
+fields carry its A-label, so `user@bücher.de` goes as `RCPT TO:<user@xn--bcher-kva.de>`
+to any server.
 
 If either required extension is missing, @alexify/mailer returns a non-retryable failed
 receipt with the code `smtp.smtputf8-unsupported` before sending `MAIL FROM`.
@@ -398,9 +479,9 @@ The connection remains available for a later ASCII-only message.
 
 Unicode display names and subjects do not by themselves require SMTPUTF8.
 @alexify/mailer continues to encode those values as RFC 2047 encoded words, so an address
-such as `José <jose@example.com>` follows the ordinary ASCII SMTP flow.  An
-ASCII A-label domain such as `xn--r8jz45g.xn--zckzah` likewise does not require
-SMTPUTF8, while its Unicode U-label form does.
+such as `José <jose@example.com>` follows the ordinary ASCII SMTP flow, and so does
+`support@例え.テスト`, written as `support@xn--r8jz45g.xn--zckzah`.  A verbatim custom
+header with a Unicode address in it is written as given and does require SMTPUTF8.
 
 [RFC 6531]: https://www.rfc-editor.org/rfc/rfc6531
 
@@ -749,8 +830,9 @@ Each signature in the `signatures` array can have the following options:
 | `headerFields`     | `string[]`                         | see below                           | Headers to sign (h= tag)              |
 
 By default the signature covers From, Reply-To, Subject, To, Cc, Date,
-Message-ID, In-Reply-To, References, MIME-Version and Content-Type, present or
-not, since a field absent when signed cannot be added afterwards without
+Message-ID, In-Reply-To, References, MIME-Version, Content-Type,
+List-Unsubscribe and List-Unsubscribe-Post (which one-click unsubscription
+needs signed, RFC 8058 §4), present or not, since a field absent when signed cannot be added afterwards without
 breaking the signature; From, Reply-To and Subject are listed twice, so that a
 second instance cannot be added either (over-signing, RFC 6376 §8.15). A name
 listed more than once in `headerFields` signs the instances of that field from

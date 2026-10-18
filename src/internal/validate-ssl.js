@@ -1,4 +1,4 @@
-// Not ported from upyo: the check of `validateSsl`, in a module of its own so
+// Not ported: the check of `validateSsl`, in a module of its own so
 // that only the providers that take the option bundle it.
 
 /**

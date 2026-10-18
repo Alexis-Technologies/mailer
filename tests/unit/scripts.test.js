@@ -145,6 +145,16 @@ test('Scripts: check-pack wants every file of the exports map and nothing else',
   ]);
 });
 
+test('Scripts: CONTRIBUTING lists the gates of prepublishOnly, in its order', () => {
+  // Before: CONTRIBUTING said prepublishOnly ran no size gate, which it had
+  // run since 1.0, with test:runtime and check:pack it did not name.
+  const text = fs.readFileSync(path.join(ROOT, 'CONTRIBUTING.md'), 'utf8');
+  const section = text.slice(text.indexOf('## Before opening a PR'));
+  const start = section.indexOf('```bash\n') + '```bash\n'.length;
+  const block = section.slice(start, section.indexOf('\n```', start));
+  assert.deepStrictEqual(block.split('\n'), pkg.scripts.prepublishOnly.split(' && '));
+});
+
 test('Scripts: check-dts compiles the types of every entry of the exports map', () => {
   const { typesOf } = require('../../scripts/check-dts.js');
   assert.deepStrictEqual(

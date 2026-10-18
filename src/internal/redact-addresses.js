@@ -1,4 +1,4 @@
-// Not ported from upyo: keeps email addresses out of error text that goes to
+// Not ported: keeps email addresses out of error text that goes to
 // telemetry and logs, such as an SMTP rejection naming its recipient.
 
 const REDACTED = '[REDACTED]';

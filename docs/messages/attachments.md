@@ -36,6 +36,80 @@ regular (non-inline) attachment.  The `readFile()` call in this example
 allocates the complete file before constructing the message; use a content
 factory below when the file should be read incrementally.
 
+## Files, URLs, data URIs and streams
+
+*@alexify/mailer/attachments* makes an attachment of a path, a URL, a data URI or a
+stream, with its file name and type found for you.  Nothing reads a file or a URL a
+message merely names: these helpers are the only way in, and you call them.
+
+```js
+const { createMessage } = require('@alexify/mailer');
+const { fromPath, fromUrl, fromDataUri, fromStream } = require('@alexify/mailer/attachments');
+
+const message = createMessage({
+  from: 'finance@example.com',
+  to: 'manager@example.com',
+  subject: 'Monthly report',
+  content: { text: 'Attached.' },
+  attachments: [
+    await fromPath('./reports/october.pdf'),
+    await fromUrl('https://cdn.example.com/terms.pdf'),
+    fromDataUri('data:text/csv,month%2Ctotal%0Aoctober%2C42'),
+    await fromStream(response.body, { filename: 'export.zip' }),
+  ],
+});
+```
+
+- **`fromPath(path, options)`** checks that the path is a regular file of at most
+  `maxBytes` (25 MiB) and reads it again each time the message is read (a DKIM
+  signature, a retry, another transport of a pool), never holding it.  When the
+  path comes from a user, pass `root`: the file must be inside it once both are
+  resolved with `realpath`, so neither `..` nor a symbolic link leads out.  Each
+  reading opens the file that was checked, by its device and inode: one that a
+  link, a renamed directory or a file renamed over it has put in its place since,
+  or that has grown past `maxBytes`, fails the reading.
+- **`fromUrl(url, options)`** fetches http and https URLs once, through the `fetch`
+  you pass or the global one, and holds the bytes.  It follows at most `maxRedirects`
+  (5), checks every URL with `allowUrl`, and sends `headers` to the origin of the
+  first URL only.  It gives up after `timeout` (30 s) or `maxBytes` (25 MiB), and
+  refuses a redirect from https to http, whatever `allowUrl` says.  Without an
+  `allowUrl`, each URL is checked as `isPublicUrl` checks its host as written, and
+  then by every address its host name resolves to (through `lookup`,
+  `dns.promises.lookup` by default): `localhost`, `*.localhost` and an address in
+  a loopback, private, link-local (the cloud metadata address among them),
+  carrier-grade NAT, multicast, reserved, documentation or benchmarking range, or
+  in the IPv6 forms that carry an IPv4 address (IPv4-compatible `::/96`, NAT64
+  `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4 `2002::/16`), are refused.  A name
+  that answers the fetch with another address than it gave the check (DNS
+  rebinding) passes, so an application that fetches URLs its users give passes a
+  `fetch` that checks the address it connects to: one of its own on `node:https`
+  whose `lookup` refuses the same ranges, or one that goes through a proxy that
+  does.
+- **`fromDataUri(uri, options)`** decodes a base64 or percent-encoded `data:` URI
+  (RFC 2397) up to `maxBytes`, and refuses one that does not parse.
+- **`fromStream(source, options)`** reads a Node.js `Readable`, a web
+  `ReadableStream` or another async iterable of bytes once, up to `maxBytes`, since
+  a stream cannot be read again.
+
+Each takes the fields of the attachment as options, `filename`, `contentType`,
+`contentId` and `inline`; an inline one needs the `contentId` its HTML refers to.
+
+### Images of HTML as data URIs
+
+Many clients block images given as `data:` URIs.  `inlineDataUrls(html)` turns each
+`<img src="data:…">` into an inline attachment and the `src` into its `cid:`, as
+nodemailer's `attachDataUrls` does:
+
+```js
+const { inlineDataUrls } = require('@alexify/mailer/attachments');
+
+const { html, attachments } = inlineDataUrls(renderedHtml, { domain: 'example.com' });
+const message = createMessage({ ...fields, content: { html }, attachments });
+```
+
+Each image holds at most `maxBytes` (25 MiB), and HTML longer than `maxLength`
+(64 Mi characters) is refused with a `RangeError` before it is read.
+
 ## Multiple attachments
 
 You can attach multiple files to a single message by providing an array of

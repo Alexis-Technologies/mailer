@@ -353,6 +353,33 @@ async send(message) {
 This approach provides predictable error handling and allows users to handle
 errors consistently across all transports.
 
+### Classify a failure
+
+The `category` of a failure tells the decorators what to do with it, so give it
+with `createFailedReceipt` or `createReceiptError` of the root entry, together
+with `retryable`, rather than leaving both to the words of the message:
+
+| Category | Meaning | `./pool` |
+| --- | --- | --- |
+| `validation`, `rejected` | The message itself is refused: an invalid address, a suppressed recipient. No transport would take it. | stops |
+| `unsupported` | This transport cannot send the message as it is: a field it cannot express, such as `scheduledAt` or a second tag, or a limit of its provider, such as recipients or size. Another transport may. | fails over |
+| `auth`, `configuration` | The transport is set up wrongly. | fails over |
+| `rate-limit`, `network`, `timeout`, `server-error`, `service-unavailable` | The provider cannot take it now; usually retryable. | fails over |
+| `unknown` | Anything else. | fails over |
+
+```js
+if (message.scheduledAt != null) {
+  return createFailedReceipt('My service cannot schedule a message.', {
+    provider: this.id,
+    category: 'unsupported',
+    retryable: false,
+  });
+}
+```
+
+`./retry` retries what is `retryable`, and `./breaker` counts only `network`,
+`timeout`, `server-error` and `service-unavailable` against the provider.
+
 ### Use the platform, add no dependency
 
 @alexify/mailer runs on Node.js 22 or newer and has no runtime dependencies.  A

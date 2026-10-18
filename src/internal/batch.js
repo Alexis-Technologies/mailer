@@ -1,19 +1,9 @@
-// Not ported from upyo: the messages of a sendMany() read as they are needed
+// Not ported: the messages of a sendMany() read as they are needed
 // rather than all at once, so that it holds a batch in memory, not its input.
 
-const noop = () => {};
+const { readItems } = require('./iterate.js');
 
-/**
- * The items of an iterable, synchronous or not, through one async iterator
- * that can be read by hand and then iterated for the rest.
- *
- * @param iterable The items.
- * @returns An async generator of them.
- * @internal
- */
-const readItems = async function* (iterable) {
-  for await (const item of iterable) yield item;
-};
+const noop = () => {};
 
 /**
  * Reads an iterable, synchronous or not, in arrays of at most `size` items,
@@ -83,4 +73,26 @@ const sendConcurrently = async function* (messages, limit, send, signal) {
   }
 };
 
-module.exports = { chunks, readItems, sendConcurrently };
+/**
+ * The bytes a value takes as JSON, with the comma that follows it in an
+ * array: what it adds to the body of a batch request.
+ *
+ * @internal
+ */
+const jsonBytes = (value) => Buffer.byteLength(JSON.stringify(value)) + 1;
+
+/**
+ * Sends the messages of an iterable `concurrency` at a time through the
+ * `send` of a transport, the receipts in their order.
+ *
+ * @internal
+ */
+const sendManyConcurrently = (transport, messages, options) =>
+  sendConcurrently(
+    messages,
+    transport.config.concurrency,
+    (message) => transport.send(message, options),
+    options?.signal,
+  );
+
+module.exports = { chunks, jsonBytes, readItems, sendConcurrently, sendManyConcurrently };

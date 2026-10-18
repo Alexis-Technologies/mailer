@@ -12,6 +12,7 @@ const { isSmtpResponseProviderDetails } = require('./smtp-receipt.js');
 
 const { SmtpAttachmentReplayError } = require('./message-stream.js');
 const { Smtp8BitMimeUnsupportedError } = require('./raw-message.js');
+const { createHttpProxyConnector } = require('./http-proxy.js');
 
 module.exports = {
   SmtpTransport,
@@ -24,4 +25,5 @@ module.exports = {
   isSmtpResponseProviderDetails,
   SmtpAttachmentReplayError,
   Smtp8BitMimeUnsupportedError,
+  createHttpProxyConnector,
 };

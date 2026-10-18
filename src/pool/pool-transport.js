@@ -3,6 +3,9 @@
 
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
+const { isRawTransport, isVerifiableTransport } = require('../core/transport.js');
+const { refuseRaw } = require('../internal/capabilities.js');
+const { disposeOf, messageOf } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
@@ -10,6 +13,7 @@ const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
 const { WeightedStrategy } = require('./strategies/weighted-strategy.js');
 const { PriorityStrategy } = require('./strategies/priority-strategy.js');
 const { SelectorStrategy } = require('./strategies/selector-strategy.js');
+const { isAbortError, isCallerAbort, timerMs } = require('../internal/sleep.js');
 
 /**
  * Pool transport that combines multiple transports with various load balancing
@@ -73,6 +77,10 @@ class PoolTransport {
 
   strategy;
 
+  // The entries of sendRaw(), made at its first call: the configuration does
+  // not change, and the raw transports among it neither.
+  #raw;
+
   /**
    * Creates a new PoolTransport instance.
    *
@@ -98,10 +106,120 @@ class PoolTransport {
    */
   async send(message, options) {
     const pinned = pinMessageId(message, this.config.generateId);
+    return this.#deliver(
+      pinned,
+      this.config.transports,
+      (transport, sendOptions) => transport.send(pinned, sendOptions),
+      options,
+    );
+  }
+
+  /**
+   * Sends serialized MIME through the transports that send raw messages, with
+   * the strategy and the failover of `send()`.  A selector is not asked, as it
+   * judges a `Message`; with no such transport the receipt is a failure of
+   * the category `configuration`.
+   *
+   * @param message The serialized message and its envelope.
+   * @param options Optional transport options including abort signal.
+   * @returns The receipt of the first transport that sent it, or a failure.
+   */
+  async sendRaw(message, options) {
+    options?.signal?.throwIfAborted();
+    const raw = this.#rawEntries();
+    if (raw.enabled === 0) return refuseRaw(this);
+    return this.#deliver(
+      message,
+      raw.entries,
+      (transport, sendOptions) => transport.sendRaw(message, sendOptions),
+      options,
+    );
+  }
+
+  #rawEntries() {
+    if (this.#raw !== undefined) return this.#raw;
+    const entries = [];
+    let enabled = 0;
+    for (const entry of this.config.transports) {
+      const canSend = entry.enabled && isRawTransport(entry.transport);
+      if (canSend) enabled++;
+      entries.push({ ...entry, enabled: canSend, selector: undefined });
+    }
+    this.#raw = { entries, enabled };
+    return this.#raw;
+  }
+
+  /**
+   * Verifies every enabled transport, all at once, and tells how each did:
+   * `verified`, `failed` with its error, or `unverifiable` for one without
+   * `verify()`.  It never throws for a transport, so that a key a provider
+   * revoked shows while the others still send.
+   *
+   * @param options Optional abort signal.
+   * @returns `{ id, index, status, error? }` for each enabled transport.
+   */
+  async verifyAll(options) {
+    options?.signal?.throwIfAborted();
+    const pending = [];
+    const results = [];
+    for (let index = 0; index < this.config.transports.length; index++) {
+      const entry = this.config.transports[index];
+      if (!entry.enabled) continue;
+      const result = { id: entry.transport.id, index, status: 'unverifiable' };
+      results.push(result);
+      if (!isVerifiableTransport(entry.transport)) continue;
+      pending.push(
+        (async () => {
+          try {
+            await entry.transport.verify(options);
+            result.status = 'verified';
+          } catch (error) {
+            result.status = 'failed';
+            result.error = error;
+          }
+        })(),
+      );
+    }
+    await Promise.all(pending);
+    options?.signal?.throwIfAborted();
+    return results;
+  }
+
+  /**
+   * Verifies the enabled transports that can verify, all at once: the pool
+   * can send when one of them can.  It throws an `AggregateError` of their
+   * errors when none verifies, and has nothing to check when none can verify.
+   * {@link PoolTransport.verifyAll} tells how each did.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    const verifying = [];
+    for (const entry of this.config.transports) {
+      if (entry.enabled && isVerifiableTransport(entry.transport)) {
+        verifying.push(entry.transport.verify(options));
+      }
+    }
+    if (verifying.length === 0) return;
+    const results = await Promise.allSettled(verifying);
+    options?.signal?.throwIfAborted();
+    const errors = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') return;
+      errors.push(result.reason);
+    }
+    throw new AggregateError(errors, 'No transport of the pool verified.');
+  }
+
+  /**
+   * Sends a message through the transports the strategy picks, one after
+   * another until one sends it or failover has to stop.
+   */
+  async #deliver(message, entries, sendOnce, options) {
     const attemptedIndices = new Set();
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
-    // itself was rejected).
+    // itself was rejected).  A message one transport cannot send as it is
+    // (`unsupported`) goes on to the next, which may.
     const failure = {
       errorMessages: [],
       errors: [],
@@ -112,12 +230,12 @@ class PoolTransport {
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       options?.signal?.throwIfAborted();
-      const selection = this.strategy.select(pinned, this.config.transports, attemptedIndices);
+      const selection = this.strategy.select(message, entries, attemptedIndices);
       // No more transports available
       if (!selection) break;
       attemptedIndices.add(selection.index);
 
-      const receipt = await this.attempt(selection, pinned, options, failure);
+      const receipt = await this.attempt(selection, sendOnce, options, failure);
       if (receipt?.successful) return receipt;
       if (failure.deliveryUnknown || failure.isRejected) break;
       if (receipt !== undefined) {
@@ -135,6 +253,9 @@ class PoolTransport {
       errorMessages.length > 0 ? errorMessages : ['All transports failed to send the message.'],
       {
         provider: 'pool',
+        // The errors of the transports carry their categories; with none,
+        // the pool says nothing of what failed.
+        category: errors.length > 0 ? undefined : 'unknown',
         errors: errors.length > 0 ? errors : undefined,
         attempts: attemptedIndices.size,
         deliveryUnknown: failure.deliveryUnknown,
@@ -148,18 +269,18 @@ class PoolTransport {
    * timeout, and records a failure.
    *
    * @param selection The selected transport and its index.
-   * @param pinned The message, with its Message-ID pinned.
+   * @param sendOnce Sends the message through a transport, once.
    * @param options The options of the caller.
    * @param failure What the failed attempts have gathered, updated in place.
    * @returns The receipt of the transport, or `undefined` when it threw.
    * @throws The caller's abort reason when the caller aborts.
    */
-  async attempt(selection, pinned, options, failure) {
+  async attempt(selection, sendOnce, options, failure) {
     const transportId = selection.entry.transport.id;
     const sendOptions = this.createSendOptions(options);
     let receipt;
     try {
-      receipt = await selection.entry.transport.send(pinned, sendOptions.options);
+      receipt = await sendOnce(selection.entry.transport, sendOptions.options);
     } catch (error) {
       if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) throw error;
       recordThrown(failure, error, transportId);
@@ -212,7 +333,9 @@ class PoolTransport {
       const transport = entry.transport;
       if (seen.has(transport)) continue;
       seen.add(transport);
-      disposals.push(dispose(transport));
+      // An async disposal: one that throws at once rejects, rather than
+      // stopping the disposal of the others.
+      disposals.push(disposeOf(transport));
     }
 
     // Every transport is disposed of, whichever fails; the failures come
@@ -251,7 +374,7 @@ class PoolTransport {
           onSelectorError: (error, index) =>
             this.log.write(
               'warn',
-              () => ({ index, error: error instanceof Error ? error.message : String(error) }),
+              () => ({ index, error: messageOf(error) }),
               'A pool selector threw; its transport is skipped',
             ),
         });
@@ -278,7 +401,7 @@ class PoolTransport {
     const timeoutId = setTimeout(() => {
       abortSource ??= 'timeout';
       timeoutController.abort(createAbortError());
-    }, this.config.timeout);
+    }, timerMs(this.config.timeout));
     let cleanupAbortSource = noop;
     let signal = timeoutController.signal;
     let cleanupCombinedSignal = noop;
@@ -327,10 +450,6 @@ const noop = () => {};
 
 const createAbortError = () => {
   return new DOMException('The operation was aborted.', 'AbortError');
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
 // Appends the structured errors of a failed receipt, or ones made from its
@@ -427,28 +546,15 @@ const isFailedReceipt = (value) => {
   );
 };
 
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
 // A rejection of the message itself, as opposed to one of the transport
-// (authentication, rate limit, outage), which another transport may not share.
+// (authentication, rate limit, outage) or of what it can express
+// (`unsupported`), which another transport may not share.
 const hasMessageRejection = (errors) => {
   if (errors == null) return false;
   for (const error of errors) {
     if (error.category === 'validation' || error.category === 'rejected') return true;
   }
   return false;
-};
-
-// Disposes of a transport, asynchronously or not; an error it throws at once
-// rejects rather than stopping the disposal of the others.
-const dispose = async (transport) => {
-  if (typeof transport[Symbol.asyncDispose] === 'function') {
-    await transport[Symbol.asyncDispose]();
-  } else if (typeof transport[Symbol.dispose] === 'function') {
-    transport[Symbol.dispose]();
-  }
 };
 
 module.exports = { PoolTransport };

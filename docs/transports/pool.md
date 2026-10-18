@@ -243,8 +243,13 @@ providers.  Structured errors use each child transport's provider `id`, so
 fallback failures remain tied to the transport that produced them.
 
 Failover moves on after a failure of the transport, such as an authentication
-error, a rate limit or an outage, and stops in two cases where another
-transport could not help:
+error, a rate limit or an outage, and after a message the transport cannot send
+as it is, an error of category `unsupported`: a field it cannot express, such
+as `scheduledAt` on SMTP or a second tag on Postmark, or a limit of its
+provider, such as recipients, attachments or the server's SIZE.  A pool of SMTP
+and Resend sends a scheduled message through Resend whichever comes first; when
+every transport refuses it so, the receipt is `unsupported` and not retryable.
+Failover stops in two cases where another transport could not help:
 
 - **The message itself was refused**, an error of category `validation` or
   `rejected`: another provider would refuse it too.  The receipt is not
@@ -473,6 +478,29 @@ The pool ensures that all underlying transports are properly cleaned up,
 preventing connection leaks and ensuring graceful shutdown. Each transport is
 disposed of once, even when it is listed twice, and one that fails stops no
 other: the disposal rejects afterwards with an `AggregateError` of the failures.
+
+## Raw messages and verification
+
+`sendRaw()` sends serialized MIME through the enabled transports that have
+`sendRaw()`, with the configured strategy and failover; a selector is not asked,
+as it judges a `Message`.  With no such transport the receipt is a failure of the
+category `configuration`.
+
+`verify()` verifies the enabled transports that can verify, all at once, and
+resolves when one of them does: the pool can send when one of its transports can.
+When none does, it throws an `AggregateError` of their errors; when none can
+verify, it has nothing to check.
+
+`verifyAll()` verifies every enabled transport, all at once, and never throws for
+one: it gives `{ id, index, status, error? }` for each, `status` being
+`verified`, `failed` or `unverifiable` (no `verify()`). A key revoked at one
+provider shows there while `verify()` still passes on the others:
+
+```js
+for (const { id, status, error } of await pool.verifyAll()) {
+  if (status === 'failed') logger.error({ id, err: error }, 'a transport of the pool cannot send');
+}
+```
 
 ## Testing with pools
 

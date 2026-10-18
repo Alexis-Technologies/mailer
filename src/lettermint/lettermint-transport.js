@@ -3,14 +3,10 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { createLettermintConfig } = require('./config.js');
-const {
-  LettermintApiError,
-  LettermintHttpClient,
-  LettermintTimeoutError,
-} = require('./http-client.js');
+const { LettermintHttpClient } = require('./http-client.js');
+const { isCallerAbort, providerFailure } = require('../internal/api-client.js');
 const { convertMessage, generateIdempotencyKey } = require('./message-converter.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 
 const MAX_BATCH_SIZE = 500;
 
@@ -100,7 +96,7 @@ class LettermintTransport {
       return responseToReceipt(response);
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      return createLettermintFailure(error instanceof Error ? error.message : String(error), error);
+      return providerFailure('lettermint', error);
     }
   }
 
@@ -150,9 +146,7 @@ class LettermintTransport {
         receipts.push(undefined);
       } catch (error) {
         if (isCallerAbort(error, options?.signal)) throw error;
-        receipts.push(
-          createLettermintFailure(error instanceof Error ? error.message : String(error), error),
-        );
+        receipts.push(providerFailure('lettermint', error));
       }
     }
 
@@ -186,15 +180,12 @@ class LettermintTransport {
       }
     } catch (error) {
       if (isCallerAbort(error, options?.signal)) throw error;
-      const errorMessage = error instanceof Error ? error.message : String(error);
       for (const receipt of receipts) {
         if (receipt !== undefined) {
           yield receipt;
           continue;
         }
-        yield {
-          ...createLettermintFailure(errorMessage, error),
-        };
+        yield providerFailure('lettermint', error);
       }
     }
   }
@@ -243,43 +234,6 @@ const responseToReceipt = (response) => {
   });
 };
 
-const createLettermintFailure = (message, error) => {
-  if (error instanceof LettermintApiError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'lettermint',
-      statusCode: error.statusCode,
-      retryAfterMilliseconds: error.retryAfterMilliseconds,
-      attempts: error.attempts,
-    });
-  }
-
-  if (error instanceof LettermintTimeoutError) {
-    return createFailedReceipt(message, {
-      deliveryUnknown: isDeliveryUnknown(error),
-      provider: 'lettermint',
-      category: 'timeout',
-      code: 'timeout',
-      retryable: true,
-      attempts: error.attempts,
-    });
-  }
-
-  return createFailedReceipt(message, {
-    deliveryUnknown: isDeliveryUnknown(error),
-    provider: 'lettermint',
-    attempts: getErrorAttempts(error),
-  });
-};
-
-const getErrorAttempts = (error) => {
-  if (typeof error !== 'object' || error == null || !('attempts' in error)) {
-    return undefined;
-  }
-  const attempts = error.attempts;
-  return typeof attempts === 'number' ? attempts : undefined;
-};
-
 const isSuccessfulStatus = (status) => {
   switch (status) {
     case 'pending':
@@ -299,14 +253,6 @@ const isSuccessfulStatus = (status) => {
     case 'unsubscribed':
       return false;
   }
-};
-
-const isAbortError = (error) => {
-  return error instanceof Error && error.name === 'AbortError';
-};
-
-const isCallerAbort = (error, signal) => {
-  return signal?.aborted === true && (isAbortError(error) || error === signal.reason);
 };
 
 module.exports = { LettermintTransport };
