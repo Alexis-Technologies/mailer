@@ -574,6 +574,30 @@ test('Templates: Nunjucks autoescapes, extends and includes through the loader',
   );
 });
 
+test('Templates: concurrent Nunjucks renders each fail with their own missing include', async () => {
+  // Before: the failures of an environment were one list, cut to the window
+  // of each render, so a render took the failure of another one.
+  const engine = createNunjucksEngine({ nunjucks });
+  const renderer = createTemplateRenderer({
+    engine,
+    loader: createMemoryLoader({
+      'a.njk': '{% include "missing-a.njk" %}',
+      'b.njk': '{% include "missing-b.njk" %}',
+      'c.njk': '<p>{% include "nope.njk" ignore missing %}</p>',
+    }),
+  });
+  const [a, b] = await Promise.all([
+    failureOf(renderer.render({ template: 'a' })),
+    failureOf(renderer.render({ template: 'b' })),
+  ]);
+  assert.ok(a instanceof TemplateNotFoundError);
+  assert.ok(b instanceof TemplateNotFoundError);
+  assert.deepStrictEqual([a.template, b.template], ['missing-a.njk', 'missing-b.njk']);
+  assert.deepStrictEqual(a.tried, ['missing-a.njk']);
+  // Before: a missing include failed even with `ignore missing`.
+  assert.strictEqual((await renderer.render({ template: 'c' })).html, '<p></p>');
+});
+
 test('Templates: Eta includes and lays out through the loader, relative to the file', async () => {
   const engine = createEtaEngine({ Eta });
   const templates = {
