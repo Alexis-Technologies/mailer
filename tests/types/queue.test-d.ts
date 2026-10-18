@@ -138,7 +138,18 @@ expectType<string | undefined>(
     { signingKeys: keys },
   ).data.mac,
 );
-createMailQueue({ driver, signingKeys: keys });
+createMailQueue({ driver, signingKeys: keys, idSecret: 's'.repeat(32) });
+prepareMailJob(
+  {
+    kind: 'content',
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 's',
+    content: { text: 't' },
+  },
+  { idSecret: new Uint8Array(32) },
+);
+expectError(createMailQueue({ driver, idSecret: 42 }));
 const codec = { encode: (text: string) => text, decode: async (text: string) => text };
 createMailQueue({ driver, codec });
 createMailJobHandler({ transport, codec });

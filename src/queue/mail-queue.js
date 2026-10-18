@@ -8,7 +8,7 @@ const { toUuid } = require('../internal/uuid.js');
 const { checkCodec, sealMailJob } = require('./envelope.js');
 const { MailQueueError } = require('./errors.js');
 const { createMailJobHandler } = require('./handler.js');
-const { prepareMailJob } = require('./job.js');
+const { checkIdSecret, prepareMailJob } = require('./job.js');
 const { keyringOf } = require('./signing.js');
 
 const checkDriver = (driver) => {
@@ -81,6 +81,7 @@ const createQueueConfig = (options) => {
   const auditStrict = options.auditStrict ?? false;
   if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
   keyringOf(options.signingKeys);
+  checkIdSecret(options.idSecret);
   const now = options.now ?? Date.now;
   const jobOptions = {
     namespace: options.namespace,
@@ -89,6 +90,7 @@ const createQueueConfig = (options) => {
     maxInlineAttachmentBytes: options.maxInlineAttachmentBytes,
     generateId: options.generateId,
     signingKeys: options.signingKeys,
+    idSecret: options.idSecret,
     now,
   };
   for (const name of Object.keys(jobOptions)) {
@@ -112,7 +114,8 @@ const createQueueConfig = (options) => {
  * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
  * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
  * and which its workers verify; `codec`, which seals the fields of each job
- * in its store and opens them in its workers; `logger`, `generateId`, `now`.
+ * in its store and opens them in its workers; `idSecret`, under which the id
+ * of a job is derived from its key; `logger`, `generateId`, `now`.
  * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
  * @throws {TypeError} If an option is invalid.
  */

@@ -327,7 +327,8 @@ const buildMessage = (run, fields, attachments) => {
     tags: data.tags,
     headers: data.headers,
     list: data.list,
-    // The job's id: scoped to the tenant, of a fixed length, with no address.
+    // The job's id: scoped to the tenant, of a fixed length, a hash of the
+    // key (under `idSecret`, one no address can be found from).
     idempotencyKey: job.id,
     messageId: data.messageId,
     date: data.date === undefined ? undefined : new Date(data.date),

@@ -132,7 +132,7 @@ await queue.enqueue({
   context: { url },
   from: 'no-reply@example.com',
   to: user.email,
-  idempotencyKey: `reset-password:${token}`,
+  idempotencyKey: `reset-password:${resetRequest.id}`, // an id, never an address or a token
 });
 
 queue.createWorker({

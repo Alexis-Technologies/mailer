@@ -60,6 +60,8 @@ export interface MailJobFieldsInput {
   /**
    * The key the job is enqueued once under: an enqueue again with it is the
    * same job, and with it for another message is refused. Made when absent.
+   * An id of what the message tells of (`reset:${request.id}`), never an
+   * address or a secret: the id of the job is a hash of it.
    */
   readonly idempotencyKey?: string;
   readonly messageId?: string;
@@ -209,6 +211,14 @@ export interface MailJobOptions {
   readonly now?: () => number;
   /** Signs each job (`kid`, `mac`) with the first key, for workers that read only signed jobs. */
   readonly signingKeys?: readonly MailJobSigningKey[];
+  /**
+   * The secret, 32 bytes at least, under which the id of a job is derived
+   * from its key (an HMAC rather than a SHA-256), so that an id cannot be
+   * traced back to a key that names a person. The same on every producer,
+   * and never rotated: another secret makes other ids, and the same message
+   * another job.
+   */
+  readonly idSecret?: string | Uint8Array;
 }
 
 /** A job of a message: its data, and the request a driver takes. */
@@ -396,7 +406,7 @@ export interface MailQueue<TDriver extends QueueDriver = QueueDriver> {
  * const queue = createMailQueue({ driver: createMemoryQueue(), audit });
  * await queue.enqueue({
  *   kind: 'template', template: 'reset-password', context: { url },
- *   from: 'app@example.com', to: user.email, idempotencyKey: `reset:${token}`,
+ *   from: 'app@example.com', to: user.email, idempotencyKey: `reset:${resetRequest.id}`,
  * });
  * const worker = queue.createWorker({ transport, renderer: templates });
  * ```

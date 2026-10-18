@@ -33,7 +33,7 @@ await queue.enqueue({
   locale: user.locale,
   from: 'Hirevel <no-reply@example.com>',
   to: user.email,
-  idempotencyKey: `reset-password:${token}`,
+  idempotencyKey: `reset-password:${resetRequest.id}`,
   priority: 'high',
   expiresAt: new Date(Date.now() + 15 * 60_000),
 });
@@ -158,6 +158,14 @@ attempt again is of unknown delivery (`delivery_unknown`), not a second send.
 
 The rendering must then be the same for the same context: no `Date.now()` in a
 template, or an attempt again is refused as another message.
+
+The id of a job is a hash of its key, and it goes where addresses do not: into
+the audit, the logs, the provider's idempotency key and the Message-ID. A key
+is an id of what the message tells of (`reset-password:${resetRequest.id}`),
+never an address or a token: a SHA-256 of `welcome:ada@example.com` is found
+again by hashing the addresses one knows. `idSecret` (32 bytes at least)
+derives the id with an HMAC instead; it is the same on every producer and never
+rotated, as another secret makes other ids and the same message another job.
 
 ## What the queue does with an attempt
 

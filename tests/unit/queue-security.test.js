@@ -277,3 +277,33 @@ test('Queue: a codec is checked, and must give a string', async () => {
   await assert.rejects(queue.enqueue(input), /codec.encode must give a string/);
   assert.strictEqual(queue.driver.list().length, 0);
 });
+
+test('Queue: under idSecret the id of a job cannot be found from the addresses one knows', () => {
+  const { toUuid } = require('../../src/internal/uuid.js');
+  const keyed = { ...input, idempotencyKey: 'welcome:ada@example.com' };
+  const guess = toUuid('mail\u0000\u0000welcome:ada@example.com');
+  // Without a secret the id is a hash anyone can recompute from a guess.
+  assert.strictEqual(prepareMailJob(keyed).request.id, guess);
+  const secret = 's'.repeat(32);
+  const first = prepareMailJob(keyed, { idSecret: secret });
+  const again = prepareMailJob(keyed, { idSecret: Buffer.from(secret) });
+  assert.notStrictEqual(first.request.id, guess);
+  assert.match(
+    first.request.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  // The same key and secret: the same job, its Message-ID too.
+  assert.strictEqual(again.request.id, first.request.id);
+  assert.strictEqual(again.data.messageId, first.data.messageId);
+  assert.notStrictEqual(
+    prepareMailJob(keyed, { idSecret: 't'.repeat(32) }).request.id,
+    first.request.id,
+  );
+  for (const idSecret of ['short', 42, new Uint8Array(8)]) {
+    assert.throws(() => prepareMailJob(keyed, { idSecret }), /idSecret must hold 32 bytes/);
+    assert.throws(
+      () => createMailQueue({ driver: createMemoryQueue(), idSecret }),
+      /idSecret must hold 32 bytes/,
+    );
+  }
+});

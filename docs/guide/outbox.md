@@ -8,6 +8,7 @@ the keys of [`IdempotencyTransport`](/transports/idempotency) in MongoDB. The
 package depends on no MongoDB driver: you pass in its collections.
 
 ```js
+const { randomUUID } = require('node:crypto');
 const { MongoClient } = require('mongodb');
 const { createMailQueue } = require('@alexify/mailer/queue');
 const { IdempotencyTransport } = require('@alexify/mailer/idempotency');
@@ -30,7 +31,8 @@ const queue = createMailQueue({ driver: outbox, audit });
 // The producer: the job and its audit event go in the transaction.
 const session = client.startSession();
 await session.withTransaction(async () => {
-  await users.updateOne({ _id: user.id }, { $set: { resetToken } }, { session });
+  const resetId = randomUUID(); // the key names the request, never its token
+  await db.collection('resets').insertOne({ _id: resetId, userId: user.id, token }, { session });
   await queue.enqueue(
     {
       kind: 'template',
@@ -38,7 +40,7 @@ await session.withTransaction(async () => {
       context: { url },
       from: 'no-reply@example.com',
       to: user.email,
-      idempotencyKey: `reset-password:${resetToken}`,
+      idempotencyKey: `reset-password:${resetId}`,
     },
     { transaction: session },
   );

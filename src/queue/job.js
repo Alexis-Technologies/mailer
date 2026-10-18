@@ -11,7 +11,7 @@ const { createMessage } = require('../core/message.js');
 const { generateSenderMessageId } = require('../core/message-id.js');
 const { parseAddress } = require('../core/address.js');
 const { toBase64 } = require('../internal/base64.js');
-const { toUuid } = require('../internal/uuid.js');
+const { toKeyedUuid, toUuid } = require('../internal/uuid.js');
 const { hashJson } = require('./hash.js');
 const { toJson } = require('./json.js');
 const { keyringOf, signJob } = require('./signing.js');
@@ -63,6 +63,7 @@ const V1_KEYS = new Set([
   'trace',
 ]);
 const MAX_KEY_LENGTH = 256;
+const MIN_ID_SECRET_BYTES = 32;
 const DEFAULTS = Object.freeze({
   namespace: 'mail',
   maxAttempts: 5,
@@ -197,6 +198,22 @@ const correlationIdOf = (input, jobId) => {
   return given ?? inMetadata ?? jobId;
 };
 
+/**
+ * Checks the secret the ids of jobs are derived under: 32 bytes at least.
+ *
+ * @throws {TypeError} If it is not one.
+ * @internal
+ */
+const checkIdSecret = (secret) => {
+  if (secret === undefined) return;
+  let bytes = 0;
+  if (typeof secret === 'string') bytes = Buffer.byteLength(secret);
+  else if (secret instanceof Uint8Array) bytes = secret.byteLength;
+  if (bytes < MIN_ID_SECRET_BYTES) {
+    throw new TypeError(`idSecret must hold ${MIN_ID_SECRET_BYTES} bytes at least.`);
+  }
+};
+
 const resolveConfig = (options) => {
   const config = { ...DEFAULTS, ...options };
   for (const name of ['maxAttempts', 'maxJobBytes', 'maxInlineAttachmentBytes']) {
@@ -206,6 +223,7 @@ const resolveConfig = (options) => {
   }
   if (!isText(config.namespace, 128)) throw new TypeError('namespace must be a short string.');
   config.keyring = keyringOf(config.signingKeys);
+  checkIdSecret(config.idSecret);
   return config;
 };
 
@@ -242,10 +260,11 @@ const fieldsOf = (input, probe, attachments, messageId) => {
  * `{ kind: 'content', subject, content }`, with the fields of a message.
  * @param options `namespace` ('mail'), `generateId`, `now`, `maxAttempts`
  * (5), `maxJobBytes` (256 KiB), `maxInlineAttachmentBytes` (256 KiB);
- * `signingKeys`, whose first key signs the job (`kid`, `mac`).
+ * `signingKeys`, whose first key signs the job (`kid`, `mac`); `idSecret`,
+ * under which its id is derived from its key.
  * @returns `{ data, request }`.
  * @throws {TypeError} If a field is invalid, as `createMessage` finds it, or
- * a signing key.
+ * a signing key or `idSecret`.
  * @throws {RangeError} If the job or its attachments are too large.
  */
 const prepareMailJob = (input, options = {}) => {
@@ -257,7 +276,11 @@ const prepareMailJob = (input, options = {}) => {
   const tenantId = checkKey(input.tenantId, 'tenantId');
   const keyed = checkKey(input.idempotencyKey, 'idempotencyKey');
   const idempotencyKey = keyed ?? generateId('idempotency-key', config.generateId);
-  const jobId = toUuid(`${config.namespace}\u0000${tenantId ?? ''}\u0000${idempotencyKey}`);
+  // A UUID of the key: under `idSecret`, one that cannot be traced back to a
+  // key that names a person.
+  const scoped = `${config.namespace}\u0000${tenantId ?? ''}\u0000${idempotencyKey}`;
+  const jobId =
+    config.idSecret === undefined ? toUuid(scoped) : toKeyedUuid(scoped, config.idSecret);
   const correlationId = correlationIdOf(input, jobId);
   const scheduledAt = checkDateField(input.scheduledAt, 'scheduledAt');
   const expiresAt = checkDateField(input.expiresAt, 'expiresAt');
@@ -318,4 +341,11 @@ const prepareMailJob = (input, options = {}) => {
   return { data, request };
 };
 
-module.exports = { MAIL_JOB_NAME, MAIL_JOB_VERSION, UNHASHED, V1_KEYS, prepareMailJob };
+module.exports = {
+  MAIL_JOB_NAME,
+  MAIL_JOB_VERSION,
+  UNHASHED,
+  V1_KEYS,
+  checkIdSecret,
+  prepareMailJob,
+};

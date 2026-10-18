@@ -39,7 +39,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the application's key) seals the
   fields of each job in its store, its addresses, context and attachments, leaving the version,
   hash, signature and trace context in clear; a worker that cannot open a sealed job gives it
-  back (`queue.codec_missing`, `queue.codec_failed`).
+  back (`queue.codec_missing`, `queue.codec_failed`). `idSecret` derives the id of a job from its
+  key with an HMAC, so an id that goes into the audit and the logs cannot be traced back to a key
+  that names a person.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
