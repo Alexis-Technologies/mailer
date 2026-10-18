@@ -89,6 +89,14 @@ await commit();
 unsubscribe are engagement, not states. The queue writes `correlationId` into
 the metadata of each message, which the providers give back with its events.
 
+A webhook's event names its message by the `correlationId` the message's
+metadata gave back, which every HTTP provider of `./webhooks` returns; without
+it (an SMTP relay, a provider that drops metadata) it is filed under the
+provider's id of the message. The MongoDB sink's
+`eventsOfProviderMessage(providerMessageId)` finds both: the events filed under
+that id and those of the message whose `accepted` event carries it (an index of
+`ensureIndexes()`).
+
 ## Messages to reconcile
 
 A message whose last state is `submitted` long after its send, or

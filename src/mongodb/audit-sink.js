@@ -17,12 +17,33 @@ const eventOfDocument = (document) => {
   return { id: _id, ...rest, at: at instanceof Date ? at.toISOString() : at };
 };
 
+// The events of a message named by the provider's id of it: a webhook's
+// event with no correlationId is filed under that id, and the worker's
+// accepted event carries it, so the two meet here.
+const eventsOfProviderMessage = async (collection, providerMessageId) => {
+  const named = await collection
+    // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
+    .find({ providerMessageId })
+    .toArray();
+  const correlationIds = new Set([providerMessageId]);
+  for (const document of named) correlationIds.add(document.correlationId);
+  const documents = await collection
+    // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
+    .find({ correlationId: { $in: [...correlationIds] } })
+    .sort({ at: 1, attempt: 1, rank: 1 })
+    .toArray();
+  const events = [];
+  for (const document of documents) events.push(eventOfDocument(document));
+  return events;
+};
+
 /**
  * Makes an audit sink in a collection.
  *
  * @param options `collection`, `db.collection('mail_audit')`.
  * @returns The sink, with `has(id)`, `eventsOf(correlationId)`,
- * `stateOf(correlationId)` and `ensureIndexes()`.
+ * `eventsOfProviderMessage(providerMessageId)`, `stateOf(correlationId)` and
+ * `ensureIndexes()`.
  * @throws {TypeError} If it is given no collection.
  */
 const createMongoAuditSink = (options = {}) => {
@@ -43,6 +64,8 @@ const createMongoAuditSink = (options = {}) => {
     return events;
   };
   return {
+    eventsOfProviderMessage: (providerMessageId) =>
+      eventsOfProviderMessage(collection, providerMessageId),
     async has(id) {
       const found = await collection.findOne({ _id: id }, { projection: { _id: 1 } });
       return found !== null && found !== undefined;
@@ -86,6 +109,10 @@ const createMongoAuditSink = (options = {}) => {
         { name: 'mailer_correlation' },
       );
       await collection.createIndex({ jobId: 1 }, { name: 'mailer_job', sparse: true });
+      await collection.createIndex(
+        { providerMessageId: 1 },
+        { name: 'mailer_provider_message', sparse: true },
+      );
     },
   };
 };

@@ -153,8 +153,14 @@ export interface MongoAuditSink extends AuditSink {
   ): Promise<void>;
   has(id: string): Promise<boolean>;
   eventsOf(correlationId: string): Promise<readonly AuditEvent[]>;
+  /**
+   * The events of the message a provider's id names: those filed under it (a
+   * webhook's event with no correlationId) and those of the message whose
+   * accepted event carries it.
+   */
+  eventsOfProviderMessage(providerMessageId: string): Promise<readonly AuditEvent[]>;
   stateOf(correlationId: string): Promise<MessageState | undefined>;
-  /** Makes the indexes of the events: by correlation id and time, by job. */
+  /** Makes the indexes of the events: by correlation id and time, by job, by the provider's id. */
   ensureIndexes(): Promise<void>;
 }
 

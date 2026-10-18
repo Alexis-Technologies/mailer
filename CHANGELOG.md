@@ -47,7 +47,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   of an attempt whose run before died `delivery_unknown` rather than a second send, unless the
   audit sink tells (`has`, new on the memory, MongoDB and combined sinks) that it died before
   its submit. `AuditSink.appendMany` (memory, MongoDB in one `bulkWrite`, combined) writes the
-  `queued` events of an `enqueueMany` in one call. The fields of a job of version 1 are fixed:
+  `queued` events of an `enqueueMany` in one call. The MongoDB sink's
+  `eventsOfProviderMessage(id)` finds the events of a message by the provider's id of it, where a
+  webhook's event without `correlationId` is filed. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`, given back with its attempts not spent, for a week or until it
   expires) rather than fail its hash during a rolling deploy.

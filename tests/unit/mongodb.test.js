@@ -324,6 +324,7 @@ test('MongoDB: the audit sink writes an event once by its id', async () => {
   assert.deepStrictEqual(collection.indexes, [
     [{ correlationId: 1, at: 1, attempt: 1, rank: 1 }, { name: 'mailer_correlation' }],
     [{ jobId: 1 }, { name: 'mailer_job', sparse: true }],
+    [{ providerMessageId: 1 }, { name: 'mailer_provider_message', sparse: true }],
   ]);
   // A sink keeps the memory sink's contract.
   const memory = createMemoryAuditSink();
@@ -639,4 +640,35 @@ test('MongoDB: the outbox tells what it holds, lists its failed jobs and retries
   await none.source.enqueue(requestOf('x'));
   await none.source.fail((await none.source.reserve(1000)).lease, { code: 'x', reason: 'y' });
   await assert.rejects(none.outbox.retryFailed('x'), /keeps no data/);
+});
+
+test('MongoDB: the events of a message are found by the provider’s id of it', async () => {
+  const { auditEventOfDeliveryEvent } = require('../../src/audit/index.js');
+  const collection = fakeCollection();
+  const sink = createMongoAuditSink({ collection });
+  const base = { source: 'worker', correlationId: 'order-42', attempt: 1 };
+  await sink.append({ ...base, id: 'e1', state: 'submitted', at: '2026-10-18T09:00:00.000Z' });
+  await sink.append({
+    ...base,
+    id: 'e2',
+    state: 'accepted',
+    at: '2026-10-18T09:00:01.000Z',
+    providerMessageId: 'ses-1',
+  });
+  // A webhook's event with no correlationId is filed under the provider's id.
+  const delivered = auditEventOfDeliveryEvent({
+    id: 'w1',
+    provider: 'ses',
+    type: 'delivered',
+    messageId: 'ses-1',
+    occurredAt: new Date('2026-10-18T09:00:05.000Z'),
+  });
+  assert.strictEqual(delivered.correlationId, 'ses-1');
+  await sink.append(delivered);
+  const events = await sink.eventsOfProviderMessage('ses-1');
+  assert.deepStrictEqual(
+    events.map((event) => event.state),
+    ['submitted', 'accepted', 'delivered'],
+  );
+  assert.deepStrictEqual(await sink.eventsOfProviderMessage('unknown'), []);
 });
