@@ -257,3 +257,28 @@ test('SparkPost: verify reads the account, the options are checked, the key neve
     /stop/,
   );
 });
+
+test('SparkPost: a 420 is retried within the send, as its classification says', async (t) => {
+  // Before: the classification of an error reached the receipt alone, so a
+  // retryable 420 was not retried within the send.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+  let calls = 0;
+  stubFetch(t, () => {
+    calls++;
+    return calls < 3
+      ? json({ errors: [{ message: 'Exceed Sending Limit', code: '2102' }] }, 420)
+      : json({ results: { id: 'tx-1', total_accepted_recipients: 1 } });
+  });
+  const state = { receipt: undefined };
+  const sending = transport({ retries: 2 }).send(message());
+  sending.then((answer) => (state.receipt = answer), assert.fail);
+  for (let i = 0; i < 100 && state.receipt === undefined; i++) {
+    t.mock.timers.tick(1000);
+    await new Promise((resolve) => process.nextTick(resolve));
+    await Promise.resolve();
+  }
+  const receipt = await sending;
+  assert.strictEqual(receipt.successful, true, receipt.errorMessages?.join());
+  assert.strictEqual(calls, 3);
+});

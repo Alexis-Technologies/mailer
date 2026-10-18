@@ -10,7 +10,7 @@ const {
 } = require('../core/receipt.js');
 const { readText } = require('./body.js');
 const { isDeliveryUnknown } = require('./delivery-unknown.js');
-const { requestWithRetry } = require('./http.js');
+const { isRetryableFailure, requestWithRetry } = require('./http.js');
 const { certificateFailure, refusalFailure } = require('./refusal.js');
 const { createLog } = require('./log.js');
 
@@ -88,6 +88,9 @@ const defaultFinalError = (provider) => (error, attempts) =>
         attempts,
         cause: error,
       });
+
+const retryableOf = (error) =>
+  typeof error.retryable === 'boolean' ? error.retryable : isRetryableFailure(error);
 
 // The text of an error answer, or undefined when it cannot be read: the
 // error then keeps the status, which says more than the failure to read.
@@ -183,6 +186,9 @@ const createApiClient = (config, provider) => {
         fetchWithAuth(options.url, { method: options.method ?? 'POST', headers, body }, signal),
       read: async (response, attempt) => read(response, await readText(response), attempt),
       reject: async (response, attempt) => reject(response, await readErrorText(response), attempt),
+      // What the provider says of an error is retried as it says, a 420 of
+      // SparkPost's spent limit among them; the status says the rest.
+      isRetryable: retryableOf,
       createTimeoutError: timeoutError,
       finalError,
       wrapAccepted: provider.acceptedError,

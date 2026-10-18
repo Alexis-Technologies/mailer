@@ -188,6 +188,7 @@ module.exports = {
   abortReason,
   exponentialDelayMs,
   isAbortError,
+  isRetryableFailure,
   isRetryableStatus,
   jitteredDelayMs,
   requestWithRetry,
