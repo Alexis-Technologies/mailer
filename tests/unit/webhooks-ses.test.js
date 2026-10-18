@@ -399,6 +399,52 @@ test('Webhooks SES: a certificate URL off the path of SNS, or with a query, is n
   assert.strictEqual(requests.length, 0);
 });
 
+test('Webhooks SES: another spelling of the certificate URL is not read', async () => {
+  // Before: the cache was keyed by the URL as written, so SNS in capitals,
+  // :443, an empty query or a tab made a new read of one certificate each.
+  const { verify, requests } = verifier();
+  for (const url of [
+    'https://SNS.eu-west-1.amazonaws.com/SimpleNotificationService-abc.pem',
+    'https://sns.eu-west-1.amazonaws.com:443/SimpleNotificationService-abc.pem',
+    `${CERT_URL}?`,
+    `${CERT_URL}#`,
+    'https://sns.eu-west-1.amazon\taws.com/SimpleNotificationService-abc.pem',
+    'https:sns.eu-west-1.amazonaws.com/SimpleNotificationService-abc.pem',
+    'https://sns.eu-west-1.amazonaws.com/./SimpleNotificationService-abc.pem',
+  ]) {
+    const message = notification({ eventType: 'Send', mail: mail() }, { SigningCertURL: url });
+    await rejects(verify(request(message)), 'certificate');
+  }
+  assert.strictEqual(requests.length, 0);
+});
+
+test('Webhooks SES: a certificate is kept only once it has verified a signature', async () => {
+  // Before: a certificate read for a forged message was cached though its
+  // signature failed, so forged messages naming other certificates of SNS
+  // pushed the one in use out of the cache, and each made a read.
+  const { verify, requests } = verifier();
+  const good = notification({ eventType: 'Send', mail: mail() });
+  await verify(request(good));
+  assert.strictEqual(requests.length, 1);
+  for (let i = 0; i < 40; i++) {
+    const forged = {
+      ...notification(
+        { eventType: 'Send', mail: mail() },
+        {
+          MessageId: `forged-${i}`,
+          SigningCertURL: `https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-f${i}.pem`,
+        },
+      ),
+      Signature: Buffer.from('forged').toString('base64'),
+    };
+    await rejects(verify(request(forged)), 'signature');
+  }
+  const again = notification({ eventType: 'Send', mail: mail() }, { MessageId: 'sns-2' });
+  await verify(request(again));
+  // The forged ones made their reads; the real certificate was not read again.
+  assert.strictEqual(requests.filter((entry) => entry.url === CERT_URL).length, 1);
+});
+
 test('Webhooks SES: a few certificates are read at a time, the next one is asked again', async () => {
   const waiting = [];
   const fetch = () =>

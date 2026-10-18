@@ -111,39 +111,43 @@ const loadCertificate = async (fetchOption, url, timeoutMs) => {
   }
 };
 
-// The certificates by URL: each read once while it is cached, the oldest
-// dropped past MAX_CERTIFICATES, one that failed to load not kept, and no
-// more than MAX_LOADING read at once.
+// The certificates by URL.  Only one that has verified a signature is kept,
+// the oldest dropped past MAX_CERTIFICATES, so that forged messages naming
+// other certificates of the service cannot push the one in use out; one is
+// read at most once while it loads, and no more than MAX_LOADING at once.
 const createCertificateCache = (fetchOption, trust, timeoutMs) => {
-  const certificates = new Map();
-  let loading = 0;
-  return (url) => {
-    let pending = certificates.get(url);
-    if (pending !== undefined) return pending;
-    if (loading >= MAX_LOADING) {
-      return Promise.reject(
-        certificateError('Too many signing certificates are being read.', undefined, UNREAD),
-      );
-    }
-    loading++;
-    pending = loadCertificate(fetchOption, url, timeoutMs)
-      .then((certificate) => {
-        trust(certificate);
-        return certificate;
-      })
-      .finally(() => {
-        loading--;
-      });
-    pending.catch(() => certificates.delete(url));
-    certificates.set(url, pending);
-    if (certificates.size > MAX_CERTIFICATES) {
-      certificates.delete(certificates.keys().next().value);
-    }
-    return pending;
+  const verified = new Map();
+  const loading = new Map();
+  return {
+    get(url) {
+      const known = verified.get(url) ?? loading.get(url);
+      if (known !== undefined) return known;
+      if (loading.size >= MAX_LOADING) {
+        return Promise.reject(
+          certificateError('Too many signing certificates are being read.', undefined, UNREAD),
+        );
+      }
+      const pending = loadCertificate(fetchOption, url, timeoutMs)
+        .then((certificate) => {
+          trust(certificate);
+          return certificate;
+        })
+        .finally(() => {
+          loading.delete(url);
+        });
+      loading.set(url, pending);
+      return pending;
+    },
+    // Keeps a certificate whose signature of a message verified.
+    keep(url, certificate) {
+      if (verified.has(url)) return;
+      verified.set(url, Promise.resolve(certificate));
+      if (verified.size > MAX_CERTIFICATES) verified.delete(verified.keys().next().value);
+    },
   };
 };
 
-const checkSignature = async (message, certificateOf, service, algorithms, common) => {
+const checkSignature = async (message, certificates, service, algorithms, common) => {
   const fields = SIGNED_FIELDS.get(message.Type);
   if (fields === undefined) {
     throw new WebhookVerificationError(
@@ -162,8 +166,14 @@ const checkSignature = async (message, certificateOf, service, algorithms, commo
   if (typeof url !== 'string' || !service.isCertificateUrl(url)) {
     throw certificateError('The signing certificate is not on a host of the service.');
   }
+  // The URL is the key of the cache, so it is taken only as the URL parser
+  // writes it: another spelling of it (`SNS.` in capitals, `:443`, an empty
+  // `?` or `#`, a tab) would read the certificate again, and push others out.
+  if (new URL(url).href !== url || url.includes('?') || url.includes('#')) {
+    throw certificateError('The signing certificate URL is not written as a URL is.');
+  }
   const text = stringToSign(message, fields);
-  const certificate = await certificateOf(message.SigningCertURL);
+  const certificate = await certificates.get(url);
   const now = common.now();
   if (now < Date.parse(certificate.validFrom) || now > Date.parse(certificate.validTo)) {
     throw certificateError('The signing certificate is not valid now.');
@@ -172,6 +182,7 @@ const checkSignature = async (message, certificateOf, service, algorithms, commo
   if (!verifySignature(algorithm, Buffer.from(text, 'utf8'), certificate.publicKey, signature)) {
     throw new WebhookVerificationError('signature', 'The SNS signature does not match.');
   }
+  certificates.keep(url, certificate);
 };
 
 // The algorithms of the signature versions taken: both by default, as a
@@ -222,7 +233,7 @@ const createSnsVerifier = (options, service) => {
   const topics = topicsOf(options.topicArns);
   const common = resolveCommonOptions(options, service.defaultToleranceMs);
   const algorithms = algorithmsOf(options.signatureVersions);
-  const certificateOf = createCertificateCache(
+  const certificates = createCertificateCache(
     checkOptionalFunction(options.fetch, 'fetch'),
     service.trust ?? (() => {}),
     checkPositiveNumber(
@@ -238,7 +249,7 @@ const createSnsVerifier = (options, service) => {
     if (!topics.has(message.TopicArn)) {
       throw new WebhookVerificationError('topic', `The topic ${message.TopicArn} is not taken.`);
     }
-    await checkSignature(message, certificateOf, service, algorithms, common);
+    await checkSignature(message, certificates, service, algorithms, common);
     checkTime(Date.parse(message.Timestamp), common);
     const key = `${service.provider}:${message.MessageId}`;
     if (message.Type !== 'Notification') {
