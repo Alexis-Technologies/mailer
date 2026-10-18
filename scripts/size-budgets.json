@@ -12,7 +12,7 @@
   "./sendgrid": 7.5,
   "./mailgun": 7.5,
   "./mailtrap": 7,
-  "./maileroo": 6.5,
+  "./maileroo": 7,
   "./lettermint": 6.5,
   "./plunk": 6,
   "./postmark": 7.5,
