@@ -177,7 +177,6 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
   const { collection, outbox } = outboxOf({
     extra: {
       changeStream: true,
-      retainFinishedSeconds: 3600,
       logger: { warn: (record, message) => records.push([message, record.error]) },
     },
   });
@@ -185,7 +184,7 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
   assert.deepStrictEqual(collection.indexes, [
     [{ state: 1, rank: 1, availableAt: 1, enqueuedAt: 1 }, { name: 'mailer_ready' }],
     [{ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' }],
-    [{ finishedAt: 1 }, { name: 'mailer_finished', expireAfterSeconds: 3600 }],
+    [{ expireAt: 1 }, { name: 'mailer_expire', expireAfterSeconds: 0 }],
   ]);
   let woken = 0;
   const unsubscribe = outbox.source.subscribe(() => woken++);
@@ -225,8 +224,12 @@ test('MongoDB: the outbox checks its options', () => {
     /changeStream needs a collection with watch/,
   );
   assert.throws(
-    () => createMongoOutbox({ collection, retainFinishedSeconds: 0 }),
-    /retainFinishedSeconds/,
+    () => createMongoOutbox({ collection, dedupeWindowSeconds: 0 }),
+    /dedupeWindowSeconds/,
+  );
+  assert.throws(
+    () => createMongoOutbox({ collection, retainFailedSeconds: 1.5 }),
+    /retainFailedSeconds/,
   );
   assert.throws(() => createMongoOutbox({ collection, now: 1 }), /now/);
   // Without a change stream, there is nothing to subscribe to.
@@ -452,4 +455,27 @@ test('MongoDB: a job done with keeps no data, unless told; its duplicates are st
     assert.deepStrictEqual([again.duplicate, typeof again.existingHash], [true, 'string']);
   }
   assert.throws(() => outboxOf({ extra: { retainData: 1 } }), /retainData must be/);
+});
+
+test('MongoDB: a completed job goes after the window of duplicates, a failed one later', async () => {
+  const { collection, source, now } = outboxOf({
+    extra: { dedupeWindowSeconds: 3600, retainFailedSeconds: 7200 },
+  });
+  await source.enqueue(requestOf('done'));
+  await source.enqueue(requestOf('refused'));
+  for (let index = 0; index < 2; index++) {
+    const { lease } = await source.reserve(1000);
+    if (lease.job.id === 'done') await source.ack(lease, null);
+    else await source.fail(lease, { code: 'x', reason: 'y' });
+  }
+  assert.strictEqual(collection.documents.get('done').expireAt.getTime(), now() + 3_600_000);
+  assert.strictEqual(collection.documents.get('refused').expireAt.getTime(), now() + 7_200_000);
+  // By default, a day and a week, whatever the driver.
+  const defaults = outboxOf();
+  await defaults.source.enqueue(requestOf('a'));
+  await defaults.source.ack((await defaults.source.reserve(1000)).lease, null);
+  assert.strictEqual(
+    defaults.collection.documents.get('a').expireAt.getTime(),
+    defaults.now() + 86_400_000,
+  );
 });

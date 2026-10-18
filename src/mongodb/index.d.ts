@@ -58,8 +58,10 @@ export interface MongoOutboxOptions extends PollingDriverOptions {
    * longer. @default 5000
    */
   readonly clockSkewToleranceMilliseconds?: number;
-  /** The time a finished job is kept, and so the window of its duplicates. @default 604800 */
-  readonly retainFinishedSeconds?: number;
+  /** The time a completed job is kept, and so the window of its duplicates. @default 86400 */
+  readonly dedupeWindowSeconds?: number;
+  /** The time a failed job is kept, for a retry by hand. @default 604800 */
+  readonly retainFailedSeconds?: number;
   /** The finished jobs whose data is kept: the others keep their version and hash. @default 'failed' */
   readonly retainData?: 'all' | 'failed' | 'none';
   readonly logger?: Logger;
@@ -83,7 +85,7 @@ export interface MongoOutboxJob {
 /** The mail queue in a collection: a driver, its source, and what it holds. */
 export interface MongoOutbox extends QueueDriver {
   readonly source: QueueSource;
-  /** Makes the indexes of the outbox: the ready jobs, the leases, and the expiry of finished ones. */
+  /** Makes the indexes of the outbox: the ready jobs, the leases, and the expiry of finished ones (`expireAt`). */
   ensureIndexes(): Promise<void>;
   get(id: string): Promise<MongoOutboxJob | undefined>;
 }

@@ -29,7 +29,7 @@ A process that only enqueues passes `{ Queue }`, or a queue of its own
 | `backoff` | `{ type: 'alexify-mailer' }`: the delay the queue chose |
 | `priority` | `high` 1, `normal` 2, `low` 3 (`priorities`); never 0, which BullMQ runs before every prioritized job |
 | `delay` | until `scheduledAt` |
-| `removeOnComplete`, `removeOnFail` | a day and a week, by time (`jobOptions`) |
+| `removeOnComplete`, `removeOnFail` | `dedupeWindowSeconds` (a day) and `retainFailedSeconds` (a week), by time, as on every driver (`jobOptions` wins) |
 
 A duplicate is told by reading the job back (`detectDuplicates`, one read per
 enqueue; `'bulk'` for `enqueueMany` too). It holds while BullMQ keeps the

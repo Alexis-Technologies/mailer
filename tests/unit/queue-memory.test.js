@@ -534,3 +534,38 @@ test('Queue: a job done with keeps no data, unless told; its duplicates are stil
   }
   assert.throws(() => createMemoryQueue({ retainData: 'some' }), /retainData must be/);
 });
+
+test('Queue: the memory queue keeps a completed job for the window of duplicates, a failed one longer', async () => {
+  const clock = manualClock(0);
+  const queue = createMemoryQueue({
+    now: clock.now,
+    dedupeWindowSeconds: 60,
+    retainFailedSeconds: 120,
+  });
+  await queue.enqueue(requestOf('done'));
+  await queue.enqueue(requestOf('refused'));
+  for (let index = 0; index < 2; index++) {
+    const { lease } = await queue.source.reserve(1000);
+    if (lease.job.id === 'done') await queue.source.ack(lease, null);
+    else await queue.source.fail(lease, { code: 'x', reason: 'y' });
+  }
+  clock.advance(59_999);
+  assert.strictEqual((await queue.enqueue(requestOf('done'))).duplicate, true);
+  clock.advance(1);
+  // Past its window, the key is forgotten: the same id is a new job.
+  assert.strictEqual((await queue.enqueue(requestOf('done'))).duplicate, false);
+  assert.strictEqual(queue.get('refused').state, 'failed');
+  clock.advance(60_000);
+  assert.strictEqual(queue.get('refused'), undefined);
+  // The count bound drops the oldest finished first, of either kind.
+  const small = createMemoryQueue({ now: clock.now, retainFinished: 1 });
+  await small.enqueue(requestOf('a'));
+  await small.enqueue(requestOf('b'));
+  await small.source.fail((await small.source.reserve(1000)).lease, { code: 'x', reason: 'y' });
+  await small.source.ack((await small.source.reserve(1000)).lease, null);
+  assert.deepStrictEqual(
+    small.list().map((job) => job.id),
+    ['b'],
+  );
+  assert.throws(() => createMemoryQueue({ dedupeWindowSeconds: 0 }), /dedupeWindowSeconds/);
+});

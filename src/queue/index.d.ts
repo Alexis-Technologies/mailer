@@ -471,8 +471,12 @@ export interface MemoryQueueJob {
 export interface MemoryQueueOptions extends PollingDriverOptions {
   /** @default 100000 */
   readonly maxJobs?: number;
-  /** The jobs finished it keeps, and so the window of its duplicates. @default 10000 */
+  /** The most jobs finished it keeps, the oldest dropped first. @default 10000 */
   readonly retainFinished?: number;
+  /** The time a completed job is kept, and so the window of its duplicates. @default 86400 */
+  readonly dedupeWindowSeconds?: number;
+  /** The time a failed job is kept. @default 604800 */
+  readonly retainFailedSeconds?: number;
   /** See {@link MailQueueRetainData}. @default 'failed' */
   readonly retainData?: MailQueueRetainData;
 }

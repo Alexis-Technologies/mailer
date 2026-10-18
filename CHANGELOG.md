@@ -67,7 +67,8 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   that a worker whose clock is behind does not run a job beside its holder. Every driver drops the
   message of a job done with (`retainData`: `'failed'` keeps the failed ones, `'all'`, `'none'`),
   keeping its version and hash, so a duplicate is still told and a reset link does not wait in the
-  store.
+  store. Every driver keeps a completed job `dedupeWindowSeconds` (a day, its window of duplicates)
+  and a failed one `retainFailedSeconds` (a week); the outbox drops them by a TTL on `expireAt`.
 - **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
   defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
   (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,

@@ -5,7 +5,8 @@
 // 1, as 0 in BullMQ runs before every prioritized job.
 
 const { createLog } = require('../internal/log.js');
-const { checkPositiveInteger, checkRetainData } = require('../internal/options.js');
+const { checkPositiveInteger } = require('../internal/options.js');
+const { checkRetainData, retentionOf } = require('../internal/queue-options.js');
 const { settledWithin } = require('../internal/settle.js');
 const {
   MAILER_BACKOFF_TYPE,
@@ -31,12 +32,6 @@ const RESERVED_WORKER_OPTIONS = new Set(['connection', 'prefix', 'concurrency', 
 // BullMQ's highest priority number, 2^21 - 1.
 const MAX_PRIORITY = 2_097_151;
 const DEFAULT_PRIORITIES = Object.freeze({ high: 1, normal: 2, low: 3 });
-const DEFAULT_JOB_OPTIONS = Object.freeze({
-  // Kept by time, not by count: the window of duplicates does not shrink
-  // under load.
-  removeOnComplete: { age: 86_400 },
-  removeOnFail: { age: 604_800 },
-});
 
 const checkReserved = (options, reserved, what) => {
   if (options === undefined) return {};
@@ -91,11 +86,15 @@ const createDriverConfig = (options) => {
     priorities: checkPriorities(options.priorities),
     detectDuplicates,
     retainData: checkRetainData(options.retainData),
+    // Kept by time, not by count: the window of duplicates does not shrink
+    // under load.
+    retention: retentionOf(options),
   };
 };
 
 const optionsOf = (config, request) => ({
-  ...DEFAULT_JOB_OPTIONS,
+  removeOnComplete: { age: config.retention.dedupeWindowSeconds },
+  removeOnFail: { age: config.retention.retainFailedSeconds },
   ...config.jobOptions,
   jobId: request.id,
   timestamp: request.enqueuedAt,
@@ -193,7 +192,8 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
  * `removeOnComplete`; `workerOptions`, such as `limiter` or
  * `lockDuration`; `priorities` (`{ high: 1, normal: 2, low: 3 }`);
  * `detectDuplicates` (true); `retainData` ('failed'), the finished jobs whose
- * data is kept; `logger`.
+ * data is kept; `dedupeWindowSeconds` (a day) and `retainFailedSeconds` (a
+ * week), BullMQ's `removeOnComplete` and `removeOnFail`; `logger`.
  * @returns The driver, with `queue` and `createProcessor(handler)`.
  * @throws {TypeError} If an option is invalid.
  */

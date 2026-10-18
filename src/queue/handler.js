@@ -14,11 +14,8 @@ const { messageOf } = require('../internal/decorator.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { fingerprintOf } = require('../internal/fingerprint.js');
 const { createLog } = require('../internal/log.js');
-const {
-  checkNonNegativeInteger,
-  checkOptionalFunction,
-  checkPositiveInteger,
-} = require('../internal/options.js');
+const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const { checkNonNegativeInteger } = require('../internal/queue-options.js');
 const { isCallerAbort } = require('../internal/sleep.js');
 const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');

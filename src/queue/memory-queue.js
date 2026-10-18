@@ -8,11 +8,8 @@
 const { randomUUID } = require('node:crypto');
 const { Heap } = require('../internal/heap.js');
 const { createPollingDriver } = require('../internal/polling-driver.js');
-const {
-  checkOptionalFunction,
-  checkPositiveInteger,
-  checkRetainData,
-} = require('../internal/options.js');
+const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
+const { checkRetainData, retentionOf } = require('../internal/queue-options.js');
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 
 // The data of a job as a store gives it back: a copy, never the object
@@ -44,6 +41,20 @@ const nodeOf = (entry) => ({
 const isCurrent = (node, state) =>
   node.version === node.entry.version && node.entry.state === state;
 
+// A list of the ids of finished jobs, the oldest at its head, taken from the
+// head without shifting the array.
+const finishedList = () => ({ ids: [], head: 0 });
+const sizeOf = (list) => list.ids.length - list.head;
+const headOf = (list) => (list.head < list.ids.length ? list.ids[list.head] : undefined);
+const dropHead = (list) => {
+  list.ids[list.head] = undefined;
+  list.head += 1;
+  if (list.head > 1024 && list.head * 2 > list.ids.length) {
+    list.ids = list.ids.slice(list.head);
+    list.head = 0;
+  }
+};
+
 class MemorySource {
   id = 'memory';
   jobs = new Map();
@@ -54,12 +65,14 @@ class MemorySource {
   #leases = new Heap(leaseBefore);
   #open = 0;
   #active = 0;
-  // The ids of the jobs finished, the oldest at #finishedHead.
-  #finished = [];
-  #finishedHead = 0;
+  // The jobs finished, kept for different times: a completed one for the
+  // window of its duplicates, a failed one for a retry by hand.
+  #completed = finishedList();
+  #failed = finishedList();
   #listeners = new Set();
   #waiters = new Set();
   #seq = 0;
+  #finishedSeq = 0;
   #pausedUntil = 0;
   #config;
 
@@ -81,22 +94,54 @@ class MemorySource {
   }
 
   #finish(entry, state) {
+    const now = this.#config.now();
     entry.state = state;
     entry.token = undefined;
     entry.version += 1;
     this.#active -= 1;
     this.#open -= 1;
-    this.#finished.push(entry.id);
-    while (this.#finished.length - this.#finishedHead > this.#config.retainFinished) {
-      this.jobs.delete(this.#finished[this.#finishedHead]);
-      this.#finished[this.#finishedHead] = undefined;
-      this.#finishedHead += 1;
-    }
-    if (this.#finishedHead > 1024 && this.#finishedHead * 2 > this.#finished.length) {
-      this.#finished = this.#finished.slice(this.#finishedHead);
-      this.#finishedHead = 0;
-    }
+    entry.finishedSeq = this.#finishedSeq++;
+    const completed = state === 'completed';
+    const seconds = completed ? this.#config.dedupeWindowSeconds : this.#config.retainFailedSeconds;
+    entry.expireAt = now + seconds * 1000;
+    (completed ? this.#completed : this.#failed).ids.push(entry.id);
+    this.#sweep(now);
     this.#notify();
+  }
+
+  // Drops the finished jobs whose time is up, then the oldest beyond the
+  // count kept, the memory of their keys with them.
+  #sweep(now) {
+    this.#expireList(this.#completed, now);
+    this.#expireList(this.#failed, now);
+    while (sizeOf(this.#completed) + sizeOf(this.#failed) > this.#config.retainFinished) {
+      const completed = this.jobs.get(headOf(this.#completed));
+      const failed = this.jobs.get(headOf(this.#failed));
+      const older =
+        failed === undefined ||
+        (completed !== undefined && completed.finishedSeq < failed.finishedSeq)
+          ? this.#completed
+          : this.#failed;
+      this.jobs.delete(headOf(older));
+      dropHead(older);
+    }
+  }
+
+  // Drops the finished jobs whose time is up: what the queue holds is read
+  // only after.
+  prune() {
+    this.#sweep(this.#config.now());
+  }
+
+  #expireList(list, now) {
+    for (;;) {
+      const id = headOf(list);
+      if (id === undefined) return;
+      const entry = this.jobs.get(id);
+      if (entry !== undefined && entry.expireAt > now) return;
+      this.jobs.delete(id);
+      dropHead(list);
+    }
   }
 
   #holds(lease) {
@@ -152,6 +197,7 @@ class MemorySource {
 
   async enqueue(request) {
     if (!isJobRequest(request)) throw new TypeError('The memory queue takes a job request.');
+    this.#sweep(this.#config.now());
     const held = this.jobs.get(request.id);
     if (held !== undefined) return { id: request.id, duplicate: true, existingHash: held.hash };
     if (this.#open >= this.#config.maxJobs) {
@@ -185,6 +231,7 @@ class MemorySource {
 
   async reserve(leaseMilliseconds) {
     const now = this.#config.now();
+    this.#sweep(now);
     this.#expire(now);
     if (this.#pausedUntil > now) return { nextAvailableAt: this.#pausedUntil };
     this.#promote(now);
@@ -322,7 +369,8 @@ const viewOf = (entry, now) => {
  *
  * @param options `now`, `sleep`, `leaseMilliseconds` (60000),
  * `pollIntervalMilliseconds` (1000), `maxJobs` (100000), `retainFinished`
- * (10000), `retainData` ('failed'), `logger`.
+ * (10000), `dedupeWindowSeconds` (a day), `retainFailedSeconds` (a week),
+ * `retainData` ('failed'), `logger`.
  * @returns The driver, with `source`, `list()`, `get(id)`, `drain()` and
  * `wake()`.
  * @throws {TypeError} If an option is invalid.
@@ -333,6 +381,7 @@ const createMemoryQueue = (options = {}) => {
     maxJobs: checkPositiveInteger(options.maxJobs ?? 100_000, 'maxJobs'),
     retainFinished: checkPositiveInteger(options.retainFinished ?? 10_000, 'retainFinished'),
     retainData: checkRetainData(options.retainData),
+    ...retentionOf(options),
   };
   const source = new MemorySource(config);
   const driver = createPollingDriver(source, { ...options, now: config.now });
@@ -340,12 +389,14 @@ const createMemoryQueue = (options = {}) => {
     ...driver,
     source,
     list() {
+      source.prune();
       const views = [];
       const now = config.now();
       for (const entry of source.jobs.values()) views.push(viewOf(entry, now));
       return views;
     },
     get(id) {
+      source.prune();
       const entry = source.jobs.get(id);
       return entry === undefined ? undefined : viewOf(entry, config.now());
     },

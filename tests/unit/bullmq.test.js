@@ -446,3 +446,29 @@ test('BullMQ: a job done with keeps its version and hash, not its message, unles
     /retainData/,
   );
 });
+
+test('BullMQ: the retention of jobs is the queue’s, as on every driver', async () => {
+  const bullmq = fakeBullMQ();
+  const driver = createBullMQDriver({ bullmq });
+  await driver.enqueue(requestOf());
+  const [queue] = bullmq.queues;
+  assert.deepStrictEqual(
+    [queue.added[0].opts.removeOnComplete, queue.added[0].opts.removeOnFail],
+    [{ age: 86_400 }, { age: 604_800 }],
+  );
+  const short = fakeBullMQ();
+  await createBullMQDriver({
+    bullmq: short,
+    dedupeWindowSeconds: 3600,
+    retainFailedSeconds: 7200,
+  }).enqueue(requestOf());
+  const { opts } = short.queues[0].added[0];
+  assert.deepStrictEqual(
+    [opts.removeOnComplete, opts.removeOnFail],
+    [{ age: 3600 }, { age: 7200 }],
+  );
+  assert.throws(
+    () => createBullMQDriver({ bullmq, dedupeWindowSeconds: -1 }),
+    /dedupeWindowSeconds/,
+  );
+});

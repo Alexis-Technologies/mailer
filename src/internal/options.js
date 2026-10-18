@@ -37,38 +37,4 @@ const checkPositiveInteger = (value, name) => {
   return value;
 };
 
-/**
- * Checks a whole number of zero or more.
- *
- * @internal
- */
-const checkNonNegativeInteger = (value, name) => {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new TypeError(`${name} must be a whole number of zero or more: ${String(value)}`);
-  }
-  return value;
-};
-
-// What a queue keeps of the data of a finished job: all of it, that of the
-// failed ones (for a retry by hand), or none.
-const RETAIN_DATA = new Set(['all', 'failed', 'none']);
-
-/**
- * Checks `retainData` of a queue, `'failed'` by default.
- *
- * @internal
- */
-const checkRetainData = (value = 'failed') => {
-  if (!RETAIN_DATA.has(value)) {
-    throw new TypeError(`retainData must be 'all', 'failed' or 'none': ${String(value)}`);
-  }
-  return value;
-};
-
-module.exports = {
-  checkNonNegativeInteger,
-  checkRetainData,
-  checkOptionalFunction,
-  checkPositiveInteger,
-  checkPositiveNumber,
-};
+module.exports = { checkOptionalFunction, checkPositiveInteger, checkPositiveNumber };

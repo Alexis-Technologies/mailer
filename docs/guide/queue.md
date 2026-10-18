@@ -80,8 +80,10 @@ not the worker:
   same message;
 - a job is 256 KiB at most.
 
-Once a job is done with, the store drops its message (`retainData`, on the
-driver): `'failed'` by default keeps the data of the failed jobs only, for a
+A completed job is kept `dedupeWindowSeconds` (a day), the window in which an
+enqueue under its key is a duplicate, and a failed one `retainFailedSeconds` (a
+week), on every driver. Once a job is done with, the store drops its message
+(`retainData`, on the driver): `'failed'` by default keeps the data of the failed jobs only, for a
 retry by hand; `'all'` keeps every one, `'none'` none. The version and the hash
 of a job stay, so an enqueue again is still told a duplicate.
 

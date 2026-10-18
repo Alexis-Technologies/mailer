@@ -24,7 +24,7 @@ expectAssignable<MongoCollectionLike>(typed);
 const outbox = createMongoOutbox({
   collection: db.collection('mail_outbox'),
   changeStream: true,
-  retainFinishedSeconds: 3600,
+  dedupeWindowSeconds: 3600,
   leaseMilliseconds: 30_000,
   pollIntervalMilliseconds: 500,
 });

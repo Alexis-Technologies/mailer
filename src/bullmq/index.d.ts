@@ -127,6 +127,10 @@ export interface BullMQDriverOptions<Q extends BullMQQueueLike, W extends BullMQ
   readonly detectDuplicates?: boolean | 'bulk';
   /** The finished jobs whose data is kept: the others keep their version and hash. @default 'failed' */
   readonly retainData?: 'all' | 'failed' | 'none';
+  /** The time a completed job is kept (`removeOnComplete.age`), the window of its duplicates. @default 86400 */
+  readonly dedupeWindowSeconds?: number;
+  /** The time a failed job is kept (`removeOnFail.age`). @default 604800 */
+  readonly retainFailedSeconds?: number;
   /** Hears the events of the workers: errors, jobs BullMQ failed itself, stalls. */
   readonly logger?: Logger;
 }

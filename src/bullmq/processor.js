@@ -4,7 +4,7 @@
 // and a job moved back for a release, which spends no attempt.
 
 const { warnThrown } = require('../internal/callback.js');
-const { checkRetainData } = require('../internal/options.js');
+const { checkRetainData } = require('../internal/queue-options.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { namedError, rateLimitError, retryError } = require('./backoff.js');
 

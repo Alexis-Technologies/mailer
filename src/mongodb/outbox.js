@@ -9,18 +9,17 @@
 const { randomUUID } = require('node:crypto');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const {
   checkNonNegativeInteger,
-  checkOptionalFunction,
-  checkPositiveInteger,
   checkRetainData,
-} = require('../internal/options.js');
+  retentionOf,
+} = require('../internal/queue-options.js');
 const { isJobRequest, rankOf } = require('../internal/priority.js');
 const { checkCollection, documentOf, sessionOf } = require('./collection.js');
 
 // The document of a pause of the whole queue: no job id has a colon.
 const PAUSE_ID = 'mailer:pause';
-const DEFAULT_RETAIN_SECONDS = 7 * 24 * 60 * 60;
 // How far the clocks of two workers may be apart: a lease is taken back only
 // that long after it ran out by the clock of the worker that takes it.
 const DEFAULT_CLOCK_SKEW_MS = 5000;
@@ -179,8 +178,11 @@ class MongoOutboxSource {
   }
 
   ack(lease, result) {
-    const finishedAt = new Date(this.#config.now());
-    const set = { state: 'completed', result: result ?? null, finishedAt };
+    const now = this.#config.now();
+    const finishedAt = new Date(now);
+    // Kept, and its key remembered, for the window of duplicates.
+    const expireAt = new Date(now + this.#config.dedupeWindowSeconds * 1000);
+    const set = { state: 'completed', result: result ?? null, finishedAt, expireAt };
     return this.#settle(lease, set, undefined, this.#config.retainData !== 'all');
   }
 
@@ -189,8 +191,10 @@ class MongoOutboxSource {
   }
 
   fail(lease, failure) {
-    const finishedAt = new Date(this.#config.now());
-    const set = { state: 'failed', failure, finishedAt };
+    const now = this.#config.now();
+    const finishedAt = new Date(now);
+    const expireAt = new Date(now + this.#config.retainFailedSeconds * 1000);
+    const set = { state: 'failed', failure, finishedAt, expireAt };
     return this.#settle(lease, set, undefined, this.#config.retainData === 'none');
   }
 
@@ -230,8 +234,9 @@ const subscribe = (collection, listener, config) => {
  * @param options `collection`, `db.collection('mail_outbox')`;
  * `changeStream` (false), to wake the workers on a change (a replica set);
  * `retainData` ('failed'), the finished jobs whose data is kept;
- * `retainFinishedSeconds` (7 days), the time a finished job is kept, and so
- * the window of its duplicates; `clockSkewToleranceMilliseconds` (5000), how
+ * `dedupeWindowSeconds` (a day), the time a completed job is kept, and so
+ * the window of its duplicates; `retainFailedSeconds` (a week), that of a
+ * failed one; `clockSkewToleranceMilliseconds` (5000), how
  * far the clocks of the workers may be apart; `now`, `logger`, and the
  * options of the polling driver.
  * @returns The driver, with `source`, `ensureIndexes()` and `get(id)`.
@@ -259,10 +264,7 @@ const createMongoOutbox = (options = {}) => {
     retainData: checkRetainData(options.retainData),
     clockSkewToleranceMilliseconds,
     changeStream,
-    retainFinishedSeconds: checkPositiveInteger(
-      options.retainFinishedSeconds ?? DEFAULT_RETAIN_SECONDS,
-      'retainFinishedSeconds',
-    ),
+    ...retentionOf(options),
     log: createLog(options.logger, { component: 'queue', queue: 'mongodb' }),
   };
   const source = new MongoOutboxSource(collection, config);
@@ -276,10 +278,11 @@ const createMongoOutbox = (options = {}) => {
         { name: 'mailer_ready' },
       );
       await collection.createIndex({ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' });
-      // A finished job goes after its time, and with it the memory of its key.
+      // A finished job goes at its time, a completed one and with it the
+      // memory of its key after the window of duplicates, a failed one later.
       await collection.createIndex(
-        { finishedAt: 1 },
-        { name: 'mailer_finished', expireAfterSeconds: config.retainFinishedSeconds },
+        { expireAt: 1 },
+        { name: 'mailer_expire', expireAfterSeconds: 0 },
       );
     },
     async get(id) {

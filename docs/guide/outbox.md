@@ -88,13 +88,14 @@ is only the fallback.
 
 | Collection | Index |
 | --- | --- |
-| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; a TTL on `finishedAt` |
+| outbox | `{ state, rank, availableAt, enqueuedAt }` for the ready jobs; `{ state, leaseUntil }` for the leases; a TTL on `expireAt` |
 | audit | `{ correlationId, at, attempt, rank }`; `{ jobId }` |
 | idempotency | a TTL on `expiresAt` |
 
-A finished job is kept `retainFinishedSeconds` (a week), and while it is kept,
+A completed job is kept `dedupeWindowSeconds` (a day), and while it is kept,
 an enqueue under its key is a duplicate: the retention is the window of
-deduplication. A key of the store goes when its time passes. A completed job
+deduplication. A failed job is kept `retainFailedSeconds` (a week), for a retry
+by hand. Both are the same options, with the same defaults, on every driver. A key of the store goes when its time passes. A completed job
 keeps no `data`, only its hash (`retainData: 'failed'`, the default; `'all'`
 or `'none'`), so a reset link in it does not wait a week in the collection and
 its backups.
@@ -113,6 +114,7 @@ its backups.
   failure: { code, reason },   // of the last failed attempt
   result: { provider, providerMessageId },
   finishedAt: ISODate(…),
+  expireAt: ISODate(…),  // when the TTL drops it: dedupeWindowSeconds or retainFailedSeconds on
 }
 ```
 
