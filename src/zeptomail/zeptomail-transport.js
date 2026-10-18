@@ -6,29 +6,17 @@
 // message shared.
 
 const { sendConverted, sentWith } = require('../internal/api.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createZeptoMailConfig } = require('./config.js');
 const { createZeptoMailClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 /**
  * A transport over the email API of ZeptoMail.
  */
-class ZeptoMailTransport {
-  id = 'zeptomail';
-
+class ZeptoMailTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createZeptoMailConfig(config);
-    this.httpClient = createZeptoMailClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('zeptomail', config, createZeptoMailConfig, createZeptoMailClient);
   }
 
   /**
@@ -47,13 +35,6 @@ class ZeptoMailTransport {
       receiptOf: (answer) =>
         sentWith('zeptomail', answer.json?.request_id, 'ZeptoMail answered without a request_id.'),
     });
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 }
 

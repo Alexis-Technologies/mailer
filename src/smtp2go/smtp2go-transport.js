@@ -7,12 +7,11 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createSmtp2goConfig } = require('./config.js');
 const { createSmtp2goClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 const describeFailure = (failure) => {
   if (typeof failure === 'string') return failure;
@@ -52,20 +51,9 @@ const receiptOf = (json) => {
 /**
  * A transport over the email API of SMTP2GO.
  */
-class Smtp2goTransport {
-  id = 'smtp2go';
-
+class Smtp2goTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createSmtp2goConfig(config);
-    this.httpClient = createSmtp2goClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('smtp2go', config, createSmtp2goConfig, createSmtp2goClient);
   }
 
   /**
@@ -83,13 +71,6 @@ class Smtp2goTransport {
       request: (payload, sendOptions) => this.httpClient.send(payload, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json),
     });
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**

@@ -11,12 +11,12 @@ const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConcurrently } = require('../internal/batch.js');
 const { isCallerAbort, providerFailure } = require('../internal/api.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { toUuid } = require('../internal/uuid.js');
 const { verifyByRequest } = require('../internal/verify.js');
 const { createAzureConfig } = require('./config.js');
 const { createAzureClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 // The id of no operation, which `verify` reads.
 const NO_OPERATION = '00000000-0000-0000-0000-000000000000';
@@ -57,20 +57,9 @@ const receiptOf = (answer, requestId) => {
 /**
  * A transport over the Email API of Azure Communication Services.
  */
-class AzureTransport {
-  id = 'azure';
-
+class AzureTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createAzureConfig(config);
-    this.httpClient = createAzureClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('azure', config, createAzureConfig, createAzureClient);
   }
 
   /**

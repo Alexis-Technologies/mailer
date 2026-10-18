@@ -17,10 +17,10 @@ const {
   providerFailure,
 } = require('../internal/api.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createMailjetConfig } = require('./config.js');
 const { createMailjetClient } = require('./http-client.js');
 const { MAX_RECIPIENTS, convertMessage, recipientCount } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 // Mailjet takes 15 MB a request at most, attachments included.
 const MAX_REQUEST_BYTES = 15 * 1000 * 1000;
@@ -51,20 +51,9 @@ const answersOf = (error) =>
 /**
  * A transport over the Send API v3.1 of Mailjet.
  */
-class MailjetTransport {
-  id = 'mailjet';
-
+class MailjetTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createMailjetConfig(config);
-    this.httpClient = createMailjetClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('mailjet', config, createMailjetConfig, createMailjetClient);
   }
 
   receiptOf(entry) {

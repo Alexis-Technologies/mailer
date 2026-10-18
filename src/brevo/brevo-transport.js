@@ -12,12 +12,11 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { providerFailure, sendConverted, sentWith } = require('../internal/api.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createBrevoConfig } = require('./config.js');
 const { createBrevoClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 const failureOf = (error) => {
   if (error?.receiptCode === 'brevo.duplicate_parameter') {
@@ -39,20 +38,9 @@ const failureOf = (error) => {
  * A transport over the transactional email API of Brevo (formerly
  * Sendinblue).
  */
-class BrevoTransport {
-  id = 'brevo';
-
+class BrevoTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createBrevoConfig(config);
-    this.httpClient = createBrevoClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('brevo', config, createBrevoConfig, createBrevoClient);
   }
 
   /**
@@ -76,13 +64,6 @@ class BrevoTransport {
         ),
       failureOf,
     });
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**

@@ -8,12 +8,11 @@
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isCallerAbort, providerFailure, sendConverted } = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createSparkPostConfig } = require('./config.js');
 const { createSparkPostClient } = require('./http-client.js');
 const { convertMessage, convertRawMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 // The receipt of `{ results: { id, total_accepted_recipients,
 // total_rejected_recipients } }`.
@@ -46,20 +45,9 @@ const receiptOf = (json) => {
 /**
  * A transport over the Transmissions API of SparkPost.
  */
-class SparkPostTransport {
-  id = 'sparkpost';
-
+class SparkPostTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createSparkPostConfig(config);
-    this.httpClient = createSparkPostClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('sparkpost', config, createSparkPostConfig, createSparkPostClient);
   }
 
   /**
@@ -99,13 +87,6 @@ class SparkPostTransport {
       if (isCallerAbort(error, options?.signal)) throw error;
       return rawMessageFailure('sparkpost', error) ?? providerFailure('sparkpost', error);
     }
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**

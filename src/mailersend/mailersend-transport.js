@@ -8,30 +8,18 @@
 // accepts what may fail later, unknown to the receipts.
 
 const { sendConverted, sentWith } = require('../internal/api.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createMailerSendConfig } = require('./config.js');
 const { createMailerSendClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 /**
  * A transport over the email API of MailerSend.
  */
-class MailerSendTransport {
-  id = 'mailersend';
-
+class MailerSendTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createMailerSendConfig(config);
-    this.httpClient = createMailerSendClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('mailersend', config, createMailerSendConfig, createMailerSendClient);
   }
 
   /**
@@ -54,13 +42,6 @@ class MailerSendTransport {
           'MailerSend answered without an X-Message-Id.',
         ),
     });
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**

@@ -4,30 +4,18 @@
 // Changed in the port: `verify` lists the domains of the project.
 
 const { sendConverted, sentWith } = require('../internal/api.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createScalewayConfig } = require('./config.js');
 const { createScalewayClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 /**
  * A transport over the Transactional Email API of Scaleway.
  */
-class ScalewayTransport {
-  id = 'scaleway';
-
+class ScalewayTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createScalewayConfig(config);
-    this.httpClient = createScalewayClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('scaleway', config, createScalewayConfig, createScalewayClient);
   }
 
   /**
@@ -51,13 +39,6 @@ class ScalewayTransport {
           'Scaleway answered without an email id.',
         ),
     });
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**

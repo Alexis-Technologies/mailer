@@ -18,10 +18,10 @@ const {
   sendConverted,
 } = require('../internal/api.js');
 const { verifyByGet } = require('../internal/verify.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createPostmarkConfig } = require('./config.js');
 const { classifyErrorCode, createPostmarkClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 // The most messages one request of `/email/batch` takes.
 const MAX_BATCH_SIZE = 500;
@@ -54,20 +54,9 @@ const receiptOf = (entry) => {
 /**
  * A transport over the API of Postmark (postmarkapp.com).
  */
-class PostmarkTransport {
-  id = 'postmark';
-
+class PostmarkTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createPostmarkConfig(config);
-    this.httpClient = createPostmarkClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('postmark', config, createPostmarkConfig, createPostmarkClient);
   }
 
   /**

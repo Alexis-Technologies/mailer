@@ -19,11 +19,10 @@ const {
   sendConverted,
 } = require('../internal/api.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
-const { sendManyConcurrently } = require('../internal/batch.js');
-const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { createCloudflareConfig } = require('./config.js');
 const { createCloudflareClient, errorCodeOf } = require('./http-client.js');
 const { convertMessage, convertRawMessage } = require('./message-converter.js');
+const { ProviderTransport } = require('../internal/provider-transport.js');
 
 const listOf = (value) => (Array.isArray(value) ? value : []);
 
@@ -77,20 +76,9 @@ const receiptOf = (json, config) => {
 /**
  * A transport over the Email Service API of Cloudflare.
  */
-class CloudflareTransport {
-  id = 'cloudflare';
-
+class CloudflareTransport extends ProviderTransport {
   constructor(config) {
-    this.config = createCloudflareConfig(config);
-    this.httpClient = createCloudflareClient(this.config);
-  }
-
-  toJSON() {
-    return redactSecrets(this);
-  }
-
-  [INSPECT](_depth, options, inspect) {
-    return inspectRedacted(this, options, inspect);
+    super('cloudflare', config, createCloudflareConfig, createCloudflareClient);
   }
 
   /**
@@ -129,13 +117,6 @@ class CloudflareTransport {
       if (isCallerAbort(error, options?.signal)) throw error;
       return rawMessageFailure('cloudflare', error) ?? providerFailure('cloudflare', error);
     }
-  }
-
-  /**
-   * Sends messages `concurrency` at a time, the receipts in their order.
-   */
-  sendMany(messages, options) {
-    return sendManyConcurrently(this, messages, options);
   }
 
   /**
