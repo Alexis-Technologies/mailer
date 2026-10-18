@@ -286,3 +286,68 @@ MongoDB outbox: the order of priorities, leases, redelivery, fencing by the
 token, releases that spend no attempt, and the pause. The repository's
 `tests/helpers/queue/source-contract.js` is that contract as tests; copy it,
 and run it on your source (`createMemoryQueue().source` is one to compare).
+
+## Codes
+
+The codes the queue, its drivers and its worker give: in the `failure` of a job
+and the `error` of its audit event, as the message of a log record, or as the
+code of a process warning. `tests/unit/codes.test.js` keeps this table and the
+code in step.
+
+<!-- codes:start -->
+
+| Code | Where | What |
+| --- | --- | --- |
+| `queue.invalid_job` | failure | the data of a job is not that of a mail job |
+| `queue.unsupported_version` | failure | written by a later version: given back, then failed after a week |
+| `queue.hash_mismatch` | failure | the job is not what was enqueued |
+| `queue.signature_invalid` | failure | not signed by a key of `signingKeys` |
+| `queue.codec_missing` | failure | sealed, and the worker has no codec: given back, then failed after a week |
+| `queue.codec_failed` | failure | the codec could not open it |
+| `queue.key_reused` | thrown | a key enqueued before for another message |
+| `queue.refused` | failure | `checkJob` threw |
+| `queue.expired` | failure | past `expiresAt`, or its retry would be |
+| `queue.attempts_exhausted` | failure | a retryable failure on the last attempt |
+| `queue.redelivery_exhausted` | failure | its runs ended unsettled more than `maxRedeliveries` times |
+| `queue.redelivered` | failure | a run again after a run that may have sent it (`redelivered: 'delivery_unknown'`) |
+| `queue.attachment_unresolved` | failure | an attachment by reference, and no `resolveAttachment` |
+| `queue.attachment_failed` | failure | `resolveAttachment` threw or gave no content |
+| `queue.invalid_message` | failure | the job does not make a message |
+| `queue.invalid_receipt` | failure | the transport gave no receipt |
+| `queue.aborted` | failure | the worker stopped while the message was sent |
+| `delivery_unknown` | failure | the send may have gone (a timeout after the request, a key in flight) |
+| `queue.thrown` | failure | a bug of the transport or of the worker |
+| `queue.handler_threw` | failure | the handler of a driver threw |
+| `queue.invalid_outcome` | failure | the handler gave no outcome |
+| `queue.lost` | failure | BullMQ gave the job up itself (stalled too often) |
+| `queue.released` | failure | a release without a token, a retry on BullMQ |
+| `render.no_renderer` | failure | a template job, and the worker has no renderer |
+| `render.no_subject` | failure | neither the template nor the job gives a subject |
+| `render.failed` | failure | the template failed to render or was not found |
+| `audit.failed` | failure | a strict sink failed before the send: retried |
+| `queue.enqueued` | log | a job enqueued |
+| `queue.duplicate` | log | a job enqueued again under its key |
+| `queue.job.started` | log | a run starts |
+| `queue.job.completed` | log | a run accepted |
+| `queue.job.retrying` | log | a run to be retried |
+| `queue.job.released` | log | a run given back, its attempt not spent |
+| `queue.job.failed` | log | a run failed for good |
+| `queue.job.redelivered` | log | a run again of an attempt whose run died |
+| `queue.render.failed` | log | the text of a failed render, at `debug` |
+| `queue.worker.error` | log | what escaped the steps of the worker |
+| `queue.audit.failed` | log | the audit sink failed |
+| `queue.lease.extend_failed` | log | the store did not extend a lease |
+| `queue.lease.lost` | log | a run lost its lease, its result dropped |
+| `queue.settle_fenced` | log | a settle the token fenced off: the job may run twice |
+| `queue.settle_failed` | log | the store failed a settle: the lease will run out |
+| `queue.reserve_failed` | log | the store failed a reserve |
+| `queue.close_abandoned` | log | jobs still running past twice the timeout of `close()` |
+| `queue.change_stream_failed` | log | the change stream failed, to be opened again |
+| `queue.job.lost` | log | BullMQ failed a job itself |
+| `queue.job.stalled` | log | BullMQ found a job stalled |
+| `MAILER_AUDIT_FAILED` | warning | the audit sink failed |
+| `MAILER_QUEUE_HANDLER_THREW` | warning | the handler of a driver threw |
+| `MAILER_QUEUE_WORKER_THREW` | warning | an error escaped the steps of the worker |
+| `MAILER_QUEUE_RETAIN_FAILED` | warning | BullMQ refused to drop the data of a finished job |
+
+<!-- codes:end -->
