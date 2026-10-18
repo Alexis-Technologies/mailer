@@ -20,17 +20,13 @@ const UNESCAPED = new Map([
 ]);
 
 // A Cacher of Eta, which keeps every template it includes, as it renders,
-// bounded as the caches of the renderer are.
+// bounded as the caches of the renderer are: Eta defines and gets alone, as
+// the engine registers no template of its own.
 const cacherOf = (maxEntries) => {
   const cache = createCache(maxEntries);
   return {
     define: (key, value) => cache.set(key, value),
     get: (key) => cache.get(key),
-    remove: (key) => cache.delete(key),
-    reset: () => cache.clear(),
-    load(record) {
-      for (const key of Object.keys(record)) cache.set(key, record[key]);
-    },
   };
 };
 

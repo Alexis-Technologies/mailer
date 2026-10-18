@@ -983,6 +983,33 @@ test('Templates: a loader that fails under an engine fails as a load, naming the
   }
 });
 
+test('Templates: an include that is gone between its lookup and its read is missing', async () => {
+  // Without a cache, each read asks the loader: the include is there when
+  // the engine looks it up, and gone when it reads it.
+  const cases = [
+    [createLiquidEngine({ Liquid }), 'a.liquid', '{% render "b" %}', 'b.liquid'],
+    [createEtaEngine({ Eta }), 'a.eta', '<%~ include("b") %>', 'b.eta'],
+    [createPugEngine({ pug }), 'a.pug', 'include b', 'b.pug'],
+  ];
+  for (const [engine, name, source, include] of cases) {
+    let reads = 0;
+    const read = (asked) => {
+      if (asked === name) return { name, source };
+      if (asked !== include) return undefined;
+      reads++;
+      return reads === 1 ? { name: include, source: 'b' } : undefined;
+    };
+    const renderer = createTemplateRenderer({
+      engine,
+      loader: { load: read, loadSync: read },
+      cache: false,
+    });
+    const error = await failureOf(renderer.render({ template: 'a' }));
+    assert.ok(error instanceof TemplateNotFoundError, engine.name);
+    assert.deepStrictEqual([error.template, error.tried], [include, [include]], engine.name);
+  }
+});
+
 test('Templates: an engine that reads synchronously needs a loader with loadSync', async () => {
   const loader = {
     load: (name) => (name === 'a.ejs' ? { name, source: '<%- include("b") %>' } : undefined),
