@@ -36,6 +36,7 @@ const receiptOf = (entry) => {
   if (entry == null || typeof entry !== 'object') {
     return createFailedReceipt('Postmark gave no answer for the message.', {
       provider: 'postmark',
+      category: 'unknown',
       deliveryUnknown: true,
     });
   }

@@ -2,7 +2,7 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 const { generateId } = require('../core/id.js');
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { createSesConfig } = require('./config.js');
 const { SesApiError, SesHttpClient } = require('./http-client.js');
 const { convertMessage, convertRawMessage } = require('./message-converter.js');
@@ -292,9 +292,13 @@ const createSesFailure = (message, error) => {
     });
   }
 
+  // By the codes along its causes first, then by its words.
+  const { category, retryable } = classifyReceiptError(error);
   return createFailedReceipt(message, {
     deliveryUnknown: isDeliveryUnknown(error),
     provider: 'ses',
+    category,
+    retryable,
   });
 };
 

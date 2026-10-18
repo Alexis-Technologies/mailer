@@ -252,6 +252,9 @@ class PoolTransport {
       errorMessages.length > 0 ? errorMessages : ['All transports failed to send the message.'],
       {
         provider: 'pool',
+        // The errors of the transports carry their categories; with none,
+        // the pool says nothing of what failed.
+        category: errors.length > 0 ? undefined : 'unknown',
         errors: errors.length > 0 ? errors : undefined,
         attempts: attemptedIndices.size,
         deliveryUnknown: failure.deliveryUnknown,

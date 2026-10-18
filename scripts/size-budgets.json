@@ -19,7 +19,7 @@
   "./brevo": 7.5,
   "./mailjet": 8.5,
   "./mailersend": 8,
-  "./sparkpost": 8,
+  "./sparkpost": 8.5,
   "./zeptomail": 7.5,
   "./smtp2go": 8,
   "./azure": 9,

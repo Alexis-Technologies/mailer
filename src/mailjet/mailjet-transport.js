@@ -71,9 +71,12 @@ class MailjetTransport {
     if (entry?.Status !== 'success') {
       const errors = Array.isArray(entry?.Errors) ? entry.Errors : [];
       const text = describeErrors(errors) || `message status "${entry?.Status ?? 'unknown'}"`;
+      const statusCode = errors[0]?.StatusCode;
       return createFailedReceipt(`Mailjet: ${text}`, {
         provider: 'mailjet',
-        statusCode: errors[0]?.StatusCode,
+        // By the status of its error; with none, Mailjet says nothing of it.
+        ...(statusCode === undefined && { category: 'unknown' }),
+        statusCode,
         code: errors[0]?.ErrorCode == null ? undefined : `mailjet.${errors[0].ErrorCode}`,
         deliveryUnknown: entry == null,
         providerDetails: entry ?? undefined,
@@ -89,6 +92,7 @@ class MailjetTransport {
     if (messageId === '') {
       return createFailedReceipt('Mailjet answered without a MessageUUID.', {
         provider: 'mailjet',
+        category: 'unknown',
         deliveryUnknown: true,
       });
     }

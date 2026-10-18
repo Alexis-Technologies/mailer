@@ -28,6 +28,7 @@ const failureOf = (error) => {
     // Azure took this request before: it is running, or went then.
     return createFailedReceipt(`${error.message} (a repeat of a request Azure took before)`, {
       provider: 'azure',
+      category: 'unknown',
       deliveryUnknown: true,
       statusCode: error.statusCode,
       attempts: error.attempts,

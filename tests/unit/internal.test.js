@@ -641,3 +641,50 @@ test('Internal: a logger that throws is told once, by its name, not its text', (
   assert.match(warnings[0][1], /threw Error; its later failures are not told/);
   assert.doesNotMatch(warnings[0][1], /bob@example\.com/);
 });
+
+test('Receipts: every failed receipt the library makes names its category, or its status', () => {
+  // Before: receipts of the library's own conditions (an answer without an
+  // id, a repeat, a failure of the decorators) had none, and were classified
+  // by the words of their text, which can hold the caller's data: the key
+  // `order-timeout-1` made a receipt of ./idempotency a timeout.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '../../src');
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.js')) files.push(full);
+    }
+  };
+  walk(root);
+  const unnamed = [];
+  for (const file of files) {
+    if (file.endsWith(path.join('core', 'receipt.js'))) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    let at = text.indexOf('createFailedReceipt(');
+    while (at !== -1) {
+      // The text of the call, to its closing parenthesis.
+      let depth = 0;
+      let end = at + 'createFailedReceipt'.length;
+      for (; end < text.length; end++) {
+        if (text[end] === '(') depth++;
+        else if (text[end] === ')' && --depth === 0) break;
+      }
+      const call = text.slice(at, end + 1);
+      // A category, a status it is told by, options spread that carry one, or
+      // the structured errors of other transports, which carry theirs.
+      if (
+        !/\bcategory\b|\bstatusCode\b|\.\.\.|\berrors\b|^createFailedReceipt\(receiptError/.test(
+          call,
+        )
+      ) {
+        const line = text.slice(0, at).split('\n').length;
+        unnamed.push(`${path.relative(root, file)}:${line}`);
+      }
+      at = text.indexOf('createFailedReceipt(', end);
+    }
+  }
+  assert.deepStrictEqual(unnamed, []);
+});

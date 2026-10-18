@@ -24,7 +24,12 @@ const failureOf = (error) => {
     // Brevo took a request with this key before: the message went then.
     return createFailedReceipt(
       'Brevo already took a message with this idempotency key; it is not sent again.',
-      { provider: 'brevo', deliveryUnknown: true, code: 'brevo.duplicate_parameter' },
+      {
+        provider: 'brevo',
+        category: 'unknown',
+        deliveryUnknown: true,
+        code: 'brevo.duplicate_parameter',
+      },
     );
   }
   return providerFailure('brevo', error);

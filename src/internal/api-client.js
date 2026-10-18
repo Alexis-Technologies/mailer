@@ -3,7 +3,11 @@
 // and messages through its hooks: the error of their API, an authenticated
 // request through `requestWithRetry`, and the receipt of a failure.
 
-const { createFailedReceipt, parseRetryAfter } = require('../core/receipt.js');
+const {
+  classifyReceiptError,
+  createFailedReceipt,
+  parseRetryAfter,
+} = require('../core/receipt.js');
 const { readText } = require('./body.js');
 const { isDeliveryUnknown } = require('./delivery-unknown.js');
 const { requestWithRetry } = require('./http.js');
@@ -220,8 +224,20 @@ const providerFailure = (provider, error) => {
       provider,
       deliveryUnknown: isDeliveryUnknown(error),
       attempts: typeof error?.attempts === 'number' ? error.attempts : undefined,
+      // By the codes along its causes first, then by its words.
+      ...categoryOf(error),
     })
   );
+};
+
+/**
+ * The category and retryability of a thrown error, by `classifyReceiptError`.
+ *
+ * @internal
+ */
+const categoryOf = (error) => {
+  const { category, retryable } = classifyReceiptError(error);
+  return { category, retryable };
 };
 
 /**
@@ -257,6 +273,7 @@ const isCallerAbort = (error, signal) =>
 
 module.exports = {
   ProviderApiError,
+  categoryOf,
   createApiClient,
   isCallerAbort,
   parseAnswer,

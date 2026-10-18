@@ -34,6 +34,7 @@ const receiptOf = (json) => {
   if (typeof messageId !== 'string' || messageId === '') {
     return createFailedReceipt('SparkPost answered without a transmission id.', {
       provider: 'sparkpost',
+      category: 'unknown',
       deliveryUnknown: true,
     });
   }

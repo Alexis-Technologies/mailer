@@ -42,6 +42,7 @@ const receiptOf = (json) => {
   if (typeof messageId !== 'string' || messageId === '') {
     return createFailedReceipt('SMTP2GO answered without an email_id.', {
       provider: 'smtp2go',
+      category: 'unknown',
       deliveryUnknown: true,
     });
   }

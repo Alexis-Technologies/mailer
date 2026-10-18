@@ -24,7 +24,7 @@ const {
   iterateRawMessage,
   RawMessageValidationError,
 } = require('../core/raw-message.js');
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { refusalFailure } = require('../internal/refusal.js');
 const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
@@ -66,7 +66,9 @@ const failureOf = (error) => {
   if (error instanceof RawMessageValidationError) {
     return createFailedReceipt(message, { provider: 'sendmail', category: 'validation' });
   }
-  return createFailedReceipt(message, { provider: 'sendmail' });
+  // By the codes along its causes first, then by its words.
+  const { category, retryable } = classifyReceiptError(error);
+  return createFailedReceipt(message, { provider: 'sendmail', category, retryable });
 };
 
 // An address that would read as an option, as nodemailer refuses it; `--`
