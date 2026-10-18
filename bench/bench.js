@@ -30,7 +30,7 @@ const {
 const { composeMessage } = require('../src/mime/index.js');
 const { inlineDataUrls } = require('../src/attachments/index.js');
 const { htmlToText } = require('../src/render/index.js');
-const { fingerprintOf } = require('../src/idempotency/fingerprint.js');
+const { fingerprintOf } = require('../src/internal/fingerprint.js');
 const { gatedSendMany } = require('../src/internal/gate.js');
 const {
   createMailtrapWebhookVerifier,

@@ -25,7 +25,7 @@ const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createIdempotencyConfig } = require('./config.js');
-const { fingerprintOf } = require('./fingerprint.js');
+const { fingerprintOf } = require('../internal/fingerprint.js');
 
 const STORE_FAILED = 'MAILER_IDEMPOTENCY_STORE_FAILED';
 
