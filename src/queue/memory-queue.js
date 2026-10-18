@@ -221,36 +221,40 @@ class MemorySource {
 
   async ack(lease, result) {
     const entry = this.#holds(lease);
-    if (entry === undefined) return;
+    if (entry === undefined) return false;
     entry.result = result;
     this.#finish(entry, 'completed');
+    return true;
   }
 
   async retry(lease, availableAt, failure) {
     const entry = this.#holds(lease);
-    if (entry === undefined) return;
+    if (entry === undefined) return false;
     this.#active -= 1;
     entry.availableAt = availableAt;
     entry.failure = failure;
     this.#wait(entry);
     this.#notify();
+    return true;
   }
 
   async fail(lease, failure) {
     const entry = this.#holds(lease);
-    if (entry === undefined) return;
+    if (entry === undefined) return false;
     entry.failure = failure;
     this.#finish(entry, 'failed');
+    return true;
   }
 
   async release(lease, availableAt) {
     const entry = this.#holds(lease);
-    if (entry === undefined) return;
+    if (entry === undefined) return false;
     this.#active -= 1;
     entry.attempt -= 1;
     entry.availableAt = availableAt ?? this.#config.now();
     this.#wait(entry);
     this.#notify();
+    return true;
   }
 
   async pause(until) {

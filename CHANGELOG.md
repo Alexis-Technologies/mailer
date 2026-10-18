@@ -31,7 +31,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   queue and `expiresAt` a deadline. `createMailJobHandler` is the worker for any driver;
   `createPollingDriver(source)` makes a driver of a store that lends its jobs (an outbox), and
   `createMemoryQueue()` is one in memory for tests, its jobs on heaps so a reserve costs
-  O(log n) however many wait, its `source` held to the same contract as the outbox. The fields of a job of version 1 are fixed:
+  O(log n) however many wait, its `source` held to the same contract as the outbox. A source's
+  settling writes give `false` when the token of the lease no longer holds the job, and the driver
+  logs `queue.settle_fenced`. The fields of a job of version 1 are fixed:
   a later version, or a field this one does not know, makes the job wait for a worker that reads
   it (`queue.unsupported_version`) rather than fail its hash during a rolling deploy.
   `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and a worker given them sends

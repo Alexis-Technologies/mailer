@@ -228,7 +228,10 @@ clock of the tests. It is the polling driver over a source in memory:
 lends its jobs (`reserve`, `extend`, `ack`, `retry`, `fail`, `release`), such
 as an outbox in your database. It keeps the lease of a job while it runs, gives
 a job whose lease ran out to another worker as `redelivered`, and on `close()`
-waits for the jobs in flight, then aborts them.
+waits for the jobs in flight, then aborts them. A source's `ack`, `retry`,
+`fail` and `release` are fenced by the token of the lease and give `false`
+when it was lost: the driver then logs `queue.settle_fenced` at `warn`, as
+another worker holds the job and what this run did may be done again.
 
 A source of your own is held to the same semantics as the memory queue and the
 MongoDB outbox: the order of priorities, leases, redelivery, fencing by the

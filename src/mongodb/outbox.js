@@ -75,7 +75,9 @@ class MongoOutboxSource {
       $set: { ...set, token: null, leaseUntil: null, updatedAt: new Date(this.#config.now()) },
     };
     if (inc !== undefined) update.$inc = inc;
-    await this.#collection.updateOne(leased(lease), update);
+    const result = await this.#collection.updateOne(leased(lease), update);
+    // false: the lease was lost, and the job is another worker's.
+    return (result?.matchedCount ?? 0) > 0;
   }
 
   async enqueue(request, options = {}) {

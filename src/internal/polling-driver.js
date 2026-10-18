@@ -164,7 +164,16 @@ const runLease = async (source, handler, lease, jobsSignal, config, log) => {
     return;
   }
   try {
-    await settle(source, lease, outcome, config);
+    const settled = await settle(source, lease, outcome, config);
+    // The lease ran out between the run and its settling: another worker
+    // holds the job, and what this run did may be done again.
+    if (settled === false) {
+      log.write(
+        'warn',
+        () => ({ jobId: lease.job.id, outcome: outcome?.type }),
+        'queue.settle_fenced',
+      );
+    }
   } catch (error) {
     // The lease runs out, and the job comes back.
     log.write(

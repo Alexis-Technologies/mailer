@@ -143,14 +143,15 @@ const sourceContract = (name, makeSource, options = {}) => {
     clock.advance(LEASE + 1);
     const held = (await source.reserve(LEASE)).lease;
     assert.strictEqual(await source.extend(lost, LEASE), false);
-    await source.ack(lost, null);
-    await source.fail(lost, { code: 'x', reason: 'y' });
-    await source.release(lost);
-    await source.retry(lost, START, { code: 'x', reason: 'y' });
+    // Each settling write of a lost lease writes nothing, and says so.
+    assert.strictEqual(await source.ack(lost, null), false);
+    assert.strictEqual(await source.fail(lost, { code: 'x', reason: 'y' }), false);
+    assert.strictEqual(await source.release(lost), false);
+    assert.strictEqual(await source.retry(lost, START, { code: 'x', reason: 'y' }), false);
     // The job is still the next holder's.
     assert.strictEqual((await source.reserve(LEASE)).lease, undefined);
     assert.strictEqual(await source.extend(held, LEASE), true);
-    await source.ack(held, null);
+    assert.strictEqual(await source.ack(held, null), true);
     clock.advance(LEASE * 3);
     assert.strictEqual((await source.reserve(LEASE)).lease, undefined);
   });

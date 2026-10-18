@@ -1590,11 +1590,16 @@ export interface QueueSource {
   ): Promise<{ readonly lease?: QueueLease; readonly nextAvailableAt?: number }>;
   /** false: the lease was lost (it ran out, another took it). */
   extend(lease: QueueLease, leaseMilliseconds: number): Promise<boolean>;
-  ack(lease: QueueLease, result?: JsonObject): Promise<void>;
-  retry(lease: QueueLease, availableAt: number, failure: QueueFailure): Promise<void>;
-  fail(lease: QueueLease, failure: QueueFailure): Promise<void>;
+  /**
+   * Settles the job of a lease. Each settling write is fenced by the token:
+   * `false` when the lease was lost and nothing was written (another worker
+   * holds the job, and what this run did may be done twice).
+   */
+  ack(lease: QueueLease, result?: JsonObject): Promise<boolean | void>;
+  retry(lease: QueueLease, availableAt: number, failure: QueueFailure): Promise<boolean | void>;
+  fail(lease: QueueLease, failure: QueueFailure): Promise<boolean | void>;
   /** Back to ready at `availableAt` (now by default), its attempt not counted. */
-  release(lease: QueueLease, availableAt?: number): Promise<void>;
+  release(lease: QueueLease, availableAt?: number): Promise<boolean | void>;
   /** The whole queue waits until then; without it, a retry of the queue is one of the job. */
   pause?(until: number): Promise<void>;
   /** Wakes the readers when a job may be ready: an enqueue, a change stream. */

@@ -405,3 +405,40 @@ test('Queue: the memory queue lends each of many jobs without looking through th
   assert.deepStrictEqual(await source.reserve(60_000), {});
   assert.ok(performance.now() - started < 3000, `${performance.now() - started} ms`);
 });
+
+test('Queue: a settle its source fenced off is told, as the job may run twice', async () => {
+  const records = [];
+  const logger = { warn: (record, message) => records.push([message, record]) };
+  let reserved = false;
+  const source = {
+    id: 'fenced',
+    enqueue: async () => ({ id: 'x', duplicate: false }),
+    reserve: async () => {
+      if (reserved) return {};
+      reserved = true;
+      const job = {
+        id: 'j',
+        name: 'mail',
+        data: {},
+        attempt: 1,
+        maxAttempts: 1,
+        redelivered: false,
+      };
+      return { lease: { job, token: 't' } };
+    },
+    extend: async () => true,
+    // The lease ran out between the run and its settling.
+    ack: async () => false,
+    retry: async () => true,
+    fail: async () => true,
+    release: async () => undefined,
+  };
+  const driver = createPollingDriver(source, { pollIntervalMilliseconds: 5, logger });
+  const consumer = driver.consume(async () => ({ type: 'ack' }));
+  while (records.length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+  await consumer.close();
+  assert.deepStrictEqual(records[0], [
+    'queue.settle_fenced',
+    { component: 'queue', queue: 'fenced', jobId: 'j', outcome: 'ack' },
+  ]);
+});
