@@ -163,3 +163,21 @@ test('Scripts: check-dts compiles the types of every entry of the exports map', 
   );
   assert.strictEqual(typesOf(pkg.exports)[0], './index.d.ts');
 });
+
+test('Scripts: test:stores fails rather than skip when a store is not given', () => {
+  const env = { ...process.env, MONGODB_URL: '', BULLMQ_REDIS_URL: '' };
+  const result = spawnSync(process.execPath, [path.join(ROOT, 'scripts/test-stores.js')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env,
+  });
+  assert.strictEqual(result.status, 1);
+  assert.match(result.stderr, /needs MONGODB_URL and BULLMQ_REDIS_URL/);
+  const half = spawnSync(process.execPath, [path.join(ROOT, 'scripts/test-stores.js')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...env, MONGODB_URL: 'mongodb://localhost:1' },
+  });
+  assert.strictEqual(half.status, 1);
+  assert.match(half.stderr, /needs BULLMQ_REDIS_URL:/);
+});

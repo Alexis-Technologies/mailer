@@ -210,6 +210,7 @@
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
     "test:bullmq": "node --test --test-concurrency=1 tests/bullmq/*.test.js",
     "test:mongodb": "node --test --test-concurrency=1 tests/mongodb/*.test.js",
+    "test:stores": "node scripts/test-stores.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",
