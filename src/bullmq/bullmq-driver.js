@@ -4,7 +4,10 @@
 // it; its attempts and backoff are the queue's; its priority is ranked from
 // 1, as 0 in BullMQ runs before every prioritized job.
 
+const { warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
+const { redactAddresses } = require('../internal/redact-addresses.js');
+const { toUuid } = require('../internal/uuid.js');
 const { checkPositiveInteger } = require('../internal/options.js');
 const { checkRetainData, retentionOf } = require('../internal/queue-options.js');
 const { settledWithin } = require('../internal/settle.js');
@@ -116,6 +119,33 @@ const duplicateOf = async (queue, request) => {
   return answer;
 };
 
+// Tells the audit of a job BullMQ gave up itself, which the handler never
+// settled: it may have been sent, by a run that stalled after its send.
+const auditLost = async (audit, job, error) => {
+  const attempt = Math.max(1, job?.attemptsMade ?? 1);
+  const event = {
+    id: toUuid(`${job?.id}\u0000${attempt}\u0000delivery_unknown`),
+    state: 'delivery_unknown',
+    at: new Date().toISOString(),
+    source: 'worker',
+    correlationId:
+      typeof job?.data?.correlationId === 'string' ? job.data.correlationId : String(job?.id),
+    jobId: String(job?.id),
+    attempt,
+    error: {
+      category: 'unknown',
+      code: 'queue.lost',
+      message: redactAddresses(String(error?.message ?? 'lost')).slice(0, 500),
+      retryable: false,
+    },
+  };
+  try {
+    await audit.append(event);
+  } catch (thrown) {
+    warnThrown('The audit sink of a BullMQ queue', thrown, 'MAILER_AUDIT_FAILED');
+  }
+};
+
 const startWorker = (config, queue, handler, consumeOptions, log) => {
   const { Worker } = config.bullmq;
   if (typeof Worker !== 'function') {
@@ -158,6 +188,9 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
     // handler never saw.
     if (!isSettledError(error)) {
       log.write('error', () => ({ jobId: job?.id, reason: error?.message }), 'queue.job.lost');
+      if (typeof consumeOptions.audit?.append === 'function') {
+        auditLost(consumeOptions.audit, job, error);
+      }
     }
   });
   worker.on('stalled', (jobId) => log.write('warn', () => ({ jobId }), 'queue.job.stalled'));

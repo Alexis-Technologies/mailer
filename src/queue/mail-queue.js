@@ -214,6 +214,7 @@ const createMailQueue = (options = {}) => {
       const consumer = driver.consume(handler, {
         concurrency: workerOptions.concurrency,
         signal: workerOptions.signal,
+        audit: workerOptions.audit ?? queue.audit,
       });
       return {
         close: (closeOptions) => consumer.close(closeOptions),

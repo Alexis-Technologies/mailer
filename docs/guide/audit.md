@@ -86,3 +86,28 @@ await commit();
 `failed`; `deferred` keeps a message accepted; an open, a click and an
 unsubscribe are engagement, not states. The queue writes `correlationId` into
 the metadata of each message, which the providers give back with its events.
+
+## Messages to reconcile
+
+A message whose last state is `submitted` long after its send, or
+`delivery_unknown`, may have gone or not: its worker died after the request,
+a timeout came after the provider took it, or BullMQ gave the job up after it
+stalled too often (the driver tells the queue's sink `delivery_unknown`, code
+`queue.lost`). Find them, then settle each from the provider's webhooks or its
+dashboard rather than send it again. On MongoDB:
+
+```js
+const stale = await db
+  .collection('mail_audit')
+  .aggregate([
+    { $sort: { correlationId: 1, at: 1, attempt: 1, rank: 1 } },
+    { $group: { _id: '$correlationId', state: { $last: '$state' }, at: { $last: '$at' } } },
+    {
+      $match: {
+        state: { $in: ['submitted', 'delivery_unknown'] },
+        at: { $lt: new Date(Date.now() - 15 * 60_000) },
+      },
+    },
+  ])
+  .toArray();
+```

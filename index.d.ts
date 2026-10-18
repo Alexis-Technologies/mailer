@@ -1552,6 +1552,12 @@ export interface QueueConsumeOptions {
   /** The jobs run at once. @default 1 */
   readonly concurrency?: number;
   readonly signal?: AbortSignal;
+  /**
+   * The sink a driver tells of a job it gave up itself, which the handler
+   * never settled (BullMQ's job stalled too often): `delivery_unknown`. A
+   * mail queue's worker passes the queue's.
+   */
+  readonly audit?: AuditSink;
 }
 /** The options of closing a consumer. */
 export interface QueueCloseOptions {

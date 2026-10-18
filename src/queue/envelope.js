@@ -8,8 +8,9 @@
 const { messageOf } = require('../internal/decorator.js');
 const { MailQueueError } = require('./errors.js');
 
-// The fields a sealed job keeps in clear, beside `enc`.
-const ENVELOPE = new Set(['v', 'hash', 'enqueuedAt', 'mac', 'kid', 'trace']);
+// The fields a sealed job keeps in clear, beside `enc`: an id of its message
+// among them, by which a driver that gives a job up tells the audit.
+const ENVELOPE = new Set(['v', 'hash', 'enqueuedAt', 'correlationId', 'mac', 'kid', 'trace']);
 
 /**
  * Checks a codec: `encode(text)` and `decode(text)`, sync or async, each

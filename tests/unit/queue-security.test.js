@@ -176,6 +176,7 @@ test('Queue: with a codec the store holds no address, and the worker opens the j
   const enqueued = await queue.enqueue(withFile);
   const [stored] = driver.list();
   assert.deepStrictEqual(Object.keys(stored.data).toSorted(), [
+    'correlationId',
     'enc',
     'enqueuedAt',
     'hash',
@@ -257,8 +258,8 @@ test('Queue: what a codec opens is checked, and a field in clear is refused', as
   const opened = { ...JSON.parse(signed.enc), ...signed };
   delete opened.enc;
   const forged = forge(opened);
-  const { v, hash, enqueuedAt, kid, mac, ...fields } = forged;
-  const resealed = { v, hash, enqueuedAt, kid, mac, enc: JSON.stringify(fields) };
+  const { v, hash, enqueuedAt, correlationId, kid, mac, ...fields } = forged;
+  const resealed = { v, hash, enqueuedAt, correlationId, kid, mac, enc: JSON.stringify(fields) };
   const verifying = createMailJobHandler({
     transport: fakeTransport(),
     codec: identity,

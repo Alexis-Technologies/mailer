@@ -54,14 +54,16 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the application's key) seals the
   fields of each job in its store, its addresses, context and attachments, leaving the version,
   hash, signature and trace context in clear; a worker without the codec gives a sealed job back
-  (`queue.codec_missing`), and one whose codec fails retries it (`queue.codec_failed`). `idSecret` derives the id of a job from its
+  (`queue.codec_missing`), and one whose codec fails retries it (`queue.codec_failed`); its
+  `correlationId` stays in clear too. `idSecret` derives the id of a job from its
   key with an HMAC, so an id that goes into the audit and the logs cannot be traced back to a key
   that names a person.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
   that spend no attempt. `createBullMQProcessor` and `createBullMQBackoffStrategy` serve a Worker
-  of your own. `pnpm test:bullmq` runs it on BullMQ and Valkey.
+  of your own. A job BullMQ gives up itself (stalled too often) is told to the queue's audit sink
+  as `delivery_unknown` (`queue.lost`), so its trail does not end at `submitted`. `pnpm test:bullmq` runs it on BullMQ and Valkey.
 - **`./mongodb`**: the transactional outbox, `createMongoOutbox({ collection })`, a
   `QueueSource` in a collection of the MongoDB driver passed in: a job enqueued with
   `{ transaction: session }` is written in that transaction (by an upsert, so a duplicate does

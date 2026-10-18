@@ -38,6 +38,6 @@
   "./tee": 3.5,
   "./audit": 2,
   "./queue": 18,
-  "./bullmq": 4,
+  "./bullmq": 4.5,
   "./mongodb": 6
 }

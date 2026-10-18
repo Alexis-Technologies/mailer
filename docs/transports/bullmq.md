@@ -39,6 +39,11 @@ it holds only while the first job is not finished. A completed job keeps only
 `{ v, hash }` of its data (`job.updateData`, by `retainData: 'failed'`, the
 default; `'all'` or `'none'`), so its message does not wait a day in Redis.
 
+A job BullMQ fails itself, which the handler never settled (stalled more than
+`maxStalledCount`), is logged as `queue.job.lost` and told to the queue's audit
+sink as `delivery_unknown` (code `queue.lost`): its run may have sent it before
+it stalled.
+
 ## The workers it makes
 
 `queue.createWorker()` makes a BullMQ `Worker` with your `workerOptions`

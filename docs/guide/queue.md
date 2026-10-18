@@ -145,7 +145,7 @@ const queue = createMailQueue({ driver, codec, signingKeys });
 ```
 
 A sealed job keeps in clear only `v`, `hash` (a duplicate is still told by
-it), `enqueuedAt`, `kid`, `mac` and `trace`; the rest is `enc`. Its workers
+it), `enqueuedAt`, `correlationId`, `kid`, `mac` and `trace`; the rest is `enc`. Its workers
 take the queue's codec. A worker without it gives the job back, its attempts
 not spent, for a worker that can open it (`queue.codec_missing`); one whose
 codec throws (a key out of reach) retries it (`queue.codec_failed`), and a

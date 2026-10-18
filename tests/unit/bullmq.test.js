@@ -472,3 +472,26 @@ test('BullMQ: the retention of jobs is the queue’s, as on every driver', async
     /dedupeWindowSeconds/,
   );
 });
+
+test('BullMQ: a job BullMQ gives up itself is told to the audit as of unknown delivery', async () => {
+  const { createMemoryAuditSink } = require('../../src/audit/index.js');
+  const bullmq = fakeBullMQ();
+  const audit = createMemoryAuditSink();
+  const driver = createBullMQDriver({ bullmq });
+  const consumer = driver.consume(async () => ({ type: 'ack' }), { audit });
+  const [worker] = bullmq.workers;
+  const job = fakeJob({ data: { v: 1, correlationId: 'order-42' }, attemptsMade: 1 });
+  worker.emit('failed', job, new Error('job stalled more than allowable limit'));
+  await new Promise(setImmediate);
+  const [event] = audit.events;
+  assert.deepStrictEqual(
+    [event.state, event.correlationId, event.jobId, event.attempt, event.error.code],
+    ['delivery_unknown', 'order-42', 'j1', 1, 'queue.lost'],
+  );
+  // What the processor threw itself is the handler's, told already.
+  const { retryError } = require('../../src/bullmq/backoff.js');
+  worker.emit('failed', job, retryError({ code: 'x', reason: 'y', delayMilliseconds: 1 }));
+  await new Promise(setImmediate);
+  assert.strictEqual(audit.events.length, 1);
+  await consumer.close();
+});
