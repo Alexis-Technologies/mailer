@@ -237,6 +237,20 @@ export interface TemplateRendererOptions<TSource = string> {
   readonly autoText?: boolean;
   /** false reads and compiles every template on each render, for development. @default true */
   readonly cache?: boolean | TemplateCacheOptions;
+  /**
+   * The includes, partials and layouts an engine looks up in one render, as
+   * it runs synchronously (what it looks up after an await of its own is not
+   * counted); more fail the render. Infinity for no bound. @default 10000
+   */
+  readonly maxIncludes?: number;
+  /**
+   * How deep a chain of includes goes, each written in the one before, as the
+   * engine names the template an include is written in. Infinity for no
+   * bound. @default 32
+   */
+  readonly maxIncludeDepth?: number;
+  /** The largest HTML, text or subject a render gives, in bytes of UTF-8. Infinity for no bound. @default 10485760 */
+  readonly maxOutputBytes?: number;
 }
 
 /** A renderer of templates by name, a `Renderer` of `./render`. */

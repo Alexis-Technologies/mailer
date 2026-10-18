@@ -12,10 +12,15 @@ const { checkOptionalFunction, checkPositiveInteger } = require('../internal/opt
 const { createCache, memoize } = require('./cache.js');
 const { TemplateNotFoundError, TemplateRenderError, templateErrorOf } = require('./errors.js');
 const { parseFrontMatter } = require('./front-matter.js');
-const { createIncludes } = require('./includes.js');
+const { createIncludes, withBounds } = require('./includes.js');
 const { checkTemplateName } = require('./loader.js');
 
 const DEFAULT_MAX_ENTRIES = 1000;
+// The bounds of a render: the includes it reads, how deep they go, and the
+// bytes of each part it gives.
+const DEFAULT_MAX_INCLUDES = 10_000;
+const DEFAULT_MAX_INCLUDE_DEPTH = 32;
+const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const NO_LAYOUT = new Set(['none', 'false']);
 
 const defaultVariantName = (template, variant) => {
@@ -66,6 +71,15 @@ const enginesOf = (options) => {
   return { engines, suffixes };
 };
 
+// A whole number above zero, or Infinity for none.
+const checkBound = (value, name, fallback) => {
+  if (value === undefined) return fallback;
+  if (value !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(value) || value < 1)) {
+    throw new TypeError(`${name} must be a positive whole number or Infinity: ${String(value)}`);
+  }
+  return value;
+};
+
 const checkLocale = (locale, what) => {
   if (locale === undefined) return undefined;
   if (typeof locale !== 'string') throw new TypeError(`${what} must be a string.`);
@@ -113,6 +127,13 @@ const createRendererConfig = (options) => {
     autoText: options.autoText ?? true,
     cache: cache !== false,
     maxEntries,
+    maxIncludes: checkBound(options.maxIncludes, 'maxIncludes', DEFAULT_MAX_INCLUDES),
+    maxIncludeDepth: checkBound(
+      options.maxIncludeDepth,
+      'maxIncludeDepth',
+      DEFAULT_MAX_INCLUDE_DEPTH,
+    ),
+    maxOutputBytes: checkBound(options.maxOutputBytes, 'maxOutputBytes', DEFAULT_MAX_OUTPUT_BYTES),
   };
 };
 
@@ -160,12 +181,27 @@ const wrapError = (error, template, phase, engine) => {
   });
 };
 
-const run = async (phase, template, engine, step) => {
+// Calls an engine, with the bounds of the render while it runs, and makes
+// what it throws an error of ./templates.
+const run = async (phase, template, engine, step, bounds) => {
   try {
-    return await step();
+    return await withBounds(bounds, step);
   } catch (error) {
     throw wrapError(error, template, phase, engine);
   }
+};
+
+// A part of a message, held to maxOutputBytes of UTF-8, at most three bytes
+// for each UTF-16 unit, so that most need no count.
+const checkOutput = (config, phase, name, engine, value) => {
+  const max = config.maxOutputBytes;
+  if (value.length * 3 <= max || Buffer.byteLength(value) <= max) return value;
+  throw new TemplateRenderError(
+    name,
+    phase,
+    `The template gave more than ${max} bytes (maxOutputBytes).`,
+    { engine: engine?.name },
+  );
 };
 
 const normalizeSubject = (subject) => {
@@ -181,7 +217,9 @@ const isParts = (value) => typeof value === 'object' && value !== null;
  *
  * @param options `engine` or `engines`, `loader`, `partials`, `layout`,
  * `globals`, `defaultLocale`, `variantName`, `frontMatter` (true),
- * `inlineCss`, `autoText` (true) and `cache` (true, or `{ maxEntries }`).
+ * `inlineCss`, `autoText` (true), `cache` (true, or `{ maxEntries }`),
+ * `maxIncludes` (10000), `maxIncludeDepth` (32) and `maxOutputBytes`
+ * (10 MiB).
  * @returns The renderer: `render({ template, context, locale })` and
  * `clear()`.
  * @throws {TypeError} If an option is invalid.
@@ -193,20 +231,22 @@ const createTemplateRenderer = (options = {}) => {
       partials: config.partials,
       cache: config.cache,
       maxEntries: config.maxEntries,
+      maxIncludeDepth: config.maxIncludeDepth,
     });
   const compiled = createCache(config.cache ? config.maxEntries : 0);
   const resolved = createCache(config.cache ? config.maxEntries : 0);
-  const state = { config, compiled, resolved, includes: makeIncludes() };
+  const state = { config, compiled, resolved, files: makeIncludes() };
   return {
     async render(input) {
       const checked = checkInput(input);
       // Without a cache, each render reads and compiles anew, includes too.
-      const current = config.cache ? state : { ...state, includes: makeIncludes() };
-      return renderTemplate(current, checked, input);
+      const current = config.cache ? state : { ...state, files: makeIncludes() };
+      const bounds = { includes: 0, maxIncludes: config.maxIncludes };
+      return renderTemplate(current, checked, input, bounds);
     },
     clear() {
       // Engines key what they keep by the includes, so they make it anew too.
-      state.includes = makeIncludes();
+      state.files = makeIncludes();
       compiled.clear();
       resolved.clear();
     },
@@ -238,7 +278,7 @@ const findPart = async (state, base, locale, part, choices, tried) => {
     for (const extension of choice.extensions) {
       const name = stem + extension;
       tried?.push(name);
-      const source = await state.includes.read(name);
+      const source = await state.files.includes.read(name);
       if (source !== undefined) return { name, source, engine: choice.engine, choice };
     }
   }
@@ -273,7 +313,7 @@ const resolvedFor = (state, template, locale) =>
     resolveTemplate(state, template, locale),
   );
 
-const compileEntry = async (state, found, part) => {
+const compileEntry = async (state, found, part, bounds) => {
   const { name, engine } = found;
   let body = found.source.source;
   let fields;
@@ -292,9 +332,10 @@ const compileEntry = async (state, found, part) => {
     path: found.source.path,
     part,
     cache: state.config.cache,
-    includes: state.includes,
+    includes: state.files.includes,
   };
-  const render = await run('compile', name, engine, () => engine.compile(body, context));
+  state.files.top(name);
+  const render = await run('compile', name, engine, () => engine.compile(body, context), bounds);
   if (typeof render !== 'function') {
     throw new TemplateRenderError(name, 'compile', 'The engine gave no function.', {
       engine: engine.name,
@@ -303,25 +344,29 @@ const compileEntry = async (state, found, part) => {
   const subject =
     fields?.subject === undefined
       ? undefined
-      : await run('compile', name, engine, () =>
-          engine.compile(fields.subject, { ...context, part: 'subject' }),
+      : await run(
+          'compile',
+          name,
+          engine,
+          () => engine.compile(fields.subject, { ...context, part: 'subject' }),
+          bounds,
         );
   return { name, engine, render, subject, fields, context };
 };
 
-const compiledFor = (state, found, part) =>
+const compiledFor = (state, found, part, bounds) =>
   memoize(state.compiled, `${found.engine.name}\u0000${part}\u0000${found.name}`, () =>
-    compileEntry(state, found, part),
+    compileEntry(state, found, part, bounds),
   );
 
-const renderString = async (phase, entry, render, scope) => {
-  const output = await run(phase, entry.name, entry.engine, () => render(scope));
+const renderString = async (state, phase, entry, render, scope, bounds) => {
+  const output = await run(phase, entry.name, entry.engine, () => render(scope), bounds);
   if (typeof output !== 'string') {
     throw new TemplateRenderError(entry.name, phase, 'The template gave no string.', {
       engine: entry.engine.name,
     });
   }
-  return output;
+  return checkOutput(state.config, phase, entry.name, entry.engine, output);
 };
 
 const globalsOf = async (config, input) => {
@@ -343,7 +388,7 @@ const layoutNameOf = (config, entry) => {
 };
 
 // Renders the HTML of a template into its layout, when it has one.
-const applyLayout = async (state, entry, html, scope, locale) => {
+const applyLayout = async (state, entry, html, scope, locale, bounds) => {
   const name = layoutNameOf(state.config, entry);
   if (name === undefined) return { html, engine: entry.engine, context: entry.context };
   let resolution;
@@ -356,15 +401,22 @@ const applyLayout = async (state, entry, html, scope, locale) => {
   if (resolution.html === undefined) {
     throw new TemplateRenderError(entry.name, 'layout', `The layout ${name} has no HTML.`);
   }
-  const layout = await compiledFor(state, resolution.html, 'html');
+  const layout = await compiledFor(state, resolution.html, 'html', bounds);
   if (layout.fields?.layout !== undefined) {
     throw new TemplateRenderError(layout.name, 'layout', 'A layout has no layout of its own.');
   }
-  const wrapped = await renderString('layout', layout, layout.render, { ...scope, body: html });
+  const wrapped = await renderString(
+    state,
+    'layout',
+    layout,
+    layout.render,
+    { ...scope, body: html },
+    bounds,
+  );
   return { html: wrapped, engine: layout.engine, context: layout.context };
 };
 
-const renderTemplate = async (state, checked, input) => {
+const renderTemplate = async (state, checked, input, bounds) => {
   const { config } = state;
   const resolution = await resolvedFor(state, checked.template, checked.locale);
   const scope = { ...(await globalsOf(config, input)), ...checked.context };
@@ -372,11 +424,12 @@ const renderTemplate = async (state, checked, input) => {
     state,
     resolution.html ?? resolution.text,
     resolution.html ? 'html' : 'text',
+    bounds,
   );
   let html;
   let text;
   let subject;
-  const output = await run('render', main.name, main.engine, () => main.render(scope));
+  const output = await run('render', main.name, main.engine, () => main.render(scope), bounds);
   if (typeof output === 'string') {
     if (resolution.html === undefined) text = decodeEntities(output);
     else html = output;
@@ -388,27 +441,29 @@ const renderTemplate = async (state, checked, input) => {
     });
   }
   if (html !== undefined && typeof output === 'string') {
-    const outer = await applyLayout(state, main, html, scope, resolution.locale);
+    checkOutput(config, 'render', main.name, main.engine, html);
+    const outer = await applyLayout(state, main, html, scope, resolution.locale, bounds);
     html = outer.html;
     if (typeof outer.engine.finish === 'function') {
-      html = await run('finish', main.name, outer.engine, () =>
-        outer.engine.finish(html, outer.context),
-      );
+      const finish = () => outer.engine.finish(html, outer.context);
+      html = await run('finish', main.name, outer.engine, finish, bounds);
+      checkOutput(config, 'finish', main.name, outer.engine, html);
     }
   }
   if (html !== undefined && config.inlineCss !== undefined) {
-    html = await run('inline-css', main.name, undefined, () => config.inlineCss(html));
+    html = await run('inline-css', main.name, undefined, () => config.inlineCss(html), bounds);
+    checkOutput(config, 'inline-css', main.name, undefined, html);
   }
   if (text === undefined && resolution.html !== undefined && resolution.text !== undefined) {
-    const entry = await compiledFor(state, resolution.text, 'text');
-    text = decodeEntities(await renderString('render', entry, entry.render, scope));
+    const entry = await compiledFor(state, resolution.text, 'text', bounds);
+    text = decodeEntities(await renderString(state, 'render', entry, entry.render, scope, bounds));
   }
   if (subject === undefined && main.subject !== undefined) {
-    subject = await renderString('render', main, main.subject, scope);
+    subject = await renderString(state, 'render', main, main.subject, scope, bounds);
   }
   if (subject === undefined && resolution.subject !== undefined) {
-    const entry = await compiledFor(state, resolution.subject, 'subject');
-    subject = await renderString('render', entry, entry.render, scope);
+    const entry = await compiledFor(state, resolution.subject, 'subject', bounds);
+    subject = await renderString(state, 'render', entry, entry.render, scope, bounds);
   }
   return outputOf(config, main, resolution, { html, text, subject });
 };
@@ -416,13 +471,15 @@ const renderTemplate = async (state, checked, input) => {
 const outputOf = (config, main, resolution, parts) => {
   const { html } = parts;
   for (const key of ['html', 'text', 'subject']) {
-    if (parts[key] !== undefined && typeof parts[key] !== 'string') {
+    if (parts[key] === undefined) continue;
+    if (typeof parts[key] !== 'string') {
       throw new TemplateRenderError(
         main.name,
         'render',
         `The template gave its ${key} as no string.`,
       );
     }
+    checkOutput(config, 'render', main.name, main.engine, parts[key]);
   }
   const text = parts.text ?? (config.autoText && html !== undefined ? htmlToText(html) : undefined);
   if (html === undefined && text === undefined) {

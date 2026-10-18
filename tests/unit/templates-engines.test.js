@@ -174,6 +174,66 @@ test('Templates: no engine option turns off escaping unless allowUnescaped', asy
   }
 });
 
+test('Templates: a render reads at most maxIncludes includes, at most maxIncludeDepth deep', async () => {
+  // Before: no bound, so a template that included in a loop, or a chain of
+  // includes, read as many as it named.
+  const items = [1, 2, 3, 4, 5];
+  const looped = [
+    [
+      createMustacheEngine({ mustache }),
+      { 'a.mustache': '{{#items}}{{> row}}{{/items}}', 'row.mustache': '.' },
+    ],
+    [
+      createEjsEngine({ ejs }),
+      { 'a.ejs': '<% for (const i of items) { %><%- include("row") %><% } %>', 'row.ejs': '.' },
+    ],
+    [
+      createEtaEngine({ Eta }),
+      { 'a.eta': '<% for (const i of it.items) { %><%~ include("row") %><% } %>', 'row.eta': '.' },
+    ],
+  ];
+  for (const [engine, templates] of looped) {
+    const options = { maxIncludes: 4 };
+    const error = await failureOf(
+      renderWith(engine, templates, { template: 'a', context: { items } }, options),
+    );
+    assert.ok(error instanceof TemplateRenderError, engine.name);
+    assert.match(error.message, /more than 4 includes \(maxIncludes\)/, engine.name);
+    const output = await renderWith(
+      engine,
+      templates,
+      { template: 'a', context: { items } },
+      { maxIncludes: 5 },
+    );
+    assert.strictEqual(output.html, '.....', engine.name);
+  }
+  const chain = {
+    'a.hbs': 'a{{> b}}',
+    'b.hbs': 'b{{> c}}',
+    'c.hbs': 'c{{> d}}',
+    'd.hbs': 'd',
+  };
+  const engine = createHandlebarsEngine({ handlebars });
+  assert.strictEqual(
+    (await renderWith(engine, chain, { template: 'a' }, { maxIncludeDepth: 3 })).html,
+    'abcd',
+  );
+  const deep = await failureOf(
+    renderWith(engine, chain, { template: 'a' }, { maxIncludeDepth: 2 }),
+  );
+  assert.ok(deep instanceof TemplateRenderError);
+  assert.match(deep.message, /"d" of c.hbs is more than 2 includes deep/);
+  // A partial that names itself is no deeper for it.
+  const tree = { 'a.hbs': '{{> node}}', 'node.hbs': '{{#if next}}{{> node next=false}}{{/if}}n' };
+  const recursive = await renderWith(
+    engine,
+    tree,
+    { template: 'a', context: { next: true } },
+    { maxIncludeDepth: 2 },
+  );
+  assert.strictEqual(recursive.html, 'nn');
+});
+
 test('Templates: the EJS engine refuses what it sets itself', () => {
   assert.throws(() => createEjsEngine({}), /needs ejs/);
   for (const name of ['filename', 'root', 'views', 'includer', 'cache', 'client']) {

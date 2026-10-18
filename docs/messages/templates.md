@@ -239,6 +239,24 @@ wait for the one compile. A template that is missing or fails is not kept, so
 one deployed later is found. `clear()` forgets everything; `cache: false`
 reads and compiles on every render, for development.
 
+## Bounds
+
+A render is bounded, so that a template, or a context, that runs away fails
+the render rather than the process:
+
+| Option | Default | Bounds |
+| --- | --- | --- |
+| `maxIncludes` | `10000` | the includes, partials and layouts an engine looks up in one render |
+| `maxIncludeDepth` | `32` | a chain of includes, each written in the one before |
+| `maxOutputBytes` | 10 MiB | the HTML, the text and the subject, each in bytes of UTF-8, after each step |
+
+Each takes `Infinity` for no bound, and going past one is a
+`TemplateRenderError`. The includes are counted as an engine runs
+synchronously: those EJS, Eta and Mustache look up as they render, and those
+Pug and Handlebars look up as they compile, until their first await. The depth
+is counted where the engine names the template an include is written in (Eta,
+Handlebars); a partial that names itself is no deeper for it. The file loader reads no template over its `maxBytes` (1 MiB).
+
 ## Errors
 
 | Thrown | When | `retryable` |

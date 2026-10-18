@@ -490,6 +490,51 @@ test('Templates: engines are chosen by extension, the longest first', async () =
   assert.strictEqual(text.text, 'hbs');
 });
 
+test('Templates: no part of a message is longer than maxOutputBytes', async () => {
+  // Before: no bound, so a template that repeated a value gave as much as it
+  // could hold.
+  const templates = {
+    'a.tpl': '{{x}}',
+    'a.text.tpl': '{{y}}',
+    'b.tpl': '<p/>',
+    'b.subject.tpl': '{{x}}',
+    'c.tpl': '{{x}}',
+    'layout.tpl': '{{{body}}}{{{body}}}',
+  };
+  const big = async (template, context, options) => {
+    const { renderer } = rendererOf(templates, { maxOutputBytes: 30, ...options });
+    return renderer.render({ template, context }).catch((e) => e);
+  };
+  for (const [template, context] of [
+    ['a', { x: 'x'.repeat(31), y: '' }],
+    ['a', { x: '', y: 'я'.repeat(16) }],
+    ['b', { x: 'x'.repeat(31) }],
+  ]) {
+    const error = await big(template, context);
+    assert.ok(error instanceof TemplateRenderError, template);
+    assert.match(error.message, /more than 30 bytes \(maxOutputBytes\)/);
+  }
+  // Ten Cyrillic letters are 20 bytes, and need no count.
+  assert.strictEqual((await big('a', { x: 'я'.repeat(10), y: 'y' })).html, 'я'.repeat(10));
+  // The layout counts too.
+  const layout = await big('c', { x: 'x'.repeat(20) }, { layout: 'layout' });
+  assert.strictEqual(layout.phase, 'layout');
+  const parts = createTemplateRenderer({
+    engine: { name: 'parts', extensions: [], compile: () => () => ({ html: 'x'.repeat(40) }) },
+    loader: createMemoryLoader({ x: '' }),
+    maxOutputBytes: 30,
+  });
+  assert.match((await parts.render({ template: 'x' }).catch((e) => e)).message, /maxOutputBytes/);
+  const inlined = await big(
+    'b',
+    {},
+    { inlineCss: createCssInliner({ inline: () => 'x'.repeat(31) }) },
+  );
+  assert.strictEqual(inlined.phase, 'inline-css');
+  const finished = await big('b', {}, { engine: fakeEngine({ finish: () => 'x'.repeat(31) }) });
+  assert.strictEqual(finished.phase, 'finish');
+});
+
 test('Templates: the renderer checks its options', () => {
   const engine = fakeEngine();
   const loader = createMemoryLoader({});
@@ -517,11 +562,15 @@ test('Templates: the renderer checks its options', () => {
     [{ engine, loader, variantName: 1 }, /variantName must be a function/],
     [{ engine, loader, inlineCss: 1 }, /inlineCss must be a function/],
     [{ engine, loader, defaultLocale: 1 }, /defaultLocale must be a string/],
+    [{ engine, loader, maxIncludes: 0 }, /maxIncludes must be a positive whole number/],
+    [{ engine, loader, maxIncludeDepth: 1.5 }, /maxIncludeDepth must be/],
+    [{ engine, loader, maxOutputBytes: '1' }, /maxOutputBytes must be/],
   ];
   for (const [options, pattern] of bad) {
     assert.throws(() => createTemplateRenderer(options), pattern, String(pattern));
   }
   assert.throws(() => createTemplateRenderer(), /needs an engine/);
+  createTemplateRenderer({ engine, loader, maxIncludes: Infinity, maxOutputBytes: Infinity });
   assert.throws(() => createCssInliner({}), /needs inline/);
   assert.throws(() => createCssInliner({ inline() {}, options: 1 }), /must be an object/);
 });

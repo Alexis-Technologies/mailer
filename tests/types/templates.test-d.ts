@@ -90,6 +90,9 @@ const templates = createTemplateRenderer({
   defaultLocale: 'en',
   inlineCss: cssInline,
   cache: { maxEntries: 100 },
+  maxIncludes: 100,
+  maxIncludeDepth: 8,
+  maxOutputBytes: Infinity,
 });
 expectAssignable<Renderer<TemplateInput>>(templates);
 const output = await templates.render({
