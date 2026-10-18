@@ -460,7 +460,7 @@ test('Templates: Pug reads include and extends through the loader, its locals th
   const engine = createPugEngine({ pug, options: { doctype: 'html' } });
   const templates = {
     'emails/welcome.pug':
-      'extends ../layouts/main\nblock content\n  p= name\n  p= filename\n  include footer\n  include /legal',
+      'extends ../layouts/main\nblock content\n  p= name\n  p= filename\n  include ./footer\n  include /legal',
     'layouts/main.pug': 'html\n  body\n    block content',
     'emails/footer.pug': 'footer bye',
     'legal.pug': 'small legal',
@@ -495,6 +495,42 @@ test('Templates: Pug reads include and extends through the loader, its locals th
   const plugged = createPugEngine({ pug, options: { plugins: [{ preCodeGen }] } });
   await renderWith(plugged, { 'a.pug': 'p x' }, { template: 'a' });
   assert.deepStrictEqual(seen, ['Block']);
+});
+
+test('Templates: Pug looks up a bare name as every engine does, with its extensions', async () => {
+  // Before: a bare name was read against the file, and \`.pug\` was added
+  // whatever the extensions of the engine.
+  const templates = {
+    'emails/welcome.pug': 'include footer\ninclude ./sign\ninclude legal.html',
+    'emails/footer.pug': 'p wrong',
+    'partials/footer.pug': 'footer bye',
+    'emails/sign.pug': 'i sign',
+    // Raw, as Pug includes a file of another extension.
+    'legal.html': '<small>legal</small>',
+  };
+  const engine = createPugEngine({ pug });
+  const output = await renderWith(
+    engine,
+    templates,
+    { template: 'emails/welcome' },
+    { partials: ['partials'] },
+  );
+  assert.strictEqual(output.html, '<footer>bye</footer><i>sign</i><small>legal</small>');
+  const jade = createPugEngine({ pug, extensions: ['.jade'] });
+  const own = await renderWith(
+    jade,
+    { 'a.jade': 'include b', 'b.jade': 'b jade', 'b.pug': 'b pug' },
+    { template: 'a' },
+  );
+  assert.strictEqual(own.html, '<b>jade</b>');
+  const missing = await failureOf(
+    renderWith(jade, { 'a.jade': 'include nope' }, { template: 'a' }),
+  );
+  assert.ok(missing instanceof TemplateNotFoundError);
+  assert.deepStrictEqual(
+    [missing.template, missing.tried, missing.from],
+    ['nope', ['nope.jade', 'nope'], 'a.jade'],
+  );
 });
 
 test('Templates: MJML renders after the engine inside it, whose errors reach it', async () => {

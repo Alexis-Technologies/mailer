@@ -515,7 +515,11 @@ export interface PugEngineOptions {
   /** @default ['.pug'] */
   readonly extensions?: readonly string[];
 }
-/** The Pug engine: `include` and `extends` through the loader, `/x` from its root, any other against the file. */
+/**
+ * The Pug engine: `include` and `extends` through the loader, `/x` from its
+ * root, `./x` against the file, any other from the root, then the
+ * directories of partials, with the extensions of the engine.
+ */
 export declare function createPugEngine(options: PugEngineOptions): TemplateEngine;
 
 /** What MJML finds wrong in a template. */

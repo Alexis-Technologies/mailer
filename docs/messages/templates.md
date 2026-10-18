@@ -312,6 +312,10 @@ causes and thrown as it is.
 
 What changes in behavior:
 
+- a bare Pug include (`include footer`) is read from the root, then the
+  directories of partials, as in every engine here, where Pug reads it against
+  the file: write `include ./footer` for that;
+
 - a failed CSS inlining rejects once, where the callback was called twice;
 - an async EJS template that throws rejects, where its promise rejected unheard
   and the send hung;
