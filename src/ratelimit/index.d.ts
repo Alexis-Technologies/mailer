@@ -15,9 +15,6 @@ import type {
 } from '../../index.js';
 
 /**
- * The options of {@link RateLimitTransport}.
- */
-/**
  * A store of token buckets that the processes of an application share, so
  * that N of them send no more than the one limit of the provider: on Redis,
  * a script that refills and takes in one step.
@@ -37,6 +34,9 @@ export interface RateLimitStore {
     | Promise<{ readonly taken: boolean; readonly waitMs?: number }>;
 }
 
+/**
+ * The options of {@link RateLimitTransport}.
+ */
 export interface RateLimitConfig {
   /** The tokens a bucket gains every `intervalMs`: the sustained rate. */
   readonly limit: number;
@@ -73,25 +73,37 @@ export interface RateLimitConfig {
    */
   readonly cost?: (message: Message | RawMessage) => number;
   /**
-   * The most buckets kept: past it, the least used bucket with no waiter is
-   * dropped, and its key starts full when it comes back.
+   * The most buckets kept: past it, the least used full bucket is dropped,
+   * which loses nothing; when none is full, the least used with no waiter,
+   * whose key starts full again when it comes back, which is told
+   * (`MAILER_RATELIMIT_EVICTED`, or `ratelimit.evicted` at `warn`).
    * @default 10000
    */
   readonly maxKeys?: number;
+  /**
+   * The most messages that wait in one bucket: one more is refused with a
+   * retryable `rate-limit` receipt, however long `maxWaitMs` allows.
+   * @default 10000
+   */
+  readonly maxQueue?: number;
   /**
    * The clock of the intervals, in milliseconds: `performance.now()` by
    * default, which no change of the time of day moves.
    */
   readonly now?: () => number;
   /**
-   * A pino-like logger: it hears a refused send at `info` (`ratelimit.limited`) and a send that
-   * waits at `debug` (`ratelimit.waiting`), with `waitMs`.
+   * A pino-like logger: it hears a refused send at `info`
+   * (`ratelimit.limited`), a send that waits at `debug` (`ratelimit.waiting`,
+   * with `waitMs`, and `ratelimit.waited`, with `waitedMs`, once it has its
+   * tokens), and buckets dropped before they were full at `warn`
+   * (`ratelimit.evicted`).
    */
   readonly logger?: Logger;
   /**
    * The buckets the processes share, in place of the ones of this process:
-   * a send waits, while `maxWaitMs` allows, for the time the store says, and
-   * the store, not this process, keeps the order.
+   * a send waits, while `maxWaitMs` allows, for the time the store says (or,
+   * when it says none, the time the rate gives the tokens), and the store,
+   * not this process, keeps the order.
    */
   readonly store?: RateLimitStore;
 }
@@ -108,6 +120,7 @@ export interface ResolvedRateLimitConfig {
   readonly key?: (message: Message | RawMessage) => string;
   readonly cost?: (message: Message | RawMessage) => number;
   readonly maxKeys: number;
+  readonly maxQueue: number;
   readonly now: () => number;
 }
 

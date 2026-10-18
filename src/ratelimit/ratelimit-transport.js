@@ -8,13 +8,15 @@
 // would hold it longer, where unemail started counting only at its turn; a
 // cost over the capacity is refused, where unemail cut it to the capacity and
 // sent more than the limit; the buckets of the keys are held to `maxKeys`, the
-// least used dropped first; and disposal stops the waits.
+// least used full one dropped first; the waiters of a bucket are held to
+// `maxQueue`; and disposal stops the waits.
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isRawTransport } = require('../core/transport.js');
 const { refuseRaw } = require('../internal/capabilities.js');
 const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
+const { warnLimited } = require('../internal/warn.js');
 const { createLog } = require('../internal/log.js');
 const { abortReason, sleep } = require('../internal/sleep.js');
 const { createRateLimitConfig } = require('./config.js');
@@ -116,6 +118,9 @@ class RateLimitTransport {
   // or the receipt of a refusal.
   #admit(message, signal) {
     if (this.#disposed) return Promise.reject(disposedError());
+    // A signal that aborted between two messages of a batch: the message
+    // would take its tokens and go, though the caller stopped.
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
     const { cost: costOf, key: keyOf } = this.config;
     const cost = costOf === undefined ? 1 : costOf(message);
     if (typeof cost !== 'number' || !(cost >= 0) || cost === Infinity) {
@@ -151,8 +156,16 @@ class RateLimitTransport {
         { category: 'rate-limit', retryable: true, retryAfterMilliseconds: waitMs },
       );
     }
+    // However long the waits may be, the queue of a bucket is bounded.
+    if (bucket.waiters.size >= this.config.maxQueue) {
+      this.#log.write('info', () => ({ code: 'ratelimit.limited', waitMs }), 'A send was refused.');
+      return this.#refused(
+        `The local rate limit of ${this.id} holds ${this.config.maxQueue} messages waiting already.`,
+        { category: 'rate-limit', retryable: true, retryAfterMilliseconds: waitMs },
+      );
+    }
     this.#log.write('debug', () => ({ code: 'ratelimit.waiting', waitMs }), 'A send waits.');
-    return this.#wait(bucket, cost, signal);
+    return this.#waited(this.#wait(bucket, cost, signal));
   }
 
   // Takes the tokens from the store the processes share, waiting while it
@@ -164,8 +177,17 @@ class RateLimitTransport {
     let waited = 0;
     for (;;) {
       const answer = await this.config.store.take(key, cost, { limit, intervalMs, burst });
-      if (answer?.taken === true) return undefined;
-      const waitMs = Math.max(1, Math.ceil(Number(answer?.waitMs) || 1));
+      if (answer?.taken === true) {
+        if (waited > 0) this.#logWaited(waited);
+        return undefined;
+      }
+      // A store that does not say how long is asked again after the time the
+      // rate gives the tokens, not polled at every millisecond.
+      const told = Number(answer?.waitMs);
+      const waitMs = Math.max(
+        1,
+        Math.ceil(told > 0 && Number.isFinite(told) ? told : cost / this.#refillPerMs),
+      );
       if (this.config.mode === 'reject' || waited + waitMs > this.config.maxWaitMs) {
         this.#log.write(
           'info',
@@ -182,6 +204,18 @@ class RateLimitTransport {
       await sleep(waitMs, waits);
       waited += waitMs;
     }
+  }
+
+  // Tells the time a send waited for its tokens, once it has them.
+  async #waited(waiting) {
+    const started = this.config.now();
+    await waiting;
+    this.#logWaited(this.config.now() - started);
+    return undefined;
+  }
+
+  #logWaited(waitedMs) {
+    this.#log.write('debug', () => ({ code: 'ratelimit.waited', waitedMs }), 'A send waited.');
   }
 
   #refused(text, options) {
@@ -270,14 +304,37 @@ class RateLimitTransport {
     return bucket;
   }
 
-  // Makes room for a key: drops the least used buckets that have no waiter,
-  // until there is room.  One that is not full starts full when its key comes
-  // back, the price of holding no more than `maxKeys` keys; a bucket with
-  // waiters is never dropped, so they alone can hold more.
+  // Makes room for a key: drops the least used buckets that are full, which
+  // lose nothing, as a key that comes back starts full; then, if no full one
+  // makes room, the least used without a waiter, whose key comes back with
+  // more tokens than it had, which is told.  A bucket with waiters is never
+  // dropped, so they alone can hold more than `maxKeys`.
   #evict() {
     for (const [key, bucket] of this.#buckets) {
       if (this.#buckets.size < this.config.maxKeys) return;
-      if (bucket.waiters.size === 0) this.#buckets.delete(key);
+      if (bucket.waiters.size > 0) continue;
+      this.#refill(bucket);
+      if (bucket.tokens >= this.config.burst) this.#buckets.delete(key);
+    }
+    let dropped = 0;
+    for (const [key, bucket] of this.#buckets) {
+      if (this.#buckets.size < this.config.maxKeys) break;
+      if (bucket.waiters.size === 0) {
+        this.#buckets.delete(key);
+        dropped++;
+      }
+    }
+    if (dropped > 0) this.#tellEvicted(dropped);
+  }
+
+  #tellEvicted(dropped) {
+    const text =
+      `The rate limit of ${this.id} dropped ${dropped} bucket(s) not yet full to hold ` +
+      `${this.config.maxKeys} keys: their keys start full again. Raise maxKeys, or use a store.`;
+    if (this.#log.hasLogger) {
+      this.#log.write('warn', () => ({ code: 'ratelimit.evicted', dropped }), text);
+    } else {
+      warnLimited('MAILER_RATELIMIT_EVICTED', text);
     }
   }
 }

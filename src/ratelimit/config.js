@@ -45,6 +45,7 @@ const createRateLimitConfig = (config = {}) => {
     key: checkOptionalFunction(config.key, 'key'),
     cost: checkOptionalFunction(config.cost, 'cost'),
     maxKeys: checkPositiveInteger(config.maxKeys ?? 10000, 'maxKeys'),
+    maxQueue: checkPositiveInteger(config.maxQueue ?? 10000, 'maxQueue'),
     now: checkOptionalFunction(config.now, 'now') ?? monotonic,
     logger: config.logger,
     store: checkStore(config.store),

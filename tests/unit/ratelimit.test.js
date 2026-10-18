@@ -315,3 +315,114 @@ test('RateLimit: processes that share a store share one limit', async (t) => {
     /take method/,
   );
 });
+
+test('RateLimit: a full bucket is dropped before one that is not, which is told', async (t) => {
+  // Before: the least used bucket with no waiter was dropped, full or not, so
+  // a limited key rotated out came back full, silently.
+  const clock = timeline(t);
+  const warned = [];
+  t.mock.method(process, 'emitWarning', (_text, options) => warned.push(options?.code));
+  const limiter = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 1000,
+    mode: 'reject',
+    maxKeys: 2,
+    key: (m) => m.recipients[0].address,
+    now: clock.now,
+  });
+  const to = (address) => limiter.send(message('x', address));
+  assert.strictEqual((await to('a@example.com')).successful, true);
+  await clock.advance(1000);
+  assert.strictEqual((await to('b@example.com')).successful, true);
+  // a has refilled and is the least used; b is not full: a goes, b stays.
+  assert.strictEqual((await to('c@example.com')).successful, true);
+  assert.strictEqual((await to('b@example.com')).successful, false);
+  assert.deepStrictEqual(warned, []);
+  // With no full bucket, the least used goes, and a warning says so.
+  assert.strictEqual((await to('d@example.com')).successful, true);
+  assert.deepStrictEqual(warned, ['MAILER_RATELIMIT_EVICTED']);
+});
+
+test('RateLimit: an abort between two messages stops the next though tokens are there', async () => {
+  // Before: only a message that had to wait heard the aborted signal; one
+  // whose tokens were there took them and went.
+  const inner = fakeTransport();
+  const limiter = new RateLimitTransport(inner, { limit: 10 });
+  const controller = new AbortController();
+  const receipts = limiter.sendMany([message('a'), message('b')], { signal: controller.signal });
+  const iterator = receipts[Symbol.asyncIterator]();
+  assert.strictEqual((await iterator.next()).value.successful, true);
+  controller.abort(new Error('stop'));
+  await assert.rejects(iterator.next(), /stop/);
+  assert.strictEqual(inner.calls.length, 1);
+});
+
+test('RateLimit: maxQueue bounds the waiters, whatever maxWaitMs allows', async (t) => {
+  // Before: with maxWaitMs Infinity, any number of messages waited.
+  const clock = timeline(t);
+  const limiter = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 1000,
+    maxWaitMs: Infinity,
+    maxQueue: 1,
+    now: clock.now,
+  });
+  assert.strictEqual((await limiter.send(message('first'))).successful, true);
+  const waiting = limiter.send(message('second'));
+  const refused = await limiter.send(message('third'));
+  assert.strictEqual(refused.successful, false);
+  assert.strictEqual(refused.errors[0].category, 'rate-limit');
+  assert.match(refused.errorMessages[0], /holds 1 messages waiting/);
+  await clock.advance(1000);
+  assert.strictEqual((await waiting).successful, true);
+  assert.throws(
+    () => new RateLimitTransport(fakeTransport(), { limit: 1, maxQueue: 0 }),
+    /maxQueue/,
+  );
+});
+
+test('RateLimit: a store that gives no wait is asked again after the rate, and waits are told', async (t) => {
+  // Before: a store answering { taken: false } alone was asked again every
+  // millisecond, a thousand round trips a second for each waiting message.
+  const clock = timeline(t);
+  let takes = 0;
+  const records = [];
+  const logger = { debug: (record) => records.push(record), info() {}, warn() {} };
+  const limiter = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 1000,
+    now: clock.now,
+    logger,
+    store: { take: () => ({ taken: ++takes > 2 }) },
+  });
+  const sending = limiter.send(message());
+  // Lets the answer of the store come, and its wait start, before the clock moves.
+  await clock.advance(0);
+  await clock.advance(999);
+  assert.strictEqual(takes, 1);
+  await clock.advance(1);
+  await clock.advance(1000);
+  assert.strictEqual((await sending).successful, true);
+  assert.strictEqual(takes, 3);
+  const waited = records.find((record) => record.code === 'ratelimit.waited');
+  assert.strictEqual(waited.waitedMs, 2000);
+  // A local wait is told once its tokens are there.
+  const local = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 1000,
+    now: clock.now,
+    logger,
+  });
+  records.length = 0;
+  await local.send(message());
+  const second = local.send(message());
+  await clock.advance(1000);
+  await second;
+  assert.deepStrictEqual(
+    records.map((record) => [record.code, record.waitedMs ?? record.waitMs]),
+    [
+      ['ratelimit.waiting', 1000],
+      ['ratelimit.waited', 1000],
+    ],
+  );
+});

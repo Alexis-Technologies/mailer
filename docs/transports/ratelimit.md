@@ -36,9 +36,12 @@ takes `cost(message)` of them, 1 without `cost`.
 
 `key(message)` chooses the bucket, such as a tenant's, so one tenant's burst
 does not hold back the others. No more than `maxKeys` buckets are kept: past
-it, the least used one with no waiter is dropped, and its key starts full when
-it comes back, the price of a bound on memory. Disposing of the transport stops
-the waits, each rejecting with an `AbortError`.
+it, the least used full one is dropped, which loses nothing; when none is full,
+the least used one with no waiter goes, its key starting full when it comes
+back, the price of a bound on memory, and a warning says so
+(`MAILER_RATELIMIT_EVICTED`, or `ratelimit.evicted` to the logger). No more than
+`maxQueue` messages wait in one bucket, whatever `maxWaitMs` allows. Disposing
+of the transport stops the waits, each rejecting with an `AbortError`.
 
 ```js
 const perTenant = new RateLimitTransport(transport, {
@@ -93,10 +96,11 @@ const limited = new RateLimitTransport(transport, { limit: 14, store });
 | `maxWaitMs` | `30000` | The longest wait, from the arrival. |
 | `key` | one bucket | The bucket of a message. |
 | `cost` | `1` | The tokens a message takes. |
-| `maxKeys` | `10000` | The most buckets kept, the least used dropped first. |
+| `maxKeys` | `10000` | The most buckets kept, the least used full one dropped first. |
+| `maxQueue` | `10000` | The most messages waiting in one bucket. |
 | `store` | | The buckets the processes share, in place of this process's. |
-| `now` | `Date.now` | The clock. |
-| `logger` | | A pino-like logger: a refused send (`ratelimit.limited`) at `info`, a send that waits at `debug`. |
+| `now` | `performance.now()` | The clock of the intervals, which no change of the time of day moves. |
+| `logger` | | A pino-like logger: a refused send (`ratelimit.limited`) at `info`, a send that waits (`ratelimit.waiting`) and the time it waited (`ratelimit.waited`) at `debug`, buckets dropped before they were full (`ratelimit.evicted`) at `warn`. |
 
 `sendMany()` goes through the `sendMany()` of the wrapped transport, each
 message handed to it once it has its tokens, so a batch is throttled like as

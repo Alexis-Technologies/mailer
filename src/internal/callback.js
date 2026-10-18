@@ -3,39 +3,7 @@
 // becomes a process warning rather than vanishing, as a logger's does.
 
 const { redactAddresses } = require('./redact-addresses.js');
-
-// A listener or a mirror that fails for every message would fill the output
-// of the process: no more than BURST warnings of a code go out a minute, and
-// the first after it says how many were left out.
-const BURST = 10;
-const WINDOW_MS = 60 * 1000;
-const periods = new Map();
-
-/**
- * Emits a process warning, at most `BURST` of a code a minute.
- *
- * @param code The code of the warning.
- * @param text What it says.
- * @internal
- */
-const warnLimited = (code, text) => {
-  const now = performance.now();
-  let period = periods.get(code);
-  let said = text;
-  if (period === undefined || now - period.start >= WINDOW_MS) {
-    if (period !== undefined && period.skipped > 0) {
-      said += ` (${period.skipped} more warnings of ${code} were left out in the last minute)`;
-    }
-    period = { start: now, count: 0, skipped: 0 };
-    periods.set(code, period);
-  }
-  if (period.count >= BURST) {
-    period.skipped++;
-    return;
-  }
-  period.count++;
-  process.emitWarning(said, { code });
-};
+const { warnLimited } = require('./warn.js');
 
 /**
  * The text of what was thrown, with the addresses in it redacted: an SMTP
