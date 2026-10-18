@@ -16,7 +16,8 @@ const DEFAULT_MAX_BYTES = 1024 * 1024;
 /**
  * Whether a value is a template name: `welcome`, `auth/reset-password`,
  * `welcome.uk.hbs`; letters, digits, `_`, `-`, `@`, `.` and `/` between
- * segments, none of them empty, `.` or `..`, at most 256 characters.
+ * segments, none of them empty or starting with `.` (`..`, `.env`), at most
+ * 256 characters.
  *
  * @internal
  */
@@ -28,11 +29,22 @@ const isTemplateName = (name) => {
   for (;;) {
     const slash = name.indexOf('/', start);
     const segment = name.slice(start, slash === -1 ? name.length : slash);
-    if (segment === '' || segment === '.' || segment === '..') return false;
+    if (segment === '' || segment[0] === '.') return false;
     if (slash === -1) return true;
     start = slash + 1;
   }
 };
+
+/**
+ * The error of a value that is no template name.
+ *
+ * @internal
+ */
+const notTemplateName = (name, what) =>
+  new TypeError(
+    `${what} must be a template name such as "welcome" or "auth/reset-password", ` +
+      `not a path: ${JSON.stringify(name)}`,
+  );
 
 /**
  * Checks a template name.
@@ -41,12 +53,7 @@ const isTemplateName = (name) => {
  * @internal
  */
 const checkTemplateName = (name, what) => {
-  if (!isTemplateName(name)) {
-    throw new TypeError(
-      `${what} must be a template name such as "welcome" or "auth/reset-password", ` +
-        `not a path: ${JSON.stringify(name)}`,
-    );
-  }
+  if (!isTemplateName(name)) throw notTemplateName(name, what);
   return name;
 };
 
@@ -160,4 +167,10 @@ const createMemoryLoader = (templates) => {
   return { load: loadSync, loadSync };
 };
 
-module.exports = { checkTemplateName, createFileLoader, createMemoryLoader, isTemplateName };
+module.exports = {
+  checkTemplateName,
+  createFileLoader,
+  createMemoryLoader,
+  isTemplateName,
+  notTemplateName,
+};

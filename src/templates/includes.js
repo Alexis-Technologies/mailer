@@ -3,7 +3,7 @@
 // kept as its templates are, and never read from disk by the engine itself.
 
 const { TemplateLoadError, TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
-const { isTemplateName } = require('./loader.js');
+const { checkTemplateName, isTemplateName, notTemplateName } = require('./loader.js');
 const { createCache, memoize } = require('./cache.js');
 
 // The segments of a name, `.` dropped and `..` taking the one before; undefined
@@ -77,6 +77,8 @@ const candidatesOf = (include, from, extensions, partials) => {
   }
   return names;
 };
+
+const READ = 'The name of a template read';
 
 // What a loader threw, as an error that names the template: one of
 // ./templates as it is, and any other, such as EMFILE or a database timeout,
@@ -157,15 +159,20 @@ const createIncludes = (loader, options) => {
     const known = depths.get(name);
     if (known === undefined || depth < known) depths.set(name, depth);
   };
-  const read = (name) =>
-    memoize(sources, name, async () => {
+  // A loader is given template names alone, whoever asks: an engine, or the
+  // variants of the renderer.
+  const read = (name) => {
+    if (!isTemplateName(name)) return Promise.reject(notTemplateName(name, READ));
+    return memoize(sources, name, async () => {
       try {
         return (await loader.load(name)) ?? undefined;
       } catch (error) {
         throw loadFailure(name, error);
       }
     });
+  };
   const readSync = (name) => {
+    checkTemplateName(name, READ);
     if (typeof loader.loadSync !== 'function') {
       throw new TypeError(
         'This engine reads its includes synchronously, and the loader has no loadSync.',

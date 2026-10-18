@@ -24,6 +24,7 @@ const makeTree = (t) => {
   fs.writeFileSync(path.join(root, 'notes.txt'), 'not a template');
   fs.writeFileSync(path.join(root, 'big.ejs'), 'x'.repeat(2048));
   fs.writeFileSync(path.join(base, 'secret.ejs'), 'secret');
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=1');
   return { base, root };
 };
 
@@ -44,6 +45,9 @@ test('Templates: the file loader reads a name under its directory, its BOM dropp
     '../secret.ejs',
     'auth/../welcome.ejs',
     '/etc/passwd',
+    // Before: read, as a segment after the first could start with a dot.
+    'auth/../.env',
+    'auth/.hidden.ejs',
   ]) {
     assert.strictEqual(await loader.load(name), undefined, name);
     assert.strictEqual(loader.loadSync(name), undefined, name);

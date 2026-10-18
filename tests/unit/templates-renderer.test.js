@@ -130,12 +130,76 @@ test('Templates: a missing template names what was tried, and is not retryable',
 
 test('Templates: a name is never a path', async () => {
   const { renderer } = rendererOf({});
-  for (const template of ['../secret', '/etc/passwd', 'a//b', 'a/./b', 'a\\b', '', '.hidden', 42]) {
+  for (const template of [
+    '../secret',
+    '/etc/passwd',
+    'a//b',
+    'a/./b',
+    'a\\b',
+    '',
+    '.hidden',
+    // Before: a segment after the first could start with a dot.
+    'partials/.env',
+    'a/.git/config',
+    42,
+  ]) {
     await assert.rejects(renderer.render({ template }), TypeError, String(template));
   }
   await assert.rejects(renderer.render(null), TypeError);
   await assert.rejects(renderer.render({ template: 'a', context: [] }), TypeError);
   await assert.rejects(renderer.render({ template: 'a', locale: 1 }), TypeError);
+});
+
+test('Templates: a loader is given template names alone, whoever asks', async () => {
+  // Before: a name an engine read, or one variantName gave, reached the loader
+  // unchecked, such as a database query by name.
+  const asked = [];
+  const loader = {
+    load: (name) => {
+      asked.push(name);
+      return name === 'a.tpl' ? { name, source: '<p/>' } : undefined;
+    },
+    loadSync: (name) => {
+      asked.push(name);
+      return undefined;
+    },
+  };
+  const reader = (read) => ({
+    name: 'reader',
+    extensions: ['.tpl'],
+    compile: async (source, context) => {
+      await read(context.includes);
+      return () => source;
+    },
+  });
+  for (const read of [
+    (includes) => includes.read('../secret.tpl'),
+    (includes) => includes.readSync('partials/.env'),
+    (includes) => includes.read(42),
+  ]) {
+    const renderer = createTemplateRenderer({ engine: reader(read), loader });
+    await assert.rejects(renderer.render({ template: 'a' }), /must be a template name/);
+  }
+  const variants = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader,
+    variantName: (template) => `../${template}`,
+  });
+  await assert.rejects(
+    variants.render({ template: 'a' }),
+    /variantName gives must be a template name/,
+  );
+  assert.deepStrictEqual(asked, [
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+  ]);
 });
 
 test('Templates: includes are read through the loader, from the root or the partials', async () => {
@@ -553,6 +617,7 @@ test('Templates: the renderer checks its options', () => {
     [{ engine }, /needs a loader/],
     [{ engine, loader, partials: 'p' }, /partials must be an array/],
     [{ engine, loader, partials: ['../p'] }, /directory of partials/],
+    [{ engine, loader, partials: ['p/.hidden'] }, /directory of partials/],
     [{ engine, loader, layout: '/abs' }, /layout must be a template name/],
     [{ engine, loader, globals: 1 }, /globals must be an object or a function/],
     [{ engine, loader, frontMatter: 'yes' }, /frontMatter must be a boolean/],
@@ -583,7 +648,10 @@ test('Templates: variantName names the variants, frontMatter: false reads none',
   const output = await renderer.render({ template: 'welcome', locale: 'uk' });
   assert.deepStrictEqual([output.html, output.subject], ['<p>uk</p>', 'S']);
   const { renderer: broken } = rendererOf({}, { variantName: () => 1 });
-  await assert.rejects(broken.render({ template: 'a' }), /variantName must give a name/);
+  await assert.rejects(
+    broken.render({ template: 'a' }),
+    /variantName gives must be a template name/,
+  );
   const { renderer: raw } = rendererOf(
     { 'a.tpl': '---\nsubject: x\n---\n<p/>' },
     { frontMatter: false },

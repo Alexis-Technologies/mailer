@@ -272,8 +272,10 @@ const choicesOf = (config, template) => {
 };
 
 const findPart = async (state, base, locale, part, choices, tried) => {
-  const stem = state.config.variantName(base, { locale, part });
-  if (typeof stem !== 'string') throw new TypeError('variantName must give a name.');
+  const stem = checkTemplateName(
+    state.config.variantName(base, { locale, part }),
+    'The name variantName gives',
+  );
   for (const choice of choices) {
     for (const extension of choice.extensions) {
       const name = stem + extension;
