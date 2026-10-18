@@ -80,7 +80,64 @@ const hasExtension = (name, extensions) => {
 
 const isMissing = (error) => error?.code === 'ENOENT' || error?.code === 'ENOTDIR';
 
+// A file is opened without following a link its last segment became after
+// its real path was checked, where the system can say so.
+const OPEN_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+const CHUNK = 64 * 1024;
+
+// The reads of an open file of `size` bytes, up to `limit`, through the
+// descriptor its size was taken from, so that a file that grew since is not
+// read whole: each read yields where it goes and is given the bytes read, so
+// that one loop serves a descriptor and a handle.
+const readsOf = function* (size, limit) {
+  let buffer = Buffer.allocUnsafe(Math.min(size + 1, limit));
+  let total = 0;
+  for (;;) {
+    if (total === buffer.length) {
+      if (total === limit) return buffer;
+      const grown = Buffer.allocUnsafe(Math.min(total + CHUNK, limit));
+      buffer.copy(grown, 0, 0, total);
+      buffer = grown;
+    }
+    const bytesRead = yield { buffer, offset: total };
+    if (bytesRead === 0) return buffer.subarray(0, total);
+    total += bytesRead;
+  }
+};
+
+const readAtMost = async (handle, size, limit) => {
+  const reads = readsOf(size, limit);
+  let step = reads.next();
+  while (!step.done) {
+    const into = step.value;
+    const read = await handle.read(
+      into.buffer,
+      into.offset,
+      into.buffer.length - into.offset,
+      null,
+    );
+    step = reads.next(read.bytesRead);
+  }
+  return step.value;
+};
+
+const readAtMostSync = (fd, size, limit) => {
+  const reads = readsOf(size, limit);
+  let step = reads.next();
+  while (!step.done) {
+    const into = step.value;
+    step = reads.next(
+      fs.readSync(fd, into.buffer, into.offset, into.buffer.length - into.offset, null),
+    );
+  }
+  return step.value;
+};
+
 const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+
+// A file opened as the real path of a name: none when it is gone or is a
+// directory, which Windows does not open.
+const isNoFile = (error) => isMissing(error) || error?.code === 'EISDIR';
 
 /**
  * Makes a loader of the templates in a directory.
@@ -104,14 +161,11 @@ const createFileLoader = (options = {}) => {
       throw new RangeError(`The template ${JSON.stringify(name)} leads out of ${dir}.`);
     }
   };
-  const checkStats = (name, stats) => {
-    if (!stats.isFile()) return false;
-    if (stats.size > maxBytes) {
-      throw new RangeError(
-        `The template ${JSON.stringify(name)} holds more than ${maxBytes} bytes.`,
-      );
-    }
-    return true;
+  const tooLong = (name) =>
+    new RangeError(`The template ${JSON.stringify(name)} holds more than ${maxBytes} bytes.`);
+  const sourceOf = (name, real, bytes) => {
+    if (bytes.length > maxBytes) throw tooLong(name);
+    return { name, source: stripBom(bytes.toString('utf8')), path: real };
   };
   const accepts = (name) => isTemplateName(name) && hasExtension(name, extensions);
   return {
@@ -126,8 +180,21 @@ const createFileLoader = (options = {}) => {
         throw error;
       }
       checkWithin(name, real);
-      if (!checkStats(name, await fsp.stat(real))) return undefined;
-      return { name, source: stripBom(await fsp.readFile(real, 'utf8')), path: real };
+      let handle;
+      try {
+        handle = await fsp.open(real, OPEN_FLAGS);
+      } catch (error) {
+        if (isNoFile(error)) return undefined;
+        throw error;
+      }
+      try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) return undefined;
+        if (stats.size > maxBytes) throw tooLong(name);
+        return sourceOf(name, real, await readAtMost(handle, stats.size, maxBytes + 1));
+      } finally {
+        await handle.close();
+      }
     },
     loadSync(name) {
       if (!accepts(name)) return undefined;
@@ -140,8 +207,21 @@ const createFileLoader = (options = {}) => {
         throw error;
       }
       checkWithin(name, real);
-      if (!checkStats(name, fs.statSync(real))) return undefined;
-      return { name, source: stripBom(fs.readFileSync(real, 'utf8')), path: real };
+      let fd;
+      try {
+        fd = fs.openSync(real, OPEN_FLAGS);
+      } catch (error) {
+        if (isNoFile(error)) return undefined;
+        throw error;
+      }
+      try {
+        const stats = fs.fstatSync(fd);
+        if (!stats.isFile()) return undefined;
+        if (stats.size > maxBytes) throw tooLong(name);
+        return sourceOf(name, real, readAtMostSync(fd, stats.size, maxBytes + 1));
+      } finally {
+        fs.closeSync(fd);
+      }
     },
   };
 };

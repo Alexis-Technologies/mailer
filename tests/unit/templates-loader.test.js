@@ -3,6 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const {
@@ -62,6 +63,48 @@ test('Templates: the file loader reads a name under its directory, its BOM dropp
     (await createFileLoader({ dir: root }).load('notes.txt')).source,
     'not a template',
   );
+});
+
+test('Templates: the file loader reads no more than maxBytes of a file that grew since its size', async (t) => {
+  // Before: the size was taken by path and the file read whole by path
+  // after, so a file that grew in between, or was replaced, was read whole.
+  const { root } = makeTree(t);
+  const small = { isFile: () => true, size: 10 };
+  t.mock.method(fsp, 'stat', async () => small);
+  t.mock.method(fs, 'statSync', () => small);
+  const open = fsp.open;
+  t.mock.method(fsp, 'open', async (...args) => {
+    const handle = await open(...args);
+    handle.stat = async () => small;
+    return handle;
+  });
+  t.mock.method(fs, 'fstatSync', () => small);
+  const loader = createFileLoader({ dir: root, maxBytes: 1024 });
+  await assert.rejects(loader.load('big.ejs'), /more than 1024 bytes/);
+  assert.throws(() => loader.loadSync('big.ejs'), /more than 1024 bytes/);
+  // A file that grew within maxBytes is read whole, through the descriptor.
+  assert.strictEqual((await createFileLoader({ dir: root }).load('big.ejs')).source.length, 2048);
+  assert.strictEqual(createFileLoader({ dir: root }).loadSync('big.ejs').source.length, 2048);
+});
+
+test('Templates: the file loader takes a directory it cannot open for none', async (t) => {
+  // Windows opens no directory: EISDIR, where the others open it and say it
+  // is no file.
+  const { root } = makeTree(t);
+  const denied = (code) => Object.assign(new Error(code), { code });
+  let code = 'EISDIR';
+  t.mock.method(fsp, 'open', async () => {
+    throw denied(code);
+  });
+  t.mock.method(fs, 'openSync', () => {
+    throw denied(code);
+  });
+  const loader = createFileLoader({ dir: root });
+  assert.strictEqual(await loader.load('folder.ejs'), undefined);
+  assert.strictEqual(loader.loadSync('folder.ejs'), undefined);
+  code = 'EACCES';
+  await assert.rejects(loader.load('welcome.ejs'), { code: 'EACCES' });
+  assert.throws(() => loader.loadSync('welcome.ejs'), { code: 'EACCES' });
 });
 
 test('Templates: the file loader follows no symbolic link out of its directory', async (t) => {
