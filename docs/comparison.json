@@ -341,7 +341,7 @@
         "queue": {
           "mark": "✅",
           "text": "MongoDB outbox (transactional), BullMQ driver, memory queue",
-          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again; in MongoDB, a job is written in the transaction of its cause."
+          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again; in MongoDB, a job is written in the transaction of its cause. Jobs are signed (HMAC) and may be sealed, their message dropped once done with; tenants take turns, and a job that kills its worker is given up."
         },
         "attachments": {
           "mark": "✅",
@@ -400,7 +400,7 @@
         },
         "idempotency": {
           "mark": "✅",
-          "text": "decorator with reserved keys + 5 providers"
+          "text": "decorator with reserved keys, a MongoDB store + 5 providers"
         },
         "dkim": {
           "mark": "✅",
@@ -466,7 +466,7 @@
         },
         "otel": {
           "mark": "✅",
-          "text": "decorator: spans + metrics"
+          "text": "decorator: spans + metrics, and those of the queue's worker"
         },
         "hooks": {
           "mark": "✅",
@@ -501,7 +501,7 @@
           "text": "2026-10 (this release)"
         },
         "tests": {
-          "text": "177 / ~2560"
+          "text": "183 / ~2690"
         },
         "maintainer": {
           "text": "1 author, Alexis Technologies"
