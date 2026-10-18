@@ -384,3 +384,32 @@ test('Breaker: a jump of the time of day does not move the circuit', async (t) =
   shift = 60 * 60 * 1000;
   assert.strictEqual(breaker.state, 'open');
 });
+
+test('Breaker: a clock that throws gives the last time it gave', async (t) => {
+  // Before: a now() that threw fell back to Date.now, another clock, so a
+  // circuit opened on a monotonic clock waited about fifty years to retry.
+  const warned = [];
+  t.mock.method(process, 'emitWarning', (_text, options) => warned.push(options?.code));
+  let time = 1000;
+  let throws = false;
+  const breaker = new CircuitBreakerTransport(
+    fakeTransport(() => failed('network')),
+    {
+      failureThreshold: 1,
+      resetTimeoutMs: 60_000,
+      now: () => {
+        if (throws) throw new Error('clock gone');
+        return time;
+      },
+    },
+  );
+  await breaker.send(message());
+  throws = true;
+  const refused = await breaker.send(message());
+  assert.strictEqual(refused.successful, false);
+  assert.ok(refused.errors[0].retryAfterMilliseconds <= 60_000);
+  assert.ok(warned.includes('MAILER_BREAKER_LISTENER_FAILED'));
+  throws = false;
+  time += 60_000;
+  assert.strictEqual(breaker.state, 'half-open');
+});

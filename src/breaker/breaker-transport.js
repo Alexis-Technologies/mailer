@@ -50,6 +50,7 @@ class CircuitBreakerTransport {
   // Grows at each change of state: a result counts only in the period it
   // was sent in, not in one the circuit came to since.
   #period = 0;
+  #lastNow = 0;
   #log;
 
   /**
@@ -74,13 +75,15 @@ class CircuitBreakerTransport {
     return this.#state;
   }
 
+  // A clock that throws gives the last time it gave, never one of another
+  // clock, which would put the intervals decades off.
   #now() {
     try {
-      return this.config.now();
+      this.#lastNow = this.config.now();
     } catch (error) {
       warnThrown('The now of CircuitBreakerTransport', error, 'MAILER_BREAKER_LISTENER_FAILED');
-      return Date.now();
     }
+    return this.#lastNow;
   }
 
   /**
