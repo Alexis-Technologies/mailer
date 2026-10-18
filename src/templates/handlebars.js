@@ -22,7 +22,8 @@ const partialNameOf = (name) => {
   return undefined;
 };
 
-// The partials a template names, and those it defines inline, from its AST.
+// The statements of a template that name a partial, and the partials it
+// defines inline, from its AST.
 const visit = (node, named, inline) => {
   if (Array.isArray(node)) {
     for (const child of node) visit(child, named, inline);
@@ -31,7 +32,7 @@ const visit = (node, named, inline) => {
   if (typeof node !== 'object' || node === null) return;
   if (PARTIALS.has(node.type)) {
     const name = partialNameOf(node.name);
-    if (name !== undefined && name[0] !== '@') named.add(name);
+    if (name !== undefined && name[0] !== '@') named.push(node);
   }
   if (node.type === 'DecoratorBlock' && node.path?.original === 'inline') {
     const name = node.params?.[0]?.value;
@@ -42,13 +43,27 @@ const visit = (node, named, inline) => {
   }
 };
 
-// The partials a template names but does not define inline.
-const namesOf = (ast) => {
-  const named = new Set();
+// Looks up the partials a template names from the template `from`, and names
+// each in its AST by the template it resolves to, so that `./footer` in two
+// directories is two partials.
+const resolvePartials = async (includes, ast, from, extensions) => {
+  const named = [];
   const inline = new Set();
   visit(ast, named, inline);
-  for (const name of inline) named.delete(name);
-  return named;
+  const found = new Map();
+  for (const node of named) {
+    const name = partialNameOf(node.name);
+    if (inline.has(name)) continue;
+    const source = await includes.lookup(name, from, extensions);
+    node.name = {
+      type: 'StringLiteral',
+      value: source.name,
+      original: source.name,
+      loc: node.name.loc,
+    };
+    found.set(source.name, source);
+  }
+  return found;
 };
 
 /**
@@ -86,34 +101,34 @@ const createHandlebarsEngine = (options = {}) => {
     }
     return environment;
   };
-  // Reads, compiles and registers a partial once per environment however many
-  // templates name it at once, and gives the partials it names, which it does
-  // not wait for: a partial that names itself, or one that names it back, is
-  // registered all the same, as Handlebars finds partials when it renders.
-  const registerPartial = (environment, includes, name, from) => {
-    let entry = environment.partials.get(name);
+  // Compiles and registers a partial once per environment however many
+  // templates name it at once, under the name of its template, and gives the
+  // partials it names, which it does not wait for: a partial that names
+  // itself, or one that names it back, is registered all the same, as
+  // Handlebars finds partials when it renders.
+  const registerPartial = (environment, includes, source) => {
+    let entry = environment.partials.get(source.name);
     if (entry === undefined) {
       entry = (async () => {
-        const found = await includes.lookup(name, from, extensions);
-        const ast = environment.env.parse(found.source);
-        environment.env.registerPartial(name, environment.env.compile(ast, given));
-        return { from: found.name, names: namesOf(ast) };
+        const ast = environment.env.parse(source.source);
+        const named = await resolvePartials(includes, ast, source.name, extensions);
+        environment.env.registerPartial(source.name, environment.env.compile(ast, given));
+        return named;
       })();
-      environment.partials.set(name, entry);
-      entry.catch(() => environment.partials.delete(name));
+      environment.partials.set(source.name, entry);
+      entry.catch(() => environment.partials.delete(source.name));
     }
     return entry;
   };
   // Registers the partials a template names, and those they name, each once.
   const loadPartials = async (environment, includes, ast, from) => {
-    const pending = [{ from, names: namesOf(ast) }];
+    const pending = [await resolvePartials(includes, ast, from, extensions)];
     const seen = new Set();
     for (let index = 0; index < pending.length; index++) {
-      const named = pending[index];
-      for (const name of named.names) {
-        if (seen.has(name)) continue;
-        seen.add(name);
-        pending.push(await registerPartial(environment, includes, name, named.from));
+      for (const source of pending[index].values()) {
+        if (seen.has(source.name)) continue;
+        seen.add(source.name);
+        pending.push(await registerPartial(environment, includes, source));
       }
     }
   };

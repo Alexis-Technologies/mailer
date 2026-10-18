@@ -222,6 +222,23 @@ test(
   },
 );
 
+test('Templates: a Handlebars partial is the template it resolves to, not the name written', async () => {
+  // Before: partials were registered by the name written, so `./footer` of
+  // b/y rendered the footer of a/x, whichever was compiled first.
+  const engine = createHandlebarsEngine({ handlebars });
+  const renderer = createTemplateRenderer({
+    engine,
+    loader: createMemoryLoader({
+      'a/x.hbs': '{{> ./footer}}',
+      'a/footer.hbs': 'A',
+      'b/y.hbs': '{{> ./footer}}{{> "./footer"}}',
+      'b/footer.hbs': 'B',
+    }),
+  });
+  assert.strictEqual((await renderer.render({ template: 'a/x' })).html, 'A');
+  assert.strictEqual((await renderer.render({ template: 'b/y' })).html, 'BB');
+});
+
 test('Templates: a partial that fails to load is read again on the next render', async () => {
   let fail = true;
   const loader = {
