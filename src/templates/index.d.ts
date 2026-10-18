@@ -455,8 +455,8 @@ export interface EjsEngineOptions {
 }
 /**
  * The EJS engine. An include is read through the loader: `/x` from its root,
- * `./x` against the template rendered, any other from the root, then the
- * directories of partials.
+ * `./x` against the template it is written in, any other from the root, then
+ * the directories of partials.
  */
 export declare function createEjsEngine(options: EjsEngineOptions): TemplateEngine;
 

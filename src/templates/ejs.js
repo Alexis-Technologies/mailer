@@ -39,16 +39,20 @@ const createEjsEngine = (options = {}) => {
     name: 'ejs',
     extensions,
     compile(source, context) {
-      // EJS tells the includer the name written, not the template it is
-      // written in: a relative include is read against the template rendered.
-      const includer = (include) => {
-        const found = context.includes.lookupSync(include, context.name, extensions);
-        return { filename: found.path ?? found.name, template: found.source };
+      const { includes } = context;
+      const hooks = {
+        // EJS calls the includer as a method of the options of the template
+        // the include is written in, whose file name is its name in the
+        // loader: a relative include is read against it.
+        includer(include) {
+          const found = includes.lookupSync(include, this.filename, extensions);
+          return { filename: found.name, template: found.source };
+        },
       };
       return ejs.compile(source, {
         ...given,
-        filename: context.path ?? context.name,
-        includer,
+        filename: context.name,
+        includer: hooks.includer,
         cache: false,
         client: false,
       });

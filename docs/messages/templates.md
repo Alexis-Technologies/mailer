@@ -118,8 +118,7 @@ Every include, partial and layout an engine reads goes through the loader of
 the renderer:
 
 - `/x` is read from the root of the loader;
-- `./x` and `../x` against the template it is written in (EJS: the template
-  rendered, as EJS tells no more);
+- `./x` and `../x` against the template it is written in;
 - any other name from the root, then from each directory of `partials`;
 - the extensions of the engine are added when the name has none.
 
@@ -254,8 +253,8 @@ Each takes `Infinity` for no bound, and going past one is a
 `TemplateRenderError`. The includes are counted as an engine runs
 synchronously: those EJS, Eta and Mustache look up as they render, and those
 Pug and Handlebars look up as they compile, until their first await. The depth
-is counted where the engine names the template an include is written in (Eta,
-Handlebars); a partial that names itself is no deeper for it. The file loader reads no template over its `maxBytes` (1 MiB).
+is counted where the engine names the template an include is written in (EJS,
+Eta, Handlebars); a partial that names itself is no deeper for it. The file loader reads no template over its `maxBytes` (1 MiB).
 
 ## Timeouts and aborts
 

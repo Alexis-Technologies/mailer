@@ -89,6 +89,35 @@ test('Templates: EJS escapes, includes through the loader and keeps raw output r
   assert.strictEqual(syntax.engine, 'ejs');
 });
 
+test('Templates: an EJS include is read against the template it is written in', async () => {
+  // Before: against the template rendered, as EJS tells the includer no more
+  // than the name written, so ./b of emails/parts/a read emails/b.
+  const engine = createEjsEngine({ ejs });
+  const templates = {
+    'emails/welcome.ejs': '<%- include("./parts/a") %>',
+    'emails/parts/a.ejs': 'a<%- include("./b") %><%- include("../c") %>',
+    'emails/parts/b.ejs': 'b',
+    'emails/b.ejs': 'wrong',
+    'emails/c.ejs': 'c',
+  };
+  assert.strictEqual(
+    (await renderWith(engine, templates, { template: 'emails/welcome' })).html,
+    'abc',
+  );
+  const missing = await failureOf(
+    renderWith(
+      engine,
+      { 'x/a.ejs': '<%- include("./y/b") %>', 'x/y/b.ejs': '<%- include("./nope") %>' },
+      { template: 'x/a' },
+    ),
+  );
+  assert.ok(missing instanceof TemplateNotFoundError);
+  assert.deepStrictEqual(
+    [missing.from, missing.tried],
+    ['x/y/b.ejs', ['x/y/nope.ejs', 'x/y/nope']],
+  );
+});
+
 test('Templates: an async EJS template that throws rejects, rather than hanging the send', async () => {
   // Before, in @nestjs-modules/mailer: `rendered.then(render)` had no catch.
   const engine = createEjsEngine({ ejs, options: { async: true } });
