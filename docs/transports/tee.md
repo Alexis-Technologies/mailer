@@ -30,6 +30,11 @@ timeout, and follow the caller's signal. Disposing of the tee waits for the
 copies in flight before it disposes of the mirrors. The primary and the mirrors
 send one Message-ID, so a copy reads as the message it is.
 
+The copies start with the primary's send, not after it: a mirror receives the
+message whether or not the primary takes it, so a copy may go out for a
+message the primary refused. A shadow that should see only what the primary
+sent belongs after the send, in `afterSend` of [`./hooks`](/transports/hooks).
+
 `onMirror` hears the outcome of every copy: its `receipt`, the `error` its send
 threw, or why it was `skipped`. Without it, a failed or skipped copy becomes a
 process warning (`MAILER_TEE_MIRROR_FAILED`), with the addresses of its text

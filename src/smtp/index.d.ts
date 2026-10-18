@@ -92,6 +92,8 @@ export interface SmtpConfig extends TransportDependencies {
    * default the host name of this machine when it is a fully qualified
    * domain name, its address as an address literal, or `[127.0.0.1]`, as
    * nodemailer gives it; a server that checks the name refuses `localhost`.
+   * The server writes it into the `Received` field of each message, which
+   * the recipients read: set it where the machine's own name is private.
    */
   readonly localName?: string;
   /**

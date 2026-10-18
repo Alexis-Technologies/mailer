@@ -146,6 +146,14 @@ qualified domain name, its address as an address literal, or `[127.0.0.1]`, as
 nodemailer does; a server that checks the name, such as Postfix with
 `reject_non_fqdn_helo_hostname`, refuses `localhost`.  A name with whitespace or
 a control character is refused when the transport is made.
+
+The server writes the EHLO name into the `Received` field it adds to each
+message, which every recipient can read, so the default tells them the host
+name of the machine that sent it, an internal one such as
+`ip-10-0-1-5.ec2.internal` included.  Set `localName` to the public name of
+the sending host (one whose address resolves back to it) wherever the machine's
+own name should stay private.
+
 Connection pooling improves performance by reusing connections across multiple
 messages.
 

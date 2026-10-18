@@ -106,7 +106,10 @@ export declare class TeeTransport<TProviderId extends string = string>
    * @throws {TypeError} If an option is invalid.
    */
   constructor(primary: Transport<TProviderId>, config: TeeConfig);
-  /** Sends a message through the primary and mirrors it. */
+  /**
+   * Sends a message through the primary and mirrors it; the copies start
+   * with the primary's send, whatever the primary answers.
+   */
   send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message through the primary, mirrored to the mirrors that send
