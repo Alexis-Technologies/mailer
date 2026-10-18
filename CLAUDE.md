@@ -643,6 +643,98 @@ fails on upstream's behavior):
   the application pins). ZeptoMail, whose signing is not documented, Plunk, which posts no
   events, and Cloudflare, whose events go to a Queue, have none.
 
+**Bugs of 1.1 found in review before its release** (each in its own `fix:` commit, or `perf:`,
+with a test that fails without it; R for review):
+
+- R1. webhooks: an id was kept as taken inside `verify()`, before the application handled its
+  events, so a delivery whose handler failed came back as a replay, was answered 2xx and lost;
+  and a store was made silently per verifier, which neither several processes nor a verifier
+  made per request share. `verify()` reserves the id for `leaseMs` and returns the events with
+  `commit()` and `release()`, over a store of `reserve`, `commit` and `release` (`claimDelivery`
+  in `request.js`); another delivery meanwhile is `pending` (503); `replayStore` is required,
+  `null` to keep none; a refusal carries the `status` to answer.
+- R2. render: `htmlToText` read the end of a string built with `+=`, which V8 flattens at each
+  read, so 1 MB of HTML took ten seconds, against the "linear" of U14. The text is built in
+  chunks, its last character and trailing whitespace kept aside.
+- R3. attachments: the media type in the pattern of `inlineDataUrls` was unbounded, quadratic on
+  `<img src=data:x` repeated; `isPublicUrl` judged the host as written, so a name resolving to a
+  private address passed, and so did NAT64, 6to4, site-local, multicast and reserved ranges; a
+  redirect could go from https to http. The type is bounded, the default `allowUrl` resolves the
+  name (`lookup`) and checks every address, and a downgrade is refused; DNS rebinding between
+  the check and the connection stays, as the docs say.
+- R4. attachments: `fromPath` checked the real path once and read the file later, with no bound.
+  It takes `maxBytes` (25 MiB), and each read checks the path again and that the file is the one
+  checked (`dev`, `ino`).
+- R5. webhooks: SNS read the certificate of any `SigningCertURL` on an `sns.*.amazonaws.com` host,
+  its path and query unchecked, behind a cache keyed by the whole URL, so a query per request
+  made a read per request; Azure handed back a `validationUrl` of any host. The SNS path must be
+  `/SimpleNotificationService-<id>.pem` with no query, four reads at most at once, and
+  `certificateTimeoutMs` and `signatureVersions` are options; a `validationUrl` must be on
+  `*.eventgrid.azure.net`, and a token is checked when the request carries one.
+- R6. smtp: `createHttpProxyConnector` sent `Proxy-Authorization` over `http:` to any host and had
+  only an idle timeout. Credentials go in clear to a loopback proxy alone, unless
+  `allowPlaintextCredentials`, and the CONNECT has one deadline.
+- R7. ratelimit: `maxKeys` only started a sweep, so the buckets grew without bound; disposal left
+  its timers and waiters; an abort between the messages of a `sendMany` was not heard. The least
+  recently used bucket goes past `maxKeys`, disposal rejects the waiters with an `AbortError`,
+  and each wait checks the signal.
+- R8. tee and every warning of a decorator: disposal closed the mirrors with copies in flight; a
+  failed copy, a hook or a store that threw became a warning with its raw text, addresses
+  included, one per failure. Disposal waits for the copies, a copy carries the primary's
+  Message-ID, and warnings are redacted (`describeThrown`) and held to ten a minute per code
+  (`warnLimited`, `internal/callback.js`).
+- R9. idempotency: one `ttlMs` held a reservation and a result, so a crash or a `break` after
+  `reserve` left the key pending for a day, every send of it `in_flight`; a holder whose time
+  ran out could complete another's reservation; the receipts of the decorator had no category
+  and were classified by the words of the key (`order-timeout-1` was a `timeout`). A reservation
+  has `leaseMs` (10 minutes) and a token that `complete` and `release` take, a message abandoned
+  is released, and every receipt names its category.
+- R10. core, pool: a refusal by a provider's limits before any request (`scheduledAt` where it
+  cannot schedule, a second tag for Postmark) was `validation`, at which `./pool` stops its
+  failover. It is the category `unsupported`: not retried, failed over, not counted by the
+  breaker.
+- R11. mailtrap: its own `parseRetryAfter` had not the bound of bug 29, and gave 0 for a past date.
+  It uses the core one.
+- R12. the gate of the decorators (`internal/gate.js`): a `sendMany` its caller left (`break`) did
+  not settle the messages read ahead, so a probe stayed out, keys stayed pending and hooks went
+  unheard; and every answer given in place ended the wrapped `sendMany`, cutting the batches of a
+  batch API to one or two messages. `abandon` settles them in a `finally`, and one wrapped
+  `sendMany` runs, the answers in place put in the order of their messages.
+- R13. breaker: a probe that never ended kept the circuit half-open for good, an `isFailure` that
+  threw broke its state, a failed batch counted a failure per message, and a late result counted
+  in a later period. A probe has `probeTimeoutMs`, the callbacks are guarded, a batch counts one
+  failure, and a result counts in the period it was sent in.
+- R14. sendmail: no timeout, no bound on the processes, success on an exit with 0 before the whole
+  message was written, and an abort sent SIGTERM alone. `timeout` (60 seconds; SIGTERM, then
+  SIGKILL 5 seconds on; `deliveryUnknown` once the message was written), `maxConcurrent` (10),
+  and such an exit fails.
+- R15. postmark, mailjet: a batch was cut by its count alone (500, 50), so its attachments were
+  held whole and could pass the provider's limit, which refuses the whole batch. It is cut by its
+  bytes too (50 MB, 15 MB).
+- R16. hooks: the hooks had no signal, a rejection of an async `onRetry` went unheard, and
+  `beforeSend` could return anything. The context carries the signal, an abort during
+  `beforeSend` sends nothing, a rejected `onRetry` is a warning, and a value not shaped as a
+  message refuses it.
+- R17. breaker, ratelimit, the memory stores and the replay store: intervals on `Date.now`, which
+  a step of the clock moves. They are measured on `performance.now()`.
+- R18. webhooks: Basic and Bearer credentials were compared with an early exit on a length apart;
+  the store was given ids as they came, one of which names a recipient (Mailtrap without
+  `event_id`); the verifiers of providers that sign no time took `toleranceMs` and `now` and
+  never read them; a batch reserved its ids one round trip at a time. Credentials compare as
+  HMACs, the store is given a SHA-256 of each id, those options throw, and the store is called
+  64 ids at a time.
+- R19. core: `metadata` had no bound on its keys or values. 64 keys, values of 1024 characters.
+- R20. webhooks: the mapping of events guessed where the provider did not say. An Azure
+  engagement of any type but a click was an open, and a quarantined message deferred, which
+  Azure does not try again; a Mailgun failure of no severity, a SendGrid bounce of no type and a
+  Mailjet bounce without `hard_bounce` had a kind (and SendGrid's `expired`, given up after its
+  retries, was hard); a Resend bounce without its detail and an SES bounce of no recipient had
+  none; Postmark made any undocumented bounce type a bounce, and any suppression an
+  unsubscribe. The rule of `docs/guide/webhooks.md` (`deferred` while the provider tries again;
+  `bounced` hard, soft or undetermined as it says; `rejected` with nothing sent; `unknown` rather
+  than a guess) holds for all, and `tests/unit/webhooks-mapping.test.js` pins every provider's
+  table.
+
 ## Repository layout
 
 ```
@@ -656,8 +748,8 @@ src/
                     delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
                     receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
                     schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
-                    the decorators of 1.1 (gate.js, callback.js, options.js), and redact.js,
-                    redact-addresses.js, sleep.js, log.js
+                    the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
+                    and redact.js, redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock
@@ -690,10 +782,10 @@ The root entry is the contract every subpath shares, ported from `@upyo/core` (`
   `verify()`.
 - **`Receipt`**: `{ successful: true, messageId }` or
   `{ successful: false, errorMessages, errors, retryable }`. A `ReceiptError` carries a `category`
-  (auth, rate-limit, network, timeout, validation, rejected, server-error, service-unavailable,
-  configuration, unknown), `retryable`, `statusCode` and `retryAfterMilliseconds`;
-  `classifyHttpStatus` and `classifyReceiptError` classify. A transport reports a failure in a
-  receipt rather than by throwing.
+  (auth, rate-limit, network, timeout, validation, rejected, unsupported, server-error,
+  service-unavailable, configuration, unknown), `retryable`, `statusCode` and
+  `retryAfterMilliseconds`; `classifyHttpStatus` and `classifyReceiptError` classify. A transport
+  reports a failure in a receipt rather than by throwing.
 
 The contracts of the reliability layer, still to be designed (Phase 0):
 
@@ -751,7 +843,8 @@ circuit breaker with a single probe in half-open, and no switch after an ambiguo
 without an idempotency key (`./pool` has strategies and failover, `./breaker` of 1.1 takes a
 failing provider out of it; no health checks yet); OpenTelemetry spans and metrics (time in
 queue, attempts, failure rate per provider, outbox size; `./otel` covers sends); token-bucket rate
-limits per provider and per tenant (SES quotas; `./ratelimit` of 1.1, by any key).
+limits per provider and per tenant (SES quotas; `./ratelimit` of 1.1, by any key, with a
+store of buckets that processes share).
 
 **Phase 3, multi-tenant (P1–P2).** Provider credentials per tenant (bring your own SES), domains
 and DKIM per tenant, quotas; List-Unsubscribe one-click (RFC 8058, done in 1.1) and the split

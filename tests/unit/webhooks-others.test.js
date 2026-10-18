@@ -500,11 +500,28 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
     eventType: 'Microsoft.Communication.EmailEngagementTrackingReportReceived',
     data: { engagementType: 'view' },
   });
+  // Before: an engagement of any type but a click was an open.
+  many.push({
+    id: 's-forward',
+    eventType: 'Microsoft.Communication.EmailEngagementTrackingReportReceived',
+    data: { engagementType: 'forward' },
+  });
   many.push({ id: 's-other', eventType: 'Microsoft.Communication.Other' });
   const typed = await verifier.verify({ body: JSON.stringify(many), headers });
   assert.deepStrictEqual(
     typed.events.map((event) => event.type),
-    ['delivered', 'bounced', 'bounced', 'rejected', 'deferred', 'unknown', 'opened', 'unknown'],
+    [
+      'delivered',
+      'bounced',
+      'bounced',
+      'rejected',
+      // Quarantined: held by the recipient's system, not tried again.
+      'unknown',
+      'unknown',
+      'opened',
+      'unknown',
+      'unknown',
+    ],
   );
   await rejects(verifier.verify({ body: '{}', headers }), 'payload');
   const custom = createAzureWebhookVerifier({

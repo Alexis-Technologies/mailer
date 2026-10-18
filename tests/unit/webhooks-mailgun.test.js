@@ -221,7 +221,8 @@ test('Webhooks Postmark: a bounce is read by its type', async () => {
     ['Unsubscribe', 'unsubscribed', undefined],
     ['ManuallyDeactivated', 'rejected', undefined],
     ['AutoResponder', 'unknown', undefined],
-    ['SomethingNew', 'bounced', 'undetermined'],
+    // A type Postmark does not document is unknown, not a guess.
+    ['SomethingNew', 'unknown', undefined],
   ];
   for (const [type, eventType, kind] of cases) {
     const { events } = await verifier.verify(bounce(type));

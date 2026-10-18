@@ -79,9 +79,22 @@ as many events.
 | `tags`, `metadata` | The tags and metadata of the message, as the transport sent them. |
 | `raw` | The provider's record. |
 
-`rejected` is a message the provider never attempted, such as one to a
-suppressed address; `deferred` one it keeps trying; `unknown` an event the model
-has no name for, kept with its `raw` record.
+Every provider's events are read by one rule, so that the same outcome has the
+same type whoever reports it:
+
+| What the provider says | `type` | `bounce.kind` |
+| --- | --- | --- |
+| It has not sent the message and will not: a suppressed, blocked or invalid address, a policy, a template that did not render. | `rejected` | |
+| An attempt failed and it will try again (Mailgun's temporary failure, Postmark's `Transient`). The message stays accepted. | `deferred` | `soft`, when it gives a bounce |
+| It gave up after an attempt, and says the failure is permanent. Suppress the address. | `bounced` | `hard` |
+| It gave up after an attempt, and says the failure is temporary or soft (a full mailbox, a block). | `bounced` | `soft` |
+| It gave up after an attempt, and does not say which (Azure, SparkPost's class 1). | `bounced` | `undetermined` |
+| An open or a click it documents. | `opened`, `clicked` | |
+| Anything it does not document, or a name the model has none for. | `unknown` | |
+
+An `unknown` event is never a guess: it keeps the provider's `raw` record,
+for the application to read. `tests/unit/webhooks-mapping.test.js` holds the
+mapping of every provider's events to this table.
 
 A receipt of unknown delivery (`deliveryUnknown`) has no `messageId` of the
 provider to find its events by. Give the message a `messageId` of its own, or
@@ -198,8 +211,9 @@ Turn on the Signed Event Webhook in SendGrid and pass its verification key
 (base64, as SendGrid shows it, or PEM). The signature is ECDSA P-256 over the
 timestamp and the body. SendGrid posts events in batches: each event is taken
 once by its `sg_event_id`, so a batch sent again keeps only what is not
-committed, and is refused as `replay` when nothing is left. A `bounce` is hard, a `blocked` one soft; a
-`dropped` message is `rejected`; an unsubscribe is `unsubscribed`. The
+committed, and is refused as `replay` when nothing is left. A bounce of the type
+`bounce` is hard, a `blocked` or `expired` one soft, and one of no type
+undetermined; a `dropped` message is `rejected`; an unsubscribe is `unsubscribed`. The
 categories are the tags of the message and its custom arguments its metadata;
 `messageId` is the `X-Message-Id` of the receipt, without the filter SendGrid
 adds after it.
@@ -219,8 +233,9 @@ neither the body nor the event in it, so a timestamp, token and signature
 seen once can carry any event until the token is taken: give every process
 the same shared `replayStore`, as one store per process takes the same token
 once in each. A permanent
-failure is a hard bounce, a temporary one a deferred soft bounce, and a
-failure for a suppressed address `rejected`. The user variables are the
+failure is a hard bounce, a temporary one a deferred soft bounce, one of no
+severity an undetermined bounce, and a failure for a suppressed address
+`rejected`. The user variables are the
 metadata, and `messageId` the id of the receipt, in angle brackets.
 
 ## Postmark
@@ -233,9 +248,14 @@ const postmark = createPostmarkWebhookVerifier({ username: 'hook', password: 's3
 Postmark signs nothing, so the URL of the webhook carries credentials, which
 the verifier requires and compares in constant time. With no time or id
 signed, nothing holds a request to a window or takes it once, and it needs no
-`replayStore`: deduplicate by the `id` of the events. A bounce is read by its type: `HardBounce` is hard,
-`SoftBounce` soft, `Transient` deferred, `SpamComplaint` a complaint,
-`ManuallyDeactivated` a rejection.
+`replayStore`: deduplicate by the `id` of the events. A bounce is read by its
+type: `HardBounce` is hard, `SoftBounce` soft, `Transient` deferred,
+`SpamComplaint` a complaint, `ManuallyDeactivated` a rejection, `Unknown`
+undetermined, and a notice that follows no attempt (`VirusNotification`,
+`OpenRelayTest`) or a type Postmark does not document `unknown`. A subscription
+change is `unsubscribed` when it suppresses the address by hand or by a link
+(`ManualSuppression`); one that follows a bounce or a complaint is `unknown`,
+that event having come on its own.
 
 ## MailerSend and Mailtrap
 
@@ -281,7 +301,8 @@ const sparkpost = createSparkPostWebhookVerifier({ username: 'hook', password: '
 Neither signs its events, so their webhooks carry Basic credentials (in
 Mailjet's callback URL, SparkPost's `auth_type: basic`), which the verifiers
 require. Mailjet's message id is the MessageUUID of the receipt, its custom
-campaign the tag and its event payload the metadata; SparkPost's message id is
+campaign the tag and its event payload the metadata, and a bounce is hard or
+soft by its `hard_bounce`, undetermined without it; SparkPost's message id is
 the transmission's, and a bounce is hard for the classes 10, 30 and 90,
 undetermined for 1, soft for the others. As for Postmark, nothing holds a
 request to a window or takes it once.
@@ -350,8 +371,9 @@ validation of a new subscription carries no event and is handed back for the
 application to answer, its token checked when it carries one; its
 `validationUrl`, for a validation by hand, must be on `*.eventgrid.azure.net`
 over HTTPS, or the request is refused. Delivery reports are `delivered`, `bounced`,
-`rejected` (Suppressed) or `deferred` (Quarantined); engagement reports
-`opened` or `clicked`. The message id is that of the send operation, the
+`rejected` (Suppressed), or `unknown` for Quarantined, which Azure does not try
+again; an engagement report is
+`opened` for a `view`, `clicked` for a `click`, and `unknown` for another. The message id is that of the send operation, the
 receipt's.
 
 ## Scaleway

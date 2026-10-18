@@ -33,7 +33,14 @@ const DELIVERY_TYPES = new Map([
   ['Failed', 'bounced'],
   ['FilteredSpam', 'bounced'],
   ['Suppressed', 'rejected'],
-  ['Quarantined', 'deferred'],
+  // Held by the recipient's system, which Azure does not try again: the model
+  // has no name for it.
+  ['Quarantined', 'unknown'],
+]);
+// The engagement types Azure documents; another is unknown, not an open.
+const ENGAGEMENT_TYPES = new Map([
+  ['view', 'opened'],
+  ['click', 'clicked'],
 ]);
 
 const eventOf = (record) => {
@@ -45,7 +52,7 @@ const eventOf = (record) => {
     type = DELIVERY_TYPES.get(data.status) ?? 'unknown';
     at = data.deliveryAttemptTimeStamp ?? at;
   } else if (record.eventType === ENGAGEMENT) {
-    type = data.engagementType === 'click' ? 'clicked' : 'opened';
+    type = ENGAGEMENT_TYPES.get(data.engagementType) ?? 'unknown';
     at = data.userActionTimeStamp ?? at;
     if (type === 'clicked') url = stringOf(data.engagementContext);
   }

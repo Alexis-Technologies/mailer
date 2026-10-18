@@ -44,6 +44,10 @@ const BOUNCES = new Map([
   ['Subscribe', { type: 'unknown' }],
   ['ChallengeVerification', { type: 'unknown' }],
   ['InboundError', { type: 'unknown' }],
+  ['VirusNotification', { type: 'unknown' }],
+  ['OpenRelayTest', { type: 'unknown' }],
+  ['Unknown', { type: 'bounced', kind: 'undetermined' }],
+  ['Unconfirmed', { type: 'bounced', kind: 'undetermined' }],
 ]);
 const TYPES = new Map([
   ['Delivery', 'delivered'],
@@ -54,7 +58,11 @@ const TYPES = new Map([
 
 const describeRecord = (record) => {
   if (record.RecordType === 'Bounce') {
-    const known = BOUNCES.get(record.Type) ?? { type: 'bounced', kind: 'undetermined' };
+    // A bounce that gives no type is a bounce of a kind not said; a type
+    // Postmark does not document is not a guess.
+    const known =
+      BOUNCES.get(record.Type) ??
+      (record.Type === undefined ? { type: 'bounced', kind: 'undetermined' } : { type: 'unknown' });
     let bounce;
     if (known.kind !== undefined) {
       bounce = { kind: known.kind };
@@ -66,7 +74,12 @@ const describeRecord = (record) => {
   }
   if (record.RecordType === 'SubscriptionChange') {
     return {
-      type: record.SuppressSending === true ? 'unsubscribed' : 'unknown',
+      // A suppression after a bounce or a complaint followed that event;
+      // only one by hand or by a link is an unsubscribe.
+      type:
+        record.SuppressSending === true && record.SuppressionReason === 'ManualSuppression'
+          ? 'unsubscribed'
+          : 'unknown',
       reason: stringOf(record.SuppressionReason),
       at: record.ChangedAt,
     };

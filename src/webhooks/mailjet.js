@@ -32,7 +32,10 @@ const eventOf = (record) => {
   const type = TYPES.get(record.event) ?? 'unknown';
   let bounce;
   if (type === 'bounced') {
-    bounce = { kind: record.hard_bounce === true ? 'hard' : 'soft' };
+    let kind = 'undetermined';
+    if (record.hard_bounce === true) kind = 'hard';
+    else if (record.hard_bounce === false) kind = 'soft';
+    bounce = { kind };
     if (stringOf(record.error) !== undefined) bounce.diagnostic = record.error;
   }
   // The MessageUUID of the send's answer, the receipt's id.

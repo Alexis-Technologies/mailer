@@ -112,11 +112,19 @@ const messageIdOf = (record) => {
   return dot > 0 ? id.slice(0, dot) : id;
 };
 
+// A bounce is hard, a block or a message that expired after its retries soft;
+// one of no type does not say.
+const SENDGRID_BOUNCE_KINDS = new Map([
+  ['bounce', 'hard'],
+  ['blocked', 'soft'],
+  ['expired', 'soft'],
+]);
+
 const eventOf = (record, index, timestamp) => {
   const type = TYPES.get(record.event) ?? 'unknown';
   let bounce;
   if (record.event === 'bounce') {
-    bounce = { kind: record.type === 'blocked' ? 'soft' : 'hard' };
+    bounce = { kind: SENDGRID_BOUNCE_KINDS.get(record.type) ?? 'undetermined' };
     if (stringOf(record.status) !== undefined) bounce.code = record.status;
     if (stringOf(record.reason) !== undefined) bounce.diagnostic = record.reason;
   }

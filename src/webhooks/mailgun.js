@@ -44,7 +44,11 @@ const failureOf = (data) => {
   const status = isRecord(data['delivery-status']) ? data['delivery-status'] : {};
   const reason = stringOf(data.reason);
   if (reason?.startsWith('suppress-')) return { type: 'rejected', reason };
-  const bounce = { kind: data.severity === 'temporary' ? 'soft' : 'hard' };
+  // A failure that gives no severity does not say which it is.
+  let kind = 'undetermined';
+  if (data.severity === 'temporary') kind = 'soft';
+  else if (data.severity === 'permanent') kind = 'hard';
+  const bounce = { kind };
   if (status.code !== undefined && status.code !== null) bounce.code = String(status.code);
   const diagnostic = stringOf(status.description) ?? stringOf(status.message);
   if (diagnostic !== undefined) bounce.diagnostic = diagnostic;

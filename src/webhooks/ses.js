@@ -71,7 +71,7 @@ const onlyDestinationOf = (mail) => {
 
 const bounceOf = (bounce) => {
   const kind = bounceKindOf(bounce.bounceType);
-  return recipientsOf(bounce.bouncedRecipients, (item) => {
+  const recipients = recipientsOf(bounce.bouncedRecipients, (item) => {
     const recipient = stringOf(item?.emailAddress);
     if (recipient === undefined) return undefined;
     const details = { kind };
@@ -79,6 +79,11 @@ const bounceOf = (bounce) => {
     if (stringOf(item.diagnosticCode) !== undefined) details.diagnostic = item.diagnosticCode;
     return { recipient, bounce: details, reason: stringOf(bounce.bounceSubType) };
   });
+  // A bounce that names no recipient is still a bounce, of its kind.
+  if (recipients.length === 0) {
+    recipients.push({ bounce: { kind }, reason: stringOf(bounce.bounceSubType) });
+  }
+  return recipients;
 };
 
 const emailsOf = (list) =>

@@ -91,9 +91,10 @@ const eventsOf = (payload, id) => {
   const type = TYPES.get(payload.type) ?? 'unknown';
   const { tags, metadata } = splitNamedTags(data.tags);
   let bounce;
-  if (type === 'bounced' && isRecord(data.bounce)) {
-    bounce = { kind: bounceKindOf(data.bounce.type) };
-    if (stringOf(data.bounce.message) !== undefined) bounce.diagnostic = data.bounce.message;
+  if (type === 'bounced') {
+    const detail = isRecord(data.bounce) ? data.bounce : {};
+    bounce = { kind: bounceKindOf(detail.type) };
+    if (stringOf(detail.message) !== undefined) bounce.diagnostic = detail.message;
   }
   const detail = data.bounce ?? data.failed ?? data.suppressed ?? data.delivery_delayed;
   const reason = isRecord(detail)

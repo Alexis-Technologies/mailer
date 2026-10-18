@@ -53,6 +53,7 @@ const rejects = async (promise, reason) => {
 test('Webhooks SendGrid: a signed batch is an event per record', async () => {
   const records = [
     record('bounce', {
+      type: 'bounce',
       status: '5.1.1',
       reason: '550 5.1.1 unknown user',
       bounce_classification: 'Invalid Address',
