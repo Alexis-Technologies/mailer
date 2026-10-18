@@ -72,10 +72,18 @@ the message is `deliveryUnknown`.
 ## Batches
 
 `sendMany()` sends up to 500 messages and 50 MB a request through `/email/batch`,
-reading its input a batch at a time: messages with files go in as many requests
-as their size takes, each of which fails, or is of unknown delivery, on its own.  Each message has the receipt of its own answer, so an
-inactive recipient fails its message alone; a message that cannot be converted
-fails alone too.
+converting each message as it reads it and sending a request as soon as the
+next message would not fit, so that it holds no more than a request at once:
+messages with files go in as many requests as their size takes, each of which
+fails, or is of unknown delivery, on its own.  Each message has the receipt of
+its own answer, so an inactive recipient fails its message alone; a message that
+cannot be converted fails alone too.
+
+A batch request has no idempotency key: a timeout or a reset after it was sent
+leaves all its messages of unknown delivery at once. Messages with large files,
+or any whose delivery must be known one by one, are better sent with `send()`
+each (or through `./retry`'s `sendMany`, which sends them one by one at a
+bounded concurrency).
 
 ## Verifying the configuration
 

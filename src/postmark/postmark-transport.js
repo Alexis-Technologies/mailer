@@ -9,14 +9,8 @@
 // sently's JSON parse before the status check is gone with the shared client.
 
 const { createFailedReceipt } = require('../core/receipt.js');
-const { chunks, jsonBytes } = require('../internal/batch.js');
-const {
-  convertBatch,
-  isCallerAbort,
-  mergeBatch,
-  providerFailure,
-  sendConverted,
-} = require('../internal/api.js');
+const { jsonBytes } = require('../internal/batch.js');
+const { isCallerAbort, mergeBatch, providerFailure, sendConverted } = require('../internal/api.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createPostmarkConfig } = require('./config.js');
 const { classifyErrorCode, createPostmarkClient } = require('./http-client.js');
@@ -78,8 +72,9 @@ class PostmarkTransport extends ProviderTransport {
 
   /**
    * Sends messages with `/email/batch`, 500 and 50 MB a request at most,
-   * reading the input a batch at a time; each message has the receipt of its
-   * own answer.
+   * each message converted as it is read and a request sent as soon as the
+   * next one would not fit, so that no more than a request is held at once;
+   * each message has the receipt of its own answer.
    *
    * @param messages The messages.
    * @param options Optional abort signal and retry callback.
@@ -87,34 +82,40 @@ class PostmarkTransport extends ProviderTransport {
    */
   async *sendMany(messages, options) {
     const signal = options?.signal;
-    for await (const batch of chunks(messages, MAX_BATCH_SIZE)) {
+    // The messages of the request being filled, in order: the index of a
+    // payload, or the receipt of a message that did not convert.
+    let slots = [];
+    let payloads = [];
+    let bytes = 2;
+    for await (const message of messages) {
       signal?.throwIfAborted();
-      const converted = await convertBatch(
-        batch,
-        (message) => convertMessage(message, this.config, signal),
-        'postmark',
-        signal,
-      );
-      if (converted.payloads.length === 0) {
-        yield* mergeBatch(converted.slots, () => undefined);
+      let payload;
+      try {
+        payload = await convertMessage(message, this.config, signal);
+      } catch (error) {
+        if (isCallerAbort(error, signal)) throw error;
+        slots.push(providerFailure('postmark', error));
         continue;
       }
-      const receipts = [];
-      let run = [];
-      let bytes = 2;
-      for (const payload of converted.payloads) {
-        const size = jsonBytes(payload);
-        if (run.length > 0 && bytes + size > MAX_BATCH_BYTES) {
-          for (const receipt of await this.#sendRun(run, options)) receipts.push(receipt);
-          run = [];
-          bytes = 2;
-        }
-        run.push(payload);
-        bytes += size;
+      const size = jsonBytes(payload);
+      const full = payloads.length === MAX_BATCH_SIZE || bytes + size > MAX_BATCH_BYTES;
+      if (payloads.length > 0 && full) {
+        yield* this.#flush(slots, payloads, options);
+        slots = [];
+        payloads = [];
+        bytes = 2;
       }
-      for (const receipt of await this.#sendRun(run, options)) receipts.push(receipt);
-      yield* mergeBatch(converted.slots, (index) => receipts[index]);
+      slots.push(payloads.length);
+      payloads.push(payload);
+      bytes += size;
     }
+    yield* this.#flush(slots, payloads, options);
+  }
+
+  // Sends a request, and gives the receipts of its messages in their order.
+  async *#flush(slots, payloads, options) {
+    const receipts = payloads.length === 0 ? [] : await this.#sendRun(payloads, options);
+    yield* mergeBatch(slots, (index) => receipts[index]);
   }
 
   // Sends the payloads of one request: a receipt each, in order.

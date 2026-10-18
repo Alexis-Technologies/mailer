@@ -67,8 +67,12 @@ if (receipt.successful) console.log(receipt.messageId); // the MessageUUID
 ## Batches and errors
 
 `Messages` is Mailjet's batch: `sendMany()` sends requests of at most 50
-recipients, as Mailjet counts them over the whole request, and 15 MB, reading
-its input a batch at a time.  When one message of a request fails, Mailjet answers 400 with
+recipients, as Mailjet counts them over the whole request, and 15 MB, converting
+each message as it reads it and sending a request as soon as the next one would
+not fit, so that it holds no more than a request at once. A batch request has no
+idempotency key: a timeout after it was sent leaves all its messages of unknown
+delivery, so messages with large files are better sent with `send()` each.
+When one message of a request fails, Mailjet answers 400 with
 the answers of all of them, so each message gets the receipt of its own answer:
 those that went succeed, the others fail with the code Mailjet gives
 (`mailjet.send-0003`) and the fields it names.

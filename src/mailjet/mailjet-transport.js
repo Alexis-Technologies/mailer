@@ -8,10 +8,9 @@
 
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
-const { chunks, jsonBytes } = require('../internal/batch.js');
+const { jsonBytes } = require('../internal/batch.js');
 const {
   ProviderApiError,
-  convertBatch,
   isCallerAbort,
   mergeBatch,
   providerFailure,
@@ -131,7 +130,9 @@ class MailjetTransport extends ProviderTransport {
 
   /**
    * Sends messages in requests of up to 50 recipients and 15 MB, each message
-   * with the receipt of its own answer.
+   * converted as it is read and a request sent as soon as the next one would
+   * not fit, so that no more than a request is held at once; each message
+   * has the receipt of its own answer.
    *
    * @param messages The messages.
    * @param options Optional abort signal and retry callback.
@@ -139,39 +140,44 @@ class MailjetTransport extends ProviderTransport {
    */
   async *sendMany(messages, options) {
     const signal = options?.signal;
-    for await (const batch of chunks(messages, MAX_RECIPIENTS)) {
+    // The messages of the request being filled, in order: the index of an
+    // entry, or the receipt of a message that did not convert.
+    let slots = [];
+    let entries = [];
+    let recipients = 0;
+    let bytes = 16;
+    for await (const message of messages) {
       signal?.throwIfAborted();
-      const converted = await convertBatch(
-        batch,
-        (message) => convertMessage(message, this.config, signal),
-        'mailjet',
-        signal,
-      );
-      const receipts = [];
-      let run = [];
-      let recipients = 0;
-      let bytes = 16;
-      for (let i = 0; i < batch.length; i++) {
-        if (typeof converted.slots[i] !== 'number') continue;
-        const count = recipientCount(batch[i]);
-        const entry = converted.payloads[converted.slots[i]];
-        const size = jsonBytes(entry);
-        const full = recipients + count > MAX_RECIPIENTS || bytes + size > MAX_REQUEST_BYTES;
-        if (run.length > 0 && full) {
-          for (const receipt of await this.sendEntries(run, options)) receipts.push(receipt);
-          run = [];
-          recipients = 0;
-          bytes = 16;
-        }
-        run.push(entry);
-        recipients += count;
-        bytes += size;
+      let entry;
+      try {
+        entry = await convertMessage(message, this.config, signal);
+      } catch (error) {
+        if (isCallerAbort(error, signal)) throw error;
+        slots.push(providerFailure('mailjet', error));
+        continue;
       }
-      if (run.length > 0) {
-        for (const receipt of await this.sendEntries(run, options)) receipts.push(receipt);
+      const count = recipientCount(message);
+      const size = jsonBytes(entry);
+      const full = recipients + count > MAX_RECIPIENTS || bytes + size > MAX_REQUEST_BYTES;
+      if (entries.length > 0 && full) {
+        yield* this.#flush(slots, entries, options);
+        slots = [];
+        entries = [];
+        recipients = 0;
+        bytes = 16;
       }
-      yield* mergeBatch(converted.slots, (index) => receipts[index]);
+      slots.push(entries.length);
+      entries.push(entry);
+      recipients += count;
+      bytes += size;
     }
+    yield* this.#flush(slots, entries, options);
+  }
+
+  // Sends a request, and gives the receipts of its messages in their order.
+  async *#flush(slots, entries, options) {
+    const receipts = entries.length === 0 ? [] : await this.sendEntries(entries, options);
+    yield* mergeBatch(slots, (index) => receipts[index]);
   }
 
   /**

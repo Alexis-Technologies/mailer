@@ -282,3 +282,40 @@ test('Postmark: a batch past 50 MB goes in as many requests as that takes', asyn
   );
   for (const request of requests) assert.ok(Buffer.byteLength(request.body) <= 50 * 1000 * 1000);
 });
+
+test('Postmark: a request goes once the next message would not fit, not after 500', async (t) => {
+  // Before: 500 messages were read and converted, their files in base64,
+  // before the first request, so a batch held them all however large.
+  let read = 0;
+  const readAtRequests = [];
+  stubFetch(t, (request) => {
+    readAtRequests.push(read);
+    return json(
+      request.json.map((_payload, index) => ({ ErrorCode: 0, MessageID: `pm-${index}` })),
+    );
+  });
+  const big = () =>
+    message({
+      attachments: [
+        {
+          filename: 'big.bin',
+          contentType: 'application/octet-stream',
+          inline: false,
+          contentId: '',
+          content: new Uint8Array(20 * 1000 * 1000),
+        },
+      ],
+    });
+  const input = (function* () {
+    for (let i = 0; i < 4; i++) {
+      read++;
+      yield big();
+    }
+  })();
+  const receipts = [];
+  for await (const receipt of transport().sendMany(input)) receipts.push(receipt);
+  assert.strictEqual(receipts.length, 4);
+  // A file of 20 MB is some 27 MB in base64: one fills a request, which goes
+  // once the next message is read, and the last once the input ends.
+  assert.deepStrictEqual(readAtRequests, [2, 3, 4, 4]);
+});
