@@ -538,3 +538,61 @@ test('Webhooks: onVerify hears each request taken or refused, and why', async (t
     /onVerify must be a function/,
   );
 });
+
+test('Webhooks: a late commit or release under another token leaves the id alone', async () => {
+  // Before: commit and release took the id alone, so a request whose lease
+  // ran out freed the reservation of the delivery that held the id now, and
+  // a third one was handled at the same time.
+  let time = 0;
+  const store = createMemoryReplayStore({ now: () => time });
+  assert.strictEqual(store.reserve('a', 1000, 'first'), 'reserved');
+  time = 1500;
+  assert.strictEqual(store.reserve('a', 1000, 'second'), 'reserved');
+  store.release('a', 'first');
+  assert.strictEqual(store.reserve('a', 1000, 'third'), 'pending');
+  store.commit('a', 5000, 'first');
+  assert.strictEqual(store.reserve('a', 1000, 'third'), 'pending');
+  store.commit('a', 5000, 'second');
+  assert.strictEqual(store.reserve('a', 1000, 'third'), 'done');
+  // A commit after the lease, with nobody holding the id, still keeps it.
+  assert.strictEqual(store.reserve('b', 1000, 'x'), 'reserved');
+  time = 3000;
+  store.commit('b', 5000, 'x');
+  assert.strictEqual(store.reserve('b', 1000, 'y'), 'done');
+  // The verifier passes one token per delivery to each call.
+  const calls = [];
+  const watching = {
+    reserve: async (id, leaseMs, token) => calls.push(['reserve', token]) && 'reserved',
+    commit: async (id, ttlMs, token) => {
+      calls.push(['commit', token]);
+    },
+    release: async (id, token) => {
+      calls.push(['release', token]);
+    },
+  };
+  const mailtrap = createMailtrapWebhookVerifier({ secret: 'mt', replayStore: watching });
+  const delivery = await mailtrap.verify(signMailtrap(mailtrapBatch('ev-1', 'ev-2')));
+  await delivery.commit([delivery.events[0]]);
+  await delivery.release();
+  const tokens = new Set(calls.map((call) => call[1]));
+  assert.strictEqual(tokens.size, 1);
+  assert.match([...tokens][0], /^[0-9a-f-]{36}$/);
+  assert.deepStrictEqual(
+    calls.map((call) => call[0]),
+    ['reserve', 'reserve', 'commit', 'release'],
+  );
+});
+
+test('Webhooks: the memory replay store tells of a committed id dropped before its time', (t) => {
+  // Before: past maxEntries, live committed ids were dropped silently, so a
+  // request sent again in their time was taken twice.
+  const warned = [];
+  t.mock.method(process, 'emitWarning', (_text, options) => warned.push(options?.code));
+  const store = createMemoryReplayStore({ maxEntries: 2, now: () => 0 });
+  for (const id of ['a', 'b', 'c']) {
+    store.reserve(id, 1000, id);
+    store.commit(id, 60_000, id);
+  }
+  assert.deepStrictEqual(warned, ['MAILER_REPLAY_EVICTED']);
+  assert.strictEqual(store.reserve('a', 1000, 'again'), 'reserved');
+});

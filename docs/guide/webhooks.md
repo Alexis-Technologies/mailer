@@ -134,20 +134,29 @@ SHA-256 of the provider's id in base64url (`mailtrap:3q2-7w…`), as some ids na
 recipient. The ids of a batch go to it up to 64 at a time, so a store must
 take calls that run at once, as a Redis client does by pipelining them:
 
+A reservation is made under the `token` of its request, which its commit and
+release give, so that a request whose lease ran out neither frees nor commits
+the reservation of the delivery that holds the id now:
+
 ```js
-// Redis, with node-redis: an atomic reservation, a commit, and a release
-// that frees a reservation only, never a committed id.
-const RELEASE = "if redis.call('get', KEYS[1]) == 'pending' then return redis.call('del', KEYS[1]) end";
+// Redis, with node-redis: an atomic reservation under a token, a commit
+// unless another request holds the id, and a release of one's own
+// reservation only, never a committed id.
+const COMMIT = `local v = redis.call('get', KEYS[1])
+if v == false or v == 'done' or v == 'pending:' .. ARGV[1] then
+  return redis.call('set', KEYS[1], 'done', 'PX', ARGV[2]) end`;
+const RELEASE = `if redis.call('get', KEYS[1]) == 'pending:' .. ARGV[1] then
+  return redis.call('del', KEYS[1]) end`;
 const replayStore = {
-  async reserve(id, leaseMs) {
-    if (await redis.set(id, 'pending', { NX: true, PX: leaseMs })) return 'reserved';
+  async reserve(id, leaseMs, token) {
+    if (await redis.set(id, `pending:${token}`, { NX: true, PX: leaseMs })) return 'reserved';
     return (await redis.get(id)) === 'done' ? 'done' : 'pending';
   },
-  async commit(id, ttlMs) {
-    await redis.set(id, 'done', { PX: ttlMs });
+  async commit(id, ttlMs, token) {
+    await redis.eval(COMMIT, { keys: [id], arguments: [token, String(ttlMs)] });
   },
-  async release(id) {
-    await redis.eval(RELEASE, { keys: [id] });
+  async release(id, token) {
+    await redis.eval(RELEASE, { keys: [id], arguments: [token] });
   },
 };
 ```

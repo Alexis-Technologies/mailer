@@ -66,18 +66,29 @@ export type ReplayState = 'reserved' | 'pending' | 'done';
  * processes, on Redis or a database, makes `reserve` one atomic operation
  * (`SET NX PX`, an insert under a unique index).  The ids of a batch are
  * passed up to 64 at a time, so its methods are called while others run.
+ * A reservation is made under the `token` of its request, which the commit
+ * and the release give: a store that keeps it fences a request whose lease
+ * ran out, so that it neither frees nor commits the reservation of the
+ * request that holds the id now.
  */
 export interface ReplayStore {
   /**
-   * Reserves an id for `leaseMs`, unless it is held: `reserved` when it is
-   * new, its lease ran out or it was released; `pending` while another
-   * request holds it; `done` once one was committed and until its time ends.
+   * Reserves an id for `leaseMs` under `token`, unless it is held:
+   * `reserved` when it is new, its lease ran out or it was released;
+   * `pending` while another request holds it; `done` once one was committed
+   * and until its time ends.
    */
-  reserve(id: string, leaseMs: number): ReplayState | Promise<ReplayState>;
-  /** Keeps a reserved id as taken for `ttlMs`. */
-  commit(id: string, ttlMs: number): void | Promise<void>;
-  /** Frees a reserved id that is not committed; a committed one stays. */
-  release(id: string): void | Promise<void>;
+  reserve(id: string, leaseMs: number, token?: string): ReplayState | Promise<ReplayState>;
+  /**
+   * Keeps a reserved id as taken for `ttlMs`, unless another request holds
+   * it now under another token.
+   */
+  commit(id: string, ttlMs: number, token?: string): void | Promise<void>;
+  /**
+   * Frees an id reserved under `token` that is not committed; a committed
+   * one, or one another request holds, stays.
+   */
+  release(id: string, token?: string): void | Promise<void>;
 }
 
 /**

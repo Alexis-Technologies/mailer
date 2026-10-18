@@ -6,8 +6,9 @@
 // verified, and an id is kept as taken only once the application has handled
 // its events.
 
-const { createHash, createHmac, randomBytes, timingSafeEqual } = require('node:crypto');
+const { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } = require('node:crypto');
 const { warnThrown } = require('../internal/callback.js');
+const { warnLimited } = require('../internal/warn.js');
 const {
   checkOptionalFunction,
   checkPositiveInteger,
@@ -70,13 +71,17 @@ class WebhookVerificationError extends Error {
 
 /**
  * Makes a store of the ids of the requests taken, in this process: an id is
- * `pending` for the lease of the request that reserved it, and `done` for
- * its time once that request is committed.  It holds at most `maxEntries`
- * ids, the oldest done ones dropped first; a pending id is never dropped
- * before its lease ends.
+ * `pending` for the lease of the request that reserved it, under its token,
+ * and `done` for its time once that request is committed; a commit or a
+ * release under another token, from a request whose lease ran out and whose
+ * id another holds now, is ignored.  It holds at most `maxEntries` ids, the
+ * oldest done ones dropped first, which a warning tells while they are kept
+ * (`MAILER_REPLAY_EVICTED`); a pending id is never dropped before its lease
+ * ends.
  *
  * @param options `maxEntries` (10000) and `now`.
- * @returns `{ reserve(id, leaseMs), commit(id, ttlMs), release(id) }`.
+ * @returns `{ reserve(id, leaseMs, token), commit(id, ttlMs, token),
+ * release(id, token) }`.
  * @throws {TypeError} If an option is invalid.
  */
 const createMemoryReplayStore = (options = {}) => {
@@ -88,11 +93,22 @@ const createMemoryReplayStore = (options = {}) => {
   // A Map iterates in the order of insertion, and an entry is written anew
   // when it changes, so the first ones are the oldest.
   const trim = (at) => {
+    let dropped = 0;
     for (const [id, entry] of entries) {
       const live = entry.expiresAt > at;
       if (live && entries.size <= maxEntries) break;
       if (live && !entry.done) continue;
       entries.delete(id);
+      if (live) dropped++;
+    }
+    // A committed id dropped before its time can be taken again: the store
+    // is too small for the rate of the requests.
+    if (dropped > 0) {
+      warnLimited(
+        'MAILER_REPLAY_EVICTED',
+        `The memory replay store dropped ${dropped} id(s) before their time to hold ` +
+          `${maxEntries}: a request sent again may be taken twice. Raise maxEntries.`,
+      );
     }
   };
 
@@ -103,19 +119,25 @@ const createMemoryReplayStore = (options = {}) => {
   };
 
   return {
-    reserve(id, leaseMs) {
+    reserve(id, leaseMs, token) {
       const at = now();
       const entry = entries.get(id);
       if (entry !== undefined && entry.expiresAt > at) return entry.done ? 'done' : 'pending';
-      write(id, { done: false, expiresAt: at + leaseMs }, at);
+      write(id, { done: false, expiresAt: at + leaseMs, token }, at);
       return 'reserved';
     },
-    commit(id, ttlMs) {
+    commit(id, ttlMs, token) {
       const at = now();
+      const entry = entries.get(id);
+      // Another request holds the id now: its handler decides.
+      if (entry !== undefined && !entry.done && entry.expiresAt > at && entry.token !== token) {
+        return;
+      }
       write(id, { done: true, expiresAt: at + ttlMs }, at);
     },
-    release(id) {
-      if (entries.get(id)?.done === false) entries.delete(id);
+    release(id, token) {
+      const entry = entries.get(id);
+      if (entry?.done === false && entry.token === token) entries.delete(id);
     },
   };
 };
@@ -281,16 +303,19 @@ class WebhookDelivery {
   events = [];
   #store;
   #ttlMs;
+  // The token the ids were reserved under, which a commit and a release give.
+  #token;
   // The reserved ids, each with the number of its events not committed.
   #left = new Map();
   #keyOf = new WeakMap();
 
-  constructor(fields, store, ttlMs) {
+  constructor(fields, store, ttlMs, token) {
     for (const name in fields) {
       if (Object.hasOwn(fields, name)) this[name] = fields[name];
     }
     this.#store = store;
     this.#ttlMs = ttlMs;
+    this.#token = token;
   }
 
   add(key, events) {
@@ -327,7 +352,7 @@ class WebhookDelivery {
         else keys.push(key);
       }
     }
-    await this.#settle(keys, (key) => this.#store.commit(key, this.#ttlMs));
+    await this.#settle(keys, (key) => this.#store.commit(key, this.#ttlMs, this.#token));
   }
 
   /**
@@ -338,7 +363,7 @@ class WebhookDelivery {
     if (this.#store === null) return;
     const keys = [];
     for (const key of this.#left.keys()) keys.push(key);
-    await this.#settle(keys, (key) => this.#store.release(key));
+    await this.#settle(keys, (key) => this.#store.release(key, this.#token));
   }
 
   // A key whose call failed stays, to be committed or released again.
@@ -368,7 +393,8 @@ class WebhookDelivery {
  */
 const claimDelivery = async (common, entries, fields = {}, ttlMs = common.toleranceMs * 2) => {
   const store = common.replayStore;
-  const delivery = new WebhookDelivery(fields, store, ttlMs);
+  const token = store === null ? undefined : randomUUID();
+  const delivery = new WebhookDelivery(fields, store, ttlMs, token);
   let done = 0;
   let pending = 0;
   if (store === null) {
@@ -379,7 +405,7 @@ const claimDelivery = async (common, entries, fields = {}, ttlMs = common.tolera
   for (const entry of entries) keys.push(storeKeyOf(entry.key));
   const states = [];
   const { failure } = await callEach(keys, async (key, index) => {
-    states[index] = await store.reserve(key, common.leaseMs);
+    states[index] = await store.reserve(key, common.leaseMs, token);
   });
   // The events keep the order of the request, whatever order the store
   // answered in.

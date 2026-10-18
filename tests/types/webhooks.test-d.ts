@@ -48,6 +48,9 @@ expectType<Promise<void>>(result.commit());
 expectType<Promise<void>>(result.commit([result.events[0]]));
 expectType<Promise<void>>(result.release());
 expectType<ReplayState | Promise<ReplayState>>(store.reserve('id', 30_000));
+expectType<ReplayState | Promise<ReplayState>>(store.reserve('id', 30_000, 'token'));
+expectType<void | Promise<void>>(store.commit('id', 60_000, 'token'));
+expectType<void | Promise<void>>(store.release('id', 'token'));
 const shared: ReplayStore = {
   reserve: async () => 'reserved' as const,
   commit: async () => {},
