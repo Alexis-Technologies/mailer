@@ -797,6 +797,9 @@ with a test that fails without it; R for review):
   `tee.mirror_failed`.
 - R40. jmap: `verify()` retried its reads with no `onRetry`.
 - R41. attachments: `inlineDataUrls` read HTML of any length; `maxLength` bounds it.
+- R42. tee: the deadline of an awaited mirror was unref'd, as that of a detached one is, so a
+  script whose mirror hung on nothing that kept the process alive ended with its send unsettled
+  (on Node 22, so did the suite of `./tee`). The caller waits for it, so it keeps the process.
 
 ## Repository layout
 

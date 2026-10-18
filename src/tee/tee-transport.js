@@ -28,7 +28,7 @@ const describe = (outcome) => {
 
 // A send of a mirror that does not settle by `timeout`, as one that ignores
 // its signal would not, fails then all the same.
-const withDeadline = (sending, timeout, mirror) => {
+const withDeadline = (sending, timeout, mirror, detached) => {
   let timer;
   const deadline = new Promise((resolve, reject) => {
     timer = setTimeout(
@@ -36,7 +36,9 @@ const withDeadline = (sending, timeout, mirror) => {
       timerMs(timeout),
     );
     // A detached send does not keep the process alive; disposal waits for it.
-    timer.unref?.();
+    // An awaited one does, as its caller waits for the deadline: a mirror hung
+    // on nothing else would end the process with the send unsettled.
+    if (detached) timer.unref?.();
   });
   return Promise.race([sending, deadline]).finally(() => clearTimeout(timer));
 };
@@ -173,6 +175,7 @@ class TeeTransport {
         : mirror.send(message, { signal: mirrorSignal }),
       this.config.timeout,
       mirror.id,
+      detached,
     );
     const settled = sending.then(
       (receipt) => this.#report({ mirror: mirror.id, message, receipt }),

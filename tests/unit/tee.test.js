@@ -1,5 +1,6 @@
 // Not ported: tests of ./tee, ported from unemail's tee driver, against fake
 // transports.
+const { execFileSync } = require('node:child_process');
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMessage } = require('../../index.js');
@@ -76,6 +77,32 @@ test('Tee: awaitMirrors waits for them, bounded, and they follow the caller', as
   await pending;
   assert.strictEqual(outcomes.at(-1), 'caller left');
 });
+
+test(
+  'Tee: an awaited mirror hung on nothing fails at its timeout, the process kept for it',
+  { skip: globalThis.Deno !== undefined && 'spawns the CLI with -e, which Deno does not take' },
+  () => {
+    // Before: its deadline did not keep the process alive, so a script whose
+    // mirror hung on a promise ended with the send unsettled, nothing said.
+    const script = `
+      const { createMessage } = require(${JSON.stringify(require.resolve('../../index.js'))});
+      const { TeeTransport } = require(${JSON.stringify(require.resolve('../../src/tee/index.js'))});
+      const primary = { id: 'p', send: async () => ({ successful: true, messageId: 'p' }) };
+      const tee = new TeeTransport(primary, {
+        mirrors: [{ id: 'm', send: () => new Promise(() => {}) }],
+        awaitMirrors: true,
+        timeout: 20,
+        onMirror: (outcome) => console.log(outcome.error.message),
+      });
+      const message = createMessage({
+        from: 'a@example.com', to: 'b@example.com', subject: 's', content: { text: 'x' },
+      });
+      tee.send(message).then((receipt) => console.log('sent', receipt.messageId));
+    `;
+    const output = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+    assert.strictEqual(output, 'The mirror m did not answer within 20 ms.\nsent p\n');
+  },
+);
 
 test('Tee: a mirror never changes the primary, which alone throws', async (t) => {
   const warnings = [];

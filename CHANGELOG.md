@@ -127,8 +127,9 @@ additive but the defaults listed below.
   code for each event (`breaker.open`, `breaker.refused`, `ratelimit.waiting`,
   `ratelimit.waited`, `idempotency.in_flight`, `tee.mirror_failed`…).
 - **`./tee`:** mirrors each message to other transports once the primary has answered it, with
-  one Message-ID, each copy with a timeout of its own and not awaited by default, the primary's
-  receipt the one returned; disposal waits for the copies in flight.
+  one Message-ID, each copy with a timeout of its own and not awaited by default (with
+  `awaitMirrors`, awaited until that timeout at most, which keeps the process alive for it), the
+  primary's receipt the one returned; disposal waits for the copies in flight.
 - **Delivery events and `./webhooks`:** the `DeliveryEvent` model at the root, one event per
   message and recipient, and a verifier per provider for SES, Resend, SendGrid, Mailgun,
   Postmark, MailerSend, Mailtrap, Brevo, Mailjet, SparkPost, Lettermint, Maileroo, SMTP2GO, Azure
