@@ -8,6 +8,13 @@ const {
   checkPositiveNumber,
 } = require('../internal/options.js');
 
+// A store of the buckets the processes of an application share.
+const checkStore = (store) => {
+  if (store === undefined) return undefined;
+  if (typeof store?.take !== 'function') throw new TypeError('store must have a take method.');
+  return store;
+};
+
 /**
  * Resolves the options of the rate limiter.
  *
@@ -37,6 +44,7 @@ const createRateLimitConfig = (config = {}) => {
     maxKeys: checkPositiveInteger(config.maxKeys ?? 10000, 'maxKeys'),
     now: checkOptionalFunction(config.now, 'now') ?? Date.now,
     logger: config.logger,
+    store: checkStore(config.store),
   };
 };
 

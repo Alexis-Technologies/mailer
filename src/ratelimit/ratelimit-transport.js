@@ -15,7 +15,7 @@ const { isRawTransport, isVerifiableTransport } = require('../core/transport.js'
 const { refuseRaw } = require('../internal/capabilities.js');
 const { Fifo, gatedSendMany } = require('../internal/gate.js');
 const { createLog } = require('../internal/log.js');
-const { abortReason } = require('../internal/sleep.js');
+const { abortReason, sleep } = require('../internal/sleep.js');
 const { createRateLimitConfig } = require('./config.js');
 
 const disposeOf = async (transport) => {
@@ -36,6 +36,8 @@ class RateLimitTransport {
   #buckets = new Map();
   #refillPerMs;
   #disposed = false;
+  // Aborts the waits on a shared store when the transport is disposed of.
+  #closing = new AbortController();
   #log;
 
   /**
@@ -101,6 +103,7 @@ class RateLimitTransport {
    */
   async [Symbol.asyncDispose]() {
     this.#disposed = true;
+    this.#closing.abort(disposedError());
     const reason = disposedError();
     for (const bucket of this.#buckets.values()) {
       clearTimeout(bucket.timer);
@@ -133,7 +136,9 @@ class RateLimitTransport {
         { category: 'configuration', code: 'ratelimit.cost_over_capacity' },
       );
     }
-    const bucket = this.#bucketOf(keyOf === undefined ? '' : String(keyOf(message)));
+    const key = keyOf === undefined ? '' : String(keyOf(message));
+    if (this.config.store !== undefined) return this.#takeShared(key, cost, signal);
+    const bucket = this.#bucketOf(key);
     this.#refill(bucket);
     if (bucket.waiters.size === 0 && bucket.tokens >= cost) {
       bucket.tokens -= cost;
@@ -154,6 +159,35 @@ class RateLimitTransport {
     }
     this.#log.write('debug', () => ({ code: 'ratelimit.waiting', waitMs }), 'A send waits.');
     return this.#wait(bucket, cost, signal);
+  }
+
+  // Takes the tokens from the store the processes share, waiting while it
+  // says when they will be there, within `maxWaitMs` of the arrival.
+  async #takeShared(key, cost, signal) {
+    const { limit, intervalMs, burst } = this.config;
+    const waits =
+      signal === undefined ? this.#closing.signal : AbortSignal.any([signal, this.#closing.signal]);
+    let waited = 0;
+    for (;;) {
+      const answer = await this.config.store.take(key, cost, { limit, intervalMs, burst });
+      if (answer?.taken === true) return undefined;
+      const waitMs = Math.max(1, Math.ceil(Number(answer?.waitMs) || 1));
+      if (this.config.mode === 'reject' || waited + waitMs > this.config.maxWaitMs) {
+        this.#log.write(
+          'info',
+          () => ({ code: 'ratelimit.limited', waitMs }),
+          'A send was refused.',
+        );
+        return this.#refused(
+          `The shared rate limit of ${this.id} (${limit} per ${intervalMs} ms) would hold the ` +
+            `message ${waitMs} ms.`,
+          { category: 'rate-limit', retryable: true, retryAfterMilliseconds: waitMs },
+        );
+      }
+      this.#log.write('debug', () => ({ code: 'ratelimit.waiting', waitMs }), 'A send waits.');
+      await sleep(waitMs, waits);
+      waited += waitMs;
+    }
   }
 
   #refused(text, options) {

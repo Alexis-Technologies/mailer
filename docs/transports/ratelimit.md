@@ -47,6 +47,41 @@ const perTenant = new RateLimitTransport(transport, {
 });
 ```
 
+## Several processes
+
+The buckets are those of the process: N replicas each send `limit` a second,
+N times the quota of the provider. Give them a `store` they share, whose `take`
+refills and takes in one step, and the limit is one. A send then waits for the
+time the store says, as long as `maxWaitMs` allows, and is refused past it.
+
+```js
+// Redis: a token bucket in a script, on the clock of Redis.
+const TAKE = `
+local key, cost, limit, interval, burst = KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
+local now = redis.call('TIME'); now = now[1] * 1000 + math.floor(now[2] / 1000)
+local state = redis.call('HMGET', key, 'tokens', 'at')
+local tokens = tonumber(state[1]) or burst
+local at = tonumber(state[2]) or now
+tokens = math.min(burst, tokens + (now - at) * limit / interval)
+local taken = tokens >= cost
+if taken then tokens = tokens - cost end
+redis.call('HSET', key, 'tokens', tokens, 'at', now)
+redis.call('PEXPIRE', key, math.ceil(interval * burst / limit))
+if taken then return 0 end
+return math.ceil((cost - tokens) * interval / limit)`;
+
+const store = {
+  async take(key, cost, { limit, intervalMs, burst }) {
+    const waitMs = await redis.eval(TAKE, {
+      keys: [`ratelimit:${key}`],
+      arguments: [String(cost), String(limit), String(intervalMs), String(burst)],
+    });
+    return waitMs === 0 ? { taken: true } : { taken: false, waitMs };
+  },
+};
+const limited = new RateLimitTransport(transport, { limit: 14, store });
+```
+
 ## Options
 
 | Option | Default | Description |
@@ -59,6 +94,7 @@ const perTenant = new RateLimitTransport(transport, {
 | `key` | one bucket | The bucket of a message. |
 | `cost` | `1` | The tokens a message takes. |
 | `maxKeys` | `10000` | The most buckets kept, the least used dropped first. |
+| `store` | | The buckets the processes share, in place of this process's. |
 | `now` | `Date.now` | The clock. |
 | `logger` | | A pino-like logger: a refused send (`ratelimit.limited`) at `info`, a send that waits at `debug`. |
 

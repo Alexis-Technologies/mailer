@@ -17,6 +17,26 @@ import type {
 /**
  * The options of {@link RateLimitTransport}.
  */
+/**
+ * A store of token buckets that the processes of an application share, so
+ * that N of them send no more than the one limit of the provider: on Redis,
+ * a script that refills and takes in one step.
+ */
+export interface RateLimitStore {
+  /**
+   * Takes `cost` tokens of the bucket of `key`, refilled at `limit` tokens
+   * every `intervalMs` up to `burst`, when it holds them: `{ taken: true }`;
+   * or `{ taken: false, waitMs }`, the time until it would.
+   */
+  take(
+    key: string,
+    cost: number,
+    bucket: { readonly limit: number; readonly intervalMs: number; readonly burst: number },
+  ):
+    | { readonly taken: boolean; readonly waitMs?: number }
+    | Promise<{ readonly taken: boolean; readonly waitMs?: number }>;
+}
+
 export interface RateLimitConfig {
   /** The tokens a bucket gains every `intervalMs`: the sustained rate. */
   readonly limit: number;
@@ -65,6 +85,12 @@ export interface RateLimitConfig {
    * waits at `debug` (`ratelimit.waiting`), with `waitMs`.
    */
   readonly logger?: Logger;
+  /**
+   * The buckets the processes share, in place of the ones of this process:
+   * a send waits, while `maxWaitMs` allows, for the time the store says, and
+   * the store, not this process, keeps the order.
+   */
+  readonly store?: RateLimitStore;
 }
 
 /**

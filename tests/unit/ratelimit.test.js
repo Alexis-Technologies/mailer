@@ -264,3 +264,54 @@ test('RateLimit: a signal that aborted between two messages of a batch stops the
   await assert.rejects(iterator.next(), /stop/);
   assert.strictEqual(inner.calls.length, 1);
 });
+
+test('RateLimit: processes that share a store share one limit', async (t) => {
+  // Before: each process had its buckets, so N of them sent N times the
+  // quota of the provider.
+  const clock = timeline(t);
+  const buckets = new Map();
+  const calls = [];
+  const store = {
+    // A token bucket as a Redis script would keep it, on the clock of the test.
+    take: async (key, cost, { limit, intervalMs, burst }) => {
+      calls.push([key, cost, limit, intervalMs, burst]);
+      const now = clock.now();
+      const bucket = buckets.get(key) ?? { tokens: burst, at: now };
+      bucket.tokens = Math.min(burst, bucket.tokens + ((now - bucket.at) * limit) / intervalMs);
+      bucket.at = now;
+      buckets.set(key, bucket);
+      if (bucket.tokens >= cost) {
+        bucket.tokens -= cost;
+        return { taken: true };
+      }
+      return { taken: false, waitMs: ((cost - bucket.tokens) * intervalMs) / limit };
+    },
+  };
+  const first = new RateLimitTransport(fakeTransport(), { limit: 1, intervalMs: 1000, store });
+  const second = new RateLimitTransport(fakeTransport(), {
+    limit: 1,
+    intervalMs: 1000,
+    mode: 'reject',
+    store,
+  });
+  assert.strictEqual((await first.send(message())).successful, true);
+  const refused = await second.send(message());
+  assert.strictEqual(refused.errors[0].category, 'rate-limit');
+  assert.strictEqual(refused.errors[0].retryAfterMilliseconds, 1000);
+  // The first waits for the store's tokens, on the store's word.
+  const waiting = first.send(message());
+  // Lets the answer of the store come, and its wait start, before the clock moves.
+  await clock.advance(0);
+  await clock.advance(1000);
+  assert.strictEqual((await waiting).successful, true);
+  assert.deepStrictEqual(calls[0], ['', 1, 1, 1000, 1]);
+  // Disposal stops a wait on the store.
+  const held = first.send(message());
+  await clock.advance(0);
+  await first[Symbol.asyncDispose]();
+  await assert.rejects(held, { name: 'AbortError' });
+  assert.throws(
+    () => new RateLimitTransport(fakeTransport(), { limit: 1, store: {} }),
+    /take method/,
+  );
+});

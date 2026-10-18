@@ -33,3 +33,7 @@ expectType<Promise<Receipt<'ses'>>>(limiter.send(message));
 expectType<AsyncIterable<Receipt<'ses'>>>(limiter.sendMany([message]));
 expectError(new RateLimitTransport(inner, {}));
 expectError(new RateLimitTransport(inner, { limit: 1, mode: 'drop' }));
+new RateLimitTransport(inner, {
+  limit: 14,
+  store: { take: async () => ({ taken: false, waitMs: 70 }) },
+});
