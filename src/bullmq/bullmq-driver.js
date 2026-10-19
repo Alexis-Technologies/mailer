@@ -8,7 +8,7 @@ const { warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { toUuid } = require('../internal/uuid.js');
-const { checkPositiveInteger } = require('../internal/options.js');
+const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { checkRetainData, retentionOf } = require('../internal/queue-options.js');
 const { settledWithin } = require('../internal/settle.js');
 const {
@@ -91,6 +91,7 @@ const createDriverConfig = (options) => {
     priorities: checkPriorities(options.priorities),
     detectDuplicates,
     retainData: checkRetainData(options.retainData),
+    now: checkOptionalFunction(options.now, 'now') ?? Date.now,
     // Kept by time, not by count: the window of duplicates does not shrink
     // under load.
     retention: retentionOf(options),
@@ -104,7 +105,7 @@ const optionsOf = (config, request) => ({
   jobId: request.id,
   timestamp: request.enqueuedAt,
   priority: config.priorities[request.priority] ?? config.priorities.normal,
-  delay: request.availableAt === undefined ? 0 : Math.max(0, request.availableAt - Date.now()),
+  delay: request.availableAt === undefined ? 0 : Math.max(0, request.availableAt - config.now()),
   attempts: request.maxAttempts,
   backoff: { type: MAILER_BACKOFF_TYPE },
 });
@@ -170,6 +171,7 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
     rateLimit,
     signal: consumeOptions.signal,
     retainData: config.retainData,
+    now: config.now,
   });
   const worker = new Worker(config.queueName, processor, {
     ...workerOptions,
@@ -228,7 +230,7 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
  * `lockDuration`; `priorities` (`{ high: 1, normal: 2, low: 3 }`);
  * `detectDuplicates` (true); `retainData` ('failed'), the finished jobs whose
  * data is kept; `dedupeWindowSeconds` (a day) and `retainFailedSeconds` (a
- * week), BullMQ's `removeOnComplete` and `removeOnFail`; `logger`.
+ * week), BullMQ's `removeOnComplete` and `removeOnFail`; `now`; `logger`.
  * @returns The driver, with `queue` and `createProcessor(handler)`.
  * @throws {TypeError} If an option is invalid.
  */
@@ -284,7 +286,11 @@ const createBullMQDriver = (options = {}) => {
     consume: (handler, consumeOptions = {}) =>
       startWorker(config, queue, handler, consumeOptions, log),
     createProcessor: (handler, processorOptions) =>
-      createBullMQProcessor(handler, { retainData: config.retainData, ...processorOptions }),
+      createBullMQProcessor(handler, {
+        retainData: config.retainData,
+        now: config.now,
+        ...processorOptions,
+      }),
     async close() {
       if (config.owned) await queue.close();
     },

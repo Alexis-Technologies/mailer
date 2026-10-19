@@ -131,6 +131,8 @@ export interface BullMQDriverOptions<Q extends BullMQQueueLike, W extends BullMQ
   readonly dedupeWindowSeconds?: number;
   /** The time a failed job is kept (`removeOnFail.age`). @default 604800 */
   readonly retainFailedSeconds?: number;
+  /** The clock a delay is counted from: that of the queue, for `scheduledAt`. */
+  readonly now?: () => number;
   /** Hears the events of the workers: errors, jobs BullMQ failed itself, stalls. */
   readonly logger?: Logger;
 }
@@ -149,6 +151,8 @@ export interface BullMQProcessorOptions {
   readonly signal?: AbortSignal;
   /** The finished jobs whose data is kept, through `job.updateData`. @default 'failed' */
   readonly retainData?: 'all' | 'failed' | 'none';
+  /** The clock a release with a delay counts from. */
+  readonly now?: () => number;
 }
 
 /** A consumer of a BullMQ driver: its worker. */

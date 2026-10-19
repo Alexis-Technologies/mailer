@@ -4,6 +4,7 @@
 // and a job moved back for a release, which spends no attempt.
 
 const { warnThrown } = require('../internal/callback.js');
+const { checkOptionalFunction } = require('../internal/options.js');
 const { checkRetainData } = require('../internal/queue-options.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { namedError, rateLimitError, retryError } = require('./backoff.js');
@@ -20,7 +21,7 @@ const jobOf = (job) => ({
 });
 
 // A job given back, by the means its version of BullMQ has.
-const release = async (job, token, outcome) => {
+const release = async (job, token, outcome, now) => {
   const delay = outcome.delayMilliseconds;
   if (
     token !== undefined &&
@@ -28,7 +29,7 @@ const release = async (job, token, outcome) => {
     delay > 0 &&
     typeof job.moveToDelayed === 'function'
   ) {
-    await job.moveToDelayed(Date.now() + delay, token);
+    await job.moveToDelayed(now() + delay, token);
     throw namedError('DelayedError', 'Released to the queue.');
   }
   if (token !== undefined && typeof job.moveToWait === 'function') {
@@ -66,7 +67,7 @@ const dropData = async (job) => {
  * @param handler The handler, such as `createMailJobHandler()`.
  * @param options `rateLimit(ms)`, the queue's `rateLimit`, for a retry of the
  * whole queue (it needs the worker's `limiter`); `signal`; `retainData`
- * ('failed'), the finished jobs whose data is kept.
+ * ('failed'), the finished jobs whose data is kept; `now`.
  * @returns The processor, with `shutdown(reason)`, which aborts the jobs it
  * runs.
  * @throws {TypeError} If the handler is not a function.
@@ -78,6 +79,7 @@ const createBullMQProcessor = (handler, options = {}) => {
     throw new TypeError('rateLimit must be a function.');
   }
   const retainData = checkRetainData(options.retainData);
+  const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
   const shutdown = new AbortController();
   const signals = [shutdown.signal];
   if (options.signal !== undefined) signals.push(options.signal);
@@ -115,7 +117,7 @@ const createBullMQProcessor = (handler, options = {}) => {
           redactAddresses(`${outcome.code}: ${outcome.reason}`),
         );
       case 'release':
-        return release(job, token, outcome);
+        return release(job, token, outcome, now);
       default:
         throw namedError(
           'UnrecoverableError',

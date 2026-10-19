@@ -523,3 +523,18 @@ test('BullMQ: enqueueMany reads its jobs back many at once to tell duplicates', 
   // At most 32 at once, more than one.
   assert.ok(most > 1 && most <= 32, String(most));
 });
+
+test('BullMQ: a delay is counted from the clock the driver is given', async () => {
+  const bullmq = fakeBullMQ();
+  const driver = createBullMQDriver({ bullmq, now: () => 1_000_000 });
+  await driver.enqueue(requestOf({ id: 'later', availableAt: 1_060_000 }));
+  assert.strictEqual(bullmq.queues[0].added[0].opts.delay, 60_000);
+  const job = fakeJob();
+  const processor = driver.createProcessor(async () => ({
+    type: 'release',
+    delayMilliseconds: 5000,
+  }));
+  await processor(job, 'tok').catch(() => {});
+  assert.deepStrictEqual(job.moves, [['delayed', 1_005_000, 'tok']]);
+  assert.throws(() => createBullMQDriver({ bullmq, now: 'clock' }), /now must be a function/);
+});
