@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-10-18
+## [1.2.0] - 2026-10-19
 
 The reliability layer of the roadmap, on the transport of 1.1: a persistent queue, on BullMQ or a
 transactional outbox in MongoDB, whose workers render templates of the engine the application

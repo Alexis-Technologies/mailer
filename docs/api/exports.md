@@ -53,7 +53,7 @@ model of delivery events.
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
-| `@alexify/mailer/templates` | `createTemplateRenderer`, `createFileLoader`, `createMemoryLoader`, `createCssInliner`, `createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`, `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`, `createReactEmailEngine`, `TemplateNotFoundError`, `TemplateRenderError` | [Templates by name](/messages/templates) |
+| `@alexify/mailer/templates` | `createTemplateRenderer`, `createFileLoader`, `createMemoryLoader`, `createCssInliner`, `createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`, `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`, `createReactEmailEngine`, `TemplateNotFoundError`, `TemplateRenderError`, `TemplateLoadError` | [Templates by name](/messages/templates) |
 | `@alexify/mailer/queue` | `createMailQueue`, `createMailJobHandler`, `createMemoryQueue`, `createPollingDriver`, `prepareMailJob`, `parseMailJob`, `MailQueueError`, `QueueLeaseLostError`, `MAIL_JOB_NAME`, `MAIL_JOB_VERSION` | [The queue](/guide/queue) |
 | `@alexify/mailer/bullmq` | `createBullMQDriver`, `createBullMQProcessor`, `createBullMQBackoffStrategy`, `MAILER_BACKOFF_TYPE` | [BullMQ](/transports/bullmq) |
 | `@alexify/mailer/mongodb` | `createMongoOutbox`, `createMongoAuditSink`, `createMongoIdempotencyStore` | [MongoDB outbox](/guide/outbox) |
@@ -83,7 +83,7 @@ model of delivery events.
 | `@alexify/mailer/mock` | `MockTransport` | [Mock](/transports/mock) |
 | `@alexify/mailer/pool` | `PoolTransport`, `RoundRobinStrategy`, `WeightedStrategy`, `PriorityStrategy`, `SelectorStrategy` | [Pool](/transports/pool) |
 | `@alexify/mailer/retry` | `RetryTransport`, `createRetryTransport` | [Retry](/transports/retry) |
-| `@alexify/mailer/otel` | `OpenTelemetryTransport`, `createOpenTelemetryTransport`, `createEmailAttributeExtractor`, `createErrorClassifier`, `defaultErrorClassifier` | [OpenTelemetry](/transports/otel) |
+| `@alexify/mailer/otel` | `OpenTelemetryTransport`, `createOpenTelemetryTransport`, `createEmailAttributeExtractor`, `createErrorClassifier`, `defaultErrorClassifier`, `instrumentHandler` | [OpenTelemetry](/transports/otel) |
 | `@alexify/mailer/logger` | `LoggerTransport` | [Logger](/transports/logger) |
 | `@alexify/mailer/breaker` | `CircuitBreakerTransport` | [Circuit breaker](/transports/breaker) |
 | `@alexify/mailer/ratelimit` | `RateLimitTransport` | [Rate limit](/transports/ratelimit) |
