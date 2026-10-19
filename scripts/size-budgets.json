@@ -3,7 +3,7 @@
   "./mime": 7.5,
   "./attachments": 4.5,
   "./render": 3,
-  "./templates": 12,
+  "./templates": 16,
   "./webhooks": 15.5,
   "./smtp": 23.5,
   "./sendmail": 12,
