@@ -707,3 +707,33 @@ test('Queue: what escapes the steps is told, and each outcome logged with its du
   await new Promise(setImmediate);
   assert.ok(warnings.includes('MAILER_QUEUE_WORKER_THREW'));
 });
+
+test('Queue: a render that timed out, or a loader out of reach, is retried; a broken template is not', async () => {
+  const { TemplateLoadError, TemplateRenderError } = require('../../src/templates/index.js');
+  const throwing = (error) => ({
+    render() {
+      throw error;
+    },
+  });
+  const outcomeOf = async (error, key) => {
+    const { handler, transport } = handlerOf({ renderer: throwing(error) });
+    const outcome = await run(handler, jobOf({ idempotencyKey: key }));
+    assert.strictEqual(transport.calls.length, 0);
+    return outcome;
+  };
+  const timedOut = await outcomeOf(new TemplateRenderError('welcome', 'timeout', 'slow'), 't');
+  assert.deepStrictEqual([timedOut.type, timedOut.code], ['retry', 'render.failed']);
+  const unreachable = await outcomeOf(
+    new TemplateLoadError('welcome', { cause: new Error('connect ECONNREFUSED') }),
+    'l',
+  );
+  assert.strictEqual(unreachable.type, 'retry');
+  const broken = await outcomeOf(new TemplateRenderError('welcome', 'compile', 'bad tag'), 'b');
+  assert.deepStrictEqual([broken.type, broken.code], ['fail', 'render.failed']);
+  // A bug of the loader fails the job.
+  const bug = await outcomeOf(
+    new TemplateLoadError('welcome', { cause: new TypeError('x is undefined') }),
+    'g',
+  );
+  assert.strictEqual(bug.type, 'fail');
+});

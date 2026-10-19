@@ -233,7 +233,11 @@ const settleFailure = async (run, receipt, code) => {
 // A failure thrown by the application's code (a resolver, a renderer's
 // loader): a bug fails the job, anything else is classified as a send's is.
 const settleThrown = (run, error, code) => {
-  if (isProgrammerError(error) || error?.retryable === false || TEMPLATE_CODES.has(error?.code)) {
+  // What says it may pass is retried before any rule that fails it: a render
+  // that timed out, a loader out of reach.
+  const failsAgain =
+    isProgrammerError(error) || error?.retryable === false || TEMPLATE_CODES.has(error?.code);
+  if (error?.retryable !== true && failsAgain) {
     const category = classifyReceiptError(error).category;
     return fail(run, code, messageOf(error), {
       error: failureError(

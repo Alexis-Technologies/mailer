@@ -195,7 +195,7 @@ rotated, as another secret makes other ids and the same message another job.
 | a refused message (`validation`, `rejected`, `unsupported`) | failed at once | `failed` |
 | a failure of the operator (`auth`, `configuration`) | retried after `operatorDelayMilliseconds` (5 minutes) | `queued` |
 | a template missing or broken, no subject, no renderer | failed at once (`render.*`); a broken one's reason names the template and where it failed, its text (a helper's error, an excerpt, a value of the context) going to the log at `debug` only | `failed` |
-| an outage of the template loader or of `resolveAttachment` | retried | `queued` |
+| an outage of the template loader (`TemplateLoadError`) or of `resolveAttachment`, a render that timed out | retried | `queued` |
 | a bug: a `TypeError` thrown by the transport | failed at once (`queue.thrown`), logged with its stack | `failed` |
 | a job past `expiresAt`, or whose retry would come after it | failed (`queue.expired`) | `failed` |
 | a job written by a later version of the worker, or sealed for a codec it lacks | given back, its attempts not spent, for a worker that reads it; failed once it expires or has waited a week | — |
