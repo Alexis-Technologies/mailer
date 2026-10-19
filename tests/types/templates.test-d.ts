@@ -20,6 +20,7 @@ import {
   createPugEngine,
   createReactEmailEngine,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
   type TemplateEngine,
@@ -27,6 +28,7 @@ import {
   type TemplateInputOf,
   type TemplateOutput,
   type TemplateRenderer,
+  type TemplateRenderPhase,
 } from '../../src/templates/index.js';
 
 // The engines of the real packages, as typed, fit the structural modules.
@@ -42,7 +44,7 @@ expectType<Promise<string>>(juiced('<p>x</p>'));
 
 declare const ejs: { compile(source: string, options?: object): (data?: object) => string };
 declare const pug: { compile(source: string, options?: object): (locals?: object) => string };
-declare const mustache: { Writer: new () => object };
+declare const mustache: { Writer: new () => object; Context: new (view: object) => object };
 declare const nunjucks: {
   Environment: new (loaders: unknown, options?: object) => object;
   Template: new (
@@ -61,6 +63,8 @@ createMustacheEngine({ mustache, tags: ['<%', '%>'] });
 createNunjucksEngine({ nunjucks, filters: { upper: (s: string) => s.toUpperCase() } });
 createMjmlEngine({ mjml2html, engine: hbs, includes: false, onErrors: (errors) => errors.length });
 expectError(createEjsEngine({}));
+createHandlebarsEngine({ handlebars, options: { noEscape: true }, allowUnescaped: true });
+expectError(createEtaEngine({ Eta, allowUnescaped: 'yes' }));
 expectError(createMustacheEngine({ mustache, tags: ['<%'] }));
 
 declare const render: (element: { type: string }) => Promise<string>;
@@ -85,14 +89,29 @@ const templates = createTemplateRenderer({
   layout: 'layouts/main',
   globals: (input) => ({ locale: input.locale }),
   defaultLocale: 'en',
+  locales: ['en', 'uk'],
   inlineCss: cssInline,
   cache: { maxEntries: 100 },
+  maxIncludes: 100,
+  maxIncludeDepth: 8,
+  maxOutputBytes: Infinity,
 });
 expectAssignable<Renderer<TemplateInput>>(templates);
 const output = await templates.render({
   template: 'welcome',
   context: { name: 'Ada' },
   locale: 'uk',
+  tenantId: 'acme',
+  signal: AbortSignal.timeout(1000),
+});
+expectError(templates.render({ template: 'welcome', signal: 'now' }));
+createTemplateRenderer({
+  engine: hbs,
+  loader: {
+    load: (name, options) => (options?.signal?.aborted ? undefined : { name, source: '' }),
+  },
+  renderTimeoutMilliseconds: 5000,
+  logger: { debug: (properties: object, message: string) => [properties, message] },
 });
 expectType<TemplateOutput>(output);
 expectType<string | undefined>(output.subject);
@@ -106,6 +125,8 @@ createMessage({
   content: fields.content,
 });
 createTemplateRenderer({ engines: [hbs, react], loader: createMemoryLoader({ welcome: '<p/>' }) });
+expectType<string | undefined>(createFileLoader({ dir: 'emails' }).loadSync('welcome.hbs')?.source);
+expectType<boolean | undefined>(react.parts);
 expectError(templates.render({ context: {} }));
 
 // Typed templates: each name with its own context.
@@ -123,3 +144,9 @@ expectType<false>(missing.retryable);
 expectType<readonly string[]>(missing.tried);
 const broken = new TemplateRenderError('welcome', 'compile', 'x', { engine: 'handlebars' });
 expectType<'MAILER_TEMPLATE_RENDER'>(broken.code);
+expectType<string | undefined>(broken.requested);
+expectType<TemplateRenderPhase | undefined>(missing.phase);
+expectType<string | undefined>(missing.locale);
+const failed = new TemplateLoadError('welcome.hbs', { from: 'layout', cause: new Error('EMFILE') });
+expectType<'MAILER_TEMPLATE_LOAD'>(failed.code);
+expectType<true | undefined>(failed.retryable);

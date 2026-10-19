@@ -1,6 +1,7 @@
 // Not ported: the types of ./templates, templates by name rendered by an
 // engine the application passes in.
 
+import type { Logger } from '../../index.js';
 import type { ReactEmailRenderOptions, RenderOutput, Renderer } from '../render/index.js';
 
 /** The values a template renders. */
@@ -19,6 +20,15 @@ export interface TemplateInput<TContext extends object = TemplateContext> {
    * `defaultLocale` so, then the template without a locale.
    */
   readonly locale?: string;
+  /** The tenant the message is for, as the worker of `./queue` gives it: for `globals`, which the renderer reads nothing of. */
+  readonly tenantId?: string;
+  /**
+   * Stops the render, which rejects with its reason. With the cache on, a
+   * read or a compile that other renders wait for goes on for them; without
+   * it, the reads of the render are its own, and the loader is given the
+   * signal.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -46,20 +56,36 @@ export interface TemplateSource<TSource = string> {
   readonly path?: string;
 }
 
+/** What a loader is told as it reads. */
+export interface TemplateLoadOptions {
+  /**
+   * Aborted when the read is no longer waited for: at the timeout of the
+   * render (`TimeoutError`), or, without a cache, at the abort of the one
+   * render it is for. A loader that can stop, a query or a fetch, stops.
+   */
+  readonly signal?: AbortSignal;
+}
+
 /**
  * Where templates are read by name: relative to the root of the loader, `/`
- * between directories, no `.` or `..` segment.
+ * between directories, no segment starting with `.`.
  */
 export interface TemplateLoader<TSource = string> {
   /** The template of that name, or undefined when there is none. */
   load(
     name: string,
+    options?: TemplateLoadOptions,
   ): TemplateSource<TSource> | undefined | Promise<TemplateSource<TSource> | undefined>;
   /**
    * The same, synchronously: EJS, Pug, Eta and Mustache read their includes
    * so, and need it.
    */
   loadSync?(name: string): TemplateSource<TSource> | undefined;
+}
+
+/** A loader that reads synchronously too, as the file and memory loaders do. */
+export interface SyncTemplateLoader<TSource = string> extends TemplateLoader<TSource> {
+  loadSync(name: string): TemplateSource<TSource> | undefined;
 }
 
 /** The options of {@link createFileLoader}. */
@@ -77,7 +103,7 @@ export interface FileLoaderOptions {
  *
  * @throws {TypeError} If an option is invalid.
  */
-export declare function createFileLoader(options: FileLoaderOptions): TemplateLoader<string>;
+export declare function createFileLoader(options: FileLoaderOptions): SyncTemplateLoader<string>;
 
 /**
  * Makes a loader of templates held in memory, by name.
@@ -86,7 +112,7 @@ export declare function createFileLoader(options: FileLoaderOptions): TemplateLo
  */
 export declare function createMemoryLoader<TSource = string>(
   templates: Readonly<Record<string, TSource>>,
-): TemplateLoader<TSource>;
+): SyncTemplateLoader<TSource>;
 
 /** What an engine compiles: the HTML of a message, its text, or its subject. */
 export type TemplatePart = 'html' | 'text' | 'subject';
@@ -102,6 +128,8 @@ export interface TemplateIncludes<TSource = string> {
   readonly partials: readonly string[];
   /** Whether what is read and compiled may be kept. */
   readonly cache: boolean;
+  /** The most entries the renderer keeps in each of its caches, for an engine to keep as many. */
+  readonly maxEntries: number;
   /**
    * The name `include` stands for in the template `from`: `./x` and `../x`
    * against its directory, `/x` from the root, any other as it is; undefined
@@ -171,6 +199,16 @@ export interface TemplateEngine<TSource = string> {
   finish?(html: string, context: TemplateCompileContext<TSource>): string | Promise<string>;
   /** The templates of an engine whose templates are code (React Email), when the renderer has no loader. */
   readonly loader?: TemplateLoader<TSource>;
+  /**
+   * Whether its templates give their parts at once, as React Email's do: a
+   * renderer with a `layout` refuses it, as no layout wraps them.
+   */
+  readonly parts?: boolean;
+  /**
+   * Forgets what the engine keeps for these includes outside them, such as
+   * EJS's entries in `ejs.cache`: called by the renderer's `clear()`.
+   */
+  clear?(includes: TemplateIncludes<TSource>): void;
 }
 
 /** Inlines the CSS of an HTML body. */
@@ -224,6 +262,13 @@ export interface TemplateRendererOptions<TSource = string> {
       ) => TemplateContext | undefined | Promise<TemplateContext | undefined>);
   /** The locale tried after the requested ones, before the templates without one. */
   readonly defaultLocale?: string;
+  /**
+   * The locales templates are written in. A locale asked for is then looked
+   * up as the first of them its subtags reach (`uk-UA` as `uk`), and any
+   * other as none, so that a locale a user chose reads no template and keeps
+   * no entry of the cache of its own. Any by default.
+   */
+  readonly locales?: readonly string[];
   /** The name of a variant before its extension. @default `${template}[.${locale}][.text|.subject]` */
   readonly variantName?: (
     template: string,
@@ -233,10 +278,44 @@ export interface TemplateRendererOptions<TSource = string> {
   readonly frontMatter?: boolean;
   /** Inlines the CSS of the HTML, after MJML and before the text. None by default. */
   readonly inlineCss?: CssInliner;
-  /** The text from the HTML with htmlToText when there is no text template. @default true */
+  /**
+   * The text from the HTML with htmlToText when there is no text template.
+   * The renderer derives it itself, so `autoText: false` of `renderFields`
+   * or `renderContent` leaves it: give it to the renderer. @default true
+   */
   readonly autoText?: boolean;
   /** false reads and compiles every template on each render, for development. @default true */
   readonly cache?: boolean | TemplateCacheOptions;
+  /**
+   * The includes, partials and layouts an engine looks up in one render, as
+   * it runs synchronously (what it looks up after an await of its own is not
+   * counted); more fail the render. Infinity for no bound. @default 10000
+   */
+  readonly maxIncludes?: number;
+  /**
+   * How deep a chain of includes goes, each written in the one before, as the
+   * engine names the template an include is written in. Infinity for no
+   * bound. @default 32
+   */
+  readonly maxIncludeDepth?: number;
+  /** The largest HTML, text or subject a render gives, in bytes of UTF-8. Infinity for no bound. @default 10485760 */
+  readonly maxOutputBytes?: number;
+  /**
+   * How long a render may take: then it fails with a retryable
+   * `TemplateRenderError` of phase `timeout`, and a read or a compile it
+   * waited for is made anew by the next render rather than kept. 0 or
+   * Infinity for none. A template that loops without awaiting cannot be
+   * stopped so: Liquid's `renderLimit` stops one. @default 30000
+   */
+  readonly renderTimeoutMilliseconds?: number;
+  /**
+   * A pino-like logger, which hears at `debug`, with `component: 'templates'`:
+   * `templates.compiled` (`template`, `engine`, `part`, `durationMs`) for each
+   * compile, and `templates.rendered` (`template`, `requested`, `locale`,
+   * `engine`, `cache`: `'hit'`, or `'miss'` when the render resolved or
+   * compiled a template itself, `durationMs`) for each render. None by default.
+   */
+  readonly logger?: Logger;
 }
 
 /** A renderer of templates by name, a `Renderer` of `./render`. */
@@ -246,7 +325,9 @@ export interface TemplateRenderer<
   /**
    * @throws {TemplateNotFoundError} If there is no such template.
    * @throws {TemplateRenderError} If it does not render.
+   * @throws {TemplateLoadError} If the loader failed to read one.
    * @throws {TypeError} If the input is invalid.
+   * @throws {RangeError} If the locale is no BCP 47 tag.
    */
   render(input: TInput): Promise<TemplateOutput>;
   /** Forgets compiled templates and includes; the next render reads them again. */
@@ -268,55 +349,117 @@ export interface TemplateRenderer<
  *   template: 'reset-password', context: { url }, locale: 'uk',
  * });
  * ```
- * @throws {TypeError} If an option is invalid.
+ * @throws {TypeError} If an option is invalid, or a layout is given with an
+ * engine that gives its parts at once.
+ * @throws {RangeError} If `defaultLocale` or one of `locales` is no BCP 47 tag.
  */
 export declare function createTemplateRenderer<
   TInput extends TemplateInput<any> = TemplateInput,
   TSource = string,
 >(options: TemplateRendererOptions<TSource>): TemplateRenderer<TInput>;
 
-/** The options of the errors of ./templates. */
-export interface TemplateNotFoundErrorOptions extends ErrorOptions {
-  /** The template that included it, for an include, a partial or a layout. */
-  readonly from?: string;
-}
-
-/** No template, include, partial or layout by that name. Not retryable. */
-export declare class TemplateNotFoundError extends Error {
-  readonly code: 'MAILER_TEMPLATE_NOT_FOUND';
-  readonly retryable: false;
-  readonly template: string;
-  readonly from?: string;
-  /** The names looked up, in order. */
-  readonly tried: readonly string[];
-  constructor(template: string, tried: readonly string[], options?: TemplateNotFoundErrorOptions);
-}
-
-/** Where a template failed. */
+/** Where a render failed: looking up its template, or one of its steps. */
 export type TemplateRenderPhase =
+  | 'resolve'
   | 'front-matter'
   | 'compile'
   | 'render'
   | 'layout'
   | 'finish'
-  | 'inline-css';
+  | 'inline-css'
+  | 'timeout';
+
+/**
+ * What an error of ./templates tells of a render, for a worker to read
+ * without its message. A render sets `requested` and `locale`; the step and
+ * the engine are set where they are known.
+ */
+export interface TemplateErrorFields {
+  /** The step of the render that failed. */
+  readonly phase?: TemplateRenderPhase;
+  /** The name of the engine of the template that failed. */
+  readonly engine?: string;
+  /** The template the render was asked for: `welcome`, where `template` may be `welcome.uk.hbs` or a partial. */
+  readonly requested?: string;
+  /** The locale the render was asked for, canonical (`uk-UA`); none when it was asked for none. */
+  readonly locale?: string;
+}
+
+/** The options of the errors of ./templates. */
+export interface TemplateErrorOptions extends ErrorOptions, TemplateErrorFields {}
+
+/** The options of {@link TemplateNotFoundError}. */
+export interface TemplateNotFoundErrorOptions extends TemplateErrorOptions {
+  /** The template that included it, for an include, a partial or a layout. */
+  readonly from?: string;
+}
+
+/** No template, include, partial or layout by that name. Not retryable. */
+export declare class TemplateNotFoundError extends Error implements TemplateErrorFields {
+  readonly code: 'MAILER_TEMPLATE_NOT_FOUND';
+  readonly retryable: false;
+  /** The name looked up: the template asked for, or an include, partial or layout of it. */
+  readonly template: string;
+  readonly from?: string;
+  /** The names looked up, in order. */
+  readonly tried: readonly string[];
+  readonly phase?: TemplateRenderPhase;
+  readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
+  constructor(template: string, tried: readonly string[], options?: TemplateNotFoundErrorOptions);
+}
+
+/** The options of {@link TemplateLoadError}. */
+export interface TemplateLoadErrorOptions extends TemplateErrorOptions {
+  /** The template that included it, for an include, a partial or a layout. */
+  readonly from?: string;
+}
+
+/**
+ * A loader that failed to read a template: a file system that refused it, a
+ * database that timed out. The loader's error is its `cause`. Retryable, as
+ * it may pass on another attempt, unless the loader's error is a bug
+ * (`TypeError`, `RangeError`…) or says `retryable: false`: then `retryable`
+ * is unset, for a queue to classify by the cause.
+ */
+export declare class TemplateLoadError extends Error implements TemplateErrorFields {
+  readonly code: 'MAILER_TEMPLATE_LOAD';
+  readonly retryable?: true;
+  /** The name the loader was asked for. */
+  readonly template: string;
+  readonly from?: string;
+  readonly phase?: TemplateRenderPhase;
+  readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
+  constructor(template: string, options?: TemplateLoadErrorOptions);
+}
 
 /** The options of {@link TemplateRenderError}. */
 export interface TemplateRenderErrorOptions extends ErrorOptions {
   readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
 }
 
 /**
  * A template that does not render: its syntax, a value it cannot read, a
  * helper that threw, MJML that does not validate. The engine's error is its
- * cause. Not retryable: the same input fails again.
+ * cause. Not retryable, as the same input fails again, but for phase
+ * `timeout`: what the render waited for, a loader or a helper, may answer on
+ * another attempt.
  */
-export declare class TemplateRenderError extends Error {
+export declare class TemplateRenderError extends Error implements TemplateErrorFields {
   readonly code: 'MAILER_TEMPLATE_RENDER';
-  readonly retryable: false;
+  /** false; true for phase `timeout`. */
+  readonly retryable: boolean;
+  /** The template that failed, as its loader names it: `welcome.uk.hbs`, a layout, a partial. */
   readonly template: string;
   readonly phase: TemplateRenderPhase;
   readonly engine?: string;
+  readonly requested?: string;
+  readonly locale?: string;
   constructor(
     template: string,
     phase: TemplateRenderPhase,
@@ -341,13 +484,19 @@ export interface EjsEngineOptions {
    * are the engine's, and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `escape` and `escapeFunction`, which replace it, turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** @default ['.ejs'] */
   readonly extensions?: readonly string[];
 }
 /**
  * The EJS engine. An include is read through the loader: `/x` from its root,
- * `./x` against the template rendered, any other from the root, then the
- * directories of partials.
+ * `./x` against the template it is written in, any other from the root, then
+ * the directories of partials.
  */
 export declare function createEjsEngine(options: EjsEngineOptions): TemplateEngine;
 
@@ -370,6 +519,12 @@ export interface HandlebarsEngineOptions {
   readonly helpers?: Readonly<Record<string, (...args: any[]) => unknown>>;
   /** Of compile: `strict`, `knownHelpers`, `knownHelpersOnly`, `preventIndent`, `noEscape`. */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `noEscape: true` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** Called with each environment the engine makes: decorators, more helpers. */
   readonly configure?: (environment: any) => void;
   /** @default ['.hbs', '.handlebars'] */
@@ -400,7 +555,11 @@ export interface PugEngineOptions {
   /** @default ['.pug'] */
   readonly extensions?: readonly string[];
 }
-/** The Pug engine: `include` and `extends` through the loader, `/x` from its root, any other against the file. */
+/**
+ * The Pug engine: `include` and `extends` through the loader, `/x` from its
+ * root, `./x` against the file, any other from the root, then the
+ * directories of partials, with the extensions of the engine.
+ */
 export declare function createPugEngine(options: PugEngineOptions): TemplateEngine;
 
 /** What MJML finds wrong in a template. */
@@ -453,20 +612,29 @@ export interface LiquidEngineOptions {
   /**
    * `outputEscape` ('escape', where liquidjs escapes nothing),
    * `ownPropertyOnly` (true), `strictFilters`, `strictVariables`, `jsTruthy`,
-   * `parseLimit`, `renderLimit`, `memoryLimit`. `root`, `partials`, `layouts`,
-   * `fs`, `extname`, `relativeReference`, `templates` and `cache` are the
-   * engine's, and throw.
+   * and the limits, where liquidjs has none: `parseLimit` (1048576, the
+   * characters of a template), `renderLimit` (1000, the milliseconds of a
+   * render) and `memoryLimit` (1e8). `root`, `partials`, `layouts`, `fs`,
+   * `extname`, `relativeReference`, `templates` and `cache` are the engine's,
+   * and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
   readonly filters?: Readonly<Record<string, (...args: any[]) => unknown>>;
   readonly configure?: (liquid: any) => void;
+  /**
+   * Lets an `outputEscape` other than `'escape'` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** @default ['.liquid'] */
   readonly extensions?: readonly string[];
 }
 /**
  * The Liquid engine: `include`, `render` and `layout` through the loader, from
  * the root, then the directories of partials, `./x` against the file. With
- * its limits, the one engine of these for templates a tenant writes.
+ * its limits, on by default, the engine of these for templates a tenant
+ * writes; see the trust matrix of the guide.
  */
 export declare function createLiquidEngine(options: LiquidEngineOptions): TemplateEngine;
 
@@ -488,6 +656,12 @@ export interface NunjucksEngineOptions {
   readonly nunjucks: NunjucksModule;
   /** `autoescape` (true), `throwOnUndefined`, `trimBlocks`, `lstripBlocks`, `tags`. */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets a falsy `autoescape` turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   readonly filters?: Readonly<Record<string, (...args: any[]) => unknown>>;
   readonly configure?: (environment: any) => void;
   /** @default ['.njk', '.nunjucks'] */
@@ -506,6 +680,12 @@ export interface EtaEngineOptions {
    * `defaultExtension` are the engine's, and throw.
    */
   readonly options?: Readonly<Record<string, unknown>>;
+  /**
+   * Lets `autoEscape: false` and an `escapeFunction` of your own turn off the escaping of output. Without it, they throw: the
+   * values of a context, which a user may have written, would go into the
+   * HTML raw. @default false
+   */
+  readonly allowUnescaped?: boolean;
   /** Compiles to async functions, for `await` and `includeAsync`. @default false */
   readonly async?: boolean;
   /** @default ['.eta'] */
@@ -516,8 +696,10 @@ export declare function createEtaEngine(options: EtaEngineOptions): TemplateEngi
 
 /** The members of `require('mustache')` the engine calls. */
 export interface MustacheModule {
-  /** A writer of its own, whose cache the engine bounds; mustache.render shares one for the process. */
+  /** A writer of its own, which keeps nothing; mustache.render shares one for the process, which keeps every source it parses. */
   readonly Writer: new () => any;
+  /** The context of a render, as the engine renders the tokens it parsed. */
+  readonly Context: new (view: object) => any;
 }
 /** The options of {@link createMustacheEngine}. */
 export interface MustacheEngineOptions {
@@ -527,7 +709,11 @@ export interface MustacheEngineOptions {
   /** @default ['.mustache'] */
   readonly extensions?: readonly string[];
 }
-/** The Mustache engine: partials through the loader, from the root; a missing one fails the render. */
+/**
+ * The Mustache engine: partials through the loader, `./x` against the
+ * template it is written in, any other from the root, then the directories
+ * of partials; a missing one fails the render.
+ */
 export declare function createMustacheEngine(options: MustacheEngineOptions): TemplateEngine;
 
 /** A React Email template: its component, and its subject. */

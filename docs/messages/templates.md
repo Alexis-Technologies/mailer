@@ -63,7 +63,9 @@ subject: Reset your password, <%= name %>
 
 `render()` gives `{ html, text, subject, template, locale }`: the text is
 derived from the HTML unless a text template is there, and `template` names the
-file the message came from.
+file the message came from. The renderer derives the text itself, so
+`autoText: false` of `renderFields` leaves it; give `autoText: false` to the
+renderer instead.
 
 ## Names, variants and locales
 
@@ -86,6 +88,11 @@ A locale is looked up with its subtags dropped one by one, then
 are taken at the locale the HTML was found at, so that a Ukrainian body never
 goes with an English subject. `variantName(template, { locale, part })` names
 the variants another way.
+
+When the locale comes from a user, name the locales your templates are written
+in: with `locales: ['en', 'uk']`, `uk-UA` is looked up as `uk` and any other
+locale as none, so that a made-up tag reads no template and keeps no entry of
+the cache of its own.
 
 A name with the extension of an engine (`welcome.hbs`) is that engine's alone;
 without one, the engines are tried in their order.
@@ -113,17 +120,21 @@ pass unnoticed. `frontMatter: false` reads none.
 context and `body`, the HTML of the template, raw. A layout has no layout of
 its own. Engines that have layouts of their own (Pug's `extends`, Nunjucks's
 and Liquid's blocks, Handlebars partial blocks, Eta's `layout()`) keep them.
+A React Email template gives its HTML whole, so a renderer with a `layout`
+refuses the React Email engine, rather than send its messages without it.
 
 Every include, partial and layout an engine reads goes through the loader of
-the renderer:
+the renderer, by one rule, the same in every engine:
 
 - `/x` is read from the root of the loader;
-- `./x` and `../x` against the template it is written in (EJS: the template
-  rendered, as EJS tells no more);
+- `./x` and `../x` against the template it is written in, a partial of a
+  partial included, where EJS, Mustache and Pug would tell otherwise;
 - any other name from the root, then from each directory of `partials`;
-- the extensions of the engine are added when the name has none.
+- the extensions of the engine are tried when the name has none of them, then
+  the name as it is.
 
-A name that leads out of the root is not found.
+A name that leads out of the root is not found. React Email has no includes:
+its components import each other. MJML's are those of the engine inside it.
 
 ## Engines
 
@@ -148,6 +159,13 @@ option rather than accepted and ignored.
 Several engines go into one renderer with `engines: [...]`, chosen by
 extension, the longest first.
 
+Output is escaped, and no option of an engine turns that off unless the engine
+is given `allowUnescaped: true`: Handlebars `noEscape`, Nunjucks `autoescape:
+false`, a Liquid `outputEscape` other than `'escape'`, Eta `autoEscape: false`
+or an `escapeFunction`, and an EJS `escape` throw a `TypeError` without it.
+The raw tags of each engine (`{{{ }}}`, `<%- %>`, `| raw`, `| safe`) stay
+yours to use where a value is HTML you trust.
+
 Some engines behave a little differently here than they do on their own:
 
 - **Handlebars** gets an environment per renderer (`handlebars.create()`), so
@@ -156,8 +174,11 @@ Some engines behave a little differently here than they do on their own:
   be registered in `configure`.
 - **Liquid** escapes output by default, where liquidjs escapes nothing unless
   told. It reads own properties only.
-- **Mustache** fails on a partial that is not there, where it renders nothing.
-  Its writer, and the cache of what it parsed, are per renderer and bounded.
+- **Mustache** fails on a partial that is not there, where it renders nothing,
+  and reads `./x` against the partial it is written in, which Mustache does
+  not tell. Its writer, and the cache of what it parsed, are per renderer and
+  bounded: a template is parsed once, as it is compiled, and a partial once
+  per template read, where Mustache keeps what it parses by the whole source.
 - **MJML** renders after the engine inside it (`.mjml.hbs`), once the layout is
   applied, so the layout of an MJML template is MJML too. A static `.mjml` is
   rendered once. What MJML finds wrong under `validationLevel: 'soft'` goes to
@@ -178,11 +199,33 @@ Some engines behave a little differently here than they do on their own:
   const templates = createTemplateRenderer({ engine });
   ```
 
-Templates are code: EJS, Eta, Pug and Nunjucks run JavaScript or close to it.
-For templates your tenants write, use Liquid (with `parseLimit`, `renderLimit`
-and `memoryLimit`), Handlebars or Mustache. The context is data.
-
 :::
+
+## Who may write a template
+
+A template is code that runs in your process, so who writes it decides the
+engine. The context is data in every engine, escaped on output; what differs
+is what a template itself can do.
+
+| Engine | A template | Templates a tenant writes |
+| --- | --- | --- |
+| EJS, Eta | compiles to JavaScript: `<% %>` runs any code, with the rights of the process | no |
+| Pug | compiles to JavaScript: `- code` lines and `#{}` run any code | no |
+| Nunjucks | compiles to JavaScript and is no sandbox: its own guide calls user-defined templates unsafe, and known escapes reach `Function` through the values a template sees | no |
+| React Email | is a component, code of yours | no |
+| MJML | is the engine inside it; `mj-include` reads files, so it stays off | as that engine |
+| Handlebars | is logic-less: it calls the helpers you register and reads own properties only | yes, with helpers you trust and `knownHelpersOnly` |
+| Mustache | is logic-less | yes |
+| Liquid | was made for templates users write; parse, render and memory limits are on by default here (`parseLimit` 1 MiB, `renderLimit` 1000 ms, `memoryLimit` 1e8) | yes, the one to choose |
+
+The subject of a front matter is compiled by the same engine as the template,
+under the same rules: a tenant who writes the subject writes a template.
+
+For templates a tenant writes, keep the bounds of the renderer on: the
+includes a render reads, the size of its output, and its timeout (see
+[Bounds](#bounds)). A loop of a template that never yields can be stopped by
+none of them, only by the engine: Liquid's `renderLimit` is checked as it
+renders.
 
 ## CSS
 
@@ -210,17 +253,89 @@ wait for the one compile. A template that is missing or fails is not kept, so
 one deployed later is found. `clear()` forgets everything; `cache: false`
 reads and compiles on every render, for development.
 
+EJS compiles an include as it renders, so it keeps the compiled include in
+`ejs.cache`, which the whole process shares, by file name. The engine names
+each one by its template and its renderer (`emails/footer.ejs#3`), so that two
+renderers share none, keeps as many as `cache.maxEntries`, and forgets them at
+`clear()`. `ejs.cache` keeps whatever else the process compiles with
+`cache: true` without a bound; give it one with an LRU, as EJS documents:
+
+```js
+const { LRUCache } = require('lru-cache');
+ejs.cache = new LRUCache({ max: 500 });
+```
+
+On Node 24 (Apple M3 Max), 2000 renders of a template with three includes, one of
+them nested, took 125 ms when every include was compiled on each render, and
+50 ms with them kept; EJS still checks the disk for each relative include it
+is asked for, which takes most of what is left.
+
+## Bounds
+
+A render is bounded, so that a template, or a context, that runs away fails
+the render rather than the process:
+
+| Option | Default | Bounds |
+| --- | --- | --- |
+| `maxIncludes` | `10000` | the includes, partials and layouts an engine looks up in one render |
+| `maxIncludeDepth` | `32` | a chain of includes, each written in the one before |
+| `maxOutputBytes` | 10 MiB | the HTML, the text and the subject, each in bytes of UTF-8, after each step |
+
+Each takes `Infinity` for no bound, and going past one is a
+`TemplateRenderError`. The includes are counted as an engine runs
+synchronously: those EJS, Eta and Mustache look up as they render, and those
+Pug and Handlebars look up as they compile, until their first await. The depth
+is counted where the engine names the template an include is written in (EJS,
+Eta, Handlebars); a partial that names itself is no deeper for it. The file loader reads no template over its `maxBytes` (1 MiB).
+
+## Timeouts and aborts
+
+A render takes `renderTimeoutMilliseconds` (30000) at most; then it fails with
+a `TemplateRenderError` of phase `timeout`, which is retryable, as what it
+waited for, a loader or an async helper, may answer on another attempt. A read
+or a compile still pending then is not kept: the next render makes it anew,
+rather than wait for one that hangs, and the loader is told to stop through
+the `signal` of `load(name, { signal })`.
+
+`render({ template, context, locale, signal })` stops at the abort of
+`signal`, rejecting with its reason, as the worker of the queue passes it when
+it shuts down. With the cache on, a read or a compile that other renders wait
+for goes on for them; without it, the reads are the render's own, and the
+loader is given its signal.
+
+Neither can stop a template that loops without ever awaiting: JavaScript runs
+it to its end. Liquid's `renderLimit` (on by default) is checked as it
+renders; with the other engines, keep such templates out of the hands of
+those who could write one (see [who may write a template](#who-may-write-a-template)).
+
+## Logging
+
+Given a pino-like `logger`, the renderer tells at `debug`, with
+`component: 'templates'`, each compile (`templates.compiled`: `template`,
+`engine`, `part`, `durationMs`) and each render (`templates.rendered`:
+`template`, `requested`, `locale`, `engine`, `durationMs`, and `cache`, `miss`
+when the render resolved or compiled a template itself, `hit` when it found
+them kept). A record is built only when the logger writes `debug`.
+
 ## Errors
 
 | Thrown | When | `retryable` |
 | --- | --- | --- |
 | `TemplateNotFoundError` (`MAILER_TEMPLATE_NOT_FOUND`) | no template, include, partial or layout; `tried` lists the names looked up | `false` |
 | `TemplateRenderError` (`MAILER_TEMPLATE_RENDER`) | syntax, a helper that threw, MJML under `strict`, the inliner; `phase`, `engine`, `cause` | `false` |
+| `TemplateLoadError` (`MAILER_TEMPLATE_LOAD`) | the loader failed (`EMFILE`, a database timeout); `template` names what it read, `cause` is its error | `true`; unset for a bug of the loader (`TypeError`…) |
 | `TypeError`, `RangeError` | a name that is not one, a bad locale or context | — |
-| the loader's own error | the loader failed (`EMFILE`, a database timeout) | as classified |
 
-The queue fails a job at once on the first three, and retries an outage of the
-loader.
+Each of the three tells what a worker needs without reading its message:
+`phase`, the step that failed (`resolve`, `front-matter`, `compile`, `render`,
+`layout`, `finish`, `inline-css`); `engine`; `template`, the template that
+failed as its loader names it (`welcome.uk.hbs`, or a partial of it); and
+`requested` and `locale`, what the render was asked for.
+
+The queue fails a job at once on the first two and the last, and retries an
+outage of the loader. An engine that wraps what a loader threw in its own error
+(Nunjucks, Liquid) does not hide it: the error of ./templates is found among its
+causes and thrown as it is.
 
 ## Migrating from @nestjs-modules/mailer
 
@@ -237,6 +352,10 @@ loader.
 | `subject` in the code of the sender | `subject` in the front matter, per locale |
 
 What changes in behavior:
+
+- a bare Pug include (`include footer`) is read from the root, then the
+  directories of partials, as in every engine here, where Pug reads it against
+  the file: write `include ./footer` for that;
 
 - a failed CSS inlining rejects once, where the callback was called twice;
 - an async EJS template that throws rejects, where its promise rejected unheard

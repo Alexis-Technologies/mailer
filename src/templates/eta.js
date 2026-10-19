@@ -3,10 +3,32 @@
 // so `include()` and `layout()` read nothing from disk, a name relative to the
 // template it is written in; output is escaped, as Eta does by default.
 
-const { TemplateNotFoundError } = require('./errors.js');
-const { checkEngineExtensions, checkEngineOptions, checkModule } = require('./options.js');
+const { createCache } = require('./cache.js');
+const { missingTemplate, perIncludes } = require('./environment.js');
+const {
+  checkEngineExtensions,
+  checkEngineOptions,
+  checkEscaping,
+  checkModule,
+} = require('./options.js');
 
 const RESERVED = new Set(['views', 'cache', 'cacheFilepaths', 'defaultExtension']);
+// The options of Eta that turn off its escaping, or replace it.
+const UNESCAPED = new Map([
+  ['autoEscape', (value) => !value],
+  ['escapeFunction', () => true],
+]);
+
+// A Cacher of Eta, which keeps every template it includes, as it renders,
+// bounded as the caches of the renderer are: Eta defines and gets alone, as
+// the engine registers no template of its own.
+const cacherOf = (maxEntries) => {
+  const cache = createCache(maxEntries);
+  return {
+    define: (key, value) => cache.set(key, value),
+    get: (key) => cache.get(key),
+  };
+};
 
 /**
  * Makes the Eta engine.
@@ -24,24 +46,23 @@ const createEtaEngine = (options = {}) => {
     'createEtaEngine needs Eta: the Eta of the eta package.',
   );
   const given = checkEngineOptions(options.options, RESERVED, 'eta');
+  checkEscaping(options, given, UNESCAPED, 'eta');
   const async = options.async ?? false;
   if (typeof async !== 'boolean') throw new TypeError('async must be a boolean.');
   const extensions = checkEngineExtensions(options.extensions, ['.eta']);
-  const instances = new WeakMap();
-  const instanceOf = (includes) => {
-    let eta = instances.get(includes);
-    if (eta !== undefined) return eta;
-    eta = new Eta({ ...given, cache: includes.cache, cacheFilepaths: false });
+  const instanceOf = perIncludes((includes) => {
+    const eta = new Eta({ ...given, cache: includes.cache, cacheFilepaths: false });
+    eta.templatesSync = cacherOf(includes.maxEntries);
+    eta.templatesAsync = cacherOf(includes.maxEntries);
     eta.resolvePath = (template, resolveOptions) =>
       includes.lookupSync(template, resolveOptions?.filepath, extensions).name;
     eta.readFile = (name) => {
       const found = includes.readSync(name);
-      if (found === undefined) throw new TemplateNotFoundError(name, [name]);
+      if (found === undefined) throw missingTemplate(name);
       return found.source;
     };
-    instances.set(includes, eta);
     return eta;
-  };
+  });
   return {
     name: 'eta',
     extensions,

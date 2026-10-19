@@ -7,6 +7,7 @@ const {
   createCssInliner,
   createMemoryLoader,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
 } = require('../../src/templates/index.js');
@@ -109,6 +110,46 @@ test('Templates: locales fall back by subtag, then the default, then none', asyn
   await assert.rejects(plain.render({ template: 'welcome', locale: 'not a tag' }), RangeError);
 });
 
+test('Templates: with locales, a locale asked for is one of them or none', async () => {
+  // Before: every locale a user chose was looked up, and kept an entry of the
+  // cache of its own, so made-up tags pushed the templates out of it.
+  const reads = [];
+  const loader = createMemoryLoader({
+    'welcome.tpl': '<p>Hi</p>',
+    'welcome.uk.tpl': '<p>Привіт</p>',
+  });
+  const counted = {
+    load: (name) => {
+      reads.push(name);
+      return loader.load(name);
+    },
+  };
+  const renderer = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: counted,
+    locales: ['uk', 'EN'],
+    defaultLocale: 'en',
+  });
+  const uk = await renderer.render({ template: 'welcome', locale: 'uk-UA-x-anything' });
+  assert.deepStrictEqual([uk.template, uk.locale], ['welcome.uk.tpl', 'uk']);
+  const before = reads.length;
+  for (let index = 0; index < 20; index++) {
+    const other = await renderer.render({ template: 'welcome', locale: `de-x-tag${index}` });
+    assert.deepStrictEqual([other.template, other.locale], ['welcome.tpl', undefined]);
+  }
+  // The twenty made-up tags were one lookup: the template without a locale.
+  assert.ok(reads.length - before <= 4, String(reads.length - before));
+  assert.ok(!reads.some((name) => name.includes('tag')));
+  assert.throws(
+    () => createTemplateRenderer({ engine: fakeEngine(), loader, locales: 'uk' }),
+    /locales must be an array/,
+  );
+  assert.throws(
+    () => createTemplateRenderer({ engine: fakeEngine(), loader, locales: ['not a tag'] }),
+    RangeError,
+  );
+});
+
 test('Templates: a missing template names what was tried, and is not retryable', async () => {
   const { renderer } = rendererOf({}, { defaultLocale: 'en' });
   const error = await renderer.render({ template: 'nope', locale: 'uk' }).catch((e) => e);
@@ -129,12 +170,76 @@ test('Templates: a missing template names what was tried, and is not retryable',
 
 test('Templates: a name is never a path', async () => {
   const { renderer } = rendererOf({});
-  for (const template of ['../secret', '/etc/passwd', 'a//b', 'a/./b', 'a\\b', '', '.hidden', 42]) {
+  for (const template of [
+    '../secret',
+    '/etc/passwd',
+    'a//b',
+    'a/./b',
+    'a\\b',
+    '',
+    '.hidden',
+    // Before: a segment after the first could start with a dot.
+    'partials/.env',
+    'a/.git/config',
+    42,
+  ]) {
     await assert.rejects(renderer.render({ template }), TypeError, String(template));
   }
   await assert.rejects(renderer.render(null), TypeError);
   await assert.rejects(renderer.render({ template: 'a', context: [] }), TypeError);
   await assert.rejects(renderer.render({ template: 'a', locale: 1 }), TypeError);
+});
+
+test('Templates: a loader is given template names alone, whoever asks', async () => {
+  // Before: a name an engine read, or one variantName gave, reached the loader
+  // unchecked, such as a database query by name.
+  const asked = [];
+  const loader = {
+    load: (name) => {
+      asked.push(name);
+      return name === 'a.tpl' ? { name, source: '<p/>' } : undefined;
+    },
+    loadSync: (name) => {
+      asked.push(name);
+      return undefined;
+    },
+  };
+  const reader = (read) => ({
+    name: 'reader',
+    extensions: ['.tpl'],
+    compile: async (source, context) => {
+      await read(context.includes);
+      return () => source;
+    },
+  });
+  for (const read of [
+    (includes) => includes.read('../secret.tpl'),
+    (includes) => includes.readSync('partials/.env'),
+    (includes) => includes.read(42),
+  ]) {
+    const renderer = createTemplateRenderer({ engine: reader(read), loader });
+    await assert.rejects(renderer.render({ template: 'a' }), /must be a template name/);
+  }
+  const variants = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader,
+    variantName: (template) => `../${template}`,
+  });
+  await assert.rejects(
+    variants.render({ template: 'a' }),
+    /variantName gives must be a template name/,
+  );
+  assert.deepStrictEqual(asked, [
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+    'a.tpl',
+    'a.text.tpl',
+    'a.subject.tpl',
+  ]);
 });
 
 test('Templates: includes are read through the loader, from the root or the partials', async () => {
@@ -271,6 +376,100 @@ test('Templates: a template that is missing at first is found once it is there',
   assert.strictEqual((await renderer.render({ template: 'late' })).html, '<p>late</p>');
 });
 
+test('Templates: every failure tells its step, engine, template and the input it was for', async () => {
+  // Before: the template and the phase alone, and no engine for a layout or
+  // an output that was no string, so a worker had to read the message.
+  const templates = {
+    'welcome.uk.tpl': '<p>{{x}}</p>',
+    'include.tpl': '{{> missing}}',
+    'layout.tpl': '---\nlayout: other\n---\n{{{body}}}',
+    'other.tpl': '{{{body}}}',
+    'framed.tpl': '---\nlayout: layout\n---\n<p/>',
+    'lost.tpl': '---\nlayout: gone\n---\n<p/>',
+  };
+  const { renderer } = rendererOf(templates);
+  const fields = (error) => ({
+    name: error.name,
+    phase: error.phase,
+    engine: error.engine,
+    template: error.template,
+    requested: error.requested,
+    locale: error.locale,
+  });
+  const failure = (input) => renderer.render(input).catch(fields);
+  assert.deepStrictEqual(await failure({ template: 'nope', locale: 'uk' }), {
+    name: 'TemplateNotFoundError',
+    phase: 'resolve',
+    engine: undefined,
+    template: 'nope',
+    requested: 'nope',
+    locale: 'uk',
+  });
+  assert.deepStrictEqual(await failure({ template: 'include' }), {
+    name: 'TemplateNotFoundError',
+    phase: 'compile',
+    engine: 'fake',
+    template: 'missing',
+    requested: 'include',
+    locale: undefined,
+  });
+  assert.deepStrictEqual(
+    await failure({ template: 'welcome', locale: 'uk-UA', context: { explode: true } }),
+    {
+      name: 'TemplateRenderError',
+      phase: 'render',
+      engine: 'fake',
+      template: 'welcome.uk.tpl',
+      requested: 'welcome',
+      locale: 'uk-UA',
+    },
+  );
+  assert.deepStrictEqual(await failure({ template: 'framed' }), {
+    name: 'TemplateRenderError',
+    phase: 'layout',
+    engine: 'fake',
+    template: 'layout.tpl',
+    requested: 'framed',
+    locale: undefined,
+  });
+  assert.deepStrictEqual((await failure({ template: 'lost' })).phase, 'layout');
+  // Renders that wait for one compile each get their own input.
+  const { renderer: shared } = rendererOf(
+    { 'a.tpl': '{{!syntax' },
+    { engine: fakeEngine({ async: true }) },
+  );
+  const [first, second] = await Promise.all([
+    shared.render({ template: 'a', locale: 'uk' }).catch((e) => e),
+    shared.render({ template: 'a.tpl', locale: 'de' }).catch((e) => e),
+  ]);
+  assert.deepStrictEqual(
+    [first.requested, first.locale, second.requested, second.locale],
+    ['a', 'uk', 'a.tpl', 'de'],
+  );
+  assert.ok(first.cause instanceof SyntaxError);
+  assert.match(first.stack, /SyntaxError|TemplateRenderError/);
+  const load = await createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: {
+      load: () => {
+        throw new Error('down');
+      },
+    },
+  })
+    .render({ template: 'x' })
+    .catch(fields);
+  assert.deepStrictEqual(
+    [load.name, load.phase, load.requested],
+    ['TemplateLoadError', 'resolve', 'x'],
+  );
+  // The parts of an engine that are no strings name it too.
+  const parts = createTemplateRenderer({
+    engine: { name: 'parts', extensions: [], compile: () => () => ({}) },
+    loader: createMemoryLoader({ x: '' }),
+  });
+  assert.strictEqual((await parts.render({ template: 'x' }).catch((e) => e)).engine, 'parts');
+});
+
 test('Templates: failures are classified by phase, the engine error their cause', async () => {
   const { renderer } = rendererOf({
     'syntax.tpl': '<p>{{!syntax</p>',
@@ -305,21 +504,57 @@ test('Templates: failures are classified by phase, the engine error their cause'
   }
 });
 
-test('Templates: a loader that fails fails with its own error, which may pass on a retry', async () => {
+test('Templates: a loader that fails fails as a load of its template, which may pass on a retry', async () => {
+  // Before: the loader's error came back as it was, naming no template.
   const outage = Object.assign(new Error('EMFILE: too many open files'), { code: 'EMFILE' });
   const loader = {
     load: (name) => {
-      if (name === 'a.tpl') return { name, source: '{{> b}}' };
-      throw outage;
+      if (name === 'b.tpl') throw outage;
+      return name === 'a.tpl' ? { name, source: '{{> b}}' } : undefined;
     },
   };
   const renderer = createTemplateRenderer({ engine: fakeEngine(), loader });
-  assert.strictEqual(await renderer.render({ template: 'a' }).catch((e) => e), outage);
+  const include = await renderer.render({ template: 'a' }).catch((e) => e);
+  assert.ok(include instanceof TemplateLoadError);
+  assert.deepStrictEqual(
+    [include.code, include.template, include.retryable, include.cause],
+    ['MAILER_TEMPLATE_LOAD', 'b.tpl', true, outage],
+  );
+  assert.match(include.message, /The template "b.tpl" failed to load: EMFILE/);
   const failing = createTemplateRenderer({
     engine: fakeEngine(),
     loader: { load: () => Promise.reject(outage) },
   });
-  assert.strictEqual(await failing.render({ template: 'x' }).catch((e) => e), outage);
+  const main = await failing.render({ template: 'x' }).catch((e) => e);
+  assert.deepStrictEqual([main.template, main.cause], ['x.tpl', outage]);
+  // A bug of the loader, or an error that says so, is left for the queue to
+  // classify by its cause, never marked retryable.
+  for (const cause of [new TypeError('x is undefined'), { retryable: false, message: 'gone' }]) {
+    const buggy = createTemplateRenderer({
+      engine: fakeEngine(),
+      loader: {
+        load: () => {
+          throw cause;
+        },
+      },
+    });
+    const error = await buggy.render({ template: 'x' }).catch((e) => e);
+    assert.ok(error instanceof TemplateLoadError);
+    assert.ok(!('retryable' in error));
+  }
+  // A loader that throws an error of ./templates throws it as it is.
+  const refusal = new TemplateNotFoundError('x', []);
+  const own = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader: {
+      load: () => {
+        throw refusal;
+      },
+    },
+  });
+  const refused = await own.render({ template: 'x' }).catch((e) => e);
+  assert.ok(refused instanceof TemplateNotFoundError);
+  assert.deepStrictEqual([refused.template, refused.message], ['x', refusal.message]);
 });
 
 test('Templates: finish makes the HTML of the outermost template, then the CSS is inlined', async () => {
@@ -390,7 +625,6 @@ test('Templates: an engine that renders its parts gives HTML, text and subject a
   const renderer = createTemplateRenderer({
     engine: parts,
     loader: createMemoryLoader({ welcome: 'Subject  here' }),
-    layout: 'ignored',
   });
   assert.deepStrictEqual(await renderer.render({ template: 'welcome', context: { n: 1 } }), {
     template: 'welcome',
@@ -440,6 +674,33 @@ test('Templates: an engine that renders its parts gives HTML, text and subject a
   );
 });
 
+test('Templates: no layout goes silently unapplied to an engine that gives its parts', async () => {
+  // Before: a layout was skipped for a template that gave its parts, React
+  // Email's, and the message went without it.
+  const parts = {
+    name: 'parts',
+    extensions: [],
+    compile: () => () => ({ html: '<b/>' }),
+  };
+  assert.throws(
+    () =>
+      createTemplateRenderer({
+        engine: { ...parts, parts: true },
+        loader: createMemoryLoader({}),
+        layout: 'main',
+      }),
+    /parts engine gives its parts at once, which no layout wraps/,
+  );
+  const renderer = createTemplateRenderer({
+    engine: parts,
+    loader: createMemoryLoader({ a: '', main: '' }),
+    layout: 'main',
+  });
+  const error = await renderer.render({ template: 'a' }).catch((e) => e);
+  assert.ok(error instanceof TemplateRenderError);
+  assert.deepStrictEqual([error.phase, error.engine], ['layout', 'parts']);
+});
+
 test('Templates: engines are chosen by extension, the longest first', async () => {
   const hbs = fakeEngine({ name: 'hbs', extensions: ['.hbs'] });
   const mjml = fakeEngine({ name: 'mjml', extensions: ['.mjml.hbs'] });
@@ -453,6 +714,230 @@ test('Templates: engines are chosen by extension, the longest first', async () =
   assert.strictEqual((await renderer.render({ template: 'a' })).html, 'shadow');
   const text = await renderer.render({ template: 'b', context: {} });
   assert.strictEqual(text.text, 'hbs');
+});
+
+test('Templates: no part of a message is longer than maxOutputBytes', async () => {
+  // Before: no bound, so a template that repeated a value gave as much as it
+  // could hold.
+  const templates = {
+    'a.tpl': '{{x}}',
+    'a.text.tpl': '{{y}}',
+    'b.tpl': '<p/>',
+    'b.subject.tpl': '{{x}}',
+    'c.tpl': '{{x}}',
+    'layout.tpl': '{{{body}}}{{{body}}}',
+  };
+  const big = async (template, context, options) => {
+    const { renderer } = rendererOf(templates, { maxOutputBytes: 30, ...options });
+    return renderer.render({ template, context }).catch((e) => e);
+  };
+  for (const [template, context] of [
+    ['a', { x: 'x'.repeat(31), y: '' }],
+    ['a', { x: '', y: 'я'.repeat(16) }],
+    ['b', { x: 'x'.repeat(31) }],
+  ]) {
+    const error = await big(template, context);
+    assert.ok(error instanceof TemplateRenderError, template);
+    assert.match(error.message, /more than 30 bytes \(maxOutputBytes\)/);
+  }
+  // Ten Cyrillic letters are 20 bytes, and need no count.
+  assert.strictEqual((await big('a', { x: 'я'.repeat(10), y: 'y' })).html, 'я'.repeat(10));
+  // The layout counts too.
+  const layout = await big('c', { x: 'x'.repeat(20) }, { layout: 'layout' });
+  assert.strictEqual(layout.phase, 'layout');
+  const parts = createTemplateRenderer({
+    engine: { name: 'parts', extensions: [], compile: () => () => ({ html: 'x'.repeat(40) }) },
+    loader: createMemoryLoader({ x: '' }),
+    maxOutputBytes: 30,
+  });
+  assert.match((await parts.render({ template: 'x' }).catch((e) => e)).message, /maxOutputBytes/);
+  const inlined = await big(
+    'b',
+    {},
+    { inlineCss: createCssInliner({ inline: () => 'x'.repeat(31) }) },
+  );
+  assert.strictEqual(inlined.phase, 'inline-css');
+  const finished = await big('b', {}, { engine: fakeEngine({ finish: () => 'x'.repeat(31) }) });
+  assert.strictEqual(finished.phase, 'finish');
+});
+
+test('Templates: a render that hangs times out, and what it waited for is read anew', async () => {
+  // Before: no timeout, and a read or a compile that never settled was kept
+  // and waited for by every render after it, until clear().
+  let hang = true;
+  const signals = new Map();
+  const loader = {
+    load: (name, options) => {
+      signals.set(name, options.signal);
+      if (name !== 'a.tpl') return undefined;
+      return hang ? new Promise(() => {}) : { name, source: '<p>{{n}}</p>' };
+    },
+  };
+  const renderer = createTemplateRenderer({
+    engine: fakeEngine(),
+    loader,
+    renderTimeoutMilliseconds: 50,
+  });
+  const error = await renderer.render({ template: 'a', locale: 'uk' }).catch((e) => e);
+  assert.ok(error instanceof TemplateRenderError);
+  assert.deepStrictEqual(
+    [error.phase, error.retryable, error.template, error.requested, error.locale],
+    ['timeout', true, 'a', 'a', 'uk'],
+  );
+  assert.match(error.message, /did not render in time: It took over 50 ms/);
+  // The loader is told to stop, at the timeout of its read, which may come a
+  // tick after that of the render.
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(signals.get('a.tpl').aborted);
+  assert.strictEqual(signals.get('a.tpl').reason.name, 'TimeoutError');
+  assert.ok(!signals.get('a.uk.tpl').aborted);
+  hang = false;
+  assert.strictEqual(
+    (await renderer.render({ template: 'a', context: { n: 1 } })).html,
+    '<p>1</p>',
+  );
+  // A compile that hangs is made anew too.
+  let stalls = 1;
+  const engine = fakeEngine();
+  const compile = engine.compile;
+  engine.compile = (source, context) =>
+    stalls-- > 0 ? new Promise(() => {}) : compile(source, context);
+  const { renderer: stalled } = rendererOf(
+    { 'b.tpl': '<p/>' },
+    { engine, renderTimeoutMilliseconds: 50 },
+  );
+  assert.strictEqual((await stalled.render({ template: 'b' }).catch((e) => e)).phase, 'timeout');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.strictEqual((await stalled.render({ template: 'b' })).html, '<p/>');
+});
+
+test('Templates: a render stops at the abort of its signal, with its reason', async () => {
+  // Before: render took no signal, so a worker shutting down waited for it.
+  const seen = [];
+  const loader = {
+    load: (name, options) => {
+      seen.push(options.signal);
+      return name === 'a.tpl' ? new Promise(() => {}) : undefined;
+    },
+  };
+  const renderer = createTemplateRenderer({ engine: fakeEngine(), loader });
+  const controller = new AbortController();
+  const rendering = renderer.render({ template: 'a', signal: controller.signal });
+  const reason = new Error('shutting down');
+  setTimeout(() => controller.abort(reason), 10);
+  assert.strictEqual(await rendering.catch((e) => e), reason);
+  // An aborted signal stops it before it reads anything.
+  const before = seen.length;
+  const aborted = AbortSignal.abort(reason);
+  assert.strictEqual(
+    await renderer.render({ template: 'a', signal: aborted }).catch((e) => e),
+    reason,
+  );
+  assert.strictEqual(seen.length, before);
+  // Without a cache, the reads are the render's own, and its signal stops them.
+  const uncached = createTemplateRenderer({ engine: fakeEngine(), loader, cache: false });
+  const own = new AbortController();
+  const pending = uncached.render({ template: 'a', signal: own.signal });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  own.abort(reason);
+  assert.strictEqual(await pending.catch((e) => e), reason);
+  assert.ok(seen.at(-1).aborted);
+  // A render that ends first is not touched by a later abort.
+  const done = new AbortController();
+  const { renderer: quick } = rendererOf({ 'q.tpl': '<p/>' });
+  assert.strictEqual((await quick.render({ template: 'q', signal: done.signal })).html, '<p/>');
+  done.abort();
+  // An abort between the steps of a render stops it there.
+  const later = new AbortController();
+  const { renderer: steps } = rendererOf(
+    { 's.tpl': '<p/>' },
+    { globals: () => later.abort(reason) },
+  );
+  assert.strictEqual(
+    await steps.render({ template: 's', signal: later.signal }).catch((e) => e),
+    reason,
+  );
+  await assert.rejects(
+    renderer.render({ template: 'a', signal: {} }),
+    /signal must be an AbortSignal/,
+  );
+});
+
+test('Templates: a logger hears each compile and each render at debug, a hit or a miss', async () => {
+  // Before: nothing told how long a compile or a render took, or whether the
+  // cache had it.
+  const records = [];
+  const logger = {
+    debug: (properties, message) => records.push({ message, ...properties }),
+    isLevelEnabled: (level) => level === 'debug',
+  };
+  const { renderer } = rendererOf(
+    { 'a.tpl': '---\nsubject: S\n---\n<p>{{n}}</p>', 'a.uk.tpl': '<p>uk</p>' },
+    { logger },
+  );
+  await renderer.render({ template: 'a', context: { n: 1 } });
+  await renderer.render({ template: 'a', context: { n: 2 } });
+  await renderer.render({ template: 'a', locale: 'uk' });
+  const shape = (record) => {
+    assert.ok(record.durationMs >= 0, record.message);
+    return { ...record, durationMs: undefined };
+  };
+  assert.deepStrictEqual(records.map(shape), [
+    {
+      message: 'templates.compiled',
+      component: 'templates',
+      template: 'a.tpl',
+      engine: 'fake',
+      part: 'html',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.tpl',
+      requested: 'a',
+      locale: undefined,
+      engine: 'fake',
+      cache: 'miss',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.tpl',
+      requested: 'a',
+      locale: undefined,
+      engine: 'fake',
+      cache: 'hit',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.compiled',
+      component: 'templates',
+      template: 'a.uk.tpl',
+      engine: 'fake',
+      part: 'html',
+      durationMs: undefined,
+    },
+    {
+      message: 'templates.rendered',
+      component: 'templates',
+      template: 'a.uk.tpl',
+      requested: 'a',
+      locale: 'uk',
+      engine: 'fake',
+      cache: 'miss',
+      durationMs: undefined,
+    },
+  ]);
+  // Above debug, nothing is built.
+  const quiet = [];
+  const { renderer: info } = rendererOf(
+    { 'a.tpl': '<p/>' },
+    { logger: { debug: () => quiet.push(1), isLevelEnabled: () => false } },
+  );
+  await info.render({ template: 'a' });
+  assert.strictEqual(quiet.length, 0);
 });
 
 test('Templates: the renderer checks its options', () => {
@@ -473,6 +958,7 @@ test('Templates: the renderer checks its options', () => {
     [{ engine }, /needs a loader/],
     [{ engine, loader, partials: 'p' }, /partials must be an array/],
     [{ engine, loader, partials: ['../p'] }, /directory of partials/],
+    [{ engine, loader, partials: ['p/.hidden'] }, /directory of partials/],
     [{ engine, loader, layout: '/abs' }, /layout must be a template name/],
     [{ engine, loader, globals: 1 }, /globals must be an object or a function/],
     [{ engine, loader, frontMatter: 'yes' }, /frontMatter must be a boolean/],
@@ -482,11 +968,19 @@ test('Templates: the renderer checks its options', () => {
     [{ engine, loader, variantName: 1 }, /variantName must be a function/],
     [{ engine, loader, inlineCss: 1 }, /inlineCss must be a function/],
     [{ engine, loader, defaultLocale: 1 }, /defaultLocale must be a string/],
+    [{ engine, loader, maxIncludes: 0 }, /maxIncludes must be a positive whole number/],
+    [{ engine, loader, maxIncludeDepth: 1.5 }, /maxIncludeDepth must be/],
+    [{ engine, loader, maxOutputBytes: '1' }, /maxOutputBytes must be/],
+    [{ engine, loader, renderTimeoutMilliseconds: -1 }, /renderTimeoutMilliseconds must be/],
+    [{ engine, loader, renderTimeoutMilliseconds: Number.NaN }, /renderTimeoutMilliseconds/],
   ];
   for (const [options, pattern] of bad) {
     assert.throws(() => createTemplateRenderer(options), pattern, String(pattern));
   }
   assert.throws(() => createTemplateRenderer(), /needs an engine/);
+  createTemplateRenderer({ engine, loader, maxIncludes: Infinity, maxOutputBytes: Infinity });
+  createTemplateRenderer({ engine, loader, renderTimeoutMilliseconds: 0 });
+  createTemplateRenderer({ engine, loader, renderTimeoutMilliseconds: Infinity });
   assert.throws(() => createCssInliner({}), /needs inline/);
   assert.throws(() => createCssInliner({ inline() {}, options: 1 }), /must be an object/);
 });
@@ -499,7 +993,10 @@ test('Templates: variantName names the variants, frontMatter: false reads none',
   const output = await renderer.render({ template: 'welcome', locale: 'uk' });
   assert.deepStrictEqual([output.html, output.subject], ['<p>uk</p>', 'S']);
   const { renderer: broken } = rendererOf({}, { variantName: () => 1 });
-  await assert.rejects(broken.render({ template: 'a' }), /variantName must give a name/);
+  await assert.rejects(
+    broken.render({ template: 'a' }),
+    /variantName gives must be a template name/,
+  );
   const { renderer: raw } = rendererOf(
     { 'a.tpl': '---\nsubject: x\n---\n<p/>' },
     { frontMatter: false },

@@ -3,16 +3,46 @@
 // Nunjucks's file system, for `extends`, `include` and `import`; output is
 // escaped, as Nunjucks does by default.
 
+const { createCache } = require('./cache.js');
 const { TemplateNotFoundError } = require('./errors.js');
 const {
   checkEngineExtensions,
   checkEngineOptions,
+  checkEscaping,
   checkFunctions,
   checkModule,
 } = require('./options.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { boundedRecord, perIncludes } = require('./environment.js');
 
 const isRelative = (name) => name.startsWith('./') || name.startsWith('../');
+
+// The options of the Environment that turn off its escaping: a falsy
+// `autoescape`, null and undefined keeping the default.
+const UNESCAPED = new Map([['autoescape', (value) => value != null && !value]]);
+
+// What Nunjucks says of a template no loader has.
+const NOT_FOUND = 'template not found: ';
+
+// The template Nunjucks found missing, by its error, whose message ends a
+// line with `template not found: <name>`: the error is made anew, without
+// the cause, unless `dev` is on.
+const missingOf = (error, failures) => {
+  let current = error;
+  for (let depth = 0; depth < 8 && typeof current === 'object' && current !== null; depth++) {
+    const { message } = current;
+    const at = typeof message === 'string' ? message.lastIndexOf(NOT_FOUND) : -1;
+    if (at !== -1) {
+      const start = at + NOT_FOUND.length;
+      const end = message.indexOf('\n', start);
+      const name = message.slice(start, end === -1 ? message.length : end);
+      const failure = failures.get(name);
+      return new TemplateNotFoundError(name, failure?.tried ?? [name], { cause: error });
+    }
+    current = current.cause;
+  }
+  return undefined;
+};
 
 /**
  * Makes the Nunjucks engine.
@@ -32,16 +62,15 @@ const createNunjucksEngine = (options = {}) => {
   );
   checkModule(nunjucks.Template, undefined, 'nunjucks has no Template.');
   const given = checkEngineOptions(options.options, new Set(), 'nunjucks');
+  checkEscaping(options, given, UNESCAPED, 'nunjucks');
   const filters = checkFunctions(options.filters, 'filters');
   const configure = checkOptionalFunction(options.configure, 'configure');
   const extensions = checkEngineExtensions(options.extensions, ['.njk', '.nunjucks']);
-  const environments = new WeakMap();
-  const environmentOf = (includes) => {
-    let state = environments.get(includes);
-    if (state !== undefined) return state;
-    // What a lookup failed with: Nunjucks rewraps the error of a loader into
-    // a TemplateError of its text, which loses its class.
-    const failures = [];
+  const environmentOf = perIncludes((includes) => {
+    // The lookups that found nothing, by name: Nunjucks is told there is no
+    // such template, which it fails on itself unless `ignore missing`, and
+    // its error names the template, so each render finds its own.
+    const failures = createCache(includes.maxEntries);
     const loader = {
       async: true,
       isRelative,
@@ -57,19 +86,25 @@ const createNunjucksEngine = (options = {}) => {
               noCache: !includes.cache,
             }),
           (error) => {
-            failures.push(error);
-            process.nextTick(callback, error);
+            if (!(error instanceof TemplateNotFoundError)) {
+              process.nextTick(callback, error);
+              return;
+            }
+            failures.set(name, error);
+            process.nextTick(callback, null, null);
           },
         );
       },
     };
-    const env = new nunjucks.Environment([loader], { autoescape: true, ...given });
+    // `dev` keeps the error Nunjucks wraps as its cause, such as a loader's.
+    const env = new nunjucks.Environment([loader], { autoescape: true, dev: true, ...given });
+    // Nunjucks keeps every template it reads in the cache of its loader, as
+    // it renders: bounded, as the renderer's are.
+    loader.cache = boundedRecord(createCache(includes.cache ? includes.maxEntries : 0));
     for (const name of Object.keys(filters)) env.addFilter(name, filters[name]);
     configure?.(env);
-    state = { env, failures };
-    environments.set(includes, state);
-    return state;
-  };
+    return { env, failures };
+  });
   return {
     name: 'nunjucks',
     extensions,
@@ -78,22 +113,9 @@ const createNunjucksEngine = (options = {}) => {
       const template = new nunjucks.Template(source, state.env, context.name, true);
       return (scope) =>
         new Promise((resolve, reject) => {
-          const before = state.failures.length;
           template.render(scope, (error, output) => {
-            if (error == null) {
-              resolve(output ?? '');
-              return;
-            }
-            // The failure of a lookup during this render, under the error
-            // Nunjucks made of it.
-            let failure;
-            for (let index = before; index < state.failures.length; index++) {
-              if (state.failures[index] instanceof TemplateNotFoundError) {
-                failure = state.failures[index];
-              }
-            }
-            state.failures.length = before;
-            reject(failure === undefined ? error : Object.assign(error, { cause: failure }));
+            if (error == null) resolve(output ?? '');
+            else reject(missingOf(error, state.failures) ?? error);
           });
         });
     },

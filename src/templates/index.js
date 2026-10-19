@@ -3,7 +3,7 @@
 
 const { createCssInliner } = require('./css.js');
 const { createEjsEngine } = require('./ejs.js');
-const { TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
+const { TemplateLoadError, TemplateNotFoundError, TemplateRenderError } = require('./errors.js');
 const { createEtaEngine } = require('./eta.js');
 const { createHandlebarsEngine } = require('./handlebars.js');
 const { createLiquidEngine } = require('./liquid.js');
@@ -29,6 +29,7 @@ module.exports = {
   createPugEngine,
   createReactEmailEngine,
   createTemplateRenderer,
+  TemplateLoadError,
   TemplateNotFoundError,
   TemplateRenderError,
 };

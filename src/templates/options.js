@@ -2,6 +2,8 @@
 // option an engine keeps for itself, such as the file name its includes are
 // read by, is refused rather than accepted and never read.
 
+const { checkExtensions } = require('./environment.js');
+
 /**
  * Checks the options passed on to an engine, and gives a copy of them.
  *
@@ -29,21 +31,44 @@ const checkEngineOptions = (options, reserved, engine) => {
 };
 
 /**
+ * Refuses the options that turn off the escaping of an engine's output, or
+ * put an escaper of the application's in its place, unless the engine is
+ * given `allowUnescaped: true`: a template whose context a user wrote would
+ * otherwise put that user's HTML into the message.
+ *
+ * @param options The options of the engine.
+ * @param given The options passed on to the engine.
+ * @param switches By the name of each such option, whether a value turns the
+ * escaping off.
+ * @param engine The name of the engine, for the message.
+ * @throws {TypeError} If one is given without `allowUnescaped`.
+ * @internal
+ */
+const checkEscaping = (options, given, switches, engine) => {
+  const allowed = options.allowUnescaped ?? false;
+  if (typeof allowed !== 'boolean') throw new TypeError('allowUnescaped must be a boolean.');
+  if (allowed) return;
+  for (const name of Object.keys(given)) {
+    const turnsOff = switches.get(name);
+    if (turnsOff !== undefined && turnsOff(given[name])) {
+      throw new TypeError(
+        `${name} turns off the escaping of the ${engine} engine: pass it allowUnescaped: true ` +
+          'to allow that.',
+      );
+    }
+  }
+};
+
+/**
  * Checks the extensions of an engine.
  *
  * @internal
  */
 const checkEngineExtensions = (extensions, defaults) => {
   if (extensions === undefined) return Object.freeze([...defaults]);
-  if (!Array.isArray(extensions) || extensions.length === 0) {
-    throw new TypeError('extensions must be a list such as [".hbs"].');
-  }
-  for (const extension of extensions) {
-    if (typeof extension !== 'string' || extension.length < 2 || extension[0] !== '.') {
-      throw new TypeError(`An extension starts with its dot, such as ".hbs": ${String(extension)}`);
-    }
-  }
-  return Object.freeze([...extensions]);
+  const checked = checkExtensions(extensions, 'extensions');
+  if (checked.length === 0) throw new TypeError('extensions must name one at least.');
+  return checked;
 };
 
 /**
@@ -76,4 +101,10 @@ const checkModule = (value, member, message) => {
   return value;
 };
 
-module.exports = { checkEngineExtensions, checkEngineOptions, checkFunctions, checkModule };
+module.exports = {
+  checkEngineExtensions,
+  checkEngineOptions,
+  checkEscaping,
+  checkFunctions,
+  checkModule,
+};
