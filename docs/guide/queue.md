@@ -287,6 +287,37 @@ token, releases that spend no attempt, and the pause. The repository's
 `tests/helpers/queue/source-contract.js` is that contract as tests; copy it,
 and run it on your source (`createMemoryQueue().source` is one to compare).
 
+## Defaults
+
+What the queue, its worker and its drivers do when not told otherwise, in one
+place:
+
+| Option | Of | Default |
+| --- | --- | --- |
+| `namespace` | the queue | `'mail'` |
+| `maxAttempts` | the queue, a job | 5 |
+| `maxJobBytes`, `maxInlineAttachmentBytes` | the queue | 256 KiB each |
+| `backoff` | the worker | 30 seconds, doubled per attempt, an hour at most, full jitter |
+| `operatorDelayMilliseconds` | the worker | 5 minutes (`auth`, `configuration`, a job it cannot read yet) |
+| `maxRedeliveries` | the worker | 3 |
+| `redelivered` | the worker | `'send'` |
+| `rateLimitScope` | the worker | `'job'` |
+| `concurrency` | a worker | 1 |
+| `pollIntervalMilliseconds` | the memory queue, the outbox | 1 second |
+| `leaseMilliseconds` | the memory queue, the outbox | 1 minute, extended every third of it |
+| `timeoutMilliseconds` of `close()` | every driver | 30 seconds, then the jobs are aborted |
+| `dedupeWindowSeconds` | every driver | a day |
+| `retainFailedSeconds` | every driver | a week |
+| `retainData` | every driver | `'failed'` |
+| `fairness` | the memory queue, the outbox | `'none'` |
+| `clockSkewToleranceMilliseconds` | the outbox | 5 seconds |
+| `changeStream` | the outbox | `false` |
+| `maxJobs`, `retainFinished` | the memory queue | 100000, 10000 |
+| `priorities` | BullMQ | `high` 1, `normal` 2, `low` 3 |
+| `detectDuplicates` | BullMQ | `true` |
+| `leaseMs` | `IdempotencyTransport` | 10 minutes, longer than a lease, so a run that died is not sent again |
+| `renderTimeoutMilliseconds` | a template renderer | 30 seconds |
+
 ## Codes
 
 The codes the queue, its drivers and its worker give: in the `failure` of a job
