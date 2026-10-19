@@ -75,7 +75,8 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
 - **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
   passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
   read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
-  that spend no attempt; a batch read back 32 jobs at once to tell its duplicates.
+  that spend no attempt, delays counted from the clock it is given (`now`); a batch read back 32
+  jobs at once to tell its duplicates.
   `createBullMQProcessor` and `createBullMQBackoffStrategy` (of the type `MAILER_BACKOFF_TYPE`)
   serve a Worker of your own. A job BullMQ gives up itself (stalled too often) is told to the
   queue's audit sink as `delivery_unknown` (`queue.lost`). `pnpm test:bullmq` runs it on BullMQ
