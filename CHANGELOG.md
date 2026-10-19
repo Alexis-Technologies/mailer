@@ -108,6 +108,33 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   front matter, a layout, includes read through the loader, each template compiled once, CSS inlined
   by juice or css-inline without fetching a stylesheet (`createCssInliner`), and the text derived
   from the HTML. `TemplateNotFoundError` and `TemplateRenderError` have a stable `code`.
+  - **Safety.** An engine option that turns escaping off (Handlebars `noEscape`, Nunjucks
+    `autoescape: false`, a Liquid `outputEscape`, Eta `autoEscape: false` or `escapeFunction`, EJS
+    `escape`) throws unless the engine is given `allowUnescaped: true`. Liquid has `parseLimit`
+    (1 MiB), `renderLimit` (1000 ms) and `memoryLimit` (1e8) on by default, and the guide says who
+    may write a template in each engine. A render is bounded: `maxIncludes` (10000),
+    `maxIncludeDepth` (32), `maxOutputBytes` (10 MiB). A loader is given template names alone,
+    none with a segment starting with a dot, and the file loader reads a file through the
+    descriptor its size came from.
+  - **Time and failures.** `render({ ..., signal })` stops at the abort of its signal, with its
+    reason, and `renderTimeoutMilliseconds` (30000) fails a render that hangs with a retryable
+    `TemplateRenderError` of phase `timeout`, what it waited for read or compiled anew;
+    `loader.load(name, { signal })` is told when to stop. A loader that fails is a
+    `TemplateLoadError` (`MAILER_TEMPLATE_LOAD`), retryable unless its error is a bug; every error
+    tells `phase`, `engine`, `template`, `requested` and `locale`.
+  - **Includes.** One rule in every engine: `/x` from the root, `./x` against the template it is
+    written in, a bare name from the root then the partials, with the engine's extensions; EJS and
+    Mustache read nested relative includes against their own template, and a bare Pug include is
+    read from the root, then the partials (`include ./footer` for the file beside).
+  - **Caches and telemetry.** What each engine keeps is bounded by the renderer's cache; an EJS
+    include is compiled once (`ejs.cache`, per renderer, forgotten at `clear()`), and Mustache
+    parses a template once (it needs `mustache.Context`). `locales` names the locales templates
+    are written in; `logger` hears `templates.compiled` and `templates.rendered` at `debug`.
+  - **Fixed before release:** a Handlebars partial that names itself hung the render, and
+    `./footer` of two directories was one partial; concurrent Nunjucks renders took each other's
+    missing include, and `ignore missing` failed; Liquid's missing include was a
+    `TemplateRenderError`; a renderer with a layout and React Email sent every message without the
+    layout, which now throws when the renderer is made.
 - **`./audit`**: the states of a message (`queued`, `rendered`, `submitted`, `accepted`,
   `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
   `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks` (with `has` and
