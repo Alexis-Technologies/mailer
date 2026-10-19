@@ -372,3 +372,10 @@ test('Queue: enqueueMany tells the sink its batch in one write where it can', as
   // The duplicate is not told again.
   assert.deepStrictEqual(told, [[2, 'session']]);
 });
+
+test('Queue: the clock of a queue is checked when the queue is made', () => {
+  assert.throws(
+    () => createMailQueue({ driver: createMemoryQueue(), now: 1 }),
+    /now must be a function/,
+  );
+});

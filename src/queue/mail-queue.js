@@ -120,7 +120,7 @@ const createQueueConfig = (options) => {
   if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
   keyringOf(options.signingKeys);
   checkIdSecret(options.idSecret);
-  const now = options.now ?? Date.now;
+  const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
   const jobOptions = {
     namespace: options.namespace,
     maxAttempts: options.maxAttempts,
