@@ -211,7 +211,7 @@ test('Queue: a sealed job waits for a worker with its codec, and fails one that 
   const waiting = await plain(runOf(sealed, { attempt: 5 }), new AbortController().signal);
   assert.strictEqual(waiting.type, 'release');
   const stale = await plain(
-    runOf(sealed, { enqueuedAt: Date.now() - 8 * 24 * 60 * 60 * 1000 }),
+    runOf(sealed, { enqueuedAt: NOW - 8 * 24 * 60 * 60 * 1000 }),
     new AbortController().signal,
   );
   assert.deepStrictEqual([stale.type, stale.code], ['fail', 'queue.codec_missing']);
