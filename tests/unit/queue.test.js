@@ -42,13 +42,14 @@ const setup = (options = {}) => {
   return { clock, driver, audit, queue };
 };
 
-test('Queue: a message enqueued is rendered and sent by a worker, its states told', async () => {
+test('Queue: a message enqueued is rendered and sent by a worker, its states told', async (t) => {
   const { driver, audit, queue } = setup();
   const transport = fakeTransport((message) => sent(`p-${message.subject.length}`));
   const enqueued = await queue.enqueue(resetJob());
   assert.strictEqual(enqueued.duplicate, false);
   assert.match(enqueued.messageId, /@example\.com$/);
-  await using worker = queue.createWorker({ transport, renderer: templates, random: () => 0 });
+  const worker = queue.createWorker({ transport, renderer: templates, random: () => 0 });
+  t.after(() => worker.close());
   await driver.drain();
   assert.strictEqual(transport.calls.length, 1);
   const { message } = transport.calls[0];
@@ -71,7 +72,6 @@ test('Queue: a message enqueued is rendered and sent by a worker, its states tol
   );
   assert.strictEqual(audit.stateOf(enqueued.correlationId), 'accepted');
   assert.strictEqual(driver.get(enqueued.id).state, 'completed');
-  assert.ok(worker);
 });
 
 test('Queue: the same message enqueued twice is sent once, another under its key refused', async () => {

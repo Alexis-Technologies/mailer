@@ -1128,7 +1128,11 @@ change. **This file wins** if they ever disagree.
   catches a new one, and Docker (`node:22-bookworm-slim`) reproduces Linux. The JMAP test of a
   401 to a raw message of unknown size, which streams, is `todo` on Node 24 (known upstream bug
   14). `tests/unit/export-parity.test.js` also checks that every d.ts using `AsyncDisposable`
-  references `esnext.disposable` itself.
+  references `esnext.disposable` itself. Node 22 parses no `await using` (Node 24 does), so no
+  file it loads may hold one: a test closes what it opens with `t.after`, and a file with one
+  fails whole on Node 22 alone, in CI, never on a Node 24 at hand. A path compared with what the
+  loader of `./templates` gives is resolved with `fs.realpathSync.native`, as the plain one keeps
+  the short names of Windows (the temporary directory of a runner).
 - **`tests/runtime/`** runs the package as a consumer does, by its name, with no mock: every entry
   required and imported by name; SMTP over plain TCP, implicit TLS, STARTTLS and an HTTP CONNECT
   proxy, with DKIM checked by `tests/helpers/mime/verify-dkim.js`; an HTTP provider and

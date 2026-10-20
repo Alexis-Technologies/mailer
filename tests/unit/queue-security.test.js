@@ -104,16 +104,16 @@ test('Queue: signing keys are checked', () => {
   }
 });
 
-test('Queue: a worker with signing keys sends a signed job and fails a forged one unsent', async () => {
+test('Queue: a worker with signing keys sends a signed job and fails a forged one unsent', async (t) => {
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
   const queue = createMailQueue({ driver, now: clock.now, signingKeys: [KEY_A] });
   const transport = fakeTransport();
   await queue.enqueue(input);
-  await using worker = queue.createWorker({ transport });
+  const worker = queue.createWorker({ transport });
+  t.after(() => worker.close());
   await driver.drain();
   assert.strictEqual(transport.calls.length, 1);
-  assert.ok(worker);
 
   const records = [];
   const logger = { error: (record, message) => records.push([message, record]) };
@@ -163,7 +163,7 @@ const runOf = (data, extra = {}) => ({
   ...extra,
 });
 
-test('Queue: with a codec the store holds no address, and the worker opens the job', async () => {
+test('Queue: with a codec the store holds no address, and the worker opens the job', async (t) => {
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
   const codec = aesCodec();
@@ -190,13 +190,13 @@ test('Queue: with a codec the store holds no address, and the worker opens the j
   }
   // A duplicate is still told by the hash in clear.
   assert.strictEqual((await queue.enqueue(withFile)).duplicate, true);
-  await using worker = queue.createWorker({ transport });
+  const worker = queue.createWorker({ transport });
+  t.after(() => worker.close());
   await driver.drain();
   assert.strictEqual(transport.calls.length, 1);
   const { message } = transport.calls[0];
   assert.strictEqual(message.recipients[0].address, 'ada@example.com');
   assert.strictEqual(message.messageId, enqueued.messageId);
-  assert.ok(worker);
   assert.throws(() => parseMailJob(stored.data), isCode('queue.codec_missing'));
 });
 
