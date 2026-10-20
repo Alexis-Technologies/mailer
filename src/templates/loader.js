@@ -167,12 +167,15 @@ const loadFile = async (files, name, signal) => {
   }
 };
 
+// The real path of the system, as `fsp.realpath` gives it: `fs.realpathSync`
+// keeps the spelling it is given (its case, a short name of Windows), so a
+// root it resolved held no path `load` resolved, and the other way round.
 const loadFileSync = (files, name) => {
   if (!accepts(files, name)) return undefined;
-  files.root ??= fs.realpathSync(files.dir);
+  files.root ??= fs.realpathSync.native(files.dir);
   let real;
   try {
-    real = fs.realpathSync(path.join(files.root, name));
+    real = fs.realpathSync.native(path.join(files.root, name));
   } catch (error) {
     if (isMissing(error)) return undefined;
     throw error;

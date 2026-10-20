@@ -137,7 +137,9 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
     `./footer` of two directories was one partial; concurrent Nunjucks renders took each other's
     missing include, and `ignore missing` failed; Liquid's missing include was a
     `TemplateRenderError`; a renderer with a layout and React Email sent every message without the
-    layout, which now throws when the renderer is made.
+    layout, which now throws when the renderer is made; the file loader refused every `load` after
+    a `loadSync` when its `dir` was spelled otherwise than on disk (its case, a short name of
+    Windows).
 - **`./audit`**: the states of a message (`queued`, `rendered`, `submitted`, `accepted`,
   `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
   `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks` (with `has` and

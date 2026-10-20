@@ -50,7 +50,7 @@ test('Templates: the file loader reads a name under its directory, its BOM dropp
   const welcome = await loader.load('welcome.ejs');
   assert.strictEqual(welcome.name, 'welcome.ejs');
   assert.strictEqual(welcome.source, '<p>Hi <%= name %></p>');
-  assert.strictEqual(welcome.path, fs.realpathSync(path.join(root, 'welcome.ejs')));
+  assert.strictEqual(welcome.path, fs.realpathSync.native(path.join(root, 'welcome.ejs')));
   assert.strictEqual((await loader.load('auth/reset.ejs')).source, '<p>reset</p>');
   assert.strictEqual(loader.loadSync('auth/reset.ejs').source, '<p>reset</p>');
   // Missing, a directory, another extension and a name that is not one: none.
@@ -78,6 +78,26 @@ test('Templates: the file loader reads a name under its directory, its BOM dropp
     (await createFileLoader({ dir: root }).load('notes.txt')).source,
     'not a template',
   );
+});
+
+test('Templates: the file loader reads one real path, sync or not, however its directory is spelled', async (t) => {
+  // Before: loadSync resolved with the realpath of JavaScript, which keeps
+  // the case it is given and the short names of Windows (the temporary
+  // directory of a runner), and load with the system's, so a load after a
+  // loadSync was refused as leading out of the directory.
+  const { root } = makeTree(t);
+  const spelled = root.replace('mailer-templates-', 'MAILER-TEMPLATES-');
+  if (!fs.existsSync(spelled)) {
+    t.skip('the file system tells case apart');
+    return;
+  }
+  const real = fs.realpathSync.native(path.join(root, 'welcome.ejs'));
+  const syncFirst = createFileLoader({ dir: spelled });
+  assert.strictEqual(syncFirst.loadSync('welcome.ejs').path, real);
+  assert.strictEqual((await syncFirst.load('welcome.ejs')).path, real);
+  const asyncFirst = createFileLoader({ dir: spelled });
+  assert.strictEqual((await asyncFirst.load('welcome.ejs')).path, real);
+  assert.strictEqual(asyncFirst.loadSync('welcome.ejs').path, real);
 });
 
 test('Templates: the file loader reads no more than maxBytes of a file that grew since its size', async (t) => {
