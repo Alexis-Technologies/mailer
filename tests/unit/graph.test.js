@@ -95,6 +95,16 @@ const SUBPATH_EDGES = [
   // configuration when it is made.
   'sendmail/config.js -> mime/dkim/types.js',
   'sendmail/sendmail-transport.js -> mime/index.js',
+  // ./templates derives the text and decodes the text and subject as ./render
+  // does, and its React Email engine is the renderer of ./render.
+  'templates/renderer.js -> render/html-to-text.js',
+  'templates/renderer.js -> render/entities.js',
+  'templates/react-email.js -> render/react-email.js',
+  // The worker of ./queue renders the subject and content of a template job
+  // as ./render does, the text derived from the HTML.
+  'queue/handler.js -> render/renderer.js',
+  // The audit sink of ./mongodb reads the state of a message as ./audit does.
+  'mongodb/audit-sink.js -> audit/states.js',
 ];
 
 const subpathOf = (name) => {

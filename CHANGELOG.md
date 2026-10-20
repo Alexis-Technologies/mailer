@@ -7,6 +7,171 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-20
+
+The reliability layer of the roadmap, on the transport of 1.1: a persistent queue, on BullMQ or a
+transactional outbox in MongoDB, whose workers render templates of the engine the application
+uses and know a permanent failure from a temporary one, and the audit of every state of a
+message. Everything is additive: nothing of 1.1 changes, and the package still has no runtime
+dependency, BullMQ, MongoDB and the template engines being passed in.
+
+### Added
+
+- **`./queue`**: `createMailQueue({ driver, audit, logger })` with `enqueue`, `enqueueMany` and
+  `createWorker({ transport, renderer, resolveAttachment, checkJob, classify })`.
+  - **Jobs.** A job is a template with its context, rendered by the worker, or content rendered
+    already, as JSON checked when it is enqueued (`prepareMailJob`, `parseMailJob`): its fields as
+    `createMessage` checks them, its context refused with the path to what JSON would change,
+    attachments as bytes (bounded) or references the worker resolves. Its id is derived from the
+    namespace, tenant and `idempotencyKey`, a UUID of their hash or what `deriveId(kind, seed)`
+    makes of it (as for the Message-ID and Content-IDs of a job under a key; `generateId` makes
+    those it draws), so the same message enqueued again is one job, and another under the key is
+    refused (`MailQueueError` `queue.key_reused`, with the `jobIds`
+    refused and, from `enqueueMany`, the `answers` of the other jobs, all of them enqueued and
+    audited first). Its Message-ID and Content-IDs are fixed for every attempt. `scheduledAt` is a
+    delay of the queue and `expiresAt` a deadline. The fields of a job of version 1
+    (`MAIL_JOB_VERSION`, named `MAIL_JOB_NAME`) are fixed: a later version, or a field this one
+    does not know, makes the job wait for a worker that reads it (`queue.unsupported_version`,
+    given back with its attempts not spent, for a week or until it expires) rather than fail its
+    hash during a rolling deploy.
+  - **Security of the store.** `signingKeys` sign each job with an HMAC-SHA256 (`kid`, `mac`), and
+    a worker given them sends no job they did not sign (`queue.signature_invalid`): the SHA-256 of
+    a job tells a change, but whoever writes to the store can recompute it; the first key signs and
+    each verifies, for rotation. A `codec` (`encode`, `decode`, such as AES-GCM under the
+    application's key) seals the fields of each job, its addresses, context and attachments,
+    leaving the version, hash, correlation id, signature and trace context in clear; a worker
+    without it gives a sealed job back (`queue.codec_missing`), one whose codec fails retries it
+    (`queue.codec_failed`). `idSecret` derives the id of a job from its key with an HMAC, so an id
+    in the audit and the logs cannot be traced back to a key that names a person.
+  - **The worker** (`createMailJobHandler`, for any driver) fails a permanent failure, a missing
+    template or a bug at once, retries a temporary one never sooner than `Retry-After`, an
+    operator's failure (`auth`, `configuration`) after five minutes, and never sends again a
+    message of unknown delivery. It gives up a job whose runs ended unsettled more than
+    `maxRedeliveries` (3) times, as `delivery_unknown`, so a job that kills or blocks its worker
+    does not take every worker down in turn for ever; with `redelivered: 'delivery_unknown'`, a
+    run again of an attempt whose run before died is of unknown delivery rather than a second send,
+    unless the audit sink tells (`has`) that it died before its submit. `rateLimitScope` makes a
+    rate limit wait for the job, the queue or the job's tenant. The renderer is given the job's
+    `signal`; a template that fails to render leaves only its name, phase and engine in the store
+    and the audit, its text in the log at `debug`. Every failure, retry and escape is logged with
+    its code and duration (the codes in one table of the queue guide).
+  - **Sources and drivers.** `createPollingDriver(source)` makes a driver of a store that lends its
+    jobs (an outbox): it keeps the lease of a run, aborts a run whose lease the store does not
+    extend before the lease runs out (`QueueLeaseLostError`), logs a settle the token fenced off
+    (`queue.settle_fenced`; the settling writes of a source give `false`), and wakes one lane per
+    change of its source. A job request carries its `tenantId` and a job gives back its
+    `redeliveries`, never counted down. A driver declares `transactional`; one that is not refuses
+    a transaction, and without one the `queued` event is told before the job, so a strict sink
+    that fails leaves nothing enqueued. `AuditSink.appendMany` takes the `queued` events of an
+    `enqueueMany` in one write. `traceContext` gives each job the producer's W3C `traceparent`.
+  - **The memory queue**, `createMemoryQueue()`, for tests and a single process: its jobs on heaps
+    (a reserve costs O(log n)), its `source` held to the same contract as the outbox
+    (`tests/helpers/queue/source-contract.js`), with `stats()`, `failed()`, `retryFailed(id)` and
+    `resume()`.
+  - **Retention and tenants**, the same on every driver: a completed job is kept
+    `dedupeWindowSeconds` (a day, its window of duplicates), a failed one `retainFailedSeconds` (a
+    week), and the message of a job done with is dropped (`retainData`: `'failed'` keeps the failed
+    ones, `'all'`, `'none'`), its version and hash kept so a duplicate is still told.
+    `fairness: 'tenant'` (memory queue, outbox) takes a high job of any tenant first, then the
+    tenants in turn, so one tenant's backlog holds no other's mail.
+- **`./bullmq`**: `createBullMQDriver({ bullmq: { Queue, Worker }, connection })`, with BullMQ
+  passed in: jobs under their id, priorities from 1, retention by time, the delay of each retry
+  read back by a backoff strategy of the worker's, failures as `UnrecoverableError` and releases
+  that spend no attempt, delays counted from the clock it is given (`now`); a batch read back 32
+  jobs at once to tell its duplicates.
+  `createBullMQProcessor` and `createBullMQBackoffStrategy` (of the type `MAILER_BACKOFF_TYPE`)
+  serve a Worker of your own. A job BullMQ gives up itself (stalled too often) is told to the
+  queue's audit sink as `delivery_unknown` (`queue.lost`). `pnpm test:bullmq` runs it on BullMQ
+  and Valkey.
+- **`./mongodb`**: the transactional outbox, `createMongoOutbox({ collection })`, a `QueueSource`
+  in a collection of the MongoDB driver passed in.
+  - A job enqueued with `{ transaction: session }` is written in that transaction (an upsert, so a
+    duplicate does not abort it), lent by one atomic `findOneAndUpdate` under a token every later
+    write is fenced by, and given to another worker as `redelivered` when its lease runs out,
+    `clockSkewToleranceMilliseconds` (5 s) after by the taker's clock.
+  - An idle poll is two round trips: leases are taken back once a third of a lease, the pauses read
+    once a poll interval, and the next due time read from its own index; its optional change
+    stream wakes one lane per change after which a job may be ready, and is opened again when it
+    fails. `bench/outbox.js` measures it (2 round trips a job, some 2300 jobs a second for one
+    worker of ten lanes on a laptop).
+  - A pause of the queue or of one tenant (`rateLimitScope: 'tenant'`), and `resume()`; `stats()`
+    (jobs by state, the age of the oldest job due, the pauses), `failed({ limit, after })` and
+    `retryFailed(id)`; `ensureIndexes()` makes its indexes and the TTL on `expireAt`.
+  - `createMongoAuditSink` (each event once by its id, in the transaction; `has`, `appendMany` in
+    one `bulkWrite`, and `eventsOfProviderMessage(id)`, which finds the events a webhook filed
+    under the provider's id of a message) and `createMongoIdempotencyStore` (each step atomic, for
+    `IdempotencyTransport` across processes) go with it. `pnpm test:mongodb` runs them on a replica
+    set.
+- **`./templates`**: `createTemplateRenderer({ engine, loader, layout, partials, globals,
+  defaultLocale, inlineCss })`, a `Renderer` of templates by name, over nine engines passed in
+  (`createEjsEngine`, `createHandlebarsEngine`, `createPugEngine`, `createMjmlEngine`,
+  `createLiquidEngine`, `createNunjucksEngine`, `createEtaEngine`, `createMustacheEngine`,
+  `createReactEmailEngine`): names never paths (`createFileLoader` reads nothing outside its
+  directory, `createMemoryLoader` holds them by name), variants by locale and part, the subject in
+  front matter, a layout, includes read through the loader, each template compiled once, CSS inlined
+  by juice or css-inline without fetching a stylesheet (`createCssInliner`), and the text derived
+  from the HTML. `TemplateNotFoundError` and `TemplateRenderError` have a stable `code`.
+  - **Safety.** An engine option that turns escaping off (Handlebars `noEscape`, Nunjucks
+    `autoescape: false`, a Liquid `outputEscape`, Eta `autoEscape: false` or `escapeFunction`, EJS
+    `escape`) throws unless the engine is given `allowUnescaped: true`. Liquid has `parseLimit`
+    (1 MiB), `renderLimit` (1000 ms) and `memoryLimit` (1e8) on by default, and the guide says who
+    may write a template in each engine. A render is bounded: `maxIncludes` (10000),
+    `maxIncludeDepth` (32), `maxOutputBytes` (10 MiB). A loader is given template names alone,
+    none with a segment starting with a dot, and the file loader reads a file through the
+    descriptor its size came from.
+  - **Time and failures.** `render({ ..., signal })` stops at the abort of its signal, with its
+    reason, and `renderTimeoutMilliseconds` (30000) fails a render that hangs with a retryable
+    `TemplateRenderError` of phase `timeout`, what it waited for read or compiled anew;
+    `loader.load(name, { signal })` is told when to stop. A loader that fails is a
+    `TemplateLoadError` (`MAILER_TEMPLATE_LOAD`), retryable unless its error is a bug; every error
+    tells `phase`, `engine`, `template`, `requested` and `locale`.
+  - **Includes.** One rule in every engine: `/x` from the root, `./x` against the template it is
+    written in, a bare name from the root then the partials, with the engine's extensions; EJS and
+    Mustache read nested relative includes against their own template, and a bare Pug include is
+    read from the root, then the partials (`include ./footer` for the file beside).
+  - **Caches and telemetry.** What each engine keeps is bounded by the renderer's cache; an EJS
+    include is compiled once (`ejs.cache`, per renderer, forgotten at `clear()`), and Mustache
+    parses a template once (it needs `mustache.Context`). `locales` names the locales templates
+    are written in; `logger` hears `templates.compiled` and `templates.rendered` at `debug`.
+  - **Fixed before release:** a Handlebars partial that names itself hung the render, and
+    `./footer` of two directories was one partial; concurrent Nunjucks renders took each other's
+    missing include, and `ignore missing` failed; Liquid's missing include was a
+    `TemplateRenderError`; a renderer with a layout and React Email sent every message without the
+    layout, which now throws when the renderer is made; the file loader refused every `load` after
+    a `loadSync` when its `dir` was spelled otherwise than on disk (its case, a short name of
+    Windows).
+- **`./audit`**: the states of a message (`queued`, `rendered`, `submitted`, `accepted`,
+  `delivered`, `bounced`, `complained`, `failed`, `delivery_unknown`) and their sinks:
+  `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks` (with `has` and
+  `appendMany` where a sink of them has them), `stateOf`, `isFinalState`, and
+  `auditEventOfDeliveryEvent` and `stateOfDeliveryEvent` for the events of `./webhooks`.
+- **`./otel`**: `instrumentHandler(handler, { tracerProvider, meterProvider, withSpan })`, a span
+  `mailer.queue.process` per run of a job, linked to the producer's trace (the `traceparent` the
+  mail queue's `traceContext` gives each job as `trace`), and the metrics `mailer.queue.jobs` (by
+  outcome and code), `mailer.queue.lag`, `mailer.queue.job.duration` and
+  `mailer.queue.redeliveries`.
+- **`./render`**: `RenderOutput.subject` and `renderFields(renderer, input)`, which gives
+  `{ subject, content }`.
+- **The root**: the contracts of the reliability layer as types (`QueueDriver`, `QueueSource`,
+  `QueueJob`, `QueueJobRequest`, `QueueLease`, `QueueOutcome`, `QueueHandler`, `QueueConsumer`,
+  `QueueConsumeOptions`, `QueueEnqueueOptions`, `MessageState`, `AuditEvent`, `AuditSink`,
+  `JsonValue`, `JsonObject`), with no code.
+
+### Tooling
+
+- **Opt-in suites on the real services:** `pnpm test:bullmq` on BullMQ and Valkey
+  (`tests/bullmq/docker-compose.yml`) and `pnpm test:mongodb` on a MongoDB replica set
+  (`tests/mongodb/docker-compose.yml`), outside the gates, as `test:mailpit` is;
+  `pnpm test:stores` runs both and fails without their stores, a manual step of every release.
+- **`bench/outbox.js`**: the throughput of the outbox on a replica set, by workers and lanes.
+- **One table of the codes of the queue** in its guide, which `tests/unit/codes.test.js` keeps in
+  step with the code.
+- **devDependencies for the tests:** the nine template engines, juice and css-inline, BullMQ,
+  ioredis and the MongoDB driver; `src/` requires none of them, as `tests/unit/dependencies.test.js`
+  checks.
+- **Shared internals:** the backoff, the classification of thrown errors, the fingerprint of a
+  message and the path check moved to `src/internal/`, with no change of behavior.
+
 ## [1.1.0] - 2026-10-18
 
 The features of three libraries of the [comparison](https://mailerat.vercel.app/guide/comparison)
@@ -616,6 +781,7 @@ for code written against upyo 0.7:
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0

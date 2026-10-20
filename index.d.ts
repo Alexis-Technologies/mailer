@@ -1384,6 +1384,259 @@ export interface DeliveryEvent<TProviderId extends string = string> {
   /** The provider's record the event was read from. */
   readonly raw: unknown;
 }
+// ─── Contracts of the reliability layer ──────────────────────────────────────
+
+/**
+ * The state of a message on its way: `queued` (and again before each
+ * attempt after a failed one), `rendered`, `submitted` (handed to the
+ * transport), `accepted` by the provider, then `delivered`, `bounced` or
+ * `complained` as its events tell; `failed` when no attempt will be made
+ * again, and `delivery_unknown` when an attempt may have been taken, which
+ * only its events can settle.
+ */
+export type MessageState =
+  | 'queued'
+  | 'rendered'
+  | 'submitted'
+  | 'accepted'
+  | 'delivered'
+  | 'bounced'
+  | 'complained'
+  | 'failed'
+  | 'delivery_unknown';
+/** Why an attempt failed, in an audit event: no address in it. */
+export interface AuditError {
+  readonly category: ReceiptErrorCategory;
+  readonly code: string;
+  /** Its text, the addresses in it redacted. */
+  readonly message: string;
+  readonly retryable: boolean;
+}
+/**
+ * One change of the state of a message, as `./queue` and `./audit` record it.
+ * It holds no recipient: the message is found by `correlationId`.
+ */
+export interface AuditEvent {
+  /**
+   * The same for the same change, so that a sink can write it once however
+   * often it is told: a job run again or a webhook delivered again.
+   */
+  readonly id: string;
+  readonly state: MessageState;
+  /** When, in ISO 8601. */
+  readonly at: string;
+  readonly source: 'producer' | 'worker' | 'webhook';
+  /** What the events of one message share, from the queue to the webhooks. */
+  readonly correlationId: string;
+  /** The job of the queue; absent on the events of a webhook. */
+  readonly jobId?: string;
+  readonly tenantId?: string;
+  /** The attempt, from 1; 0 at enqueue and for the events of a webhook. */
+  readonly attempt: number;
+  /** The SHA-256 of the job, as enqueued. */
+  readonly payloadHash?: string;
+  /** The SHA-256 of the message as rendered, as `./idempotency` takes it. */
+  readonly messageHash?: string;
+  /** The Message-ID. */
+  readonly messageId?: string;
+  readonly provider?: string;
+  /** The provider's id of the message: the `messageId` of its receipt. */
+  readonly providerMessageId?: string;
+  readonly priority?: Priority;
+  readonly template?: string;
+  readonly tags?: readonly string[];
+  readonly error?: AuditError;
+  /** When the next attempt is due, for a message queued again. */
+  readonly retryAt?: string;
+  /** A run of an attempt a stopped worker did not finish. */
+  readonly redelivered?: boolean;
+  /** The event of the provider a webhook state comes from. */
+  readonly deliveryEvent?: {
+    readonly type: DeliveryEventType;
+    readonly id: string;
+    readonly bounce?: DeliveryBounce;
+  };
+}
+/** What a sink is told with an event. */
+export interface AuditContext {
+  /** The transaction of the store, for a sink that writes in the one of the enqueue. */
+  readonly transaction?: unknown;
+}
+/** Where audit events go: append-only, an event written once by its `id`. */
+export interface AuditSink {
+  append(event: AuditEvent, context?: AuditContext): void | Promise<void>;
+  /** Appends several events in one write where it can (a bulk write): a queue's batch. */
+  appendMany?(events: readonly AuditEvent[], context?: AuditContext): void | Promise<void>;
+  /**
+   * Whether an event of this id was written: lets a worker tell a run that
+   * submitted its message before it died (the ids are deterministic).
+   */
+  has?(id: string): boolean | Promise<boolean>;
+}
+
+/** A value of JSON. */
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonObject;
+/** An object of JSON. */
+export interface JsonObject {
+  readonly [key: string]: JsonValue | undefined;
+}
+/** A job as a producer hands it to a queue driver. */
+export interface QueueJobRequest {
+  /** 1 to 128 printable ASCII characters, no `:`, not all digits: a key every driver takes. */
+  readonly id: string;
+  /** The kind of the job: `mail`. */
+  readonly name: string;
+  readonly data: JsonObject;
+  /** The SHA-256 of `data`, which tells a job enqueued again from another under the same id. */
+  readonly hash: string;
+  readonly priority: Priority;
+  /** The attempts in all, the first included, at least 1. */
+  readonly maxAttempts: number;
+  /** Not run before this time, in milliseconds since the epoch. */
+  readonly availableAt?: number;
+  /** When it was enqueued, in milliseconds since the epoch. */
+  readonly enqueuedAt: number;
+  /** Its id comes from a key of the caller's: an enqueue again is expected, and told. */
+  readonly unique: boolean;
+  /** The tenant of the job: a source may share its lanes among tenants, and pause one. */
+  readonly tenantId?: string;
+}
+/** The options of an enqueue. */
+export interface QueueEnqueueOptions {
+  readonly signal?: AbortSignal;
+  /** The transaction of the store (a session of MongoDB for an outbox); a driver without one throws. */
+  readonly transaction?: unknown;
+}
+/** What a driver says of an enqueue. */
+export interface QueueEnqueueResult {
+  readonly id: string;
+  /** true: the driver still holds a job of that id, and nothing was added; undefined: it cannot tell. */
+  readonly duplicate: boolean | undefined;
+  /** The hash of the job held, when it is a duplicate and the driver read it. */
+  readonly existingHash?: string;
+}
+/** One run of a job, as a handler is given it. */
+export interface QueueJob {
+  readonly id: string;
+  readonly name: string;
+  /** As stored: whoever can write to the store may have written it, so it is checked. */
+  readonly data: unknown;
+  /** The attempt of this run, from 1. */
+  readonly attempt: number;
+  readonly maxAttempts: number;
+  readonly enqueuedAt?: number;
+  /** A run of this attempt before did not finish: the worker stopped, or its lease ran out. */
+  readonly redelivered: boolean;
+  /**
+   * How many runs of this job did not finish, never counted down: a job that
+   * kills its worker each time is told by it. Absent from a source that does
+   * not count them.
+   */
+  readonly redeliveries?: number;
+  /** The tenant of the job, from its request, where the source keeps it. */
+  readonly tenantId?: string;
+}
+/** What a handler makes of a run of a job. */
+export type QueueOutcome =
+  | { readonly type: 'ack'; readonly result?: JsonObject }
+  /** The attempt is spent; the job runs again after the delay. `queue`: the whole queue waits (a rate limit). */
+  | {
+      readonly type: 'retry';
+      readonly delayMilliseconds: number;
+      readonly code: string;
+      readonly reason: string;
+      /** `queue`: the whole queue waits; `tenant`: the jobs of the job's tenant wait. */
+      readonly scope?: 'job' | 'queue' | 'tenant';
+    }
+  /** No attempt again: the job is failed for good. */
+  | { readonly type: 'fail'; readonly code: string; readonly reason: string }
+  /** Not attempted (a shutdown, a lease lost before the send): back to the queue, no attempt spent. */
+  | { readonly type: 'release'; readonly delayMilliseconds?: number };
+/** Runs a job; it does not throw, and one that does is retried after the driver's delay. */
+export type QueueHandler = (job: QueueJob, signal: AbortSignal) => Promise<QueueOutcome>;
+/** The options of `consume()`. */
+export interface QueueConsumeOptions {
+  /** The jobs run at once. @default 1 */
+  readonly concurrency?: number;
+  readonly signal?: AbortSignal;
+  /**
+   * The sink a driver tells of a job it gave up itself, which the handler
+   * never settled (BullMQ's job stalled too often): `delivery_unknown`. A
+   * mail queue's worker passes the queue's.
+   */
+  readonly audit?: AuditSink;
+}
+/** The options of closing a consumer. */
+export interface QueueCloseOptions {
+  /** How long the jobs in flight are waited for before their signals abort. @default 30000 */
+  readonly timeoutMilliseconds?: number;
+}
+/** A consumer of a queue. */
+export interface QueueConsumer {
+  close(options?: QueueCloseOptions): Promise<void>;
+}
+/** A queue: BullMQ, a store's outbox, the memory one of the tests. */
+export interface QueueDriver {
+  readonly id: string;
+  /**
+   * true: `enqueue` writes in the `transaction` of its options, as an outbox
+   * does. A driver without it refuses a transaction, which would not hold
+   * the job with the application's writes.
+   */
+  readonly transactional?: boolean;
+  enqueue(request: QueueJobRequest, options?: QueueEnqueueOptions): Promise<QueueEnqueueResult>;
+  enqueueMany?(
+    requests: readonly QueueJobRequest[],
+    options?: QueueEnqueueOptions,
+  ): Promise<readonly QueueEnqueueResult[]>;
+  consume(handler: QueueHandler, options?: QueueConsumeOptions): QueueConsumer;
+  close?(): Promise<void>;
+}
+/** A job a source lent: settled under its token. */
+export interface QueueLease {
+  readonly job: QueueJob;
+  readonly token: string;
+}
+/** Why a job is retried or failed. */
+export interface QueueFailure {
+  readonly code: string;
+  readonly reason: string;
+}
+/**
+ * A queue that is read by lending its jobs, as a store's outbox is: what
+ * `createPollingDriver` of `./queue` makes a driver of.  A settle under a
+ * token that is no longer the job's does nothing.
+ */
+export interface QueueSource {
+  readonly id: string;
+  enqueue(request: QueueJobRequest, options?: QueueEnqueueOptions): Promise<QueueEnqueueResult>;
+  /**
+   * Lends the next ready job (by priority, then time, then order) for
+   * `leaseMilliseconds`, its attempt counted; or tells when the next one is
+   * due.
+   */
+  reserve(
+    leaseMilliseconds: number,
+  ): Promise<{ readonly lease?: QueueLease; readonly nextAvailableAt?: number }>;
+  /** false: the lease was lost (it ran out, another took it). */
+  extend(lease: QueueLease, leaseMilliseconds: number): Promise<boolean>;
+  /**
+   * Settles the job of a lease. Each settling write is fenced by the token:
+   * `false` when the lease was lost and nothing was written (another worker
+   * holds the job, and what this run did may be done twice).
+   */
+  ack(lease: QueueLease, result?: JsonObject): Promise<boolean | void>;
+  retry(lease: QueueLease, availableAt: number, failure: QueueFailure): Promise<boolean | void>;
+  fail(lease: QueueLease, failure: QueueFailure): Promise<boolean | void>;
+  /** Back to ready at `availableAt` (now by default), its attempt not counted. */
+  release(lease: QueueLease, availableAt?: number): Promise<boolean | void>;
+  /** The whole queue waits until then; without it, a retry of the queue is one of the job. */
+  pause?(until: number, scope?: { readonly tenantId?: string }): Promise<void>;
+  /** Ends a pause of the whole queue, or of one tenant's jobs, before its time. */
+  resume?(scope?: { readonly tenantId?: string }): Promise<void>;
+  /** Wakes the readers when a job may be ready: an enqueue, a change stream. */
+  subscribe?(listener: () => void): () => void;
+}
 /**
  * Optional capability for delivering already serialized MIME messages.
  * Wrappers must explicitly preserve this capability to expose it themselves.

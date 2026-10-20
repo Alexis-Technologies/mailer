@@ -1,0 +1,403 @@
+# The queue
+
+`@alexify/mailer/queue` sends mail through a queue: a producer enqueues a
+message as a job, and a worker renders it, sends it through the transport you
+composed, and decides from the receipt what the queue does next. The queue is a
+driver of your choice: [BullMQ](/transports/bullmq) on Redis or Valkey, the
+[MongoDB outbox](/guide/outbox), the memory queue for tests, or an outbox of
+your own store (a `QueueSource`).
+
+```
+producer   queue.enqueue(job) ──▶ driver (BullMQ, outbox, memory)
+worker     driver ──▶ render ──▶ attachments ──▶ createMessage ──▶ transport.send ──▶ receipt
+                                                                          │
+           ack · retry after a delay · fail for good · release  ◀─────────┘
+```
+
+## Enqueue and work
+
+```js
+const { Queue, Worker } = require('bullmq');
+const { createMailQueue } = require('@alexify/mailer/queue');
+const { createBullMQDriver } = require('@alexify/mailer/bullmq');
+const { createLoggerAuditSink } = require('@alexify/mailer/audit');
+
+const driver = createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'valkey' } });
+const queue = createMailQueue({ driver, audit: createLoggerAuditSink(logger), logger });
+
+// The producer: an HTTP handler, a cron.
+await queue.enqueue({
+  kind: 'template',
+  template: 'reset-password',
+  context: { name: user.name, url },
+  locale: user.locale,
+  from: 'Hirevel <no-reply@example.com>',
+  to: user.email,
+  idempotencyKey: `reset-password:${resetRequest.id}`,
+  priority: 'high',
+  expiresAt: new Date(Date.now() + 15 * 60_000),
+});
+
+// The worker, in a process of its own or the same one.
+const worker = queue.createWorker({
+  transport: new IdempotencyTransport(new SesTransport({ ...config, retries: 1 }), { store }),
+  renderer: templates,
+  concurrency: 5,
+});
+process.on('SIGTERM', () => worker.close());
+```
+
+A job is `{ kind: 'template', template, context, locale }`, which the worker
+renders with its `renderer` (such as one of [`./templates`](/messages/templates)),
+or `{ kind: 'content', subject, content }`, rendered already, such as with React
+Email in the producer. The other fields are those of
+[`createMessage`](/messages/compose), plus:
+
+| Field | What it does |
+| --- | --- |
+| `idempotencyKey` | the key the job is enqueued once under (one is made when absent) |
+| `scheduledAt` | a delay of the queue: not sent before then |
+| `expiresAt` | not sent after then: a code of sign-in sent late is of no use |
+| `tenantId` | scopes the key of the job |
+| `correlationId` | what the events of the message share, from the queue to the webhooks |
+| `maxAttempts` | the attempts in all (5 by default) |
+
+## What a job holds
+
+A job is JSON, checked when it is enqueued, so a bad address fails the caller,
+not the worker:
+
+- the fields are checked as `createMessage` checks them;
+- `context` must be JSON as it is: a `Date`, a `Map`, a class, `NaN` or a cycle is
+  refused with the path to it (`context.user.createdAt is a Date; pass an ISO
+  string`), so a template does not meet a string where it expected a date;
+- an attachment goes as its bytes (base64, 256 KiB in all by default) or as
+  `{ ref }`, which the worker's `resolveAttachment(ref, { job, attachment,
+  signal })` reads, with `fromPath` or `fromUrl` of
+  [`./attachments`](/messages/attachments). A job names no file or URL itself:
+  whoever can write to the store could;
+- the Message-ID and the Content-IDs are fixed, so every attempt sends the
+  same message;
+- a job is 256 KiB at most.
+
+A completed job is kept `dedupeWindowSeconds` (a day), the window in which an
+enqueue under its key is a duplicate, and a failed one `retainFailedSeconds` (a
+week), on every driver. Once a job is done with, the store drops its message
+(`retainData`, on the driver): `'failed'` by default keeps the data of the failed jobs only, for a
+retry by hand; `'all'` keeps every one, `'none'` none. The version and the hash
+of a job stay, so an enqueue again is still told a duplicate.
+
+A job is of version 1 (`v: 1`), and its fields are those of that version. A
+worker that meets a later version, or a field it does not know, gives the job
+back for a worker that reads it (`queue.unsupported_version`) instead of
+failing it for a hash it cannot recompute: during a rolling deploy, the jobs
+the new producers write wait for the new workers. A field is never added to
+version 1; a new field is a new version.
+
+## Signed jobs
+
+The hash of a job tells a job that changed in its store, but not one that was
+forged: whoever can write to Redis or MongoDB can recompute a SHA-256, and a
+worker would send their message from your domain, signed with your DKIM key.
+Give the queue `signingKeys`, and each job is signed with an HMAC-SHA256 (`kid`
+and `mac`); its workers send only jobs that one of the keys signed, and fail
+any other with `queue.signature_invalid`, unsent, logged at `error`:
+
+```js
+const queue = createMailQueue({
+  driver,
+  signingKeys: [{ id: '2026-10', secret: process.env.MAIL_JOB_KEY }], // 32 bytes at least
+});
+const worker = queue.createWorker({ transport }); // verifies with the queue's keys
+```
+
+The first key signs and each one verifies. To rotate, put the new key first,
+deploy the workers, then the producers, and drop the old key once no job it
+signed is left. A worker without keys checks the hash alone, so give every
+worker the keys before any producer.
+
+## Sealed jobs
+
+A job holds its message in clear: its addresses, its context (a link of a
+password reset among it) and its attachments, in Redis or MongoDB for as long
+as the job is kept, and in their backups. Give the queue a `codec`, and the
+store holds what it made of them:
+
+```js
+const { createCipheriv, createDecipheriv, randomBytes } = require('node:crypto');
+const key = Buffer.from(process.env.MAIL_DATA_KEY, 'base64'); // 32 bytes
+
+const codec = {
+  encode(text) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const sealed = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), sealed]).toString('base64');
+  },
+  decode(text) {
+    const bytes = Buffer.from(text, 'base64');
+    const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
+    decipher.setAuthTag(bytes.subarray(12, 28));
+    return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString();
+  },
+};
+const queue = createMailQueue({ driver, codec, signingKeys });
+```
+
+A sealed job keeps in clear only `v`, `hash` (a duplicate is still told by
+it), `enqueuedAt`, `correlationId`, `kid`, `mac` and `trace`; the rest is `enc`. Its workers
+take the queue's codec. A worker without it gives the job back, its attempts
+not spent, for a worker that can open it (`queue.codec_missing`); one whose
+codec throws (a key out of reach) retries it (`queue.codec_failed`), and a
+codec that throws an error with `retryable: false` fails it. Encryption is not a signature: a writer who
+can seal can still forge, so seal with `signingKeys` too.
+
+## Once per key
+
+The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the
+same message enqueued again is the same job (`duplicate: true`), and another
+message under the key is refused with `MailQueueError` `queue.key_reused`, its
+`jobIds` the jobs refused. `enqueueMany` refuses them only once every other
+job of the call is enqueued and told to the audit, and gives what those gave as
+the error's `answers`.
+The worker gives the message that id as its `idempotencyKey`, so
+[`IdempotencyTransport`](/transports/idempotency), with a store the workers
+share, and the providers that take a key (Resend, Lettermint, Brevo, Azure)
+dedupe it again. A worker that died mid-send leaves the key reserved, and the
+attempt again is of unknown delivery (`delivery_unknown`), not a second send.
+
+The rendering must then be the same for the same context: no `Date.now()` in a
+template, or an attempt again is refused as another message.
+
+With a transport that takes no idempotency key (SES, SMTP) and no
+`IdempotencyTransport`, give the worker `redelivered: 'delivery_unknown'`: a
+run again of an attempt whose run before died is then of unknown delivery
+(`queue.redelivered`), not a second send, unless the audit sink can tell
+(`has(id)`, as the memory and MongoDB sinks can) that the run before died
+before it submitted the message.
+
+The id of a job is a hash of its key, and it goes where addresses do not: into
+the audit, the logs, the provider's idempotency key and the Message-ID. A key
+is an id of what the message tells of (`reset-password:${resetRequest.id}`),
+never an address or a token: a SHA-256 of `welcome:ada@example.com` is found
+again by hashing the addresses one knows. `idSecret` (32 bytes at least)
+derives the id with an HMAC instead; it is the same on every producer and never
+rotated, as another secret makes other ids and the same message another job.
+
+The identifiers a job draws come from `generateId`, as everywhere in the
+library: its key when you give none, and its Message-ID and Content-IDs then.
+Those it derives, the same for the same key, are UUIDs of a hash: its id and,
+under a key of yours, its Message-ID and Content-IDs. `deriveId(kind, seed)`
+makes them your way; `seed` is a SHA-256 in hexadecimal of what they derive
+from (an HMAC under `idSecret` for the id of the job), and it must give the same
+identifier for the same seed, which the queue checks:
+
+```js
+const queue = createMailQueue({
+  driver,
+  generateId: () => ulid(), // drawn: new at each call
+  deriveId: (kind, seed) => (kind === 'job-id' ? `job_${seed.slice(0, 26)}` : `m${seed.slice(0, 32)}`),
+});
+```
+
+A generator such as `ulid()` does not fit `deriveId`: the same message enqueued
+again would get another id, and so be another job, sent twice.
+
+## What the queue does with an attempt
+
+| The attempt | The queue | The state |
+| --- | --- | --- |
+| accepted | done | `accepted` |
+| a failure of unknown delivery (a timeout after the request, a key in flight, the worker stopped mid-send) | failed for good, never sent blindly again | `delivery_unknown` |
+| a retryable failure, attempts left | retried after the backoff, never sooner than the provider's `Retry-After` | `queued` |
+| a retryable failure, the last attempt | failed (`queue.attempts_exhausted`) | `failed` |
+| a refused message (`validation`, `rejected`, `unsupported`) | failed at once | `failed` |
+| a failure of the operator (`auth`, `configuration`) | retried after `operatorDelayMilliseconds` (5 minutes) | `queued` |
+| a template missing or broken, no subject, no renderer | failed at once (`render.*`); a broken one's reason names the template and where it failed, its text (a helper's error, an excerpt, a value of the context) going to the log at `debug` only | `failed` |
+| an outage of the template loader (`TemplateLoadError`) or of `resolveAttachment`, a render that timed out | retried | `queued` |
+| a bug: a `TypeError` thrown by the transport | failed at once (`queue.thrown`), logged with its stack | `failed` |
+| a job past `expiresAt`, or whose retry would come after it | failed (`queue.expired`) | `failed` |
+| a job written by a later version of the worker, or sealed for a codec it lacks | given back, its attempts not spent, for a worker that reads it; failed once it expires or has waited a week | — |
+| the worker stops before the send | given back, its attempt not spent | — |
+| a job whose runs ended unsettled more than `maxRedeliveries` times (3): it kills or blocks its worker | failed before it renders (`queue.redelivery_exhausted`) | `delivery_unknown` |
+
+The backoff is exponential with full jitter: 30 seconds, doubled per attempt,
+an hour at most (`backoff`). A `Retry-After` is a minimum, with a little jitter
+over it, so that a rate limit does not bring every job back at once.
+`rateLimitScope: 'queue'` makes a rate limit pause the whole queue where the
+driver can. `classify({ receipt, job })` decides in the place of these rules
+(`'retry'`, `'fail'`, `'delivery_unknown'`, or `undefined` for the rules), and
+`checkJob(data, job)` refuses a job for good by throwing.
+`rateLimitScope: 'tenant'` makes a rate limit pause the jobs of the job's
+tenant alone, on the memory queue and the outbox; `resume()` of either ends a
+pause, of the queue or of a tenant (`{ tenantId }`), before its time. A
+`'queue'` pause suits one provider; with failover among several, let
+[`./breaker`](/transports/breaker) and [`./ratelimit`](/transports/ratelimit)
+take a provider out instead.
+
+## Tenants in turn
+
+Jobs go by priority, then time: a tenant who enqueues a million newsletters
+holds every other tenant's `normal` mail behind them. `fairness: 'tenant'`, on
+the memory queue and the outbox, takes a `high` job of any tenant first (a code
+of sign-in waits for no one), then the tenants in turn, a job of each, the jobs
+of no tenant as one more. It is exact within a process and close across them.
+Without it, a queue per stream (transactional and bulk, each with its own
+workers) keeps a campaign from holding a password reset. BullMQ shares a queue
+by tenant only in its Pro edition: use a queue per tenant or per stream there.
+
+**The queue retries; the transport should not.** Each attempt of a
+`RetryTransport` inside the worker holds the job and multiplies its attempts:
+give the providers `retries: 1` (they retry only what was provably not sent)
+and leave `RetryTransport` out.
+
+## The audit and the log
+
+The worker tells the [audit sink](/guide/audit) each state: `queued` at the
+enqueue (in the transaction of an outbox), `rendered`, `submitted` just before
+the send, then `accepted`, `failed` or `delivery_unknown`, and `queued` again
+for a retry. A sink that fails is a warning (`MAILER_AUDIT_FAILED`);
+`auditStrict: true` makes it retry the job before the send, so that no message
+goes unrecorded. Without a transaction, `queued` is told before the job is
+enqueued, so a strict sink that fails refuses the enqueue and nothing is
+enqueued, rather than a job enqueued and reported as failed. A driver that
+writes no transaction (BullMQ, the memory queue) refuses `{ transaction }` with
+a `TypeError` rather than ignore it; the outbox is `transactional`.
+
+Spans and metrics of the worker (`mailer.queue.jobs`, `mailer.queue.lag`,
+`mailer.queue.job.duration`, `mailer.queue.redeliveries`) come from
+[`instrumentHandler`](/transports/otel#the-worker-of-a-queue) of `./otel`,
+linked to the producer's trace that `traceContext` gives each job.
+
+`logger`, pino-like, hears what the queue does, never an address: the
+enqueues and the starts at `debug`, the sends at `info`, the retries,
+redeliveries and releases at `warn`, the failures at `error` with their code,
+category and reason.
+
+## Several processes
+
+A job is shared by every worker of its driver; the key store of
+`IdempotencyTransport` must be shared too (`createMongoIdempotencyStore`, or
+one on Redis), or a crash mid-send can be sent twice. The breaker and the rate limit of the chain are
+per process unless given a shared store (see
+[getting started](/guide/getting-started#several-processes)).
+
+## The memory queue and the polling driver
+
+`createMemoryQueue()` is a queue in memory for tests and a single process,
+with `list()`, `get(id)`, `drain()`, `wake()`, and `stats()`, `failed()` and
+`retryFailed(id)` as the outbox has them, and `now` and `sleep` for a
+clock of the tests. It is the polling driver over a source in memory:
+`createPollingDriver(source)` makes a driver of any `QueueSource`, a store that
+lends its jobs (`reserve`, `extend`, `ack`, `retry`, `fail`, `release`), such
+as an outbox in your database. It keeps the lease of a job while it runs, gives
+a job whose lease ran out to another worker as `redelivered`, and on `close()`
+waits for the jobs in flight, then aborts them. When the store does not answer
+the extensions of a lease, the run is aborted before the lease runs out
+(`QueueLeaseLostError`), so that another worker that takes the job does not
+send it beside this one. A source's `ack`, `retry`,
+`fail` and `release` are fenced by the token of the lease and give `false`
+when it was lost: the driver then logs `queue.settle_fenced` at `warn`, as
+another worker holds the job and what this run did may be done again.
+
+A source of your own is held to the same semantics as the memory queue and the
+MongoDB outbox: the order of priorities, leases, redelivery, fencing by the
+token, releases that spend no attempt, and the pause. The repository's
+`tests/helpers/queue/source-contract.js` is that contract as tests; copy it,
+and run it on your source (`createMemoryQueue().source` is one to compare).
+
+## Defaults
+
+What the queue, its worker and its drivers do when not told otherwise, in one
+place:
+
+| Option | Of | Default |
+| --- | --- | --- |
+| `namespace` | the queue | `'mail'` |
+| `maxAttempts` | the queue, a job | 5 |
+| `maxJobBytes`, `maxInlineAttachmentBytes` | the queue | 256 KiB each |
+| `backoff` | the worker | 30 seconds, doubled per attempt, an hour at most, full jitter |
+| `operatorDelayMilliseconds` | the worker | 5 minutes (`auth`, `configuration`, a job it cannot read yet) |
+| `maxRedeliveries` | the worker | 3 |
+| `redelivered` | the worker | `'send'` |
+| `rateLimitScope` | the worker | `'job'` |
+| `concurrency` | a worker | 1 |
+| `pollIntervalMilliseconds` | the memory queue, the outbox | 1 second |
+| `leaseMilliseconds` | the memory queue, the outbox | 1 minute, extended every third of it |
+| `timeoutMilliseconds` of `close()` | every driver | 30 seconds, then the jobs are aborted |
+| `dedupeWindowSeconds` | every driver | a day |
+| `retainFailedSeconds` | every driver | a week |
+| `retainData` | every driver | `'failed'` |
+| `fairness` | the memory queue, the outbox | `'none'` |
+| `clockSkewToleranceMilliseconds` | the outbox | 5 seconds |
+| `changeStream` | the outbox | `false` |
+| `maxJobs`, `retainFinished` | the memory queue | 100000, 10000 |
+| `priorities` | BullMQ | `high` 1, `normal` 2, `low` 3 |
+| `detectDuplicates` | BullMQ | `true` |
+| `leaseMs` | `IdempotencyTransport` | 10 minutes, longer than a lease, so a run that died is not sent again |
+| `renderTimeoutMilliseconds` | a template renderer | 30 seconds |
+
+## Codes
+
+The codes the queue, its drivers and its worker give: in the `failure` of a job
+and the `error` of its audit event, as the message of a log record, or as the
+code of a process warning. `tests/unit/codes.test.js` keeps this table and the
+code in step.
+
+<!-- codes:start -->
+
+| Code | Where | What |
+| --- | --- | --- |
+| `queue.invalid_job` | failure | the data of a job is not that of a mail job |
+| `queue.unsupported_version` | failure | written by a later version: given back, then failed after a week |
+| `queue.hash_mismatch` | failure | the job is not what was enqueued |
+| `queue.signature_invalid` | failure | not signed by a key of `signingKeys` |
+| `queue.codec_missing` | failure | sealed, and the worker has no codec: given back, then failed after a week |
+| `queue.codec_failed` | failure | the codec could not open it |
+| `queue.key_reused` | thrown | a key enqueued before for another message |
+| `queue.refused` | failure | `checkJob` threw |
+| `queue.expired` | failure | past `expiresAt`, or its retry would be |
+| `queue.attempts_exhausted` | failure | a retryable failure on the last attempt |
+| `queue.redelivery_exhausted` | failure | its runs ended unsettled more than `maxRedeliveries` times |
+| `queue.redelivered` | failure | a run again after a run that may have sent it (`redelivered: 'delivery_unknown'`) |
+| `queue.attachment_unresolved` | failure | an attachment by reference, and no `resolveAttachment` |
+| `queue.attachment_failed` | failure | `resolveAttachment` threw or gave no content |
+| `queue.invalid_message` | failure | the job does not make a message |
+| `queue.invalid_receipt` | failure | the transport gave no receipt |
+| `queue.aborted` | failure | the worker stopped while the message was sent |
+| `delivery_unknown` | failure | the send may have gone (a timeout after the request, a key in flight) |
+| `queue.thrown` | failure | a bug of the transport or of the worker |
+| `queue.handler_threw` | failure | the handler of a driver threw |
+| `queue.invalid_outcome` | failure | the handler gave no outcome |
+| `queue.lost` | failure | BullMQ gave the job up itself (stalled too often) |
+| `queue.released` | failure | a release without a token, a retry on BullMQ |
+| `render.no_renderer` | failure | a template job, and the worker has no renderer |
+| `render.no_subject` | failure | neither the template nor the job gives a subject |
+| `render.failed` | failure | the template failed to render or was not found |
+| `audit.failed` | failure | a strict sink failed before the send: retried |
+| `queue.enqueued` | log | a job enqueued |
+| `queue.duplicate` | log | a job enqueued again under its key |
+| `queue.job.started` | log | a run starts |
+| `queue.job.completed` | log | a run accepted |
+| `queue.job.retrying` | log | a run to be retried |
+| `queue.job.released` | log | a run given back, its attempt not spent |
+| `queue.job.failed` | log | a run failed for good |
+| `queue.job.redelivered` | log | a run again of an attempt whose run died |
+| `queue.render.failed` | log | the text of a failed render, at `debug` |
+| `queue.worker.error` | log | what escaped the steps of the worker |
+| `queue.audit.failed` | log | the audit sink failed |
+| `queue.lease.extend_failed` | log | the store did not extend a lease |
+| `queue.lease.lost` | log | a run lost its lease, its result dropped |
+| `queue.settle_fenced` | log | a settle the token fenced off: the job may run twice |
+| `queue.settle_failed` | log | the store failed a settle: the lease will run out |
+| `queue.reserve_failed` | log | the store failed a reserve |
+| `queue.close_abandoned` | log | jobs still running past twice the timeout of `close()` |
+| `queue.change_stream_failed` | log | the change stream failed, to be opened again |
+| `queue.job.lost` | log | BullMQ failed a job itself |
+| `queue.job.stalled` | log | BullMQ found a job stalled |
+| `MAILER_AUDIT_FAILED` | warning | the audit sink failed |
+| `MAILER_QUEUE_HANDLER_THREW` | warning | the handler of a driver threw |
+| `MAILER_QUEUE_WORKER_THREW` | warning | an error escaped the steps of the worker |
+| `MAILER_QUEUE_RETAIN_FAILED` | warning | BullMQ refused to drop the data of a finished job |
+
+<!-- codes:end -->

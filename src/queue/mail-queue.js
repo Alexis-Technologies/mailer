@@ -1,0 +1,256 @@
+// Not ported: the mail queue: messages enqueued as jobs of a driver the
+// application chooses (BullMQ, a store's outbox, memory), and workers that
+// send them through a transport.
+
+const { warnThrown } = require('../internal/callback.js');
+const { createLog } = require('../internal/log.js');
+const { checkOptionalFunction } = require('../internal/options.js');
+const { toUuid } = require('../internal/uuid.js');
+const { checkCodec, sealMailJob } = require('./envelope.js');
+const { MailQueueError } = require('./errors.js');
+const { createMailJobHandler } = require('./handler.js');
+const { checkIdSecret, prepareMailJob } = require('./job.js');
+const { keyringOf } = require('./signing.js');
+
+// A W3C traceparent, as `traceContext` gives it.
+const TRACEPARENT = /^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/;
+
+const checkDriver = (driver) => {
+  if (typeof driver?.enqueue !== 'function' || typeof driver?.consume !== 'function') {
+    throw new TypeError('A mail queue needs a driver, with enqueue() and consume().');
+  }
+  return driver;
+};
+
+// The audit event of a first enqueue.
+const queuedEventOf = (data, request) => {
+  const event = {
+    id: toUuid(`${request.id}\u00000\u0000queued`),
+    state: 'queued',
+    at: new Date(request.enqueuedAt).toISOString(),
+    source: 'producer',
+    correlationId: data.correlationId,
+    jobId: request.id,
+    attempt: 0,
+    payloadHash: data.hash,
+    messageId: data.messageId,
+    priority: data.priority,
+  };
+  if (data.tenantId !== undefined) event.tenantId = data.tenantId;
+  if (data.kind === 'template') event.template = data.template;
+  if (Array.isArray(data.tags)) event.tags = data.tags;
+  return event;
+};
+
+// The refusal of keys used before for other messages, with what the other
+// jobs of the call gave.
+const keyReused = (jobIds, answers) =>
+  Object.assign(
+    new MailQueueError(
+      'queue.key_reused',
+      jobIds.length === 1
+        ? `The key of job ${jobIds[0]} was used before for another message.`
+        : `The keys of ${jobIds.length} jobs were used before for other messages: ${jobIds.join(', ')}.`,
+    ),
+    { jobIds, answers },
+  );
+
+// Tells the sink of a first enqueue. Without a transaction it is told before
+// the job is enqueued, so that a strict sink that fails refuses the enqueue
+// rather than reports a job enqueued as failed, enqueued again on a retry;
+// the event is written once by its id, a duplicate's with it.
+const appendQueued = async (queue, jobs, transaction) => {
+  if (queue.audit === undefined || jobs.length === 0) return;
+  const events = [];
+  for (const { data, request } of jobs) events.push(queuedEventOf(data, request));
+  try {
+    // A batch in one write where the sink can, such as one bulkWrite.
+    if (events.length > 1 && typeof queue.audit.appendMany === 'function') {
+      await queue.audit.appendMany(events, { transaction });
+    } else {
+      for (const event of events) await queue.audit.append(event, { transaction });
+    }
+  } catch (error) {
+    if (queue.auditStrict) throw error;
+    warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
+  }
+};
+
+// The transaction of an enqueue, refused by a driver that writes none: the
+// job would not go with the application's writes, as the caller believes.
+const transactionOf = (driver, enqueueOptions) => {
+  const { transaction } = enqueueOptions;
+  if (transaction === undefined || transaction === null) return undefined;
+  if (driver.transactional !== true) {
+    throw new TypeError(
+      `The ${driver.id} driver writes no transaction: the job would not go with yours.`,
+    );
+  }
+  return transaction;
+};
+
+// What an enqueue gives: a job enqueued again is a duplicate, and one
+// enqueued again for another message is refused.
+const answerOf = (queue, prepared, result) => {
+  const { data, request } = prepared;
+  const answer = { id: request.id, correlationId: data.correlationId, messageId: data.messageId };
+  if (result?.duplicate === true) {
+    if (result.existingHash !== undefined && result.existingHash !== request.hash) {
+      throw keyReused([request.id], []);
+    }
+    queue.log.write('debug', () => ({ jobId: request.id }), 'queue.duplicate');
+    return { ...answer, duplicate: true };
+  }
+  queue.log.write(
+    'debug',
+    () => ({ jobId: request.id, priority: request.priority, template: data.template }),
+    'queue.enqueued',
+  );
+  return { ...answer, duplicate: result?.duplicate };
+};
+
+// The options of a queue, checked: a bad one fails the queue, not an enqueue.
+const createQueueConfig = (options) => {
+  const driver = checkDriver(options.driver);
+  const { audit } = options;
+  if (audit !== undefined && typeof audit?.append !== 'function') {
+    throw new TypeError('The audit sink of a mail queue must have append().');
+  }
+  const auditStrict = options.auditStrict ?? false;
+  if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
+  keyringOf(options.signingKeys);
+  checkIdSecret(options.idSecret);
+  const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
+  const jobOptions = {
+    namespace: options.namespace,
+    maxAttempts: options.maxAttempts,
+    maxJobBytes: options.maxJobBytes,
+    maxInlineAttachmentBytes: options.maxInlineAttachmentBytes,
+    generateId: options.generateId,
+    signingKeys: options.signingKeys,
+    idSecret: options.idSecret,
+    deriveId: checkOptionalFunction(options.deriveId, 'deriveId'),
+    now,
+  };
+  for (const name of Object.keys(jobOptions)) {
+    if (jobOptions[name] === undefined) delete jobOptions[name];
+  }
+  return {
+    driver,
+    audit,
+    auditStrict,
+    traceContext: checkOptionalFunction(options.traceContext, 'traceContext'),
+    codec: checkCodec(options.codec),
+    now,
+    jobOptions,
+    log: createLog(options.logger, { component: 'queue', queue: driver.id }),
+  };
+};
+
+// The job of a message: its trace, and its data sealed when the queue has a
+// codec; the driver stores the sealed data, the audit reads the clear.
+const prepareJob = async (queue, input) => {
+  const prepared = prepareMailJob(input, queue.jobOptions);
+  // The producer's trace, which the span of the worker links to; outside the
+  // hash and the signature, as it differs for the same message.
+  const trace = queue.traceContext?.();
+  if (typeof trace === 'string' && TRACEPARENT.test(trace)) prepared.data.trace = trace;
+  if (queue.codec === undefined) return prepared;
+  const data = await sealMailJob(prepared.data, queue.codec);
+  return { data: prepared.data, request: { ...prepared.request, data } };
+};
+
+/**
+ * Makes a mail queue over a driver.
+ *
+ * @param options `driver`; `audit` and `auditStrict`; `namespace` ('mail'),
+ * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
+ * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
+ * and which its workers verify; `codec`, which seals the fields of each job
+ * in its store and opens them in its workers; `idSecret`, under which the id
+ * of a job is derived from its key; `deriveId(kind, seed)`, which makes the
+ * identifiers a job derives of their hash; `traceContext`, which gives the W3C
+ * traceparent of the producer each job carries; `logger`, `generateId`,
+ * `now`.
+ * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
+ * @throws {TypeError} If an option is invalid.
+ */
+const createMailQueue = (options = {}) => {
+  const queue = createQueueConfig(options);
+  const { driver, codec } = queue;
+  return {
+    driver,
+    async enqueue(input, enqueueOptions = {}) {
+      enqueueOptions.signal?.throwIfAborted();
+      const transaction = transactionOf(driver, enqueueOptions);
+      const prepared = await prepareJob(queue, input);
+      if (transaction === undefined) await appendQueued(queue, [prepared], undefined);
+      const answer = answerOf(
+        queue,
+        prepared,
+        await driver.enqueue(prepared.request, enqueueOptions),
+      );
+      // In the transaction of the store, a first enqueue is told with it.
+      if (transaction !== undefined && answer.duplicate !== true) {
+        await appendQueued(queue, [prepared], transaction);
+      }
+      return answer;
+    },
+    async enqueueMany(inputs, enqueueOptions = {}) {
+      enqueueOptions.signal?.throwIfAborted();
+      const transaction = transactionOf(driver, enqueueOptions);
+      const prepared = [];
+      for (const input of inputs) prepared.push(await prepareJob(queue, input));
+      if (transaction === undefined) await appendQueued(queue, prepared, undefined);
+      let results;
+      if (typeof driver.enqueueMany === 'function') {
+        const requests = [];
+        for (const job of prepared) requests.push(job.request);
+        results = await driver.enqueueMany(requests, enqueueOptions);
+      } else {
+        results = [];
+        for (const job of prepared) results.push(await driver.enqueue(job.request, enqueueOptions));
+      }
+      // Every job the driver took is told to the sink, a key used before for
+      // another message refused once all are.
+      const answers = [];
+      const reused = [];
+      const firsts = [];
+      for (let index = 0; index < prepared.length; index++) {
+        try {
+          const answer = answerOf(queue, prepared[index], results[index]);
+          answers.push(answer);
+          if (answer.duplicate !== true) firsts.push(prepared[index]);
+        } catch (error) {
+          if (error?.code !== 'queue.key_reused') throw error;
+          reused.push(prepared[index].request.id);
+        }
+      }
+      if (transaction !== undefined) await appendQueued(queue, firsts, transaction);
+      if (reused.length > 0) throw keyReused(reused, answers);
+      return answers;
+    },
+    createWorker(workerOptions = {}) {
+      const handler = createMailJobHandler({
+        audit: queue.audit,
+        auditStrict: queue.auditStrict,
+        logger: options.logger,
+        now: queue.now,
+        signingKeys: options.signingKeys,
+        codec,
+        ...workerOptions,
+      });
+      const consumer = driver.consume(handler, {
+        concurrency: workerOptions.concurrency,
+        signal: workerOptions.signal,
+        audit: workerOptions.audit ?? queue.audit,
+      });
+      return {
+        close: (closeOptions) => consumer.close(closeOptions),
+        [Symbol.asyncDispose]: () => consumer.close(),
+      };
+    },
+  };
+};
+
+module.exports = { createMailQueue };

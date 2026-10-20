@@ -339,9 +339,9 @@
           "text": "`signal` + timeout over the body"
         },
         "queue": {
-          "mark": "🔜",
-          "text": "MongoDB outbox, BullMQ driver",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "✅",
+          "text": "MongoDB outbox (transactional), BullMQ driver, memory queue",
+          "note": "Permanent failures fail at once, `Retry-After` is a minimum, and a delivery of unknown outcome is never sent blindly again; in MongoDB, a job is written in the transaction of its cause. Jobs are signed (HMAC) and may be sealed, their message dropped once done with; tenants take turns, and a job that kills its worker is given up."
         },
         "attachments": {
           "mark": "✅",
@@ -373,8 +373,9 @@
           "text": "RFC 8058 one-click, DKIM-signed"
         },
         "templates": {
-          "mark": "⚠️",
-          "text": "`Renderer` interface, no engine by design"
+          "mark": "✅",
+          "text": "9 engines passed in: EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email",
+          "note": "Names, never paths; locales, layouts, front-matter subjects, CSS inlined without remote fetches, text derived."
         },
         "reactEmail": {
           "mark": "✅",
@@ -385,8 +386,8 @@
           "text": "native: Resend, Postmark, Mailjet, Mailtrap, JMAP; concurrency elsewhere"
         },
         "scheduled": {
-          "mark": "⚠️",
-          "text": "native in 8 providers; queue delay planned",
+          "mark": "✅",
+          "text": "queue delay; native in 8 providers",
           "note": "A transport that cannot schedule refuses the message before sending it, rather than sending it at once."
         },
         "tags": {
@@ -399,7 +400,7 @@
         },
         "idempotency": {
           "mark": "✅",
-          "text": "decorator with reserved keys + 5 providers"
+          "text": "decorator with reserved keys, a MongoDB store + 5 providers"
         },
         "dkim": {
           "mark": "✅",
@@ -465,7 +466,7 @@
         },
         "otel": {
           "mark": "✅",
-          "text": "decorator: spans + metrics"
+          "text": "decorator: spans + metrics, and those of the queue's worker"
         },
         "hooks": {
           "mark": "✅",
@@ -476,9 +477,9 @@
           "text": "`./mock`"
         },
         "auditLog": {
-          "mark": "🔜",
-          "text": "append-only, crypto-shredding",
-          "note": "On the [roadmap](/guide/why#the-plan) of the reliability layer: designed, with no code yet."
+          "mark": "⚠️",
+          "text": "state model + sinks, MongoDB among them; crypto-shredding next",
+          "note": "Each state of a message, from the queue to the webhooks, one event per change, written once by its id. The keyed HMAC and encrypted recipients are on the [roadmap](/guide/why#the-plan)."
         },
         "types": {
           "mark": "✅",
@@ -494,13 +495,13 @@
           "text": "MIT"
         },
         "version": {
-          "text": "1.1.0"
+          "text": "1.2.0"
         },
         "lastCommit": {
           "text": "2026-10 (this release)"
         },
         "tests": {
-          "text": "167 / ~2340"
+          "text": "183 / ~2690"
         },
         "maintainer": {
           "text": "1 author, Alexis Technologies"

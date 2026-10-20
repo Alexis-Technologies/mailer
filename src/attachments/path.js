@@ -13,16 +13,9 @@
 
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { isWithin } = require('../internal/path.js');
 const { checkMaxBytes, createAttachment } = require('./attachment.js');
 const { typeOfFilename } = require('./mime-types.js');
-
-// Whether a resolved path is the directory or under it; a name such as
-// `..data` under it is, `../data` is not.
-const isWithin = (file, directory) => {
-  const relative = path.relative(directory, file);
-  if (path.isAbsolute(relative)) return false;
-  return relative !== '..' && !relative.startsWith(`..${path.sep}`);
-};
 
 const tooLong = (filePath, maxBytes) =>
   new RangeError(`${JSON.stringify(filePath)} holds more than ${maxBytes} bytes.`);

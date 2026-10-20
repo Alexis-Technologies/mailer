@@ -423,7 +423,9 @@ const transport = new SmtpTransport({ host: 'smtp.example.com', generateId });
 ```
 
 `composeMessage()` of `./mime` takes `generateId` in its options too, and every
-transport in its configuration.
+transport in its configuration. A [queue](/guide/queue#once-per-key) derives
+the id of a job, and the Message-ID of a job under a key, from that key rather
+than drawing it, so that the same key is the same job: `deriveId` makes those.
 
 ### Dropping an inherited header
 

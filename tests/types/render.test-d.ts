@@ -4,6 +4,8 @@ import {
   createReactEmailRenderer,
   htmlToText,
   renderContent,
+  renderFields,
+  type RenderedFields,
   type Renderer,
 } from '../../src/render/index.js';
 
@@ -25,3 +27,9 @@ expectType<Promise<MessageContent>>(renderContent(upper, 'x', { autoText: false 
 expectError(renderContent(upper, 42));
 expectType<string>(htmlToText('<p>x</p>'));
 expectError(createReactEmailRenderer({}));
+const titled: Renderer<string> = { render: (name) => ({ html: `<p>${name}</p>`, subject: name }) };
+const fields = await renderFields(titled, 'x');
+expectType<RenderedFields>(fields);
+expectType<string | undefined>(fields.subject);
+expectType<MessageContent>(fields.content);
+expectError(renderFields(titled, 42));

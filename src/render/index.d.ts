@@ -9,6 +9,12 @@ import type { MessageContent } from '../../index.js';
 export interface RenderOutput {
   readonly html?: string;
   readonly text?: string;
+  /**
+   * The subject of the message, when the template has one, as those of
+   * `./templates` do. {@link renderContent} leaves it out of the content;
+   * {@link renderFields} gives it.
+   */
+  readonly subject?: string;
 }
 
 /**
@@ -49,6 +55,34 @@ export declare function renderContent<TInput>(
   input: TInput,
   options?: RenderContentOptions,
 ): Promise<MessageContent>;
+
+/**
+ * What {@link renderFields} gives: the subject and the content of a message.
+ */
+export interface RenderedFields {
+  /** The subject the renderer gave; undefined when it gave none. */
+  readonly subject?: string;
+  readonly content: MessageContent;
+}
+
+/**
+ * Renders the subject and the content of a message: the content as
+ * {@link renderContent} renders it, and the subject the renderer gave with it.
+ *
+ * @example
+ * ```js
+ * const { subject, content } = await renderFields(templates, {
+ *   template: 'welcome', context: { name: 'Ada' },
+ * });
+ * const message = createMessage({ from, to, subject, content });
+ * ```
+ * @throws {TypeError} As renderContent does, or if the subject is not a string.
+ */
+export declare function renderFields<TInput>(
+  renderer: Renderer<TInput>,
+  input: TInput,
+  options?: RenderContentOptions,
+): Promise<RenderedFields>;
 
 /**
  * The options `render` of `@react-email/render` takes.

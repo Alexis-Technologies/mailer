@@ -3,6 +3,7 @@
   "./mime": 7.5,
   "./attachments": 4.5,
   "./render": 3,
+  "./templates": 16,
   "./webhooks": 15.5,
   "./smtp": 23.5,
   "./sendmail": 12,
@@ -28,11 +29,15 @@
   "./pool": 3.5,
   "./retry": 3.5,
   "./mock": 2,
-  "./otel": 5.5,
+  "./otel": 6.5,
   "./logger": 3,
   "./breaker": 3.5,
   "./ratelimit": 4,
   "./idempotency": 4.5,
   "./hooks": 3,
-  "./tee": 3.5
+  "./tee": 3.5,
+  "./audit": 2,
+  "./queue": 19.5,
+  "./bullmq": 4.5,
+  "./mongodb": 7.5
 }

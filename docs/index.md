@@ -7,7 +7,7 @@ titleTemplate: Email for Node.js, with a reliability layer
 hero:
   name: mailer
   text: Email for Node.js, with a reliability layer
-  tagline: SMTP, sendmail, MIME and DKIM of its own, eighteen HTTP providers and JMAP, with failover, retries, rate limits and idempotency around them, and verified webhooks into one model of delivery events. Zero dependencies. Next on top, a persistent queue and an audit log.
+  tagline: SMTP, sendmail, MIME and DKIM of its own, eighteen HTTP providers and JMAP, with failover, retries, rate limits and idempotency around them, and verified webhooks into one model of delivery events. Zero dependencies. On top, a persistent queue with templates of your engine and an audit of every state.
   image:
     src: /logo-mark.svg
     alt: mailer
@@ -45,14 +45,14 @@ features:
     linkText: Pool, retry, breaker
   - icon: 🪶
     title: Zero dependencies
-    details: "Built on node:* and fetch. The OpenTelemetry providers, the logger, React Email's render and, later, the queue driver come from your application. Node.js 22+, tested on Bun and Deno, CommonJS with ESM imports, hand-written types."
+    details: "Built on node:* and fetch. The OpenTelemetry providers, the logger, React Email's render, your template engine and BullMQ come from your application. Node.js 22+, tested on Bun and Deno, CommonJS with ESM imports, hand-written types."
     link: /api/exports
     linkText: API
   - icon: 🧾
-    title: Delivery events, then the reliability layer
-    details: "The webhooks of fifteen providers, each verified before it is read, give one model of delivery events. In design: a persistent queue and outbox, an append-only audit log and suppression. None of the fourteen libraries compared has the three."
-    link: /guide/webhooks
-    linkText: Webhooks and events
+    title: The reliability layer
+    details: "A queue on BullMQ or a store of yours, whose workers render your templates, fail a permanent failure at once and retry a temporary one after Retry-After; the webhooks of fifteen providers in one model of delivery events; an audit of every state. None of the fourteen libraries compared has them."
+    link: /guide/queue
+    linkText: The queue
 ---
 
 ::: tip Status
@@ -60,8 +60,9 @@ The transport layer is here, ported from [upyo](https://github.com/dahlia/upyo) 
 what [nodemailer](https://github.com/nodemailer/nodemailer),
 [unemail](https://github.com/productdevbook/unemail) and
 [sently](https://github.com/omqkhafi/sently) did better ported in 1.1: one package, with a subpath
-per transport and decorator. Delivery events are here too; the queue and the audit log are being
-designed. See [Why @alexify/mailer?](/guide/why) for the plan.
+per transport and decorator. Delivery events are here too, and, from 1.2, the
+[queue](/guide/queue), [templates](/messages/templates) and the [audit](/guide/audit). See
+[Why @alexify/mailer?](/guide/why) for the plan.
 :::
 
 ## A quick look

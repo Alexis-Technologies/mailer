@@ -9,6 +9,7 @@ const {
   createReactEmailRenderer,
   htmlToText,
   renderContent,
+  renderFields,
 } = require('../../src/render/index.js');
 
 const h = React.createElement;
@@ -193,6 +194,34 @@ test('Render: renderContent derives the text, or keeps the one given', async () 
   await assert.rejects(renderContent({ render: () => undefined }), /neither html nor text/);
   await assert.rejects(renderContent({ render: () => ({ html: 1 }) }), /as strings/);
   await assert.rejects(renderContent({ render: () => ({ html: '', text: 2 }) }), /as strings/);
+});
+
+test('Render: renderFields gives the subject beside the content', async () => {
+  const titled = {
+    render: ({ name }) => ({ html: `<p>Hi ${name}</p>`, subject: `Welcome, ${name}` }),
+  };
+  assert.deepStrictEqual(await renderFields(titled, { name: 'Ada' }), {
+    subject: 'Welcome, Ada',
+    content: { html: '<p>Hi Ada</p>', text: 'Hi Ada' },
+  });
+  assert.deepStrictEqual(await renderFields(titled, { name: 'Ada' }, { autoText: false }), {
+    subject: 'Welcome, Ada',
+    content: { html: '<p>Hi Ada</p>' },
+  });
+  // A renderer without a subject gives none, and renderContent leaves it out.
+  const plain = { render: () => ({ text: 'plain' }) };
+  assert.deepStrictEqual(await renderFields(plain), { content: { text: 'plain' } });
+  assert.deepStrictEqual(await renderContent(titled, { name: 'Ada' }), {
+    html: '<p>Hi Ada</p>',
+    text: 'Hi Ada',
+  });
+  await assert.rejects(renderFields({}, 'x'), /renderer must have a render method/);
+  await assert.rejects(renderFields(plain, 'x', { autoText: 1 }), /autoText must be a boolean/);
+  await assert.rejects(
+    renderFields({ render: () => ({ text: 'x', subject: 1 }) }),
+    /subject as a string/,
+  );
+  await assert.rejects(renderFields({ render: () => undefined }), /neither html nor text/);
 });
 
 test('Render: the React Email renderer runs on @react-email/render', async () => {

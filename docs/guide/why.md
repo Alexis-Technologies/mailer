@@ -3,8 +3,9 @@
 ::: tip Status
 Version 1.0 is the transport layer, ported from [upyo](https://github.com/dahlia/upyo) 0.7.0, and
 1.1 adds what nodemailer, unemail and sently did better, delivery events and the decorators of a
-closed loop. The queue and the audit log are being designed: the direction below is settled, their
-API is not.
+closed loop; 1.2 adds the [queue](/guide/queue), on BullMQ or a
+[MongoDB outbox](/guide/outbox), [templates by name](/messages/templates) and the
+[audit](/guide/audit) of the states of a message. Suppression is next.
 :::
 
 ## Two parts
@@ -19,8 +20,9 @@ of two parts:
    signing, Amazon SES v2 (signed with SigV4, without the AWS SDK) and seventeen more HTTP
    providers on `fetch`, JMAP, and decorators for failover, retries, telemetry and logs.
 2. **A reliability layer on top of it,** in part here. One model of delivery events read from
-   verified webhooks, idempotency keys, a circuit breaker and rate limits came in 1.1; a persistent
-   queue and outbox, an append-only audit log and suppression are being designed.
+   verified webhooks, idempotency keys, a circuit breaker and rate limits came in 1.1; the queue
+   with its BullMQ driver and MongoDB outbox, templates and the audit of states in 1.2; the
+   crypto-shredding of the audit and suppression are next.
 
 ## The gap it fills
 

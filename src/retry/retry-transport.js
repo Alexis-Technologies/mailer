@@ -1,39 +1,20 @@
 // Ported from upyo v0.7.0 (packages/retry/src/retry-transport.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const {
-  classifyReceiptError,
-  createFailedReceipt,
-  createReceiptError,
-} = require('../core/receipt.js');
+const { classifyReceiptError } = require('../core/receipt.js');
 const { combineSignals } = require('../core/abort-signal.js');
 const { pinMessageId } = require('../core/message-id.js');
 const { createLog } = require('../internal/log.js');
 const { createRetryConfig } = require('./config.js');
 const { abortReason } = require('../internal/sleep.js');
-const {
-  disposeOf,
-  messageOf,
-  refuseUnlessRaw,
-  verifyWrapped,
-} = require('../internal/decorator.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 const { iteratorOf } = require('../internal/iterate.js');
+const { computeBackoff, isReceiptError, retryAfterOf } = require('../internal/backoff.js');
+const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 
 /**
  * Transport decorator that retries transient delivery failures.
  */
-// The built-in errors of a bug in code, such as reading a property of
-// undefined, as opposed to a failure of delivery.  A network failure is also
-// a TypeError under fetch ("fetch failed"), but its causes classify it.
-const PROGRAMMER_ERRORS = [TypeError, RangeError, ReferenceError, SyntaxError];
-
-const isProgrammerError = (error) => {
-  for (const type of PROGRAMMER_ERRORS) {
-    if (error instanceof type) return classifyReceiptError(error).category === 'unknown';
-  }
-  return false;
-};
-
 class RetryTransport {
   id;
 
@@ -292,7 +273,7 @@ class RetryTransport {
   // again sooner, where it would most likely refuse again: the failure goes
   // back with its delay, for the caller or a queue to schedule.
   isRetryAfterBeyondMaxDelay(failure) {
-    const retryAfterMilliseconds = getRetryAfterMilliseconds(failure);
+    const retryAfterMilliseconds = retryAfterOf(failure);
     return (
       Number.isFinite(retryAfterMilliseconds) &&
       retryAfterMilliseconds > this.config.backoff.maxDelayMilliseconds
@@ -300,7 +281,7 @@ class RetryTransport {
   }
 
   calculateDelay(attempt, failure) {
-    const retryAfterMilliseconds = getRetryAfterMilliseconds(failure);
+    const retryAfterMilliseconds = retryAfterOf(failure);
     const cappedRetryAfter =
       retryAfterMilliseconds == null ||
       !Number.isFinite(retryAfterMilliseconds) ||
@@ -309,18 +290,7 @@ class RetryTransport {
         : Math.min(retryAfterMilliseconds, this.config.backoff.maxDelayMilliseconds);
 
     if (cappedRetryAfter != null) return cappedRetryAfter;
-
-    const computedDelay = Math.min(
-      this.config.backoff.baseDelayMilliseconds * Math.pow(this.config.backoff.factor, attempt - 1),
-      this.config.backoff.maxDelayMilliseconds,
-    );
-
-    if (this.config.jitter === false || this.config.jitter === 'none') {
-      return computedDelay;
-    }
-
-    const random = this.config.random;
-    return Math.floor(random() * computedDelay);
+    return computeBackoff(attempt, this.config.backoff, this.config.jitter, this.config.random);
   }
 
   waitBeforeRetry(context, signal, onRetry) {
@@ -355,35 +325,7 @@ class RetryTransport {
   }
 
   createThrownFailure(error, attempts) {
-    const receiptError = toReceiptError(error);
-    if (receiptError != null) {
-      return createFailedReceipt(receiptError, {
-        provider: receiptError.provider ?? this.id,
-        attempts,
-      });
-    }
-
-    const message = messageOf(error);
-    const classification =
-      error instanceof Error && error.name === 'AbortError'
-        ? {
-            category: 'timeout',
-            code: 'timeout',
-            retryable: true,
-          }
-        : classifyReceiptError(error);
-    return createFailedReceipt(
-      createReceiptError(message, {
-        provider: this.id,
-        category: classification.category,
-        code: classification.code,
-        retryable: classification.retryable,
-      }),
-      {
-        provider: this.id,
-        attempts,
-      },
-    );
+    return receiptOfThrown(error, this.id, attempts);
   }
 }
 
@@ -397,16 +339,6 @@ class RetryTransport {
  */
 const createRetryTransport = (baseTransport, config = {}) => {
   return new RetryTransport(baseTransport, config);
-};
-
-const getRetryAfterMilliseconds = (failure) => {
-  if (failure == null) return undefined;
-  if (isReceiptError(failure)) return failure.retryAfterMilliseconds;
-  if (failure.errors == null) return undefined;
-  for (const error of failure.errors) {
-    if (error.retryAfterMilliseconds != null) return error.retryAfterMilliseconds;
-  }
-  return undefined;
 };
 
 /**
@@ -591,17 +523,6 @@ const raceWithAbort = (promise, signal) => {
 
 const toReceiptError = (value) => {
   return isReceiptError(value) ? value : undefined;
-};
-
-const isReceiptError = (value) => {
-  return (
-    typeof value === 'object' &&
-    value != null &&
-    typeof value.message === 'string' &&
-    typeof value.code === 'string' &&
-    typeof value.category === 'string' &&
-    typeof value.retryable === 'boolean'
-  );
 };
 
 module.exports = { RetryTransport, createRetryTransport };

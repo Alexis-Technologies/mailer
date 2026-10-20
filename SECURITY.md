@@ -28,9 +28,9 @@ timeline once the report is confirmed.
 
 ## Threat model
 
-The transport layer, the delivery events and their webhooks are built; the queue and the audit
-log are being designed, and this section will be completed with them. The principles all of it is
-designed around:
+The transport layer, the delivery events and their webhooks, the queue with its drivers,
+templates and the audit of states are built; suppression and the crypto-shredding of the audit
+are next. The principles all of it is designed around:
 
 - **Message content is untrusted data.** Addresses, display names, subjects, headers, file names
   and bodies can come from users. A CR or LF in any header field is rejected rather than encoded
@@ -70,6 +70,30 @@ designed around:
   match, compared in constant time; within a window of time where a time is signed, and once by
   its id. An SNS message (SES, Scaleway) is taken only from a listed topic, signed with the
   certificate of an SNS host or of the trust chain the application pins.
+- **A job of the queue is untrusted when it is read.** Whoever can write to its store (Redis,
+  MongoDB) could have written it, so the worker checks its shape and its hash before it acts on
+  it, and `checkJob` can refuse a sender. The hash, a SHA-256, tells a job that changed but not
+  one that was forged, since a writer can recompute it: with `signingKeys`, each job carries an
+  HMAC-SHA256 under the application's key, and the worker sends no job that one of its keys did
+  not sign. A job names no file or URL: an attachment is its bytes
+  or a reference that the application's `resolveAttachment` reads. A job's data is stored as it is,
+  a token of a reset link among it, unless a `codec` of the application's seals it (an envelope
+  encryption: the store then holds the version, the hash and the signature in clear and the
+  rest encrypted); once a job is done with, every driver drops its message (`retainData`, the
+  failed jobs' kept for a retry by hand), so a reset link does not wait in the store and its
+  backups. The id of a job is a hash of its key, which goes into the audit and the logs: a key
+  names what the message tells of, never an address or a secret, and `idSecret` derives the id
+  with an HMAC so that it cannot be traced back. The store is the application's to restrict
+  (Redis ACLs and TLS, MongoDB roles).
+- **Templates are named, never pathed.** A template, include, partial or layout is read only
+  through the loader of the renderer, by a name with no `..` or leading `/`; the file loader
+  compares real paths, so a symbolic link cannot lead out of its directory. No engine reads a file
+  itself, MJML's `mj-include` is off unless asked for, output is escaped by default (Liquid
+  included), and the CSS inliner fetches no remote stylesheet. Templates are code: EJS, Eta, Pug
+  and Nunjucks run JavaScript, so templates that tenants write belong to Liquid, Handlebars or
+  Mustache.
+- **The audit holds no recipient.** An event names its message by `correlationId`, with the
+  hashes of its job and message; the text of an error in it has its addresses redacted.
 - **The audit log can forget a person** (planned). Recipients are stored as a keyed hash and an
   encrypted block whose key can be destroyed, so a request to erase someone's data does not require
   editing an append-only log.

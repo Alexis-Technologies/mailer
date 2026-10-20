@@ -2,6 +2,6 @@
 
 const { htmlToText } = require('./html-to-text.js');
 const { createReactEmailRenderer } = require('./react-email.js');
-const { renderContent } = require('./renderer.js');
+const { renderContent, renderFields } = require('./renderer.js');
 
-module.exports = { createReactEmailRenderer, htmlToText, renderContent };
+module.exports = { createReactEmailRenderer, htmlToText, renderContent, renderFields };

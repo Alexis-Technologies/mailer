@@ -1,7 +1,7 @@
 {
   "name": "@alexify/mailer",
-  "version": "1.1.0",
-  "description": "Zero-dependency email for Node.js, Bun and Deno: its own SMTP client, sendmail, MIME builder and DKIM, eighteen HTTP providers and JMAP, verified webhooks into one model of delivery events, and decorators for failover, retries, circuit breaking, rate limits, idempotency and OpenTelemetry; a persistent queue and audit log are next",
+  "version": "1.2.0",
+  "description": "Zero-dependency email for Node.js, Bun and Deno: its own SMTP client, sendmail, MIME builder and DKIM, eighteen HTTP providers and JMAP, a persistent queue with a BullMQ driver, templates over nine engines, an audit of message states, verified webhooks into one model of delivery events, and decorators for failover, retries, circuit breaking, rate limits, idempotency and OpenTelemetry",
   "license": "MIT",
   "type": "commonjs",
   "author": "Alex Dolid <dolid.sasha@gmail.com>",
@@ -36,6 +36,10 @@
     "./render": {
       "types": "./src/render/index.d.ts",
       "default": "./src/render/index.js"
+    },
+    "./templates": {
+      "types": "./src/templates/index.d.ts",
+      "default": "./src/templates/index.js"
     },
     "./webhooks": {
       "types": "./src/webhooks/index.d.ts",
@@ -164,6 +168,22 @@
     "./tee": {
       "types": "./src/tee/index.d.ts",
       "default": "./src/tee/index.js"
+    },
+    "./audit": {
+      "types": "./src/audit/index.d.ts",
+      "default": "./src/audit/index.js"
+    },
+    "./queue": {
+      "types": "./src/queue/index.d.ts",
+      "default": "./src/queue/index.js"
+    },
+    "./bullmq": {
+      "types": "./src/bullmq/index.d.ts",
+      "default": "./src/bullmq/index.js"
+    },
+    "./mongodb": {
+      "types": "./src/mongodb/index.d.ts",
+      "default": "./src/mongodb/index.js"
     }
   },
   "directories": {
@@ -188,6 +208,9 @@
     "test:deno": "deno test -A --no-check --parallel tests/unit/ tests/runtime/",
     "test:mailpit": "node --test --test-concurrency=1 tests/mailpit/*.test.js",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.js",
+    "test:bullmq": "node --test --test-concurrency=1 tests/bullmq/*.test.js",
+    "test:mongodb": "node --test --test-concurrency=1 tests/mongodb/*.test.js",
+    "test:stores": "node scripts/test-stores.js",
     "test:coverage": "c8 --all --include 'src/**' --check-coverage --lines 98 --statements 98 --branches 90 --functions 100 --reporter text --reporter lcov node --test tests/unit/*.test.js",
     "test:types": "tsd",
     "check:dts": "node scripts/check-dts.js",
@@ -220,6 +243,9 @@
     "nodemailer-alternative",
     "transactional-email",
     "email-queue",
+    "bullmq",
+    "mongodb",
+    "email-templates",
     "outbox",
     "audit-log",
     "idempotency",
@@ -236,6 +262,7 @@
     "deno"
   ],
   "devDependencies": {
+    "@css-inline/css-inline": "^0.23.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/context-async-hooks": "^1.30.1",
     "@opentelemetry/resources": "^1.30.1",
@@ -245,12 +272,24 @@
     "@react-email/render": "^2.1.1",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "bullmq": "^6.3.16",
     "c8": "^12.0.0",
+    "ejs": "^7.0.2",
     "esbuild": "^0.28.2",
+    "eta": "^4.6.0",
+    "handlebars": "^4.7.10",
+    "ioredis": "^6.0.0",
+    "juice": "^12.2.0",
+    "liquidjs": "^10.30.0",
+    "mjml": "^5.4.1",
+    "mongodb": "^7.7.0",
+    "mustache": "^4.2.0",
+    "nunjucks": "^3.2.4",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.75.0",
     "pino": "^10.4.0",
     "postal-mime": "^3.0.1",
+    "pug": "^3.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsd": "^0.33.0",

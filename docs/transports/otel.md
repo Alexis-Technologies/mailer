@@ -316,6 +316,46 @@ showing its relationship to the broader user registration flow.
 This makes it easy to understand how email delivery affects overall request
 performance and to identify bottlenecks in your system.
 
+## The worker of a queue
+
+`instrumentHandler` wraps the handler of a [queue](/guide/queue)'s worker: a
+span `mailer.queue.process` per run of a job, linked to the trace of the
+request that enqueued it, and the metrics of the queue.
+
+```js
+const { context, metrics, propagation, trace } = require('@opentelemetry/api');
+const { createMailJobHandler, createMailQueue } = require('@alexify/mailer/queue');
+const { instrumentHandler } = require('@alexify/mailer/otel');
+
+const queue = createMailQueue({
+  driver,
+  // Each job carries the producer's traceparent as its `trace`.
+  traceContext: () => {
+    const carrier = {};
+    propagation.inject(context.active(), carrier);
+    return carrier.traceparent;
+  },
+});
+
+const handler = instrumentHandler(createMailJobHandler({ transport, renderer }), {
+  tracerProvider: trace.getTracerProvider(),
+  meterProvider: metrics.getMeterProvider(),
+  // The spans of an instrumented transport become children of the job's.
+  withSpan: (span, run) => context.with(trace.setSpan(context.active(), span), run),
+});
+const consumer = driver.consume(handler, { concurrency: 4, audit });
+```
+
+| Metric | Of |
+| --- | --- |
+| `mailer.queue.jobs` | runs, by `outcome` (`ack`, `retry`, `fail`, `release`, `thrown`) and `code` |
+| `mailer.queue.lag` | ms from the enqueue of a job to the start of a run: the backlog, to alert on |
+| `mailer.queue.job.duration` | ms of a run, by `outcome` and `code` |
+| `mailer.queue.redeliveries` | runs again of jobs whose run before did not settle |
+
+The `trace` of a job is outside its hash and its signature, and stays in clear
+in a sealed job.
+
 ## Metrics and monitoring
 
 The OpenTelemetry transport automatically collects comprehensive metrics
