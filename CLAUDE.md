@@ -1141,8 +1141,8 @@ change. **This file wins** if they ever disagree.
   they use `node:test` and `node:assert` alone, never `t.mock`.
 - **Bun and Deno** (`pnpm test:bun`, `pnpm test:deno`) run each file in a fresh global
   (`--parallel`), as `node --test` runs each in a process of its own; in one global, the mocks of
-  one file reach the next. Deno keeps mocked timers enabled after a test (`t.after` resets
-  them), a TLS server reads no SNI as `null` on Deno and `undefined` on Bun (`false` on Node), the
+  one file reach the next. Deno keeps mocked timers enabled and mocked methods in place after a
+  test (`t.after` resets and restores them, `t.mock.restoreAll()`), a TLS server reads no SNI as `null` on Deno and `undefined` on Bun (`false` on Node), the
   JMAP tests of a lost answer are skipped on Deno, whose `fetch` sends it again, and the import
   by name of `export-parity` spawns the node CLI, which Deno is not.
 

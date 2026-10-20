@@ -15,8 +15,10 @@ const {
 const ejs = require('ejs');
 
 // Replaces functions of node:fs for a test, and tells whether it could: a
-// runtime whose node:fs is not writable leaves the test to the others.
+// runtime whose node:fs is not writable leaves the test to the others. Node
+// restores them after the test; Deno keeps them for the tests that follow.
 const replace = (t, pairs) => {
+  t.after(() => t.mock.restoreAll());
   for (const [object, name, implementation] of pairs) {
     const before = object[name];
     try {
