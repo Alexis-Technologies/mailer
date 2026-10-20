@@ -197,6 +197,19 @@ export interface MailJobCodec {
   decode(text: string): string | Promise<string>;
 }
 
+/** The identifiers a job derives rather than draws. */
+export type MailJobDerivedIdKind = 'job-id' | 'message-id' | 'content-id';
+
+/**
+ * Makes an identifier a job derives of a seed, a SHA-256 in hexadecimal (an
+ * HMAC under `idSecret` for the job id) of what it derives from. It must
+ * give the same identifier for the same seed: unlike `generateId`, which
+ * gives a new one at each call. A `job-id` is 1 to 128 printable ASCII
+ * characters, no `:`, not all digits; the others are the left half of a
+ * Message-ID or Content-ID (dot-atom-text, at most 256 characters).
+ */
+export type MailJobIdDeriver = (kind: MailJobDerivedIdKind, seed: string) => string;
+
 /** The options of the jobs of a queue. */
 export interface MailJobOptions {
   /** The scope of the keys of the jobs. @default 'mail' */
@@ -219,6 +232,14 @@ export interface MailJobOptions {
    * another job.
    */
   readonly idSecret?: string | Uint8Array;
+  /**
+   * Makes the id of each job, and the Message-ID and Content-IDs of a job
+   * enqueued under a key, of the hash they derive from, in place of a UUID
+   * of it: an id of your format, the same for the same key. The identifiers
+   * a job draws (its key and Message-ID without a key of yours) come from
+   * `generateId`.
+   */
+  readonly deriveId?: MailJobIdDeriver;
 }
 
 /** A job of a message: its data, and the request a driver takes. */

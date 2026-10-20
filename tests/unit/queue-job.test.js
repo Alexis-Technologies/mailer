@@ -405,3 +405,70 @@ test('Queue: a field a later version adds makes the job wait, not fail its hash'
     (error) => error.code === 'queue.invalid_job',
   );
 });
+
+test('Queue: deriveId makes the ids a job derives, the same for the same key', async () => {
+  const { createMailQueue, createMemoryQueue } = require('../../src/queue/index.js');
+  const seeds = [];
+  // A deterministic format of the application's: a prefix and part of the hash.
+  const deriveId = (kind, seed) => {
+    seeds.push([kind, seed]);
+    return kind === 'job-id' ? `job_${seed.slice(0, 26)}` : `m${seed.slice(0, 24)}`;
+  };
+  const keyed = prepare(
+    {
+      idempotencyKey: 'welcome:42',
+      attachments: [{ filename: 'a.png', content: new Uint8Array([1]), inline: true }],
+    },
+    { deriveId },
+  );
+  assert.match(keyed.request.id, /^job_[0-9a-f]{26}$/);
+  assert.match(keyed.data.messageId, /^m[0-9a-f]{24}@example\.com$/);
+  assert.match(keyed.data.attachments[0].contentId, /^m[0-9a-f]{24}@example\.com$/);
+  assert.strictEqual(keyed.data.correlationId, keyed.request.id);
+  // The seed is a hash: it holds no key as given.
+  for (const [, seed] of seeds) {
+    assert.match(seed, /^[0-9a-f]{64}$/);
+    assert.ok(!seed.includes('welcome'));
+  }
+  // Without a key, the job id is derived from the generated key, and the
+  // Message-ID drawn from generateId, as before.
+  let drawn = 0;
+  const generateId = (kind) => `g${kind.replace('-', '')}${++drawn}`;
+  const unkeyed = prepare({}, { deriveId, generateId });
+  assert.match(unkeyed.request.id, /^job_/);
+  assert.match(unkeyed.data.messageId, /^gmessageid\d+@example\.com$/);
+  // The same message under its key is the same job, a duplicate.
+  const queue = createMailQueue({ driver: createMemoryQueue(), deriveId, now: () => NOW });
+  const input = { ...base, idempotencyKey: 'welcome:42' };
+  const first = await queue.enqueue(input);
+  const again = await queue.enqueue(input);
+  assert.deepStrictEqual([first.duplicate, again.duplicate, again.id], [false, true, first.id]);
+  // Under idSecret, the seed of the job id is its HMAC: another id.
+  const secret = prepare({ idempotencyKey: 'welcome:42' }, { deriveId, idSecret: 's'.repeat(32) });
+  assert.notStrictEqual(secret.request.id, keyed.request.id);
+  // By default, the UUIDs of before.
+  assert.strictEqual(
+    prepare({ idempotencyKey: 'welcome:42' }).request.id,
+    prepare({ idempotencyKey: 'welcome:42' }, { deriveId: undefined }).request.id,
+  );
+});
+
+test('Queue: deriveId must derive, and give ids a driver and a header field take', () => {
+  let count = 0;
+  const generating = () => `job_${++count}`;
+  assert.throws(
+    () => prepare({ idempotencyKey: 'k' }, { deriveId: generating }),
+    /deriveId gave another job-id for the same seed: it must derive, not generate/,
+  );
+  const refusals = [
+    [(kind, seed) => (kind === 'job-id' ? `job:${seed}` : seed), /Invalid job-id/],
+    [(kind, seed) => (kind === 'job-id' ? '12345' : seed), /Invalid job-id/],
+    [(kind, seed) => (kind === 'job-id' ? 'x'.repeat(129) : seed), /Invalid job-id/],
+    [(kind, seed) => (kind === 'job-id' ? `j${seed}` : `a b${seed}`), /Invalid message-id/],
+    [() => 42, /Invalid job-id/],
+  ];
+  for (const [deriveId, pattern] of refusals) {
+    assert.throws(() => prepare({ idempotencyKey: 'k' }, { deriveId }), pattern);
+  }
+  assert.throws(() => prepare({}, { deriveId: 'uuid' }), /deriveId must be a function/);
+});

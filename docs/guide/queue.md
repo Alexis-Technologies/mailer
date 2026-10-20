@@ -184,6 +184,25 @@ again by hashing the addresses one knows. `idSecret` (32 bytes at least)
 derives the id with an HMAC instead; it is the same on every producer and never
 rotated, as another secret makes other ids and the same message another job.
 
+The identifiers a job draws come from `generateId`, as everywhere in the
+library: its key when you give none, and its Message-ID and Content-IDs then.
+Those it derives, the same for the same key, are UUIDs of a hash: its id and,
+under a key of yours, its Message-ID and Content-IDs. `deriveId(kind, seed)`
+makes them your way; `seed` is a SHA-256 in hexadecimal of what they derive
+from (an HMAC under `idSecret` for the id of the job), and it must give the same
+identifier for the same seed, which the queue checks:
+
+```js
+const queue = createMailQueue({
+  driver,
+  generateId: () => ulid(), // drawn: new at each call
+  deriveId: (kind, seed) => (kind === 'job-id' ? `job_${seed.slice(0, 26)}` : `m${seed.slice(0, 32)}`),
+});
+```
+
+A generator such as `ulid()` does not fit `deriveId`: the same message enqueued
+again would get another id, and so be another job, sent twice.
+
 ## What the queue does with an attempt
 
 | The attempt | The queue | The state |

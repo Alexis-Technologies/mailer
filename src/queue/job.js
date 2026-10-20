@@ -11,7 +11,7 @@ const { createMessage } = require('../core/message.js');
 const { generateSenderMessageId } = require('../core/message-id.js');
 const { parseAddress } = require('../core/address.js');
 const { toBase64 } = require('../internal/base64.js');
-const { toKeyedUuid, toUuid } = require('../internal/uuid.js');
+const { deriveJobId } = require('./derive.js');
 const { hashJson } = require('./hash.js');
 const { toJson } = require('./json.js');
 const { keyringOf, signJob } = require('./signing.js');
@@ -128,7 +128,7 @@ const prepareAttachments = (given, sender, config, idOf) => {
     const inline = attachment.inline ?? false;
     const contentId =
       attachment.contentId ??
-      `${generateId('content-id', idOf(`content-id\u0000${attachments.length}`))}@${domainOf(sender)}`;
+      `${generateId('content-id', idOf('content-id', `content-id\u0000${attachments.length}`))}@${domainOf(sender)}`;
     if (
       typeof contentType !== 'string' ||
       typeof inline !== 'boolean' ||
@@ -224,6 +224,9 @@ const resolveConfig = (options) => {
   if (!isText(config.namespace, 128)) throw new TypeError('namespace must be a short string.');
   config.keyring = keyringOf(config.signingKeys);
   checkIdSecret(config.idSecret);
+  if (config.deriveId !== undefined && typeof config.deriveId !== 'function') {
+    throw new TypeError('deriveId must be a function.');
+  }
   return config;
 };
 
@@ -261,7 +264,9 @@ const fieldsOf = (input, probe, attachments, messageId) => {
  * @param options `namespace` ('mail'), `generateId`, `now`, `maxAttempts`
  * (5), `maxJobBytes` (256 KiB), `maxInlineAttachmentBytes` (256 KiB);
  * `signingKeys`, whose first key signs the job (`kid`, `mac`); `idSecret`,
- * under which its id is derived from its key.
+ * under which its id is derived from its key; `deriveId(kind, seed)`, which
+ * makes its id, and the Message-ID and Content-IDs of a job under a key, of
+ * the hash they derive from.
  * @returns `{ data, request }`.
  * @throws {TypeError} If a field is invalid, as `createMessage` finds it, or
  * a signing key or `idSecret`.
@@ -276,11 +281,11 @@ const prepareMailJob = (input, options = {}) => {
   const tenantId = checkKey(input.tenantId, 'tenantId');
   const keyed = checkKey(input.idempotencyKey, 'idempotencyKey');
   const idempotencyKey = keyed ?? generateId('idempotency-key', config.generateId);
-  // A UUID of the key: under `idSecret`, one that cannot be traced back to a
-  // key that names a person.
+  // Derived from the key, so that the same key is the same job: a UUID of
+  // its hash (under `idSecret`, one no key can be found from), or what
+  // `deriveId` makes of it.
   const scoped = `${config.namespace}\u0000${tenantId ?? ''}\u0000${idempotencyKey}`;
-  const jobId =
-    config.idSecret === undefined ? toUuid(scoped) : toKeyedUuid(scoped, config.idSecret);
+  const jobId = deriveJobId('job-id', scoped, config);
   const correlationId = correlationIdOf(input, jobId);
   const scheduledAt = checkDateField(input.scheduledAt, 'scheduledAt');
   const expiresAt = checkDateField(input.expiresAt, 'expiresAt');
@@ -291,8 +296,10 @@ const prepareMailJob = (input, options = {}) => {
   // Under a key of the caller's, the identifiers the job makes derive from
   // it, so that the same message enqueued again is the same job; otherwise
   // they are drawn from the generator.
-  const idOf = (what) =>
-    keyed === undefined ? config.generateId : () => toUuid(`${jobId}\u0000${what}`);
+  const idOf = (kind, what) =>
+    keyed === undefined
+      ? config.generateId
+      : () => deriveJobId(kind, `${jobId}\u0000${what}`, config);
   const sender = typeof input.from === 'string' ? parseAddress(input.from) : input.from;
   const { attachments, probes } = prepareAttachments(
     input.attachments,
@@ -312,7 +319,8 @@ const prepareMailJob = (input, options = {}) => {
     throw new TypeError('A job takes its Message-ID as messageId, not as a header field.');
   }
   const messageId =
-    probe.messageId ?? generateSenderMessageId(probe.sender.address, idOf('message-id'));
+    probe.messageId ??
+    generateSenderMessageId(probe.sender.address, idOf('message-id', 'message-id'));
   const now = (config.now ?? Date.now)();
   const data = { v: MAIL_JOB_VERSION, ...body, ...fieldsOf(input, probe, attachments, messageId) };
   data.idempotencyKey = idempotencyKey;

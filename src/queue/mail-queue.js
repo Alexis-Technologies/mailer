@@ -129,6 +129,7 @@ const createQueueConfig = (options) => {
     generateId: options.generateId,
     signingKeys: options.signingKeys,
     idSecret: options.idSecret,
+    deriveId: checkOptionalFunction(options.deriveId, 'deriveId'),
     now,
   };
   for (const name of Object.keys(jobOptions)) {
@@ -167,7 +168,8 @@ const prepareJob = async (queue, input) => {
  * `maxInlineAttachmentBytes` (256 KiB); `signingKeys`, which sign each job
  * and which its workers verify; `codec`, which seals the fields of each job
  * in its store and opens them in its workers; `idSecret`, under which the id
- * of a job is derived from its key; `traceContext`, which gives the W3C
+ * of a job is derived from its key; `deriveId(kind, seed)`, which makes the
+ * identifiers a job derives of their hash; `traceContext`, which gives the W3C
  * traceparent of the producer each job carries; `logger`, `generateId`,
  * `now`.
  * @returns `{ driver, enqueue, enqueueMany, createWorker }`.

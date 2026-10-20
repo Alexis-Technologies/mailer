@@ -159,6 +159,11 @@ prepareMailJob(
   { idSecret: new Uint8Array(32) },
 );
 expectError(createMailQueue({ driver, idSecret: 42 }));
+createMailQueue({
+  driver,
+  deriveId: (kind, seed) => (kind === 'job-id' ? `job_${seed.slice(0, 26)}` : seed.slice(0, 32)),
+});
+expectError(createMailQueue({ driver, deriveId: (kind: number) => String(kind) }));
 const codec = { encode: (text: string) => text, decode: async (text: string) => text };
 createMailQueue({ driver, codec });
 createMailJobHandler({ transport, codec, maxRedeliveries: 0, redelivered: 'delivery_unknown' });

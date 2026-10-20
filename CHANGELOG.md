@@ -22,9 +22,11 @@ dependency, BullMQ, MongoDB and the template engines being passed in.
   - **Jobs.** A job is a template with its context, rendered by the worker, or content rendered
     already, as JSON checked when it is enqueued (`prepareMailJob`, `parseMailJob`): its fields as
     `createMessage` checks them, its context refused with the path to what JSON would change,
-    attachments as bytes (bounded) or references the worker resolves. Its id is a UUID of the
-    namespace, tenant and `idempotencyKey`, so the same message enqueued again is one job, and
-    another under the key is refused (`MailQueueError` `queue.key_reused`, with the `jobIds`
+    attachments as bytes (bounded) or references the worker resolves. Its id is derived from the
+    namespace, tenant and `idempotencyKey`, a UUID of their hash or what `deriveId(kind, seed)`
+    makes of it (as for the Message-ID and Content-IDs of a job under a key; `generateId` makes
+    those it draws), so the same message enqueued again is one job, and another under the key is
+    refused (`MailQueueError` `queue.key_reused`, with the `jobIds`
     refused and, from `enqueueMany`, the `answers` of the other jobs, all of them enqueued and
     audited first). Its Message-ID and Content-IDs are fixed for every attempt. `scheduledAt` is a
     delay of the queue and `expiresAt` a deadline. The fields of a job of version 1
