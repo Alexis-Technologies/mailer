@@ -39,5 +39,6 @@
   "./audit": 2.5,
   "./queue": 19.5,
   "./bullmq": 4.5,
-  "./mongodb": 7.5
+  "./mongodb": 7.5,
+  "./channels": 6
 }

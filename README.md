@@ -71,7 +71,10 @@ channel's markup, mentions of everyone off unless allowed), goes through the sam
 idempotency and decorators as an email, and fails in classes of its own (an opt-out, a blocked
 bot, an unregistered push token: never retried). 2.1 closes the loop: the verified webhooks of
 the channels, one suppression list for email and the channels, and a fallback from WhatsApp to
-SMS to email on the outcome of a message. 1.x is email only; no channel is released yet.
+SMS to email on the outcome of a message. 1.x is email only; no channel is released yet. The
+messages of the channels and their checks are in `@alexify/mailer/channels` already
+([messages of the channels](https://mailerat.vercel.app/channels/messages)); their transports
+come next.
 
 ## Installation
 

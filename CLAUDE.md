@@ -905,8 +905,12 @@ src/
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
                     the base of the transports of 1.1 (provider-transport.js), what the
                     decorators and the queue share (backoff.js, thrown.js, fingerprint.js,
-                    canonical-json.js, json.js, path.js), the driver of a QueueSource (polling-driver.js), and abort.js,
-                    iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js, log.js
+                    canonical-json.js, json.js, path.js), the driver of a QueueSource
+                    (polling-driver.js), the messages of the channels (channel/: message.js,
+                    phone.js and calling-codes.js, segments.js and gsm7.js, markup.js, which
+                    ./channels exports and the transports of the channels require), and
+                    abort.js, iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js,
+                    log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)
   runtime/*.test.js the package by its name on Node, Bun and Deno, with no mock

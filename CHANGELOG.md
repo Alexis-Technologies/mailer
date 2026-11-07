@@ -43,6 +43,16 @@ worker of 1.2 holds reads the same.
   `failed` and `expired` delivery events become those states, and an audit event takes the
   `channel` of a delivery event that is not email. The logger sink writes `sent` and `read` at
   info, `expired` at warn.
+- **`./channels`, the messages of the channels:** `createChannelMessage` checks and copies a
+  message of any of the twelve (a recipient of the channel's kind, media, buttons, mentions, a
+  payload of JSON, a WhatsApp template, the fields of another channel refused),
+  `checkChannelMessage` checks a copy again, and `isChannelMessage` tells one from an email.
+  `normalizePhone` gives E.164 from the way people write a number, a national one by the trunk
+  prefix and calling code of `defaultCountry` (ITU-T E.164, no library of numbering plans), and
+  `isE164` checks one. `countSegments` counts the segments of an SMS (GSM-7 with its extension,
+  UCS-2 by code unit, 160/153 and 70/67, no character split; the tables and cases of Twilio's
+  message-segment-calculator and of split-sms). `escapeTelegramHtml`, `escapeSlackText`,
+  `escapeDiscordMarkdown` and `neutralizeMentions` put text into the markup of a chat as text.
 - **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
   `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
   audit event its `channel`.

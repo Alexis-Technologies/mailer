@@ -1,6 +1,6 @@
 # Exports
 
-The package has one root entry and a subpath per transport and decorator, each
+The package has one root entry and a subpath per transport, decorator and helper, each
 with its own hand-written types. Every name is exported by name, so `require()`
 and ESM `import` give the same values:
 
@@ -38,6 +38,9 @@ model of delivery events.
   `parseRetryAfter`.
 - **Raw messages:** the `RawMessage` type; `createRawMessagePlan`,
   `iterateRawMessage`, `analyzeRawMessage`, `RawMessageValidationError`.
+- **Channels:** the `Channel`, `ChannelMessage`, `AnyMessage`, `MessageOf` and
+  `E164` types, and the messages of the twelve channels (`SmsMessage` to
+  `PushMessage`), as types only. See [messages of the channels](/channels/messages).
 - **Delivery events:** the `DeliveryEvent`, `DeliveryEventType` and
   `DeliveryBounce` types, which `./webhooks` gives. See
   [webhooks and events](/guide/webhooks).
@@ -50,6 +53,7 @@ model of delivery events.
 
 | Subpath | Exports | Page |
 | --- | --- | --- |
+| `@alexify/mailer/channels` | `createChannelMessage`, `checkChannelMessage`, `isChannelMessage`, `normalizePhone`, `isE164`, `countSegments`, `escapeTelegramHtml`, `escapeSlackText`, `escapeDiscordMarkdown`, `neutralizeMentions` | [Messages of the channels](/channels/messages) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |

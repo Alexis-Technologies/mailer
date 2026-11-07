@@ -184,6 +184,10 @@
     "./mongodb": {
       "types": "./src/mongodb/index.d.ts",
       "default": "./src/mongodb/index.js"
+    },
+    "./channels": {
+      "types": "./src/channels/index.d.ts",
+      "default": "./src/channels/index.js"
     }
   },
   "directories": {

@@ -76,6 +76,10 @@ const guide = [
     ],
   },
   {
+    text: 'Channels',
+    items: [{ text: 'Messages of the channels', link: '/channels/messages' }],
+  },
+  {
     text: 'Transports',
     items: [
       { text: 'SMTP', link: '/transports/smtp' },
@@ -190,6 +194,7 @@ export default defineConfig({
     sidebar: {
       '/guide/': guide,
       '/messages/': guide,
+      '/channels/': guide,
       '/transports/': guide,
       '/api/': [
         {
