@@ -41,8 +41,12 @@ A send that failed frees its key for another attempt; one of unknown delivery
 `idempotency.aborted`) keeps it, as the message may have gone. A message is
 told from another by a fingerprint of its addresses, subject, body, header
 fields, the names and types of its attachments (not their bytes), its
-threading, schedule, tracking and metadata. A message without a key goes as it
-is.
+threading, schedule, tracking and metadata; a message of a channel by its
+channel, recipient, sender, text, media (their URLs or ids, not their bytes),
+buttons, payload, template, schedule, tags and metadata, so that two SMS of
+another text under one key are one sent and one refused. Neither reads the
+tenant: a key per tenant is the application's (`key`, or a `namespace` per
+tenant). A message without a key goes as it is.
 
 A key is reserved for `leaseMs` (ten minutes), and the receipt of its send is
 kept for `ttlMs` (a day). The lease bounds how long a process that crashed, or

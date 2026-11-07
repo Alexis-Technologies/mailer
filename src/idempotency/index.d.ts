@@ -4,10 +4,10 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Logger,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -81,7 +81,7 @@ export interface IdempotencyStore {
 /**
  * The options of {@link IdempotencyTransport}.
  */
-export interface IdempotencyConfig {
+export interface IdempotencyConfig<TMessage extends AnyMessage = Message> {
   /**
    * Where the keys are kept.  The default is an in-process store, which
    * deduplicates only within this process.
@@ -103,7 +103,7 @@ export interface IdempotencyConfig {
    * The key of a message; its `idempotencyKey` without it.  A message
    * without a key goes as it is.
    */
-  readonly key?: (message: Message | RawMessage) => string | undefined;
+  readonly key?: (message: TMessage | RawMessage) => string | undefined;
   /**
    * The prefix of the keys in the store, so that the same key sent through
    * two transports is two sends.
@@ -122,11 +122,11 @@ export interface IdempotencyConfig {
 /**
  * The options of {@link IdempotencyTransport}, with their defaults.
  */
-export interface ResolvedIdempotencyConfig {
+export interface ResolvedIdempotencyConfig<TMessage extends AnyMessage = Message> {
   readonly store: IdempotencyStore;
   readonly leaseMs: number;
   readonly ttlMs: number;
-  readonly key?: (message: Message | RawMessage) => string | undefined;
+  readonly key?: (message: TMessage | RawMessage) => string | undefined;
   readonly namespace: string;
 }
 
@@ -174,6 +174,9 @@ export declare function createMemoryIdempotencyStore(
  * (`idempotency.store_failed`, retryable).  The
  * receipts it makes, except `key_reused` (`validation`), are of the category
  * `unknown`, which a circuit breaker does not count against the provider.
+ * It takes the messages of the transport it guards, of email or of a
+ * channel, whose fingerprint tells a key used again: two SMS of another text
+ * under one key are one sent and one refused.
  *
  * @example
  * ```js
@@ -182,20 +185,23 @@ export declare function createMemoryIdempotencyStore(
  * await once.send(createMessage({ ...fields, idempotencyKey: `welcome:${userId}` }));
  * ```
  */
-export declare class IdempotencyTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class IdempotencyTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /** The resolved options. */
-  readonly config: ResolvedIdempotencyConfig;
+  readonly config: ResolvedIdempotencyConfig<TMessage>;
   /**
    * @param transport The transport to guard.
    * @param config The options.
    * @throws {TypeError} If an option is invalid.
    */
-  constructor(transport: Transport<TProviderId>, config?: IdempotencyConfig);
+  constructor(transport: Transport<TProviderId, TMessage>, config?: IdempotencyConfig<TMessage>);
   /** Sends one message, unless its key was used before. */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message, unless the key `key` gives it was used before.  A
    * wrapped transport without `sendRaw()` gives a failed receipt of the
@@ -207,7 +213,7 @@ export declare class IdempotencyTransport<TProviderId extends string = string>
    * key was used before, in the batch too, answered in place.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the wrapped transport. */

@@ -102,6 +102,11 @@ worker of 1.2 holds reads the same.
   `PoolTransport<P, TMessage>`, its entries, selectors and strategies take the messages of one
   channel, and a pool of transports of several channels is a type error (a `./router` sends
   them). The categories are in the guide of a custom transport.
+- **`./idempotency` takes the messages of the channels:** a message of a channel, whose
+  fingerprint threw, is told from another by its channel, recipient, text, media, buttons,
+  payload and the rest (never its tenant or its key), so that two SMS of another text under one
+  key are one sent and one refused. `IdempotencyTransport<P, TMessage>` and its `key` take the
+  messages of the transport guarded.
 - **`./hooks` takes the messages of the channels:** a copy `beforeSend` returns of one is
   checked again as `createChannelMessage` checks it, where every such copy was refused as
   `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and

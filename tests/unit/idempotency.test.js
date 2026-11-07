@@ -538,3 +538,40 @@ test('Idempotency: the logger hears a key with the addresses in it redacted', as
   assert.ok(hit);
   assert.doesNotMatch(hit.key, /bob@example\.com/);
 });
+
+test('Idempotency: a message of a channel is sent once per key, another text under it refused', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = (text, idempotencyKey = 'otp:42') =>
+    createChannelMessage({ channel: 'sms', to: '+380671234567', text, idempotencyKey });
+  const inner = fakeTransport();
+  const once = new IdempotencyTransport(inner);
+  const first = await once.send(sms('Code 1234'));
+  assert.strictEqual(first.successful, true);
+  assert.deepStrictEqual(await once.send(sms('Code 1234')), first);
+  // Two SMS of another text under one key: the fingerprint of a channel
+  // reads its recipient and text, so the second is refused, not answered.
+  const reused = await once.send(sms('Code 9999'));
+  assert.strictEqual(reused.errors[0].code, 'idempotency.key_reused');
+  const otherNumber = createChannelMessage({
+    channel: 'sms',
+    to: '+380501234567',
+    text: 'Code 1234',
+    idempotencyKey: 'otp:42',
+  });
+  assert.strictEqual((await once.send(otherNumber)).errors[0].code, 'idempotency.key_reused');
+  // An email under the same key is another message too.
+  assert.strictEqual(
+    (await once.send(message({ idempotencyKey: 'otp:42' }))).errors[0].code,
+    'idempotency.key_reused',
+  );
+  assert.strictEqual(inner.calls.length, 1);
+  // A key of the application's own for a channel, read by `key`.
+  const keyed = new IdempotencyTransport(fakeTransport(), {
+    key: (given) => (given.channel === 'sms' ? `sms:${given.to}` : undefined),
+  });
+  assert.strictEqual((await keyed.send(sms('a', undefined))).successful, true);
+  assert.strictEqual(
+    (await keyed.send(sms('b', undefined))).errors[0].code,
+    'idempotency.key_reused',
+  );
+});

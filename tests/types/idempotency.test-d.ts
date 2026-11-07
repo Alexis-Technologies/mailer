@@ -3,6 +3,7 @@ import {
   createMessage,
   type RawTransport,
   type Receipt,
+  type SmsMessage,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -72,3 +73,20 @@ expectError<IdempotencyStore>({
 // A pino-like logger.
 new IdempotencyTransport(inner, { logger: { info() {}, debug() {}, warn() {} } });
 expectError(new IdempotencyTransport(inner, { logger: 'pino' }));
+
+// The guard of a transport of a channel takes its messages and keys them.
+declare const twilio: Transport<'twilio', SmsMessage>;
+const sms = new IdempotencyTransport(twilio, {
+  key: (message) => ('channel' in message ? `sms:${message.to}` : undefined),
+});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectError(
+  sms.send(
+    createMessage({
+      from: 'a@example.com',
+      to: 'b@example.com',
+      subject: 's',
+      content: { text: 'x' },
+    }),
+  ),
+);
