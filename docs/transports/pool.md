@@ -260,6 +260,13 @@ Failover stops in two cases where another transport could not help:
   could deliver the message a second time; reconcile it from the provider's
   delivery events instead.
 
+A bug of a transport is not failed over: a `TypeError`, `RangeError`,
+`ReferenceError` or `SyntaxError` that is no recognizable delivery failure (such
+as reading a property of `undefined`) rejects the send, as in `./retry`. It may
+have struck after the message went out, and another transport would hide it in
+the receipt. A network failure that `fetch` reports as a `TypeError` still fails
+over.
+
 Every attempt of one `send()` carries the same `Message-ID`: a message without
 one gets a generated one before the first attempt, so a recipient's server can
 tell a duplicate apart.

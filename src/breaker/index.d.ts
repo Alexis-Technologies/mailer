@@ -44,8 +44,10 @@ export interface CircuitBreakerConfig {
   /**
    * Whether a receipt counts as a failure of the provider.  By default a
    * failed receipt counts when one of its errors is of the category
-   * `network`, `timeout`, `server-error` or `service-unavailable`; a refused
-   * message, a rate limit or a caller's abort says nothing of its health.
+   * `network`, `timeout`, `server-error` or `service-unavailable` (one
+   * without `errors` by the category `classifyReceiptError` gives each
+   * of its `errorMessages`); a refused message, a rate limit or a caller's
+   * abort says nothing of its health.
    * A thrown error, other than the caller's abort, always counts, once for
    * a batch.  One that throws is a process warning, and the receipt is
    * judged as by default.

@@ -11,6 +11,8 @@ const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decor
 // many there were in all.
 const MAX_RECORDED_ERROR_MESSAGES = 10;
 
+const HTTP_SCHEMES = new Set(['http:', 'https:']);
+
 // Passes the messages of a batch on one at a time, telling `onMessage` of each.
 const observeMessages = async function* (messages, onMessage) {
   for await (const message of messages) {
@@ -393,46 +395,44 @@ class OpenTelemetryTransport {
     return undefined;
   }
 
+  // Told by the transport's name, which its id gives, rather than by the
+  // shape of its config: a transport of the application whose config has a
+  // host and a port, or a domain, is not SMTP or Mailgun for that.
   extractNetworkAttributes() {
     const transport = this.wrappedTransport;
-
-    if ('config' in transport && transport.config && typeof transport.config === 'object') {
-      const config = transport.config;
-
-      // SMTP transport
-      if ('host' in config && 'port' in config) {
-        return {
-          'network.protocol.name': 'smtp',
-          'server.address': String(config.host),
-          'server.port': Number(config.port),
-        };
-      }
-
-      // HTTP-based transports
-      if ('baseUrl' in config || 'endpoint' in config || 'domain' in config) {
-        const url =
-          config.baseUrl ||
-          config.endpoint ||
-          (config.domain && `https://api.${config.region === 'eu' ? 'eu.' : ''}mailgun.net`);
-
-        if (url && typeof url === 'string') {
-          try {
-            const parsedUrl = new URL(url);
-            // The protocol is HTTP whether or not over TLS; the scheme says which.
-            return {
-              'network.protocol.name': 'http',
-              'url.scheme': parsedUrl.protocol.slice(0, -1),
-              'server.address': parsedUrl.hostname,
-              ...(parsedUrl.port && { 'server.port': Number(parsedUrl.port) }),
-            };
-          } catch {
-            // Invalid URL, skip network attributes
-          }
-        }
-      }
+    if (!('config' in transport) || !transport.config || typeof transport.config !== 'object') {
+      return undefined;
     }
-
-    return undefined;
+    const config = transport.config;
+    if (this.transportName === 'smtp') {
+      if (!('host' in config) || !('port' in config)) return undefined;
+      return {
+        'network.protocol.name': 'smtp',
+        'server.address': String(config.host),
+        'server.port': Number(config.port),
+      };
+    }
+    const url =
+      config.baseUrl ||
+      config.endpoint ||
+      (this.transportName === 'mailgun' &&
+        config.domain &&
+        `https://api.${config.region === 'eu' ? 'eu.' : ''}mailgun.net`);
+    if (!url || typeof url !== 'string') return undefined;
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return undefined;
+    }
+    if (!HTTP_SCHEMES.has(parsedUrl.protocol)) return undefined;
+    // The protocol is HTTP whether or not over TLS; the scheme says which.
+    return {
+      'network.protocol.name': 'http',
+      'url.scheme': parsedUrl.protocol.slice(0, -1),
+      'server.address': parsedUrl.hostname,
+      ...(parsedUrl.port && { 'server.port': Number(parsedUrl.port) }),
+    };
   }
 
   /**

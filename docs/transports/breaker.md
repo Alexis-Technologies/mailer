@@ -21,7 +21,9 @@ const transport = new CircuitBreakerTransport(new SesTransport(sesConfig), {
 
 - **closed:** every send goes through. A failed receipt counts when one of its
   errors is of the category `network`, `timeout`, `server-error` or
-  `service-unavailable`, and so does a thrown error other than the caller's
+  `service-unavailable` (a receipt without `errors`, as a transport of your own
+  may give, by the category `classifyReceiptError` gives each of its
+  `errorMessages`), and so does a thrown error other than the caller's
   abort. A message the provider refused, a rate limit or a success answers
   that the provider is up, and starts the count again.
 - **open:** after `failureThreshold` failures in a row. A send is answered at

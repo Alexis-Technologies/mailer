@@ -97,6 +97,38 @@ test('OTel: the transport name and the network attributes come from its config',
   }
 });
 
+test('OTel: the network attributes of a transport are not guessed from the shape of its config', async () => {
+  // Transports of the application whose config only looks like SMTP's or
+  // Mailgun's, or names a URL of another protocol.
+  const cases = [
+    { id: 'gateway', config: { host: 'gateway.internal', port: 8080 } },
+    { id: 'relay', config: { domain: 'example.com', region: 'eu' } },
+    { id: 'cache', config: { endpoint: 'redis://cache.internal:6379' } },
+  ];
+  for (const { id, config } of cases) {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(
+      { ...plain(config), id },
+      { tracerProvider, meterProvider },
+    );
+    await transport.send(createTestMessage());
+    const [span] = tracerProvider.getAllSpans();
+    assert.strictEqual(span.attributes['mailer.transport.name'], id);
+    for (const key of ['network.protocol.name', 'url.scheme', 'server.address', 'server.port']) {
+      assert.strictEqual(span.attributes[key], undefined, `${id}: ${key}`);
+    }
+  }
+  // The SMTP transport is told by its id.
+  const { tracerProvider, meterProvider } = providers();
+  const smtp = { ...plain({ host: 'smtp.example.com', port: 465 }), id: 'smtp' };
+  await new OpenTelemetryTransport(smtp, { tracerProvider, meterProvider }).send(
+    createTestMessage(),
+  );
+  const [span] = tracerProvider.getAllSpans();
+  assert.strictEqual(span.attributes['network.protocol.name'], 'smtp');
+  assert.strictEqual(span.attributes['server.port'], 465);
+});
+
 test('OTel: a batch gets the custom attributes and records its failures', async () => {
   const { tracerProvider, meterProvider } = providers();
   const failure = { successful: false, errorMessages: ['Rejected'], errors: [] };
