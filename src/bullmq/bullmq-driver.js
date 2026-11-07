@@ -4,7 +4,7 @@
 // it; its attempts and backoff are the queue's; its priority is ranked from
 // 1, as 0 in BullMQ runs before every prioritized job.
 
-const { warnThrown } = require('../internal/callback.js');
+const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
 const { toUuid } = require('../internal/uuid.js');
@@ -185,13 +185,17 @@ const startWorker = (config, queue, handler, consumeOptions, log) => {
   });
   holder.worker = worker;
   worker.on('error', (error) =>
-    log.write('error', () => ({ error: error?.message }), 'queue.worker.error'),
+    log.write('error', () => ({ error: describeThrown(error) }), 'queue.worker.error'),
   );
   worker.on('failed', (job, error) => {
     // A job BullMQ failed itself, such as one stalled too often, which the
     // handler never saw.
     if (!isSettledError(error)) {
-      log.write('error', () => ({ jobId: job?.id, reason: error?.message }), 'queue.job.lost');
+      log.write(
+        'error',
+        () => ({ jobId: job?.id, reason: describeThrown(error) }),
+        'queue.job.lost',
+      );
       if (typeof consumeOptions.audit?.append === 'function') {
         auditLost(consumeOptions.audit, job, error);
       }
