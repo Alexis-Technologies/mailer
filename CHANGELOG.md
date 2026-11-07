@@ -107,6 +107,10 @@ worker of 1.2 holds reads the same.
   payload and the rest (never its tenant or its key), so that two SMS of another text under one
   key are one sent and one refused. `IdempotencyTransport<P, TMessage>` and its `key` take the
   messages of the transport guarded.
+- **The types of `./retry`, `./breaker`, `./ratelimit` and `./tee` take the messages of a
+  channel,** a second parameter `TMessage`, email by default, as their runtime did already:
+  `./retry` retries `unreachable` alone of the categories of the channels, and `./breaker`
+  counts none of them against a provider.
 - **`./hooks` takes the messages of the channels:** a copy `beforeSend` returns of one is
   checked again as `createChannelMessage` checks it, where every such copy was refused as
   `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and

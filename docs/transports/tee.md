@@ -7,6 +7,9 @@ returned, whatever the mirrors do. It comes from the tee driver of unemail.
 
 ## Basic usage
 
+The mirrors take the messages of the primary, of email or of a channel: a tee
+of an SMS provider shadows another SMS provider.
+
 ```js
 const { TeeTransport } = require('@alexify/mailer/tee');
 

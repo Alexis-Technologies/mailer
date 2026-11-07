@@ -4,10 +4,10 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Logger,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -18,11 +18,11 @@ import type {
  * What became of the copy of a message sent to a mirror: its receipt, the
  * error its send threw, or why it was skipped.
  */
-export interface MirrorOutcome {
+export interface MirrorOutcome<TMessage extends AnyMessage = Message> {
   /** The id of the mirror. */
   readonly mirror: string;
   /** The message mirrored. */
-  readonly message: Message | RawMessage;
+  readonly message: TMessage | RawMessage;
   readonly receipt?: Receipt;
   readonly error?: unknown;
   /** Why the copy was not sent. */
@@ -32,9 +32,9 @@ export interface MirrorOutcome {
 /**
  * The options of {@link TeeTransport}.
  */
-export interface TeeConfig {
+export interface TeeConfig<TMessage extends AnyMessage = Message> {
   /** The transports each message is mirrored to. */
-  readonly mirrors: readonly Transport[];
+  readonly mirrors: readonly Transport<string, TMessage>[];
   /**
    * The time a mirror's send may take, in milliseconds: its signal aborts
    * then, and a send that ignores it fails all the same.
@@ -60,7 +60,7 @@ export interface TeeConfig {
    * addresses of its text redacted and no more than ten a minute; one that
    * throws becomes one too (`MAILER_TEE_LISTENER_FAILED`).
    */
-  readonly onMirror?: (outcome: MirrorOutcome) => void;
+  readonly onMirror?: (outcome: MirrorOutcome<TMessage>) => void;
   /**
    * A pino-like logger: without `onMirror`, it hears a failed copy at `warn`
    * (`tee.mirror_failed`) in place of a process warning.
@@ -71,12 +71,12 @@ export interface TeeConfig {
 /**
  * The options of {@link TeeTransport}, with their defaults.
  */
-export interface ResolvedTeeConfig {
-  readonly mirrors: readonly Transport[];
+export interface ResolvedTeeConfig<TMessage extends AnyMessage = Message> {
+  readonly mirrors: readonly Transport<string, TMessage>[];
   readonly timeout: number;
   readonly awaitMirrors: boolean;
   readonly maxPending: number;
-  readonly onMirror?: (outcome: MirrorOutcome) => void;
+  readonly onMirror?: (outcome: MirrorOutcome<TMessage>) => void;
 }
 
 /**
@@ -94,24 +94,27 @@ export interface ResolvedTeeConfig {
  * });
  * ```
  */
-export declare class TeeTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class TeeTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /** The resolved options. */
-  readonly config: ResolvedTeeConfig;
+  readonly config: ResolvedTeeConfig<TMessage>;
   /**
    * @param primary The transport whose receipt is returned.
    * @param config The options.
    * @throws {TypeError} If an option is invalid.
    */
-  constructor(primary: Transport<TProviderId>, config: TeeConfig);
+  constructor(primary: Transport<TProviderId, TMessage>, config: TeeConfig<TMessage>);
   /**
    * Sends a message through the primary, then mirrors it once the primary
    * has answered, whatever it answered; a primary that throws is not
    * mirrored.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message through the primary, mirrored to the mirrors that send
    * raw messages.  A primary without `sendRaw()` gives a failed receipt of the
@@ -123,7 +126,7 @@ export declare class TeeTransport<TProviderId extends string = string>
    * is handed to it.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the primary; the mirrors are not checked. */

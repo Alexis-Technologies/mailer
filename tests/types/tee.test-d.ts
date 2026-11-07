@@ -3,6 +3,8 @@ import {
   createMessage,
   type RawTransport,
   type Receipt,
+  type RawMessage,
+  type SmsMessage,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -35,3 +37,13 @@ expectError(new TeeTransport(primary, {}));
 // A pino-like logger.
 new TeeTransport(primary, { mirrors: [primary], logger: { warn() {} } });
 expectError(new TeeTransport(primary, { mirrors: [primary], logger: 'pino' }));
+
+// The decorator of a transport of a channel takes its messages.
+declare const twilio: Transport<'twilio', SmsMessage>;
+declare const smsMessage: SmsMessage;
+const sms = new TeeTransport(twilio, {
+  mirrors: [twilio],
+  onMirror: (outcome) => expectType<SmsMessage | RawMessage>(outcome.message),
+});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectType<Promise<Receipt<'twilio'>>>(sms.send(smsMessage));
