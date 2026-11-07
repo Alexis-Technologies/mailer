@@ -358,6 +358,7 @@ class MockTransport {
    */
   reset() {
     this.sentMessages = [];
+    this.sentRawMessages = [];
     this.nextResponse = null;
     this.config = createMockConfig();
     this.messageIdCounter = 1;

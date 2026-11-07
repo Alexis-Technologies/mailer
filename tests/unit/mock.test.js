@@ -90,3 +90,15 @@ test('Mock: random decides the simulated failures', async () => {
   const passing = new MockTransport({ failureRate: 0.5, random: () => 0.9 });
   assert.strictEqual((await passing.send(message('Hi'))).successful, true);
 });
+
+test('Mock: reset() clears the raw messages too', async () => {
+  const transport = new MockTransport();
+  const raw = {
+    envelope: { from: 'alex@example.com', to: ['bob@example.com'] },
+    content: 'Subject: Hi\r\n\r\nHi\r\n',
+  };
+  await transport.sendRaw(raw);
+  assert.strictEqual(transport.getSentRawMessages().length, 1);
+  transport.reset();
+  assert.deepStrictEqual(transport.getSentRawMessages(), []);
+});
