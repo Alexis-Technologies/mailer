@@ -1,10 +1,11 @@
-# План: канали в @alexify/mailer 1.3–1.5
+# План: канали в @alexify/mailer 2.0
 
-Складено 2026-11-01. Замінює `messenger/PLAN-v1.md` (коміт `3e19a6a` у гілці `feature/v1`
-репозиторію messenger): канали, заплановані для `@alexify/messenger`, переходять у mailer як нові
-subpath-и, а messenger не публікується. План спирається на два проходи по коду mailer 1.2
-(публічні типи — усі d.ts; runtime — `src/internal`, `src/core`, декоратори, черга, сховища,
-вебхуки) і на код 11 конкурентів та 12 довідкових бібліотек, склонованих у
+Складено 2026-11-01, переглянуто 2026-11-06 після перевірки проти коду mailer 1.2.0 (додаток A).
+Замінює `messenger/PLAN-v1.md` (коміт `3e19a6a` у гілці `feature/v1` репозиторію messenger):
+канали, заплановані для `@alexify/messenger`, переходять у mailer як нові subpath-и, а messenger
+не публікується. План спирається на проходи по коду mailer 1.2 (публічні типи — усі d.ts;
+runtime — `src/internal`, `src/core`, декоратори, черга, сховища, вебхуки) і на код 11
+конкурентів та 12 довідкових бібліотек, склонованих у
 `~/Documents/open-source/messenger-alternatives/` (індекс з версіями й ліцензіями — `README.md`
 тієї теки).
 
@@ -12,48 +13,53 @@ subpath-и, а messenger не публікується. План спираєт�
 
 - SMS, RCS, WhatsApp, Messenger, Instagram, Telegram, Viber, Slack, Discord, Teams, Google Chat і
   push (FCM, APNs, Web Push) — у mailer, по subpath на провайдера; `@alexify/messenger` не
-  публікується, його репозиторій архівується (розділ 12);
-- **адитивно, у 1.x, без 2.0**: жоден рядок коду email-користувача не змінюється. Єдиний
-  виняток — розширені об'єднання категорій помилок і станів, які ламають вичерпний `switch` у
-  TypeScript; так уже зроблено в 1.1 з категорією `unsupported` (розділ 4.2);
-- три релізи: **1.3** — канали й декоратори, **1.4** — замкнений цикл (вебхуки каналів,
-  suppression, фолбек), **1.5** — черга, outbox і аудит для каналів;
+  публікується, його репозиторій архівується (розділ 12). Назва `@alexify/mailer` лишається;
+- **2.0, а не адитивний 1.x:** адитивний шлях дав би дві паралельні родини назв (метрики,
+  події логера й аудиту), два API черги і розрізнення email від каналу за наявністю поля. У 2.0
+  — одна модель повідомлення, одна родина назв, одна черга. **Байти, що зберігаються, не
+  змінюються й у 2.0**: формат email-задачі v1, id задачі, fingerprint, Message-ID задачі, id
+  подій аудиту, ранги в MongoDB (розділ 2.3);
+- три релізи: **2.0** — контракти, назви, черга, перебудова вебхуків, `./channels`, `./router`,
+  декоратори і всі 19 провайдерів; **2.1** — замкнений цикл (вебхуки каналів, suppression,
+  фолбек); **2.2** — сховища MongoDB для них, crypto-shredding, фолбек за дедлайном;
+- **провайдер входить у реліз лише після живого прогону** `tests/e2e` на справжньому акаунті;
+  провайдер без нього виходить пізніше мінорним релізом (розділ 9);
+- **`./webhooks`** тримає спільний код, кожен верифікатор — subpath `./webhooks/<provider>`, як
+  транспорт (`./webhooks/ses`, `./webhooks/telegram`);
 - з конкурентів — feature-порт із заголовком походження, як у mailer 1.1; код mailer більше не
   копіюється — він узагальнюється на місці;
 - Amazon SMS — через **AWS End User Messaging SMS** (`SendTextMessage`, pinpoint-sms-voice-v2);
-- **e2e-акаунтів немає** — фейкові сервери, тест-вектори, заморожені фікстури (розділ 9);
 - нова категорія помилки **`unreachable`**; WhatsApp, Messenger і Instagram — в одному **`./meta`**.
 
 ---
 
 ## 1. Коротко
 
-1. **Надійний шар mailer здебільшого вже агностичний.** Із ~19 тис. рядків (`internal`, `core`,
-   декоратори, черга, сховища, вебхуки) повідомлення каналу без змін проходять: HTTP-шар
-   (`requestWithRetry` з правилом «не надсилати повторно запит невідомого результату без
-   ключа»), receipts, retry, breaker, ratelimit, tee, pool, outbox, BullMQ, audit-сінки, сховище
-   ідемпотентності й replay-сховище вебхуків. Падає з TypeError у п'яти місцях (fingerprint
-   ідемпотентності, `checkMessage`, розмір повідомлення в otel, logger, `getMessagesTo` у mock),
-   а hooks відмовляє. Узагальнення — ~2 тис. рядків замість ~15 тис. скопійованих у варіанті з
-   двома пакетами.
-2. **Контракти — адитивні.** `Transport<TProviderId, TMessage = Message>`; типи повідомлень
-   каналів — у `index.d.ts` кореня (типи нічого не важать); runtime-будівник і хелпери — у новому
-   `./channels`, бо корінь має ~100 Б запасу (9,9 з 10 КБ), а email-користувач не має платити за
-   таблиці телефонних кодів і GSM-7.
-3. **Машинерія лише для каналів — окремими entry:** `./channels` і `./channel-webhooks` (у
-   `./webhooks` 15,3 з 15,5 КБ). Спільне з email переїжджає в `src/internal/`, щоб не додавати
-   ребер між subpath-ами.
-4. **Email не змінюється ні на байт** там, де байти зберігаються: fingerprint ідемпотентності,
-   серіалізація mail job, id задачі. Інакше повторна постановка з тим самим ключем дає
-   `key_reused`, а `messageHash` в аудиті міняється. Golden-тести фіксують значення 1.2.
-5. **Синергія, якої немає ні в кого:** один список suppression на email і канали (пункт roadmap
+1. **Надійний шар mailer здебільшого агностичний.** Без змін повідомлення каналу проходять:
+   HTTP-шар (`requestWithRetry` з правилом «не надсилати повторно запит невідомого результату
+   без ключа»), receipts, retry, breaker, ratelimit, tee, gate, outbox, BullMQ, audit-сінки,
+   сховище ідемпотентності й replay-сховище вебхуків; ~88 % `./queue` не залежить від email.
+   Ламаються: fingerprint ідемпотентності, `checkMessage`, розмір повідомлення в otel, logger
+   (зокрема `recordMessage: 'inline'`), `getMessagesTo` і `getMessagesBySubject` у mock; hooks
+   відмовляє; pool у змішаному складі зупиняє перехід не там; номери телефонів ніде не
+   редагуються.
+2. **Одна модель.** `Message` отримує `channel: 'email'`, `Channel` включає `'email'`,
+   `AnyMessage = Message | ChannelMessage`. `tenantId?` — в обох моделях, кореляція — в
+   `metadata.correlationId` для обох, як зараз. `Transport<TProviderId, TMessage = Message>`.
+3. **Будівник і маршрутизатор — окремими entry:** `./channels` (будівник, телефони, сегменти,
+   екранування) і `./router` (транспорт, що відправляє за `message.channel`), бо корінь має
+   ~100 Б запасу (9,9 з 10 КБ), а email-користувач не має платити за таблиці GSM-7.
+4. **Одна черга:** одне ядро зі стратегією на тип задачі; email-задача лишається v1 байт у байт,
+   задача каналу — v2. API перейменовано без `Mail`: `createQueue`, `createJobHandler`.
+5. **Вебхуки:** `./webhooks` — спільне, кожен провайдер — свій subpath, тож функція перевірки
+   одного провайдера платить лише за нього.
+6. **Синергія, якої немає ні в кого:** один список suppression на email і канали (пункт roadmap
    mailer, ще не зроблений), один фолбек WhatsApp → SMS → email за результатом, одна черга, один
    аудит, одне crypto-shredding одержувачів.
-6. **Конкуренти — feature-порт, як і планувалося:** жоден не годиться як база файл у файл
-   (розділ 3.1). Майже дослівно — лише чисті функції й таблиці (thinwrap, twilio-node, http_ece,
+7. **Конкуренти — feature-порт:** жоден не годиться як база файл у файл (розділ 3.1). Майже
+   дослівно — лише чисті функції й таблиці (thinwrap, twilio-node, http_ece,
    message-segment-calculator, discord.js).
-7. **Обсяг:** ~14 тис. рядків нового `src/` за три релізи (розділ 11) замість ~16 тис. нових і
-   ~15 тис. скопійованих.
+8. **Обсяг:** ~15 тис. рядків нового `src/` за три релізи (розділ 11).
 
 ---
 
@@ -64,9 +70,10 @@ subpath-и, а messenger не публікується. План спираєт�
 - `internal/http.js`: `requestWithRetry`, `hasIdempotencyKey`, двозначна відповідь →
   `markDeliveryUnknown`, `Retry-After` понад 30 с — кинути для черги. Провайдер ставить
   `hasIdempotencyKey` лише там, де ключ відображається на дедуплікацію самого провайдера.
-- `ProviderTransport` — готова база транспорту каналу; `refusal.js` (`unsupported`) — для лімітів
-  каналу; `schedule.js` читає `scheduledAt`, яке має ту саму назву в повідомленні каналу;
-  `uuid.js` — для `apns-id`; gate, batch, backoff, verify, unsent, polling-driver.
+- `ProviderTransport` — готова база транспорту каналу (нічого не припускає про повідомлення);
+  `refusal.js` (`unsupported`) — для лімітів каналу; `schedule.js` читає `scheduledAt`, яке має
+  ту саму назву в повідомленні каналу; `uuid.js` — для `apns-id`; gate, batch, backoff, verify,
+  unsent, polling-driver.
 - `core/receipt.js`: категорії не валідуються, нові не потребують коду (лише значення
   `retryable` за замовчуванням — 2.2).
 - `./retry`, `./breaker` (`FAILURE_CATEGORIES` — allowlist network, timeout, server-error,
@@ -76,50 +83,82 @@ subpath-и, а messenger не публікується. План спираєт�
   документ outbox непрозорий для `data`, нічого email-специфічного.
 - `webhooks/request.js`: `claimDelivery` з reserve/commit/release і токеном; ключі сховища —
   SHA-256 від id, тож id з номером телефону не зберігається відкрито; три резолвери опцій
-  (з часом, без часу, облікові дані); `createSnsVerifier` — для подій AWS SMS лише новий
+  (з часом, без часу, облікові дані); `createSnsVerifier(options, service)` уже
+  параметризований (`eventsOf`, `trust`…) і спільний для SES і Scaleway — для AWS SMS лише новий
   `eventsOf`.
+- Рендерер `./templates` уже рендерить шаблон лише з `text`; `subject` вимагає тільки черга.
 
 ### 2.2 Узагальнюється на місці
 
 | Модуль | Сьогодні з повідомленням каналу | Зміна | Реліз |
 | --- | --- | --- | --- |
-| `internal/fingerprint.js` | TypeError на `message.sender` → ламає `./idempotency` і подію `rendered` воркера | гілка каналу з першою міткою `channel\0<channel>` (не перетинається з email): from, to (підписка Web Push — канонічним JSON), text, media (url/id, тип, назва — без байтів), buttons, template, mentions, payload канонічним JSON, tags, scheduledAt, metadata; без idempotencyKey, correlationId, tenantId. Канонічний JSON — з `queue/hash.js` у `internal/`. Email-гілка без змін | 1.3 |
-| `core/message.js` | `checkMessage` кидає; його єдиний виклик — hooks | `checkMetadata`, `checkScheduledAt` → `internal/message-checks.js` (корінь не росте); `checkChannelMessage` — у `internal/channel/` | 1.3 |
-| `core/message-id.js` | `pinMessageId` — no-op (немає `sender`) | для каналу закріплюється клієнтський reference (ключ ідемпотентності або UUID) у тій самій WeakMap, тож кожна спроба retry і pool несе один id: TurboSMS `sequence_id`, Vonage `client-ref`, Sinch `client_reference`, RBM `messageId`, Discord `nonce` | 1.3 |
-| `core/receipt.js` | `createFailedReceipt` пропускає лише відомі ключі; `retryable` — з HTTP-статусу | `channel?`, `segments?`, `state?` у receipt; `retryable` за замовчуванням з категорії (`unreachable` — так, інші шість — ні), email-категорій це не торкається. Словесних правил для нових категорій не додавати — вони перекласифікували б email | 1.3 |
-| `internal/api-client.js` | `URLSearchParams` стає `{}`; Content-Type перезаписується; Retry-After лише з заголовка; текст «ok» → `deliveryUnknown` | розділ 4.4 | 1.3 |
-| `internal/api.js` | тягне `core/address`, attachment, provider, а з ними calendar і message-id | `mergeBatch`, `checkCredential`, `sendConverted`, `sentWith` → новий internal-модуль, `api.js` їх реекспортує | 1.3 |
-| `internal/redact-addresses.js`, `redact.js` | редагує лише email-адреси (від `@`); ключів каналів у `SECRET_KEYS` немає | новий `redactRecipients` (адреси + E.164 з `+`) на 14 місцях виклику; logger і otel додатково редагують точний `message.to`. `SECRET_KEYS` += `authtoken`, `bottoken`, `webhookurl`, `signingsecret`, `vapidprivatekey`, `serviceaccount`, `private_key`, `client_secret`, `access_token`, `refresh_token`, заголовки `x-viber-auth-token`, `x-goog-api-key`. Повний URL ніколи не логується (токен Telegram у шляху, секрет вебхуків Slack/Discord/Teams у самому URL) | 1.3 |
-| `ses/http-client.js` | SigV4 живе всередині `./ses` | → `internal/sigv4.js` (`refactor:`), потрібен `./aws-sms` | 1.3 |
-| `./hooks` | `isShaped` відмовляє (потрібні `sender.address`, `recipients[]`) | приймає `typeof channel === 'string'` і перевіряє `checkChannelMessage` | 1.3 |
-| `./logger` | TypeError на `recipients`; повідомлення каналу потрапляє в гілку raw | гілка каналу: `{channel, recipientCount: 1, mediaCount, buttonCount, hasTemplate, hasPayload}`; події `message.sending/sent/failed/retrying` з `channel`, події `email.*` лишаються для email; `to` — лише з `recordMessage` | 1.3 |
-| `./otel` | TypeError: `Buffer.byteLength(subject)` | span `${channel} send`; атрибути `mailer.channel`, `messaging.operation.type`, `messaging.message.id`, `mailer.message.size`, `.text.length`, `.media.count`, `.segments`, `.encoding`; `from` — лише з `recordSensitiveData`, `to` — ніколи; нові інструменти `mailer.channel.{attempts, messages, retries, duration, message.size, active_sends, segments}`. Імена `email.*` і `mailer.email.*` не змінюються (дашборди) | 1.3 |
-| `./mock` | TypeError у `getMessagesTo` | збіг за `to` (і endpoint Web Push), `getMessagesByChannel`; `hasAddress` повертає false для `null` | 1.3 |
-| `./pool` | `hasMessageRejection` зупиняє перехід лише на `validation`/`rejected` — `opted-out` пішов би до іншого провайдера | `STOP_FAILOVER` = validation, rejected, invalid-recipient, opted-out, outside-window, blocked, unregistered, not-on-channel; `unreachable` — переходить (інший маршрут SMS може дістатися апарата). `not-on-channel` зупиняє, бо члени пулу — один канал; WhatsApp → SMS — це `./fallback` | 1.3 |
-| `./idempotency` | відхиляє відправлення через TypeError у fingerprint | гілка fingerprint; для повідомлення каналу з `tenantId` — namespace `${namespace}:${tenantId}:${key}` (у email `tenantId` немає) | 1.3 |
-| `./retry`, `./breaker`, `./ratelimit`, `./tee` | працюють | лише d.ts (параметр `TMessage`) | 1.3 |
-| `./audit` | стани не валідуються; таблиці закриті | ранги, `FINAL`, `STATES`, рівні логер-сінку (розділ 4.2); логер-сінк пише `message.*` для каналу і `mail.*` для email | 1.3 |
-| `webhooks/request.js`, `sns.js` | агностичні; `recipientOf` лише нижній регістр домену, телефон не нормалізується | загальна частина → `src/internal/webhook/`, один клас `WebhookVerificationError` для обох entry (щоб `instanceof` працював); `WebhookRequest.url?` (Twilio підписує URL) | 1.4 |
-| `./queue` | `parseMailJob` відмовляє на будь-якому ключі поза `V1_KEYS`; воркер 1.2 відпускає таку задачу кожні 5 хв до 7 днів | канальні двійники, окрема черга (розділ 7) | 1.5 |
-| `./mongodb` | `eventsOfProviderMessage` з'єднує лише за `providerMessageId` | опційний `provider` + складений індекс `{provider, providerMessageId}` | 1.5 |
+| `internal/fingerprint.js` | TypeError на `message.sender` (поза `try` в `./idempotency`) → ламає `./idempotency` і подію `rendered` воркера | гілка каналу з першою міткою `channel\0<channel>` (не перетинається з email): from, to (підписка Web Push — канонічним JSON), text, media (url/id, тип, назва — без байтів), buttons, template, mentions, payload канонічним JSON, tags, scheduledAt, metadata; без idempotencyKey і tenantId. Канонічний JSON — з `queue/hash.js` у `internal/`. Email-гілка без змін, `channel` і `tenantId` не читає | 2.0 |
+| `core/message.js` | `checkMessage` кидає; його єдиний виклик — hooks | `checkMetadata`, `checkScheduledAt` і перевірка `tenantId` → `internal/message-checks.js` (корінь не росте); `checkChannelMessage` — у `internal/channel/`; `createMessage` ставить `channel: 'email'` і приймає `tenantId?` | 2.0 |
+| `core/message-id.js` | `pinMessageId` — no-op (немає `sender`) | для каналу закріплюється клієнтський reference (ключ ідемпотентності або UUID) у тій самій WeakMap, тож кожна спроба retry і pool несе один id: TurboSMS `sequence_id`, Vonage `client-ref`, Sinch `client_reference`, RBM `messageId`, Discord `nonce` | 2.0 |
+| `core/receipt.js` | `createFailedReceipt` пропускає лише відомі ключі; `retryable` — з HTTP-статусу | `channel?`, `segments?`, `state?` у receipt; `retryable` за замовчуванням з категорії (`unreachable` — так, інші шість — ні), email-категорій це не торкається. Словесних правил для нових категорій не додавати — вони перекласифікували б email | 2.0 |
+| `internal/api-client.js` | `URLSearchParams` стає `{}`; Content-Type перезаписується (а `content-type` склеюється); Retry-After лише з заголовка; текст «ok» → `deliveryUnknown`; `accepts`, `retryDelayMs`, `sleep` не передаються | розділ 4.5 | 2.0 |
+| `internal/api.js` | тягне `core/address`, attachment, provider (а з ним calendar і message-id) | `mergeBatch`, `checkCredential`, `sendConverted`, `sentWith` → новий internal-модуль, `api.js` їх реекспортує | 2.0 |
+| `internal/redact-addresses.js`, `redact.js` | редагує лише email-адреси (від `@`); ключів каналів у `SECRET_KEYS` немає, `authtoken` теж | новий `redactRecipients` (адреси + E.164 з `+`) на всіх 16 місцях виклику, `queue/outcome.js` `reasonOf` (сховище й аудит) і `./bullmq` включно; logger і otel додатково редагують точний `message.to`. `SECRET_KEYS` += `authtoken`, `bottoken`, `webhookurl`, `signingsecret`, `vapidprivatekey`, `serviceaccount`, `private_key`, `client_secret`, `access_token`, `refresh_token`, заголовки `x-viber-auth-token`, `x-goog-api-key`. Повний URL ніколи не логується (токен Telegram у шляху, секрет вебхуків Slack/Discord/Teams у самому URL) | 2.0 |
+| `ses/http-client.js` | SigV4 живе всередині `./ses` | → `internal/sigv4.js` (`refactor:`), потрібен `./aws-sms` | 2.0 |
+| `./hooks` | `isShaped` відмовляє (потрібні `sender.address`, `recipients[]`) як `rejected`, а pool на цьому зупиняє перехід | приймає повідомлення з `channel` і перевіряє `checkChannelMessage` | 2.0 |
+| `./logger` | TypeError на `recipients`; з `recordMessage: 'inline'` — на `message.content` | події `message.sending/sent/failed/retrying` з `channel` для всіх (було `email.*`), текст «Sending message.»; гілка каналу: `{channel, recipientCount: 1, mediaCount, buttonCount, hasTemplate, hasPayload}`; `inline` для каналу пише `text`; `to` — лише з `recordMessage` | 2.0 |
+| `./otel` | TypeError: `Buffer.byteLength(subject)` | метрики `mailer.message.{attempts, messages, retries, duration, message.size, attachments, active_sends, segments}` з атрибутом `mailer.channel` (було `mailer.email.*`), атрибут метрик `mailer.priority` (було `email.priority`); span `${channel} send` (для email — те саме `email send`), `spanPrefix` лишається перевизначенням; атрибути каналу `mailer.channel`, `mailer.message.text.length`, `.media.count`, `.segments`, `.encoding`, `mailer.tenant.id` (лише span); `from` — лише з `recordSensitiveData`, `to` — ніколи; email-атрибути span-ів без змін | 2.0 |
+| `./mock` | TypeError у `getMessagesTo`; `getMessagesBySubject(undefined)` повертає всі повідомлення каналів | збіг за `to` (і endpoint Web Push), `getMessagesByChannel`; `getMessagesBySubject` лише по email; `hasAddress` повертає false для `null` | 2.0 |
+| `./pool` | `hasMessageRejection` зупиняє перехід лише на `validation`/`rejected` — `opted-out` пішов би до іншого провайдера; у змішаному пулі email-транспорт своєю `validation` зупиняє SMS | `STOP_FAILOVER` = validation, rejected, invalid-recipient, opted-out, outside-window, blocked, unregistered, not-on-channel; `unreachable` — переходить (інший маршрут SMS може дістатися апарата). Члени пулу — один канал (тип `PoolConfig<P, M>` це тримає); змішані канали — `./router`, WhatsApp → SMS — `./fallback` | 2.0 |
+| `./idempotency` | відхиляє відправлення через TypeError у fingerprint; без гілки каналу дві різні SMS під одним ключем збіглися б | гілка fingerprint; namespace `${namespace}:${key}` для обох моделей, без `tenantId` (інакше задача, яку почав відправляти 1.2, після оновлення шукала б ключ в іншому namespace); тенант у ключі задає застосунок через `key` чи `namespace` | 2.0 |
+| `./retry`, `./breaker`, `./ratelimit`, `./tee` | працюють | лише d.ts (параметр `TMessage`) | 2.0 |
+| `./audit` | стани не валідуються; таблиці закриті | ранги й `FINAL` (`states.js`), `STATES` (`delivery-event.js`), рівні логер-сінку (розділ 4.2); логер-сінк пише `message.<state>` з `channel` для всіх (було `mail.<state>`) | 2.0 |
+| `./queue` | `parseMailJob` відмовляє на будь-якому ключі поза `V1_KEYS`; воркер 1.2 відпускає таку задачу кожні 5 хв до 7 днів | одне ядро зі стратегіями, задача каналу v2, API без `Mail` (розділ 4.6) | 2.0 |
+| `./webhooks` | 15 верифікаторів в одному entry (15,3 з 15,5 КБ); `WebhookRequest` без `url`; `recipientOf` лише знижує регістр домену | спільне лишається в `./webhooks`, верифікатори — `./webhooks/<provider>`; `WebhookRequest.url?` (Twilio підписує URL); телефон нормалізується `normalizePhone` (розділ 4.7) | 2.0 (перебудова), 2.1 (канали) |
+| `tests/unit/delivery.test.js` | матриця пишеться вручну, тест звіряє її з кожним subpath, що має `http-client.js` | файл провайдера каналу — теж `http-client.js`; тест звіряє кожен такий subpath з email-матрицею або з матрицею каналів (`delivery-channels.test.js`) | 2.0 |
+| `./mongodb` | `eventsOfProviderMessage` з'єднує лише за `providerMessageId` | опційний `provider` + складений індекс `{provider, providerMessageId}` | 2.2 |
 
-### 2.3 Інваріанти email
+### 2.3 Що ламається в 2.0 і що не змінюється ні на байт
 
-Не змінюються ні на байт, з golden-тестом на значення 1.2 у першому ж коміті етапу 1:
-fingerprint email-повідомлення; серіалізація, hash і id mail job (без `channel: 'email'` і без
-нових ключів); `ENVELOPE` запечатаної задачі (ключ `channel` у відкритій частині провалив би
-задачу воркером 1.2 одразу); імена span-ів і метрик otel; події logger-а; `createMessage`.
+**Ламається** (розділ «Upgrading from 1.x» у CHANGELOG):
 
-### 2.4 Знахідки в mailer поза каналами
+1. `Message.channel: 'email'` — `createMessage` ставить його; у типі обов'язковий, а в runtime
+   повідомлення без `channel` вважається email, тож ручні об'єкти працюють далі. `Channel`
+   включає `'email'`; `AnyMessage = Message | ChannelMessage`; `MessageOf<C>` охоплює і email.
+2. Розширені об'єднання (розділ 4.2): `ReceiptErrorCategory`, `DeliveryEventType`,
+   `MessageState` — ламають вичерпний `switch`.
+3. Назви спостережуваності: метрики `mailer.email.*` → `mailer.message.*` з `mailer.channel`,
+   атрибут метрик `email.priority` → `mailer.priority`; події логера `email.*` → `message.*`;
+   події логер-сінку аудиту `mail.<state>` → `message.<state>`. Назви span-ів і email-атрибути
+   span-ів не змінюються.
+4. `./queue`: `createMailQueue` → `createQueue`, `createMailJobHandler` → `createJobHandler`,
+   `prepareMailJob`/`parseMailJob` → `prepareJob`/`parseJob`, `MailQueueError` → `QueueError`
+   (коди `queue.*` ті самі), `MailJobData` → `JobData`, константи відповідно.
+5. `./webhooks`: верифікатори переїжджають у `./webhooks/<provider>`, назви функцій ті самі; у
+   `./webhooks` лишаються `WebhookVerificationError`, сховища replay і типи.
+6. `DeliveryEvent.channel` — обов'язковий (15 email-верифікаторів ставлять `'email'`);
+   додається `error?: { category, code }`.
 
-Аналіз знайшов кілька дрібних вад 1.2. Кожна — окремий `fix:`-коміт з тестом, їх можна випустити
-й патчем 1.2.x до каналів:
+**Додається, нічого не ламаючи:** `Message.tenantId?`.
+
+**Не змінюється ні на байт** (golden-тести на значеннях 1.2 — першим комітом етапу 2):
+fingerprint email-повідомлення (він не читає `channel` і `tenantId`); JSON, hash, MAC, id і
+Message-ID/Content-ID email-задачі (задача v1 без нових ключів, той самий seed
+`ns\0tenant\0key`); `ENVELOPE` запечатаної задачі (ключ `channel` у відкритій частині провалив би
+задачу воркером 1.2 одразу, `queue.invalid_job`); id подій аудиту; ранги станів 1.2; namespace
+`./idempotency`; `createMessage`, крім поля `channel`; назви span-ів.
+
+### 2.4 Знахідки в mailer поза каналами — патч 1.2.1
+
+Кожна — окремий `fix:`-коміт з тестом, що падає без неї, на гілці від `main`, до 2.0; знахідка,
+що не відтворюється, відпадає:
 
 - `internal/polling-driver.js:167/216/247` логує `error?.message` без редагування;
 - `otel` (`extractNetworkAttributes`, `:403–416`): будь-який конфіг з `host` і `port` — це
   `smtp`, а з `domain` — URL Mailgun (перевіряти `id`);
-- `./idempotency` (`:173`, `:199`): тексти receipt вставляють ключ без редагування, для email
-  теж.
+- `./idempotency` (`:173`, `:199`): тексти receipt вставляють ключ без редагування, а
+  `#storeFailure` (`:212`) — сирий `messageOf(error)`;
+- `./mock`: `reset()` не чистить `sentRawMessages`;
+- `breaker:32`, `logger:375`, `pool:292`, `otel:486`, `tee:26` читають `errors` невдалого
+  receipt як масив, хоча в типі він необов'язковий (власний транспорт може його не дати);
+- `./pool` логує помилку селектора без редагування (`pool-transport.js:377`);
+- `./pool` перехоплює будь-який throw, TypeError теж, і переходить далі, ховаючи баг, — те, що
+  65 виправив для `./retry`.
 
 ---
 
@@ -130,14 +169,14 @@ fingerprint email-повідомлення; серіалізація, hash і id
 | Джерело | Ліцензія | Що беремо | Куди | Режим |
 | --- | --- | --- | --- | --- |
 | **@thinwrap/notifications** 1.2.0 | MIT | запити й відповіді Twilio, Vonage, Infobip, Sinch, WhatsApp Cloud, Telegram, вебхуків Slack/Discord/Teams/Google Chat, FCM, APNs; таблиці кодів помилок; тести на форму запиту (15–42 на провайдера) | SMS, `./meta`, чати, push | FEATURE; кілька функцій і таблиць — майже дослівно |
-| **@visulima/notification** 2.0.0 | MIT | Web Push (VAPID + RFC 8291, коректний), APNs (сесія HTTP/2, кеш JWT), верифікатори (Twilio, Slack v0, Discord/Telnyx Ed25519, Vonage JWT), парсери вхідних Twilio/Vonage для STOP, ~60–70 тестів | `./webpush`, `./apns`, `./channel-webhooks` | FEATURE (~1 000 з 8 968 рядків) |
-| **@novu/providers** 2.6.5 | MIT | лише таблиці статусів `parseEventBody` (Twilio, Telnyx, Plivo) — з виправленнями | `./channel-webhooks` | REFERENCE |
-| **twilio-node** 6.2.0 | MIT | алгоритм `X-Twilio-Signature` (варіанти URL, масиви, `bodySHA256`) і ~20 векторів; enum `MessageStatus` | `./channel-webhooks`, `./twilio` | FEATURE |
-| **telnyx-node** 7.28.0 | MIT | Ed25519-верифікатор, статуси | довідка (Telnyx не у v1) | REFERENCE |
-| **vonage-node-sdk** 3.30.1 | Apache-2.0 | 5 векторів підпису SMS (md5hash, md5, sha1, sha256, sha512) | тести `./channel-webhooks` | код — з документації, вектори — з атрибуцією |
-| **sinch-sdk-node** 1.7.0 | Apache-2.0 | вектори DLR SMS і Conversation, enum статусів і `Reason` | тести `./channel-webhooks`, `./sinch` | так само |
-| **plivo-node** 4.79.0 | MIT | V2/legacy вектори | довідка (Plivo не у v1) | REFERENCE |
-| **node-telegram-bot-api** 2.1.0 | MIT | конверт `ok:false`, поля помилок, політика обов'язкового secret token, тести транспорту й вебхука, фейковий годинник лімітера | `./telegram` | FEATURE |
+| **@visulima/notification** 2.0.0 | MIT | Web Push (VAPID + RFC 8291, коректний), APNs (сесія HTTP/2, кеш JWT), верифікатори (Twilio, Slack v0, Discord/Telnyx Ed25519, Vonage JWT), парсери вхідних Twilio/Vonage для STOP, ~60–70 тестів | `./webpush`, `./apns`, `./webhooks/<provider>` | FEATURE (~1 000 з 8 968 рядків) |
+| **@novu/providers** 2.6.5 | MIT | лише таблиці статусів `parseEventBody` (Twilio, Telnyx, Plivo) — з виправленнями | `./webhooks/<provider>` | REFERENCE |
+| **twilio-node** 6.2.0 | MIT | алгоритм `X-Twilio-Signature` (варіанти URL, масиви, `bodySHA256`) і ~20 векторів; enum `MessageStatus` | `./webhooks/twilio`, `./twilio` | FEATURE |
+| **telnyx-node** 7.28.0 | MIT | Ed25519-верифікатор, статуси | довідка (Telnyx не в плані) | REFERENCE |
+| **vonage-node-sdk** 3.30.1 | Apache-2.0 | 5 векторів підпису SMS (md5hash, md5, sha1, sha256, sha512) | тести `./webhooks/vonage` | код — з документації, вектори — з атрибуцією |
+| **sinch-sdk-node** 1.7.0 | Apache-2.0 | вектори DLR SMS і Conversation, enum статусів і `Reason` | тести `./webhooks/sinch`, `./sinch` | так само |
+| **plivo-node** 4.79.0 | MIT | V2/legacy вектори | довідка (Plivo не в плані) | REFERENCE |
+| **node-telegram-bot-api** 2.1.0 | MIT | конверт `ok:false`, поля помилок, політика обов'язкового secret token, тести транспорту й вебхука, фейковий годинник лімітера | `./telegram`, `./webhooks/telegram` | FEATURE |
 | **grammY** 1.46.0 | MIT | лише звірка | — | REFERENCE |
 | **notifme-sdk** 1.16.25 | MIT | нічого (усе старше й гірше за інші джерела) | — | SKIP |
 | **http_ece** 1.2.1 | MIT | aes128gcm одним записом, вектори RFC 8188 §3.1–3.2 | `./webpush` | FEATURE |
@@ -147,8 +186,8 @@ fingerprint email-повідомлення; серіалізація, hash і id
 | **@discordjs/rest** 2.5.0 | Apache-2.0 | алгоритм бакетів `X-RateLimit-*` і глобальний 50/с | `./discord` | код — з документації Discord, алгоритм як довідка |
 | **firebase-admin** 14.5.0 | Apache-2.0 | вилучення коду помилки FCM (`details[].errorCode` перед `status`), таблиця кодів, політика кешу токена | `./fcm` | з документації + атрибуція таблиці |
 | **@slack/bolt** 5.1.0, **@slack/web-api** 8.3.0 | MIT | верифікатор v0 (з виправленим вікном) і документований вектор; семантика 429 | `./slack` | FEATURE / REFERENCE |
-| **botframework-connector** 4.1.6 | MIT | OpenID/JWKS, перевірка claims (`iss`, `aud`, endorsements, `serviceurl`), шляхи Connector API | `./teams` | FEATURE |
-| **viber-bot** 1.0.18 | Apache-2.0 | ендпоінти, `X-Viber-Auth-Token`, вектор HMAC | `./viber` | REFERENCE + вектор |
+| **botframework-connector** 4.1.6 | MIT | OpenID/JWKS, перевірка claims (`iss`, `aud`, endorsements, `serviceurl`), шляхи Connector API | `./teams`, `./webhooks/teams` | FEATURE |
+| **viber-bot** 1.0.18 | Apache-2.0 | ендпоінти, `X-Viber-Auth-Token`, вектор HMAC | `./viber`, `./webhooks/viber` | REFERENCE + вектор |
 | **@infobip-api/sdk** 0.3.2 | MIT | SMS v3 / WhatsApp запити | `./infobip` | REFERENCE |
 | **@google/rcsbusinessmessaging** 1.0.10 | Apache-2.0 | ендпоінти `agentMessages` (`messageId`), capability check | `./rbm` | REFERENCE |
 
@@ -167,7 +206,8 @@ fingerprint email-повідомлення; серіалізація, hash і id
 `node-alphasms`). Пишемо з документації: turbosms.ua/api.html (+ callback.html — DLR і вхідні
 Viber), alphasms.ua (вебхуки статусів, підписані ключем API — за стороннім клієнтом, перевірити),
 smsclub.mobi/en/api (`im.smsclub.mobi/sms/send` і `/sms/status`, до 100 id, 9 запитів/с, статуси
-— лише опитуванням). Гібрид Viber → SMS усі троє роблять на своєму боці.
+— лише опитуванням). Гібрид Viber → SMS усі троє роблять на своєму боці. Акаунти платні, а
+альфа-ім'я відправника може потребувати реєстрації в операторів — починати рано (розділ 9).
 
 ### 3.3 Правила порту
 
@@ -196,14 +236,15 @@ from nodemailer, unemail and sently» — **«Code ported for the channels»**:
 
 ### 4.1 Типи кореня
 
-Усе нове в корені — лише типи, крім кількох полів receipt (4.6):
+Усе нове в корені — лише типи, крім `channel` і `tenantId` у `createMessage` та кількох полів
+receipt (4.9):
 
 ```ts
 export type Channel =
-  | 'sms' | 'rcs' | 'whatsapp' | 'messenger' | 'instagram' | 'telegram'
-  | 'viber' | 'slack' | 'discord' | 'teams' | 'googleChat' | 'push';
+  | 'email' | 'sms' | 'rcs' | 'whatsapp' | 'messenger' | 'instagram' | 'telegram'
+  | 'viber' | 'slack' | 'discord' | 'teams' | 'google-chat' | 'push';
 
-interface ChannelMessageBase<TChannel extends Channel, TPayload = JsonObject> {
+interface ChannelMessageBase<TChannel extends Exclude<Channel, 'email'>, TPayload = JsonObject> {
   readonly channel: TChannel;
   readonly text?: string;
   readonly media?: readonly ChannelMedia[];   // { url } | { content, contentType, filename? }
@@ -211,42 +252,58 @@ interface ChannelMessageBase<TChannel extends Channel, TPayload = JsonObject> {
   readonly payload?: TPayload;                // Block Kit, Adaptive Card, embed — as is
   readonly mentions?: ChannelMentions;        // none unless allowed
   readonly tags: readonly string[];
-  readonly metadata?: Readonly<Record<string, string>>;
+  readonly priority: Priority;
+  readonly metadata?: Readonly<Record<string, string>>; // correlationId goes here, as for email
   readonly tenantId?: string;
   readonly idempotencyKey?: string;
-  readonly correlationId?: string;
   readonly scheduledAt?: Date;
   readonly expiresAt?: Date;                  // push TTL, SMS validity period
-  readonly priority?: Priority;
 }
 // SmsMessage (to: E164, from, text), RcsMessage, WhatsAppMessage (template), MessengerMessage,
 // InstagramMessage, TelegramMessage (to: string | number), ViberMessage, SlackMessage,
 // DiscordMessage, TeamsMessage, GoogleChatMessage, PushMessage (to: { token } | subscription)
 export type ChannelMessage = SmsMessage | RcsMessage | WhatsAppMessage | /* … */ PushMessage;
-export type ChannelMessageOf<C extends Channel> = Extract<ChannelMessage, { readonly channel: C }>;
 export type AnyMessage = Message | ChannelMessage;
+export type MessageOf<C extends Channel> = Extract<AnyMessage, { readonly channel: C }>;
 
-export interface Transport<TProviderId extends string = string, TMessage = Message> { /* … */ }
-export interface VerifiableTransport<TProviderId extends string = string, TMessage = Message>
+export interface Message {
+  readonly channel: 'email';                  // new in 2.0; absent at run time means email
+  readonly tenantId?: string;                 // new in 2.0
+  /* … as in 1.2 … */
+}
+
+export interface Transport<TProviderId extends string = string, TMessage extends AnyMessage = Message> { /* … */ }
+export interface VerifiableTransport<TProviderId extends string = string, TMessage extends AnyMessage = Message>
   extends Transport<TProviderId, TMessage> { /* … */ }
 // RawTransport and isRawTransport stay email-only.
 ```
 
-- `Message`, `Address`, `createMessage`, `RawTransport`, `isRawTransport`, `DeliveryBounce` —
-  без змін.
+- **Кореляція:** окремого `correlationId` немає ні в `Message`, ні в повідомленні каналу. Як і
+  в 1.2 (R32), це `metadata.correlationId`: транспорт передає його провайдеру тим способом, який
+  провайдер повертає у вебхуку (Twilio — query `StatusCallback`, Meta —
+  `biz_opaque_callback_data`, Infobip — `callbackData`), і верифікатор кладе його в
+  `DeliveryEvent.correlationId`. Задача черги й `AuditEvent` мають свій `correlationId`, як і
+  зараз.
+- **`tenantId?`** — в обох моделях; провайдеру не надсилається; воркер ставить його з задачі;
+  читають suppression (2.1), функція ключа ratelimit, span (`mailer.tenant.id`, не метрики —
+  кардинальність), логер і аудит; fingerprint і namespace ідемпотентності — ні.
+- `Address`, `RawTransport`, `isRawTransport`, `DeliveryBounce` — без змін.
 - Декоратори стають `<TProviderId, TMessage extends AnyMessage = Message>` разом зі своїми
   конфігами (`Hooks<M>`, `RateLimitConfig<M>`, `TeeConfig<M>`, `PoolConfig<P, M>`,
-  `Strategy<P, M>`, `TransportSelector`), а `implements RawTransport<TProviderId>` міняється на
+  `Strategy<P, M>`, `TransportSelector<M>`, `IdempotencyConfig<M>`), а
+  `implements RawTransport<TProviderId>` міняється на
   `implements VerifiableTransport<TProviderId, TMessage>` — інакше `check:dts` падає з TS2416.
-  `sendRaw` лишається: для транспорту каналу він дає збій `configuration`, а email-декоратори
-  структурно лишаються `RawTransport`. Перевірено ескізом на tsc 7 `--strict`:
+  `sendRaw` лишається: для транспорту каналу він дає збій `configuration` (`refuseUnlessRaw`), а
+  email-декоратори структурно лишаються `RawTransport`. Перевірено ескізом на tsc 7 `--strict`:
   `createRetryTransport(new MockTransport())` — точно `RetryTransport<'mock'>`, як і зараз;
   транспорт Twilio дає `RetryTransport<'twilio', SmsMessage>`; email-повідомлення в SMS-декоратор
   не проходить, і навпаки.
-- `Receipt`: `channel?` (немає для email), `segments?` (SMS), `state?: 'accepted' | 'sent'`
-  (`sent` — канал не звітує про доставку: робочі чати, push, тож пізнішого стану не буде).
-- `DeliveryEvent`: `channel?`, `error?: { category, code }` (код DLR, класифікований, замість
-  `bounce`); `AuditEvent`: `channel?`.
+- `Receipt`: `channel?` (транспорт може не ставити), `segments?` (SMS),
+  `state?: 'accepted' | 'sent'` (`sent` — канал не звітує про доставку: робочі чати, push, тож
+  пізнішого стану не буде).
+- `DeliveryEvent`: `channel` (обов'язковий), `error?: { category, code }` (код DLR,
+  класифікований, замість `bounce`); `AuditEvent`: `channel?` (відсутнє — email, так записані
+  події 1.2).
 
 ### 4.2 Категорії, стани, події
 
@@ -258,13 +315,13 @@ export interface VerifiableTransport<TProviderId extends string = string, TMessa
 
 - `unreachable` — апарат тимчасово недоступний (Twilio 30003, Vonage DLR 2/7, Sinch 404):
   повторюється пізніше і є приводом для фолбеку, а не `rejected`.
-- Ранги `audit/states.js` дробові, щоб ранги, уже записані в MongoDB, лишились чинними:
-  `sent` 3.5 (між `accepted` 3 і `delivered` 4), `expired` 4 (як `failed`), `read` 4.5.
+- Ранги `audit/states.js` записуються в MongoDB (`rank` у `audit-sink.js`, індекс
+  `mailer_correlation`), тому дробові, щоб записані ранги лишились чинними: `sent` 3.5 (між
+  `accepted`/`delivery_unknown` 3 і `delivered` 4), `expired` 4 (як `failed`), `read` 4.5.
   `FINAL` += `read`, `expired`. `isFinalState('delivered')` лишається true, хоча `read` може
-  прийти пізніше: ранг усе одно посуне стан уперед.
-- Розширення в CHANGELOG 1.3 — окремим пунктом «зламає вичерпний `switch`», з посиланням на
-  прецедент `unsupported` в 1.1. Строго адитивна альтернатива (параметр типу категорії через
-  `ReceiptError`, `Receipt`, `AuditError`, `AuditEvent`, `AuditSink`) важка і не варта того.
+  прийти пізніше: ранг усе одно посуне стан уперед. `STATES` (`audit/delivery-event.js`) += `sent`,
+  `read`, `failed`, `expired`.
+- У 2.0 це чесний мажор, а не виняток з прецедентом `unsupported` 1.1.
 - tsd: `tests/types/index.test-d.ts:180` `expectError<DeliveryEventType>('sent')` перевертається.
 
 ### 4.3 `./channels`
@@ -272,11 +329,12 @@ export interface VerifiableTransport<TProviderId extends string = string, TMessa
 Новий subpath, runtime лише для каналів (реалізація в `src/internal/channel/`, бо провайдери
 тягнуть її без ребер між subpath-ами — `tests/unit/graph.test.js` дозволяє лише перелічені):
 
-- **`createChannelMessage(input)`** — union за `channel`; валідує одержувача під канал, `buttons`,
-  `mentions`, `template`, `payload`, `media`, спільні `metadata`/`scheduledAt` (з
-  `internal/message-checks.js`). Окремий будівник, а не розширений `createMessage`: рядок `to`
-  пройшов би через `parseAddress` і впав, `subject`/`content` там обов'язкові, а розширений тип
-  повернення зламав би тих, хто чекає `Message`. `isChannelMessage`, `checkChannelMessage`.
+- **`createChannelMessage(input)`** — union за `channel` (крім `email`); валідує одержувача під
+  канал, `buttons`, `mentions`, `template`, `payload`, `media`, спільні
+  `metadata`/`scheduledAt`/`tenantId` (з `internal/message-checks.js`). Окремий будівник, а не
+  розширений `createMessage`: рядок `to` пройшов би через `parseAddress` і впав,
+  `subject`/`content` там обов'язкові, а email-користувач платив би за правила каналів.
+  `isChannelMessage`, `checkChannelMessage`.
 - **`normalizePhone(input, { defaultCountry })`** → E.164: таблиця calling codes ITU (~250),
   зняття trunk-префікса (`067…` → `+38067…`), ≤15 цифр; `isE164`. Без libphonenumber.
 - **`countSegments(text)`** → `{ encoding, segments, units, characters }`: GSM-7 + extension
@@ -284,9 +342,6 @@ export interface VerifiableTransport<TProviderId extends string = string, TMessa
   70/67; українська кирилиця завжди UCS-2.
 - **екранування** Telegram HTML, Slack mrkdwn, Discord Markdown; масові згадки (`<!channel>`,
   `<!here>`, `@everyone`, `@here`) нейтралізуються за замовчуванням.
-- **`createChannelRouter({ sms, telegram, … })`** — `Transport<'router', ChannelMessage>`, що
-  відправляє за `message.channel`; потрібен воркеру черги (1.5) і замінює фасад
-  `createMessenger`, якого в mailer немає (як і `createMailer`).
 
 Ліміти каналів (Telegram 4096/1024, Discord 2000 / 10 embeds / 6000, Slack 40 000 і 50 blocks,
 WhatsApp 4096 і 3 reply-кнопки, Messenger 2000, Web Push ≤3993 байт, APNs 4/5 КБ, FCM 4 КБ…)
@@ -294,13 +349,23 @@ WhatsApp 4096 і 3 reply-кнопки, Messenger 2000, Web Push ≤3993 байт
 
 Таблиці (GSM-7, коди країн) — `.js`-файли: `scripts/check-pack.js` пропускає лише `.js` і `.d.ts`.
 
-### 4.4 Спільний HTTP-шар
+### 4.4 `./router`
+
+Новий subpath замість `createChannelRouter`: `createRouter({ email, sms, telegram, … })` —
+`Transport<'router', AnyMessage>`, що відправляє за `message.channel ?? 'email'`. `sendMany` іде
+поспіль за каналами, зберігаючи порядок receipts і пакетні API транспортів; `verify` перевіряє
+всі; dispose звільняє кожен один раз (WeakSet, як `./pool`); канал без транспорту — збій
+`unsupported`. Потрібен воркеру черги і замінює фасад `createMessenger`, якого в mailer немає
+(як і `createMailer`).
+
+### 4.5 Спільний HTTP-шар
 
 `internal/http.js` — без змін. Розширення:
 
 1. `api-client.js`: `URLSearchParams`, рядок і байти проходять без `JSON.stringify` (Twilio,
-   Vonage, AWS Query, обмін OAuth; Web Push `aes128gcm`); `Content-Type` ставиться `??=`
-   (`application/x-amz-json-1.0` AWS SMS);
+   Vonage, AWS Query, обмін OAuth; Web Push `aes128gcm`); `Content-Type` ставиться `??=` з
+   порівнянням назви без урахування регістру (`application/x-amz-json-1.0` AWS SMS); передаються
+   `accepts`, `retryDelayMs`, `sleep`;
 2. `classify` може повернути `retryAfterMilliseconds` (Telegram `parameters.retry_after`, Discord
    `retry_after` у тілі) і `rate-limit` з 400 (Graph: 4, 80007, 130429, 131056);
 3. хук `read` для текстової відповіді (вебхук Slack відповідає `ok`);
@@ -318,151 +383,227 @@ WhatsApp 4096 і 3 reply-кнопки, Messenger 2000, Web Push ≤3993 байт
    reconnect на goaway/close, ping, `unref`, таймаут через `stream.close(NGHTTP2_CANCEL)`;
    `unsent.js` отримує REFUSED_STREAM і GOAWAY з last-stream-id нижче потоку (RFC 9113 §8.7).
    d.ts з `AsyncDisposable` потребує `/// <reference lib="esnext.disposable" />`;
-8. **`internal/sigv4.js`** — з `ses/http-client.js`.
+8. **`internal/sigv4.js`** — з `ses/http-client.js`;
+9. `isPublicUrl` з `./attachments` → `internal/` (SSRF-перевірка endpoint Web Push).
 
-### 4.5 Subpath-и
+### 4.6 Черга
+
+- **Одне ядро** зі стратегією на тип задачі: `{ keys, checkBody, build, fingerprint,
+  needsSubject }`. Email-стратегія — нинішній код (`V1_KEYS`, перевірки адрес і вкладень,
+  `createMessage`, Message-ID); стратегія каналу — нова. Двійників модулів немає: спільні
+  `mail-queue.js` (→ `queue.js`), `handler.js`, `job.js`, `parse.js`, а `envelope`, `signing`,
+  `hash`, `derive`, `json`, `outcome`, `memory-queue` уже нейтральні.
+- **Email-задача** — v1 байт у байт: без `channel`, той самий seed id `ns\0tenant\0key`, той
+  самий hash, MAC, Message-ID і Content-ID, ті самі id подій аудиту. Тож 2.0-продюсер і
+  1.2-воркери далі обробляють email, а повторна постановка з тим самим ключем після оновлення —
+  дублікат, а не `key_reused`.
+- **Задача каналу** — `v: 2`: `{ v: 2, channel, kind, template?/context?/locale? | content:
+  { text?, media?, buttons?, payload?, providerTemplate? }, to, from?, priority, tags?, metadata,
+  idempotencyKey, tenantId?, correlationId, notBefore?, expiresAt?, enqueuedAt, hash, mac?, kid?,
+  trace? }`. Шаблон WhatsApp — у `content.providerTemplate`, бо `template` — це назва локального
+  шаблону. Seed id — `ns\0tenant\0key\0channel` (SMS і email під одним ключем не зіткнуться).
+  `channel` у запечатаній задачі лежить усередині `enc`, ніколи в `ENVELOPE`; `v` лежить у
+  `ENVELOPE`, тож воркер 1.2 відпускає задачу v2 як `unsupported_version` і відкриту, і
+  запечатану.
+- **API:** `createQueue`, `prepareJob`, `parseJob`, `createJobHandler({ transport })` з
+  `./router` для змішаних черг; `EnqueueResult` без обов'язкового `messageId` для задачі каналу.
+- **Обробник:** шаблон каналу рендериться в `text` через `./templates`, без перевірки `subject`
+  (рендерер змін не потребує); media — через `resolveAttachment`; збирання —
+  `createChannelMessage`; `tenantId` і `metadata.correlationId` — з задачі, як для email; після
+  `accepted` — подія `sent`, коли receipt каже `state: 'sent'`.
+- **Окрема черга для каналів** (BullMQ `queueName`, інша колекція outbox) — правило експлуатації
+  в docs: `job.name` нічим не маршрутизується, воркер 1.2 на спільній черзі відпускав би задачі
+  каналу кожні 5 хв до 7 днів (погано для одноразових кодів), а пауза 429 Telegram з
+  `rateLimitScope: 'queue'` не має зупиняти email.
+- **`./otel`:** `instrumentHandler` з атрибутом `mailer.channel`.
+
+### 4.7 Вебхуки
+
+- `src/webhooks/` тримає спільне: `request.js` (`claimDelivery`, резолвери, хелпери перевірки),
+  `sns.js`, сховища replay, `WebhookVerificationError`, типи, `WebhookRequest.url?`;
+  `src/webhooks/index.js` — entry `./webhooks`.
+- Кожен провайдер — `src/webhooks/<provider>/index.js` + `index.d.ts`, subpath
+  `./webhooks/<provider>` з назвою транспорту (`./webhooks/ses`, `./webhooks/aws-sms`,
+  `./webhooks/meta`). Назви функцій (`createSesWebhookVerifier`…) не змінюються.
+- `graph.test.js` отримує правило: вкладений subpath може вимагати модулі батьківського.
+  Таблиці кодів, спільні з транспортом (коди помилок Twilio, Meta, Vonage), лежать у теці
+  транспорту (`src/twilio/codes.js`), а вебхук бере їх ребром у `SUBPATH_EDGES`, як
+  `mongodb/audit-sink.js -> audit/states.js`.
+- Функція, що перевіряє одного провайдера, платить за спільне й одного провайдера, а не за 27.
+
+### 4.8 Subpath-и
 
 | Реліз | Subpath-и |
 | --- | --- |
-| 1.3 спільне | `./channels` |
-| 1.3 SMS/RCS | `./twilio`, `./vonage`, `./infobip`, `./sinch`, `./aws-sms`, `./turbosms`, `./alphasms`, `./smsclub`, `./rbm` |
-| 1.3 месенджери | `./meta` (WhatsApp, Messenger, Instagram: один Graph-клієнт, одне вікно 24 год), `./telegram`, `./viber` |
-| 1.3 робочі чати | `./slack`, `./discord`, `./teams`, `./google-chat` |
-| 1.3 push | `./fcm`, `./apns`, `./webpush` |
-| 1.4 | `./channel-webhooks`, `./suppression` (email і канали), `./fallback` |
-| 1.5 | нових немає: `./queue`, `./mongodb`, `./audit`, `./otel` отримують канали |
+| 2.0 спільне | `./channels`, `./router`; `./webhooks/<p>` для 15 email-провайдерів |
+| 2.0 SMS/RCS | `./twilio`, `./vonage`, `./infobip`, `./sinch`, `./aws-sms`, `./turbosms`, `./alphasms`, `./smsclub`, `./rbm` |
+| 2.0 месенджери | `./meta` (WhatsApp, Messenger, Instagram: один Graph-клієнт, одне вікно 24 год), `./telegram`, `./viber` |
+| 2.0 робочі чати | `./slack`, `./discord`, `./teams`, `./google-chat` |
+| 2.0 push | `./fcm`, `./apns`, `./webpush` |
+| 2.1 | `./webhooks/<p>` каналів, `./suppression` (email і канали), `./fallback` |
+| 2.2 | нових немає: `./mongodb`, `./audit`, `./queue` отримують сховища, crypto-shredding, фолбек за дедлайном |
 
 - Колізій з нинішніми 41 entry немає. Subpath — на постачальника, і він може тримати кілька
   каналів (`./twilio`: SMS, MMS, WhatsApp-префікс, RCS; `./meta`: три), тож email Infobip чи SMS
   Azure Communication Services колись лягли б у `./infobip` чи `./azure`. Виняток — AWS: за
   сервісом, як `./ses`, тому `./aws-sms`.
-- HTTP-клієнт провайдера каналу — `src/<sub>/client.js`, не `http-client.js`:
-  `tests/unit/delivery.test.js` додає кожен `http-client.js` до email-матриці, що відправляє
-  `createMessage`. Для каналів — своя матриця (4.6).
-- Окремий `./channel-webhooks`, а не розширений `./webhooks`: у тому 15,3 з 15,5 КБ, а десяток
-  верифікаторів каналів — ще ~10 КБ, які функція перевірки Mailgun платила б на холодному старті.
+- HTTP-клієнт провайдера каналу — `src/<sub>/http-client.js`, як в email; матриця доставки
+  каналів — `tests/unit/delivery-channels.test.js` (4.9).
 
-### 4.6 Розміри й тестова інфраструктура
+### 4.9 Розміри й тестова інфраструктура
 
-- Корінь (9,9 з 10 КБ): `channel`, `segments`, `state` у `createFailedReceipt` і `retryable` за
-  категорією — один крок +0,5 КБ у коміті етапу 1 («the root grows only for the contract they
-  share» — це саме спільний контракт).
+- Корінь (9,9 з 10 КБ): `channel` і `tenantId` у `createMessage`, `channel`, `segments`, `state`
+  у `createFailedReceipt` і `retryable` за категорією — один крок +0,5 КБ у коміті етапу 2
+  («the root grows only for the contract they share» — це саме спільний контракт).
+- `./webhooks` зменшується до спільної частини; кожен `./webhooks/<p>` отримує свій бюджет.
 - Близькі до бюджету: `./queue` 19,3/19,5, `./audit` 2,0/2, `./otel` 6,1/6,5, `./idempotency`
   4,2/4,5, `./pool` 3,4/3,5, `./mongodb` 7,3/7,5 — кожен підніметься на крок 0,5 у коміті,
   якому потрібне місце.
 - Канальний subpath, що тягне `core/receipt.js`, `internal/api-client.js` і
   `provider-transport.js`, важить від ~5,5 КБ без email-коду (`message`, `address`, `calendar`,
   `attachment`, `list`, `message-id`, `raw-message` — ~7 КБ — він не тягне).
-- Exports map — з 41 до 64 entry (+20 у 1.3, +3 у 1.4). `export-parity` запускає `node` на
-  кожен entry (+23 процеси),
-  `bundle` — два esbuild-білди на entry; `scripts.test.js` вимагає бюджет для кожного; кожен —
-  у `tests/runtime/exports.test.js` на Node, Bun і Deno; tsd-файл на кожен новий entry.
-- Матриця доставки каналів (`tests/unit/delivery.test.js` або поруч): ті самі сценарії, що в
-  email — двозначна відповідь → `deliveryUnknown` без повтору, `Retry-After`, редагування
-  секретів і одержувачів — з повідомленням каналу на кожен провайдер.
+- Exports map — з 41 до ~77 у 2.0 (+19 провайдерів, `./channels`, `./router`, +15 email-вебхуків)
+  і ~91 у 2.1 (+~12 вебхуків каналів, `./suppression`, `./fallback`). `export-parity` запускає
+  `node` на кожен entry, `bundle` — два esbuild-білди на entry; `scripts.test.js` вимагає бюджет
+  для кожного; кожен — у `tests/runtime/exports.test.js` на Node, Bun і Deno; tsd-файл на кожен
+  новий entry.
+- Матриця доставки каналів: ті самі сценарії, що в email — двозначна відповідь →
+  `deliveryUnknown` без повтору, `Retry-After`, редагування секретів і одержувачів — з
+  повідомленням каналу на кожен провайдер; `delivery.test.js` звіряє кожен subpath з
+  `http-client.js` з однією з двох матриць.
 
 ---
 
-## 5. Реліз 1.3 — канали й декоратори
+## 5. Реліз 2.0
 
-Гілка `feature/messenger` (уже є в mailer, чиста), один PR, коміти по одному на subpath і на фікс,
-як у 1.1 і 1.2.
+Гілка `feature/messenger`, один PR, коміти по одному на subpath і на фікс, як у 1.1 і 1.2.
 
-### Етап 0. Позиціонування і перенесення з messenger (`docs:`/`chore:`)
+### Етап 0. Патч 1.2.1 (опційно, до 2.0)
 
-- `CLAUDE.md`: «What this is» (email і канали), прибрати SMS/WhatsApp/push з «Out of scope»,
-  roadmap каналів (з `messenger/CLAUDE.md`: правила каналів, рішення «HTTP APIs, not SDKs»,
-  «Official APIs only», «Few providers per channel», «One message, the channel's own payload»,
-  список «What the competitors appear to get wrong» для месенджингу), розділ «Code ported for the
-  channels» (3.3), «Repository layout», «Architecture» (4.1–4.2);
+Знахідки 2.4 — гілка від `main`, `fix:`-коміт на кожну, з тестом; реліз 1.2.1; потім
+`feature/messenger` оновлюється від `main`.
+
+### Етап 1. Документи (`docs:`/`chore:`)
+
+- `CLAUDE.md`: «What this is» (email і канали), Status 2.0, прибрати SMS/WhatsApp/push з «Out of
+  scope», roadmap каналів (з `messenger/CLAUDE.md`: правила каналів, рішення «HTTP APIs, not
+  SDKs», «Official APIs only», «Few providers per channel», «One message, the channel's own
+  payload», «No phone-number library», список «What the competitors appear to get wrong» для
+  месенджингу), рішення «One `./webhooks` entry» → «спільний `./webhooks` і subpath на
+  провайдера», «Eighteen providers» → 37, розділ «Code ported for the channels» (3.3),
+  «Repository layout», «Architecture» (4.1–4.2), Testing notes (матриця каналів, живий прогін),
+  Release process (живий прогін кожного нового провайдера);
 - `package.json`: `description`, `keywords` (sms, whatsapp, telegram, viber, slack, discord,
   teams, push, fcm, apns, web-push, rcs); README — нове вступне речення і розділ каналів;
-- порівняння: `messenger/docs/comparison.json` (11 бібліотек) → `docs/comparison-channels.json`,
-  перший стовпець `@alexify/messenger` → `@alexify/mailer` (клітинки 🔜, як і були);
-  `scripts/comparison.js` рендерить дві пари дані → сторінка (зараз `DATA` одна, `TARGETS`
-  масив), CI перевіряє дрейф обох; `docs/guide/comparison-channels.md` — проза з messenger;
-  клітинка `@alexify/mailer` у рядку «Multi-channel: SMS, WhatsApp, push» `docs/comparison.json`
-  (зараз «❌ out of scope») → 🔜, таблиця перегенеровується;
+- порівняння: `messenger/docs/comparison.json` (12 бібліотек: messenger і 11 конкурентів) →
+  `docs/comparison-channels.json`, перший стовпець `@alexify/messenger` → `@alexify/mailer`
+  (клітинки 🔜, як і були); `scripts/comparison.js` рендерить дві пари дані → сторінка (зараз
+  `DATA` одна, `TARGETS` масив), CI перевіряє дрейф обох; `docs/guide/comparison-channels.md` —
+  проза з messenger; клітинка `@alexify/mailer` у рядку «Multi-channel: SMS, WhatsApp, push»
+  `docs/comparison.json` (зараз «❌ out of scope») → 🔜, таблиця перегенеровується;
 - виправити два формулювання про thinwrap, перенесені з messenger: «an accepted SMS is always
   reported `sent`, never `queued`» замість «every SMS reported `sent`»; відсутній Web API Slack —
   не баг;
 - `LICENSE` і `SOURCES` тесту атрибуції — нотиси джерел 3.1.
 
-### Етап 1. Контракти (`feat(core):`, `refactor:`)
+### Етап 2. Контракти (`test:`, `feat(core)!:`, `refactor:`)
 
-- golden-тести інваріантів 2.3 — першим комітом;
-- типи кореня 4.1, об'єднання 4.2, поля receipt і `retryable` за категорією (+0,5 КБ кореня);
+- golden-тести інваріантів 2.3 — першим комітом, разом із замороженим JSON задачі v1 від 1.2,
+  який обробник 2.0 читає й відправляє з тим самим Message-ID;
+- типи кореня 4.1, об'єднання 4.2, `Message.channel`, `tenantId?` в обох моделях (golden-тест:
+  fingerprint повідомлення з `tenantId` і без нього однаковий), поля receipt і `retryable` за
+  категорією (+0,5 КБ кореня);
 - таблиці `./audit` (ранги, `FINAL`, `STATES`, рівні логер-сінку);
 - `refactor:` `checkMetadata`/`checkScheduledAt` → `internal/message-checks.js`; канонічний JSON
-  → `internal/`; загальні хелпери `api.js` → internal-модуль; SigV4 → `internal/sigv4.js`;
-- `./channels` (4.3) з тестами сегментів на `TestData` Twilio і кейсах split-sms;
-- фікси 2.4 — окремими `fix:`-комітами, якщо не вийшли патчем 1.2.x раніше.
+  → `internal/`; нейтральні хелпери `api.js` → internal-модуль; SigV4 → `internal/sigv4.js`;
+- `./channels` (4.3) з тестами сегментів на `TestData` Twilio і кейсах split-sms; `./router`
+  (4.4).
 
-### Етап 2. Спільний шар (`feat:`)
+### Етап 3. Спільний шар (`feat:`)
 
-`api-client.js` (4.4, пункти 1–3), `redactRecipients` і `SECRET_KEYS`, `internal/jwt.js`,
-`internal/google-auth.js`, `internal/http2.js` з `unsent.js`, fingerprint із гілкою каналу,
-`pinMessageId` із клієнтським reference.
+`api-client.js` (4.5, пункти 1–3), `redactRecipients` і `SECRET_KEYS`, `internal/jwt.js`,
+`internal/google-auth.js`, `internal/http2.js` з `unsent.js`, `isPublicUrl` → `internal/`,
+fingerprint із гілкою каналу, `pinMessageId` із клієнтським reference.
 
-### Етап 3. Декоратори (`feat(<subpath>):`)
+### Етап 4. Декоратори й назви (`feat(<subpath>)!:`)
 
 `./mock` → `./hooks` → `./logger` → `./otel` → `./pool` → `./idempotency` (runtime 2.2), потім
-d.ts `./retry`, `./breaker`, `./ratelimit`, `./tee`. Кожен — з тестом на повідомленні каналу,
-що падає без зміни, і tsd на `TMessage`.
+d.ts `./retry`, `./breaker`, `./ratelimit`, `./tee`; логер-сінк `./audit`. Перейменування
+спостережуваності 2.3 — у комітах свого subpath-а. Кожен — з тестом на повідомленні каналу, що
+падає без зміни, і tsd на `TMessage`.
 
-### Етап 4. Канали (`feat(<subpath>):`, по коміту на провайдера)
+### Етап 5. Черга (`feat(queue)!:`, `feat(mongodb):`, `feat(bullmq):`)
+
+Ядро зі стратегіями, перейменування API, задача v2 каналу, обробник (4.6), `instrumentHandler`;
+контракт джерела (`tests/helpers/queue/source-contract.js`) — і з задачами каналу; `pnpm
+test:stores` з обома типами задач на окремих чергах.
+
+### Етап 6. Вебхуки (`refactor(webhooks)!:`)
+
+Спільне — у `./webhooks`, 15 email-верифікаторів — у `./webhooks/<p>` (4.7), бюджети, tsd на
+кожен entry, правило вкладених subpath-ів у `graph.test.js`, `docs/guide/webhooks.md` з новими
+шляхами імпорту.
+
+### Етап 7. Провайдери (`feat(<subpath>):`, по коміту на провайдера)
 
 | Subpath | Джерело | Нове | Баги джерела, що виправляються | ~src | Розмір |
 | --- | --- | --- | --- | --- | --- |
-| `./twilio` (SMS, MMS, WhatsApp-префікс, RCS `rcs:`) | thinwrap (запит, хости), twilio-node (статуси) | `num_segments` у receipt, коди → категорії (21610 → `opted-out`, 21211/21614 → `invalid-recipient`, 21408 → `configuration`, 63016 → `outside-window`, 30003 → `unreachable`), correlation id у query `StatusCallback` (підпис його покриває) | T1, T6, T11, V7, V8 | 300 | M |
+| `./twilio` (SMS, MMS, WhatsApp-префікс, RCS `rcs:`) | thinwrap (запит, хости), twilio-node (статуси) | `num_segments` у receipt, коди → категорії (21610 → `opted-out`, 21211/21614 → `invalid-recipient`, 21408 → `configuration`, 63016 → `outside-window`, 30003 → `unreachable`) у `src/twilio/codes.js`, `metadata.correlationId` у query `StatusCallback` (підпис його покриває) | T1, T6, T11, V7, V8 | 300 | M |
 | `./vonage` (SMS API) | thinwrap | усі `messages[]`, `message-count` → segments, `client-ref` | T2 | 220 | S |
 | `./infobip` (SMS v3, RCS) | thinwrap, Infobip SDK | REJECTED у 200 → відмова за назвою групи, `callbackData` → correlation | NV4 | 200 | S |
 | `./sinch` (SMS batches) | thinwrap | `client_reference`, регіони | — | 130 | S |
 | `./aws-sms` (End User Messaging SMS) | `internal/sigv4.js` | `SendTextMessage`, configuration set, `MessageId`, коди помилок AWS | — | 220 | S–M |
 | `./turbosms` (SMS, Viber, гібрид) | документація | `sequence_id` = клієнтський reference → `hasIdempotencyKey` (дедуплікація провайдера, 30 днів) | — | 250 | M |
 | `./alphasms` (SMS, Viber, гібрид) | документація | — | — | 250 | M |
-| `./smsclub` (SMS, Viber, гібрид) | документація | ліміт 9 запитів/с, статуси опитуванням (1.4) | — | 250 | M |
+| `./smsclub` (SMS, Viber, гібрид) | документація | ліміт 9 запитів/с, статуси опитуванням (2.1) | — | 250 | M |
 | `./rbm` (Google RCS Business Messaging) | документація, @google/rcsbusinessmessaging як довідка | `google-auth`, `messageId` клієнта = ідемпотентність, capability check → `not-on-channel` до відправлення | — | 300 | M |
 | `./meta` | thinwrap (WhatsApp Cloud: text/template/interactive, таблиця `mapWhatsAppCode`) | Messenger Send API і Instagram (нові), шаблон обов'язковий поза вікном, `biz_opaque_callback_data` → correlation, версія Graph як опція з датованим значенням | T10 | 600 | L |
 | `./telegram` | ntba (конверт, поля помилок), thinwrap | опис → категорія (403 blocked/kicked → `blocked`, «can't initiate conversation» → `not-on-channel`, 400 «chat not found» → `invalid-recipient`, `migrate_to_chat_id`), HTML-екранування, ліміти, inline-кнопки, media через нативний `FormData` | T7, V11, TG1 | 580 | M |
-| `./viber` (Bot API) | документація, viber-bot як довідка | `status != 0` → помилка; 5/6 → `not-on-channel` | VB1 (у 1.4) | 250 | M |
+| `./viber` (Bot API) | документація, viber-bot як довідка | `status != 0` → помилка; 5/6 → `not-on-channel` | VB1 (у 2.1) | 250 | M |
 | `./slack` (Web API + incoming webhook) | thinwrap, visulima (`chat.postMessage`) | `ok:false` → категорії, mrkdwn, `ts` як id, без повтору `chat.postMessage` після мережевої помилки, `state: 'sent'` | SL1 | 280 | M |
 | `./discord` (бот REST + webhook) | thinwrap (webhook `?wait=true`) | бот REST, `allowed_mentions: { parse: [] }` за замовчуванням, `thread_id` у query, `nonce` + `enforce_nonce` (безпечний повтор), бакети з `X-RateLimit-*` | T8, V10, DC1 | 300 | M |
 | `./teams` (Workflows webhook + Bot Framework) | thinwrap (конверт Adaptive Card, `failureStatusFor2xx`) | Workflows 202 → `accepted`; бот: токен client credentials, `serviceUrl` лише з allowlist, відправлення за відомою conversation reference | T9, V-MessageCard, BB1 | 320 | M–L |
 | `./google-chat` (webhook + Chat API app) | thinwrap (webhook) | Chat API app через `google-auth`, `name` як id, `threadKey` | — | 250 | M |
 | `./fcm` (HTTP v1) | thinwrap (JWT, oneof цілі), firebase-admin як довідка | `details[].errorCode` перед `status` (UNREGISTERED → `unregistered`, SENDER_ID_MISMATCH → `invalid-recipient`, QUOTA_EXCEEDED → `rate-limit`), зарезервовані ключі data, TTL у `android`/`apns`/`webpush` | T3, T5, V16, FB1 | 350 | M |
 | `./apns` (HTTP/2, token) | thinwrap (`createApnsJwt`, `finalizePushType`, таблиця reasons), node-apn і visulima (сесія) | `internal/http2.js`, `apns-id` як id, явне середовище (не `NODE_ENV`), priority 5 для background, ліміт 4/5 КБ, `ExpiredProviderToken` → новий токен один раз | T3, T4, V15, AP1 | 400 | M–L |
-| `./webpush` (VAPID) | http_ece, visulima (звірка), RFC 8291/8292 | `node:crypto` (`createECDH`, `hkdfSync`), JWT на аудиторію в кеші, ≤3993 байт, перевірка `p256dh`/`auth`, `Topic`, 404/410 → `unregistered`, 413 → `validation`, SSRF-перевірка endpoint (`isPublicUrl` з `./attachments` → `internal/`) | V14, EC1 | 250 | M |
+| `./webpush` (VAPID) | http_ece, visulima (звірка), RFC 8291/8292 | `node:crypto` (`createECDH`, `hkdfSync`), JWT на аудиторію в кеші, ≤3993 байт, перевірка `p256dh`/`auth`, `Topic`, 404/410 → `unregistered`, 413 → `validation`, SSRF-перевірка endpoint (`isPublicUrl` з `internal/`) | V14, EC1 | 250 | M |
 
 Разом ~5 700 рядків `src/` провайдерів, плюс d.ts (~40 %) і тести (1,5–2×). Кожен subpath
-отримує бюджет у `scripts/size-budgets.json` (орієнтир mailer: провайдер 7–9,5 КБ поверх кореня).
+отримує бюджет у `scripts/size-budgets.json` (орієнтир mailer: провайдер 7–9,5 КБ поверх кореня),
+місце в матриці каналів і рядок у `tests/e2e/channels.e2e.test.js` (одна таблиця, як
+`providers.e2e.test.js`, кожен рядок пропускається без своїх змінних середовища).
 
-**Хвилі всередині етапу 4** (від того, що закриває одноразові коди й алерти): SMS-провайдери →
-`./telegram` → `./meta` → push → робочі чати → `./viber`, `./rbm`, українські.
+**Порядок — за готовністю акаунтів** (розділ 9): спершу безкоштовні (Telegram, Slack, Discord,
+FCM, Web Push, тестовий номер WhatsApp Cloud, пробний Twilio, AWS sandbox), далі з пробними
+кредитами (Vonage, Infobip, Sinch), далі ті, що потребують оплати або схвалення (APNs, RBM,
+Viber, Teams, TurboSMS, AlphaSMS, SMSClub).
 
-### Етап 5. Ревʼю, продуктивність, документація
+### Етап 8. Ревʼю, продуктивність, документація, реліз
 
 - хвиля ревʼю (`fix:`/`perf:`), як R1–R42 у 1.1: кожна знахідка — коміт з тестом;
 - `pnpm bench` для гарячих шляхів (сегменти, екранування, підпис), оновлення `bench/baseline.json`;
 - docs: розділ «Channels» у сайдбарі (`docs/.vitepress/config.mts`), сторінка на кожен subpath,
-  `Known issues` (неперевірені на живому API провайдери), клітинки `docs/comparison-channels.json`
-  (🔜 → ✅ лише для зробленого); CHANGELOG з пунктом про розширені об'єднання;
-  `chore(release): 1.3.0`.
+  `/guide/queue` (окрема черга, нові назви API), `Known issues`, клітинки
+  `docs/comparison-channels.json` (🔜 → ✅ лише для зробленого);
+- CHANGELOG 2.0.0 з розділом «Upgrading from 1.x» (2.3);
+- **ворота живого прогону:** провайдер без зеленого `pnpm test:e2e` на живому акаунті знімається
+  з exports map, docs і CHANGELOG релізу й виходить мінорним 2.x, коли прогін буде (додавання
+  провайдера адитивне);
+- `chore(release): 2.0.0`.
 
 ---
 
-## 6. Реліз 1.4 — замкнений цикл
+## 6. Реліз 2.1 — замкнений цикл
 
-### 6.1 `./channel-webhooks`
+### 6.1 Вебхуки каналів (`./webhooks/<provider>`)
 
-Спільна частина `request.js` і `sns.js` — у `src/internal/webhook/` (етап `refactor:`, розмір
-`./webhooks` не змінюється), один `WebhookVerificationError`. Наявні хелпери закривають більшість
+Спільна частина вже в `./webhooks` (етап 6 релізу 2.0). Наявні хелпери закривають більшість
 схем: `checkBodyHmac` (Viber, Meta), `tokenCheckOf` (Telegram), `basicCredentialsOf` (Infobip,
 українські з Basic), `hmacOf` + `checkSignedSeconds` (Slack v0, Sinch), `createSnsVerifier` (AWS
 SMS). Нові: Twilio (HMAC-SHA1 від URL + відсортованих параметрів, base64), порівняння
 base64-підпису, Vonage JWT HS256 з `payload_hash`, хелпер GET `hub.challenge` Meta. Верифікатор
-будує `id` події з id провайдера, ніколи з `To` (воно потрапляє в `deliveryEvent.id` аудиту), і
-нормалізує одержувача через `normalizePhone` (Vonage шле `447…` без `+`).
+будує `id` події з id провайдера, ніколи з `To` (воно потрапляє в `deliveryEvent.id` аудиту),
+нормалізує одержувача через `normalizePhone` (Vonage шле `447…` без `+`) і ставить `channel`.
 
 | Провайдер | Схема | Джерело | Вектори |
 | --- | --- | --- | --- |
@@ -478,13 +619,14 @@ base64-підпису, Vonage JWT HS256 з `payload_hash`, хелпер GET `hub
 | TurboSMS, AlphaSMS | колбеки DLR за документацією; SMSClub — лише опитування | документація | з прикладів документації |
 | Teams bot (опційно) | Bot Framework JWT: OpenID → JWKS, RS256/384/512, `iss`, `aud`, endorsements `msteams`, `serviceurl` = `activity.serviceUrl` | botbuilder (FEATURE) | згенерувати |
 
-**Таблиці статусів** (з рангом, закріплені тестом мапінгу на кожного провайдера; правило
-`docs/guide/webhooks.md`: `unknown` замість здогадки):
+**Таблиці статусів** (з рангом, закріплені тестом мапінгу на кожного провайдера, як
+`tests/unit/webhooks-mapping.test.js`; правило `docs/guide/webhooks.md`: `unknown` замість
+здогадки):
 
 - Twilio: accepted/scheduled/queued/sending → `accepted`; sent → `sent`; delivered → `delivered`;
-  read → `read`; undelivered/failed → `failed` (категорія з ErrorCode); canceled → `failed`;
-  partially_delivered → `unknown` з `raw` (Novu губить scheduled, read, canceled,
-  partially_delivered — NV1);
+  read → `read`; undelivered/failed → `failed` (категорія з ErrorCode, таблиця
+  `src/twilio/codes.js`); canceled → `failed`; partially_delivered → `unknown` з `raw` (Novu
+  губить scheduled, read, canceled, partially_delivered — NV1);
 - Vonage DLR: accepted/buffered → `sent`, delivered, expired, failed/rejected → `failed`,
   unknown → `unknown`;
 - Sinch SMS: Queued → `accepted`, Dispatched → `sent`, Delivered, Expired,
@@ -494,21 +636,23 @@ base64-підпису, Vonage JWT HS256 з `payload_hash`, хелпер GET `hub
 - Viber: delivered, seen → `read`, failed; subscribed/unsubscribed → `subscribed`/`unsubscribed`.
 
 **Звірка без вебхуків:** `pollStatus(ids)` на транспортах, що вміють (SMSClub, TurboSMS), і
-функція `reconcile`, яку в 1.5 викликає воркер черги.
+функція `reconcile`, яку в 2.2 викликає воркер черги.
 
 ### 6.2 `./suppression` — один список для email і каналів
 
 Пункт Phase 2 roadmap mailer («a suppression list per tenant and stream, checked before a message
 is queued, with a bypass policy for transactional mail») і opt-out messenger — одна річ:
 
-- `SuppressionStore`: `isSuppressed(tenantId, recipientHash, channel | 'email' | '*', stream?)`,
-  `suppress`, `unsuppress`; одержувач — HMAC під ключем застосунку (email — адреса в нижньому
-  регістрі, телефон — E.164), не відкрито; сховище в пам'яті (MongoDB — 1.5);
-- `SuppressionTransport` — декоратор над будь-яким транспортом; відмова — **невдалий** receipt
-  `opted-out`, а не успіх (баг V1 visulima), тож фолбек і pool бачать її правильно;
+- `SuppressionStore`: `isSuppressed(tenantId, recipientHash, channel | '*', stream?)`,
+  `suppress`, `unsuppress`; тенант — `message.tenantId`; одержувач — HMAC під ключем застосунку
+  (email — адреса в нижньому регістрі, телефон — E.164), не відкрито; сховище в пам'яті
+  (MongoDB — 2.2);
+- `SuppressionTransport` — декоратор над будь-яким транспортом, і перевірка в
+  `createQueue({ suppression })` до постановки; відмова — **невдалий** receipt `opted-out`, а не
+  успіх (баг V1 visulima), тож фолбек і pool бачать її правильно;
 - транзакційні (одноразові коди, скидання пароля) обходять лише явним прапорцем;
-- джерела: email — `bounced` (hard), `complained`, `unsubscribed` з `./webhooks`; канали — Twilio
-  `OptOutType` (STOP/START/HELP), Vonage inbound, Sinch `OPT_OUT`, WhatsApp 131050, Viber
+- джерела: email — `bounced` (hard), `complained`, `unsubscribed` з `./webhooks/<p>`; канали —
+  Twilio `OptOutType` (STOP/START/HELP), Vonage inbound, Sinch `OPT_OUT`, WhatsApp 131050, Viber
   `unsubscribed`/`subscribed`, Telegram `kicked`, помилки відправлення (21610 тощо).
 
 ### 6.3 24-годинне вікно (у `./meta`)
@@ -523,8 +667,9 @@ is queued, with a bypass policy for transactional mail») і opt-out messenger �
 email). Наступний крок — на `rejected`, `invalid-recipient`, `not-on-channel`, `outside-window`,
 `unregistered`, `unreachable`; ніколи на `opted-out`; на `blocked` — лише якщо дозволено опцією;
 ніколи після `deliveryUnknown` без ключа ідемпотентності. Пригнічене чи дедупліковане відправлення
-не є успіхом (V1). Результат — receipt останнього кроку і перелік спроб. Фолбек «немає receipt до
-дедлайну» потребує черги — у 1.5.
+не є успіхом (V1). Результат — receipt останнього кроку і перелік спроб. Правила зупинки спільні з
+`./pool` (`STOP_FAILOVER`) в одному internal-модулі. Фолбек «немає receipt до дедлайну» потребує
+черги — у 2.2.
 
 ### 6.5 Rate limits каналів
 
@@ -538,38 +683,20 @@ Telegram 30/с глобально + 1/с на чат (20/хв, якщо `chat_id
 
 ---
 
-## 7. Реліз 1.5 — черга, outbox і аудит для каналів
+## 7. Реліз 2.2 — сховища, crypto-shredding, дедлайни
 
-- **Задача каналу** (`./queue`): ім'я `'channel'`, а не `'mail'`; `CHANNEL_V1_KEYS` окремо від
-  `V1_KEYS`; `parse` розгалужується на `typeof data.channel === 'string'` до перевірки ключів.
-  Форма: `{ v: 1, channel, kind, template?/context?/locale? | content: { text?, media?, buttons?,
-  payload?, providerTemplate? }, to, from?, priority, tags?, metadata, idempotencyKey, tenantId?,
-  correlationId, notBefore?, expiresAt?, enqueuedAt, hash, mac?, kid?, trace? }`. Шаблон WhatsApp —
-  у `content.providerTemplate`, бо `template` — це назва локального шаблону. Id задачі —
-  `ns\0tenant\0key\0channel` (SMS і email під одним ключем не зіткнуться). `priority`
-  обов'язковий (`internal/priority.js`).
-- **API:** `prepareChannelJob`, `parseChannelJob`, `createChannelQueue`,
-  `createChannelJobHandler({ transport })` з роутером `./channels`; `ChannelEnqueueResult` без
-  обов'язкового `messageId`. `parseMailJob`, `MailJobData` і `createMailJobHandler` не
-  змінюються.
-- **Окрема черга для каналів** (BullMQ `queueName`, інша колекція outbox) — правило експлуатації,
-  записане в docs: воркер 1.2 на спільній черзі відпускав би задачі каналів кожні 5 хв до 7 днів
-  (погано для одноразових кодів), а пауза 429 Telegram з `rateLimitScope: 'queue'` не зупиняє email.
-  Ключ `channel` ніколи не йде у відкритий `ENVELOPE`.
-- **Воркер:** рендер `text` через `./templates` (`channel` у вході рендеру, без перевірки
-  subject), media через `resolveAttachment`, будівник `createChannelMessage`; після `accepted`
-  подія `sent`, коли receipt каже `state: 'sent'`.
 - **`./mongodb`:** сховища suppression і вікна 24 год; `eventsOfProviderMessage` з `provider` і
   складеним індексом (Telegram `message_id` і Slack `ts` унікальні лише в межах чату).
-- **`./audit`:** `channel` у `AuditEvent`; **crypto-shredding одержувачів** — HMAC + зашифрований
-  блок, ключ на одержувача, стирання ключа = стирання; пункт roadmap mailer, робиться один раз для
-  адрес і номерів (~400 рядків).
-- **`./otel`:** `instrumentHandler` з атрибутом `mailer.channel` для задач каналів.
+- **`./audit`:** **crypto-shredding одержувачів** — HMAC + зашифрований блок, ключ на
+  одержувача, стирання ключа = стирання; пункт roadmap mailer, робиться один раз для адрес і
+  номерів (~400 рядків).
 - **Фолбек за дедлайном:** відкладена задача, що читає стан з аудиту й запускає наступний крок,
   якщо немає `delivered`/`read`.
-- **Ідемпотентність через провайдера:** клієнтський reference 1.3 стає ключем для TurboSMS
-  `sequence_id`, RBM `messageId`, Discord `nonce` + `enforce_nonce`; деінде — `delivery_unknown`
-  і звірка (`reconcile` 6.1).
+- **Звірка:** воркер викликає `reconcile` (6.1) для задач `delivery_unknown` у провайдерів без
+  ключа ідемпотентності; клієнтський reference 2.0 уже є ключем для TurboSMS `sequence_id`, RBM
+  `messageId`, Discord `nonce` + `enforce_nonce`.
+- **Подія аудиту для задачі, що чекала понад 7 днів** (`unsupported_version` чи `codec_missing`):
+  зараз вона падає без події й застрягає в `queued`.
 
 ---
 
@@ -617,54 +744,66 @@ Telegram 30/с глобально + 1/с на чат (20/хв, якщо `chat_id
 
 ---
 
-## 9. Тестування без e2e-акаунтів
+## 9. Тестування й ворота живого прогону
 
-- **Інваріанти email** — golden-тести 2.3 (fingerprint, hash і id mail job на значеннях 1.2); уся
-  наявна сюїта mailer лишається зеленою без змін, крім перевернутого tsd 4.2.
+- **Інваріанти email** — golden-тести 2.3 (fingerprint, hash і id mail job на значеннях 1.2,
+  `tenantId` поза fingerprint) і заморожена задача v1 від 1.2; уся наявна сюїта mailer лишається
+  зеленою, змінюючись лише там, де 2.3 перелічує зміни (назви, шляхи імпорту, tsd 4.2).
+- **Сумісність черги:** задача v2 у логіці розбору 1.2 — `unsupported_version`, не `invalid_job`;
+  повторна постановка email-задачі з тим самим ключем після оновлення — дублікат, не
+  `key_reused`; `pnpm test:stores` з обома типами задач.
 - **Провайдери** — проти фейкових серверів (`node:http`, h2c для APNs за патерном
   `node-apn/test/client.js`) або `t.mock.method(globalThis, 'fetch')`; форма запиту, помилки в
   2xx, Retry-After, редагування секретів і одержувачів — з тестів thinwrap і visulima, плюс
-  канальна матриця доставки (4.6).
+  матриця доставки каналів (4.9).
 - **Вебхуки** — проти векторів: Twilio (~20), Vonage (5), Sinch (2), Viber (1), Slack (1), RFC
   8188 §3.1–3.2 і RFC 8291 Appendix A для Web Push; для решти — згенерувати ключі один раз і
-  заморозити тіло й підпис у `tests/fixtures/channel-webhooks/` (LF, порівняння байт у байт).
-- **Тіла відповідей і колбеків** — з прикладів офіційної документації; у тестах і в docs
-  позначати «перевірено за документацією, не на живому API».
+  заморозити тіло й підпис у `tests/fixtures/webhooks/<provider>/` (LF, порівняння байт у байт);
+  після живого прогону — справжні тіла, знеособлені.
+- **Тіла відповідей і колбеків** — з прикладів офіційної документації, звірені живим прогоном.
 - **Deno** — тест повтору запиту на перевикористаному з'єднанні для провайдерів без ключа
-  ідемпотентності (як у email-провайдерів).
-- **`tests/e2e/`** — набори пишуться одразу, але пропускаються без змінних середовища. Безкоштовні
-  акаунти, які варто створити першими: Telegram-бот (BotFather), Slack і Discord (робочий
-  простір), Firebase-проєкт (FCM), тестовий номер WhatsApp Cloud API (Meta for Developers),
-  пробний Twilio, AWS sandbox. Українські провайдери платні; без акаунта їхні колбеки й коди
-  статусів лишаються неперевіреними — головний ризик 1.4.
+  ідемпотентності (як у email-провайдерів); `tests/runtime` надсилає на локальний HTTP/2-сервер
+  на Node, Bun і Deno.
+- **Ворота живого прогону:** `tests/e2e/channels.e2e.test.js` — одна таблиця провайдерів, кожен
+  рядок пропускається без своїх змінних середовища; перед релізом кожен новий провайдер має
+  зелений прогін на живому акаунті, інакше виходить пізніше мінорним релізом (етап 8). Release
+  process у `CLAUDE.md` і скіл `npm-publish` це вимагають.
+- **Акаунти** — безкоштовні: Telegram-бот (BotFather), Slack і Discord (робочий простір),
+  Firebase-проєкт (FCM), Web Push (VAPID-ключі, браузер), тестовий номер WhatsApp Cloud API
+  (Meta for Developers), пробний Twilio, AWS sandbox; з пробними кредитами: Vonage, Infobip,
+  Sinch; з оплатою або схваленням — перевірити умови й почати рано: APNs (Apple Developer
+  Program), RBM (реєстрація агента, тестові пристрої), Viber (умови для ботів), Teams (тенант
+  M365), TurboSMS, AlphaSMS, SMSClub (платні; альфа-ім'я відправника).
 
 ---
 
 ## 10. Ризики й відкриті питання
 
-1. **Назва.** `@alexify/mailer` гірше знаходиться в пошуку npm за «sms» чи «whatsapp»;
-   компенсується `description`, `keywords`, README і сторінкою порівняння каналів, але не
-   повністю. Свідома ціна об'єднання.
-2. **Розширені об'єднання** ламають вичерпний `switch` у TypeScript-користувачів (4.2). Якщо
-   узгодження станів email і каналів вийде незграбним настільки, що доведеться змінити
-   runtime-поведінку для email, — це вже 2.0, а не 1.3; поки аналіз такого не знайшов.
-3. **Змішані розгортання 1.2/1.5** на одній черзі — лише правилом експлуатації (окрема черга),
-   кодом це не закрити (7).
-4. **Бюджети розмірів** — корінь і шість entry за крок від межі (4.6); кожне підвищення — у
-   коміті, якому воно потрібне, з поясненням у повідомленні.
-5. **Ширший semver і довший CI:** 64 entry, `export-parity` запускає процес на кожен; зміна API
-   WhatsApp — реліз mailer.
-6. **TurboSMS, AlphaSMS, SMSClub** — документація неповна (формат колбеків, підпис AlphaSMS,
-   статуси Viber), джерела коду й акаунта немає. Робимо в 1.3 за документацією і позначаємо як
-   неперевірені до першого користувача з акаунтом.
-7. **Teams Bot Framework** — найскладніший канал (токени, JWKS, `serviceUrl`, проактивні розмови
-   потребують вхідної події інсталяції). У 1.3 — відправлення за відомою conversation reference;
-   прийом activity — у 1.4.
-8. **Telnyx** — не в плані, але дешевий (~1–2 дні) і єдиний SMS-провайдер з власним
+1. **Обсяг 2.0** — контракти, назви, черга, вебхуки й 19 провайдерів в одному мажорі. Етапи 2–6
+   не залежать від провайдерів; ворота живого прогону прибирають неготових без затримки решти.
+2. **Акаунти** — частина провайдерів платна або потребує схвалення; що не встигне до релізу,
+   вийде мінорним 2.x.
+3. **Назва.** `@alexify/mailer` гірше знаходиться в пошуку npm за «sms» чи «whatsapp»;
+   компенсується `description`, `keywords`, README і сторінкою порівняння каналів. Свідома ціна,
+   рішення 2026-11-06.
+4. **Користувачі otel і логів** оновлюють дашборди й алерти (`mailer.email.*` →
+   `mailer.message.*`, `email.*` → `message.*`, `mail.*` → `message.*`) і шляхи імпорту
+   вебхуків — розділ «Upgrading from 1.x».
+5. **Змішані розгортання 1.2/2.0** на одній черзі: email-задачі обробляються далі, задачі каналу
+   на воркері 1.2 чекають до 7 днів — окрема черга, правило docs, кодом не закрити (4.6).
+6. **Бюджети розмірів і CI:** корінь і шість entry за крок від межі (4.9); ~77–91 entry,
+   `export-parity` запускає процес на кожен — можливо, імпорт за назвою доведеться звести в один
+   процес. Зміна API WhatsApp — реліз mailer.
+7. **TurboSMS, AlphaSMS, SMSClub** — документація неповна (формат колбеків, підпис AlphaSMS,
+   статуси Viber), джерела коду немає; живий прогін на платному акаунті обов'язковий.
+8. **Teams Bot Framework** — найскладніший канал (токени, JWKS, `serviceUrl`, проактивні розмови
+   потребують вхідної події інсталяції). У 2.0 — відправлення за відомою conversation reference;
+   прийом activity — у 2.1.
+9. **Telnyx** — не в плані, але дешевий (~1–2 дні) і єдиний SMS-провайдер з власним
    `Idempotency-Key`. За правилом «few providers per channel» — чекає користувача.
-9. **Версії Graph API** дрейфують: версія — опція `./meta` з датованим значенням за
-   замовчуванням.
-10. **HTTP/2 на Bun і Deno** — через Node-сумісність; `tests/runtime` має надіслати на локальний
+10. **Версії Graph API** дрейфують: версія — опція `./meta` з датованим значенням за
+    замовчуванням.
+11. **HTTP/2 на Bun і Deno** — через Node-сумісність; `tests/runtime` має надіслати на локальний
     HTTP/2-сервер на всіх трьох.
 
 ---
@@ -673,11 +812,11 @@ Telegram 30/с глобально + 1/с на чат (20/хв, якщо `chat_id
 
 | Реліз | Нове `src/` (оцінка) | Основне |
 | --- | --- | --- |
-| 1.3 | ~7 700: узагальнення ядра й декораторів ~1 000, `./channels` ~1 000, спільний шар (jwt, google-auth, http2, api-client) ~700, провайдери ~5 700; d.ts кореня +~400 | 20 провайдерів, декоратори для каналів |
-| 1.4 | ~4 100: верифікатори й мапінг ~2 500, suppression ~600, вікно і фолбек ~600, ratelimit ~400 | замкнений цикл, один suppression для email і каналів |
-| 1.5 | ~2 200: задача й воркер каналу ~900, сховища MongoDB ~300, crypto-shredding ~400, фолбек за дедлайном ~250, решта ~350 | черга, outbox, аудит каналів |
+| 2.0 | ~9 700: узагальнення ядра й декораторів ~1 000, `./channels` ~1 000, `./router` ~150, спільний шар (jwt, google-auth, http2, api-client) ~700, черга каналів (стратегії) ~900, перебудова вебхуків ~200, провайдери ~5 700; d.ts кореня +~400 | 19 провайдерів, одна модель, одна черга, назви |
+| 2.1 | ~4 100: верифікатори й мапінг ~2 500, suppression ~600, вікно і фолбек ~600, ratelimit ~400 | замкнений цикл, один suppression для email і каналів |
+| 2.2 | ~1 200: сховища MongoDB ~300, crypto-shredding ~400, фолбек за дедлайном ~250, решта ~250 | сховища, аудит каналів |
 
-Разом ~14 тис. рядків нового коду; тести ≈1,5–2× від коду. Для порівняння, варіант із двома
+Разом ~15 тис. рядків нового коду; тести ≈1,5–2× від коду. Для порівняння, варіант із двома
 пакетами — ~16 тис. нових і ~15 тис. скопійованих рядків, які далі жили б окремо.
 
 ---
@@ -685,14 +824,14 @@ Telegram 30/с глобально + 1/с на чат (20/хв, якщо `chat_id
 ## 12. Перехід: що робиться з messenger
 
 1. **npm** — нічого: `@alexify/messenger` ніколи не публікувався (npm 404), користувачів немає.
-2. **Що переїжджає в mailer** (етап 0): `docs/comparison.json` (11 бібліотек) і проза сторінки
+2. **Що переїжджає в mailer** (етап 1): `docs/comparison.json` (12 бібліотек) і проза сторінки
    порівняння; із `CLAUDE.md` — правила каналів, рішення, список помилок конкурентів, платформні
    нотатки (Deno повторює запит, APNs через `node:http2`); цей план замінює `PLAN-v1.md`.
    Каркас (інструменти, тести, CI) не переїжджає — у mailer він той самий.
 3. **Репозиторій `Alexis-Technologies/messenger`** — останній коміт у `main`: README «moved to
    @alexify/mailer» з посиланням; потім архівування в налаштуваннях GitHub (робить власник).
-   Локальна гілка `feature/v1` з `PLAN-v1.md` не запушена: запушити для історії перед
-   архівуванням або лишити локально.
+   Локальна гілка `feature/v1` з `PLAN-v1.md` на 1 коміт попереду `origin`: запушити для історії
+   перед архівуванням або лишити локально.
 4. **Vercel-проєкт `messengerat.vercel.app`** — видалити або перенаправити на
    `mailerat.vercel.app` (вручну в Vercel).
 5. **Бренд** — індиговий знак messenger не потрібен; лишається бренд mailer.
@@ -703,8 +842,43 @@ Telegram 30/с глобально + 1/с на чат (20/хв, якщо `chat_id
 
 ## 13. Перші кроки
 
-1. Етап 0 у mailer на `feature/messenger`: позиціонування, перенесення порівняння й тексту з
-   messenger, `LICENSE`, розділ правил порту.
-2. Фікси 2.4 — окремими `fix:`-комітами (за бажання — патчем 1.2.x до каналів).
-3. Етап 1 (контракти з golden-тестами) і етап 2 (спільний шар) — після них кожен декоратор і
-   провайдер незалежний, тож етапи 3–4 можна вести паралельно по subpath-ах.
+1. Почати реєстрацію акаунтів, що потребують оплати або схвалення (розділ 9) — це найдовший шлях.
+2. Етап 0: патч 1.2.1 зі знахідками 2.4 (гілка від `main`), за бажання.
+3. Етап 1 у mailer на `feature/messenger`: позиціонування, перенесення порівняння й тексту з
+   messenger, `LICENSE`, розділ правил порту, оновлені рішення `CLAUDE.md`.
+4. Етапи 2–6 (контракти з golden-тестами, спільний шар, декоратори, черга, вебхуки) — після них
+   кожен провайдер незалежний, тож етап 7 можна вести паралельно по subpath-ах.
+
+---
+
+## Додаток A. Перевірка плану 1.3–1.5 (2026-11-06)
+
+Перша редакція цього плану (коміт `b8c48d3`) пропонувала адитивні 1.3–1.5. Три перевірки проти
+коду 1.2.0 підтвердили розміри (корінь 9,9/10 КБ, `./webhooks` 15,3/15,5, `./queue` 19,3/19,5),
+41 entry, місця падінь, правила pool і breaker, поведінку `api-client`, `V1_KEYS` і `ENVELOPE`,
+відпускання задачі з невідомим ключем, `check-pack`, tsd `'sent'`, відсутність `url` у
+`WebhookRequest` і знахідки 2.4. Що змінилося:
+
+| Перша редакція | Тепер |
+| --- | --- |
+| адитивний 1.x з виключенням для об'єднань | 2.0: інакше дві родини назв метрик, подій логера й аудиту і два API черги |
+| `tenantId?`, `correlationId?` лише в повідомленні каналу | сьогодні їх не має жодне повідомлення — лише задача черги й `AuditEvent`; `tenantId?` — в обох моделях, кореляція — `metadata.correlationId` для обох |
+| namespace ідемпотентності з `tenantId` для каналів | namespace без `tenantId` для обох (сумісність задач, які почав 1.2) |
+| `client.js` замість `http-client.js`, щоб обійти `delivery.test.js` | матриця там ручна; `http-client.js` лишається, тест звіряє з однією з двох матриць |
+| `STATES` в `audit/states.js` | `STATES` — `audit/delivery-event.js`; ранги записані в MongoDB, тому дробові |
+| `channel` у вході рендеру | не потрібен: рендерер уже вміє лише `text`; `subject` вимагає тільки черга |
+| двійники `prepareChannelJob`, `createChannelQueue`, `createChannelJobHandler` | одне ядро зі стратегіями (~88 % `./queue` нейтральні), API без `Mail` |
+| черга каналів у 1.5 | у 2.0, бо перейменування API ламає, а ламати треба один раз |
+| `./channel-webhooks` поруч із `./webhooks` | `./webhooks` — спільне, `./webhooks/<provider>` — кожен верифікатор |
+| `createChannelRouter` у `./channels` | `./router`, що маршрутизує й email |
+| «20 провайдерів» (§11), «+20 entry» (§4.6) | 19 провайдерів; «20» рахувало і `./channels`; набір той самий |
+| провайдери без живих акаунтів | провайдер входить у реліз лише після живого прогону |
+
+Пропущені першою редакцією місця, тепер у плані: logger `recordMessage: 'inline'`;
+`getMessagesBySubject` і `reset()` у mock; pool, що ховає TypeError і зупиняється на `validation`
+чужого каналу; відмова hooks як `rejected`; колізія fingerprint двох SMS під одним ключем;
+номери телефонів не редагуються на жодному з 16 місць, `queue/outcome.js` включно; `authtoken`
+поза `SECRET_KEYS`; `accepts`/`retryDelayMs`/`sleep` і `content-type` у нижньому регістрі в
+`api-client`; необов'язковий `errors` у п'яти декораторах; лог селектора pool; `channel` у
+відкритій частині запечатаної задачі — `invalid_job`; задача, що чекала 7 днів, без події
+аудиту.
