@@ -3,6 +3,7 @@
 // receipt of the first.
 
 const { createHash } = require('node:crypto');
+const { updateCanonical } = require('./canonical-json.js');
 
 const addAddresses = (hash, label, addresses) => {
   hash.update(`${label}\u0000`);
@@ -41,25 +42,75 @@ const addMessage = (hash, message) => {
   addValue(hash, 'calendar', message.calendar);
   addValue(hash, 'scheduled-at', message.scheduledAt?.toISOString());
   addValue(hash, 'tracking', message.tracking);
-  if (message.metadata !== undefined) {
-    const keys = Object.keys(message.metadata).toSorted();
-    for (const key of keys) addValue(hash, `metadata ${key}`, message.metadata[key]);
+  addMetadata(hash, message.metadata);
+};
+
+// A value of the JSON of a channel (a recipient of Web Push, a payload, a
+// template) in its canonical form, so that the order of its keys does not
+// make another message of it.
+const addCanonical = (hash, label, value) => {
+  hash.update(`${label}\u0000`);
+  if (value !== undefined) updateCanonical(hash, value);
+  hash.update('\u0000');
+};
+
+const addMetadata = (hash, metadata) => {
+  if (metadata === undefined) return;
+  const keys = Object.keys(metadata).toSorted();
+  for (const key of keys) addValue(hash, `metadata ${key}`, metadata[key]);
+};
+
+// A message of a channel, after a first label that no email message has, so
+// that the two never meet: what it says, its media by their URL or id, type
+// and name (not their bytes); neither its idempotency key, which an attempt
+// may set (pinMessageId), nor its tenant or the end of its validity.
+const addChannelMessage = (hash, message) => {
+  hash.update(`channel\u0000${message.channel}\u0000`);
+  addValue(hash, 'from', message.from);
+  addCanonical(hash, 'to', message.to);
+  addValue(hash, 'text', message.text);
+  if (message.media !== undefined) {
+    for (const medium of message.media) {
+      addValue(hash, 'medium', [
+        medium.url ?? null,
+        medium.id ?? null,
+        medium.contentType ?? null,
+        medium.filename ?? null,
+        medium.caption ?? null,
+      ]);
+    }
   }
+  addCanonical(hash, 'buttons', message.buttons);
+  addCanonical(hash, 'template', message.template);
+  addCanonical(hash, 'mentions', message.mentions);
+  addCanonical(hash, 'payload', message.payload);
+  addValue(hash, 'thread', message.thread);
+  addValue(hash, 'title', message.title);
+  addCanonical(hash, 'data', message.data);
+  addValue(hash, 'priority', message.priority);
+  addValue(hash, 'tags', message.tags);
+  addValue(hash, 'scheduled-at', message.scheduledAt?.toISOString());
+  addMetadata(hash, message.metadata);
 };
 
 /**
  * The SHA-256 of what a message says: its addresses, subject, body, header
  * fields, the names and types of its attachments (not their bytes), its
  * threading, schedule, tracking and metadata; for a raw message, its
- * envelope.  Its Message-ID and Date are left out, as an attempt may set them.
+ * envelope; for a message of a channel, its recipient and what it sends.
+ * Its Message-ID and Date are left out, as an attempt may set them, and so
+ * are its tenant and its channel when it is email, so that a key reserved by
+ * 1.2 finds its message after the upgrade.
  *
- * @param message A message or a raw message.
+ * @param message A message, a raw message or a message of a channel.
  * @returns The fingerprint, in hexadecimal.
  * @internal
  */
 const fingerprintOf = (message) => {
   const hash = createHash('sha256');
-  if (message.envelope !== undefined && message.recipients === undefined) {
+  if (typeof message.channel === 'string' && message.channel !== 'email') {
+    addChannelMessage(hash, message);
+  } else if (message.envelope !== undefined && message.recipients === undefined) {
     addValue(hash, 'raw', [message.envelope.from, message.envelope.to]);
   } else {
     addMessage(hash, message);

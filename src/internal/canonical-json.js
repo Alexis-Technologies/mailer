@@ -67,4 +67,15 @@ const hashJson = (value, leaveOut) => digestJson(createHash('sha256'), value, le
 const macJson = (secret, value, leaveOut) =>
   digestJson(createHmac('sha256', secret), value, leaveOut);
 
-module.exports = { hashJson, macJson };
+/**
+ * Writes a value of JSON in its canonical form into a digest, as a part of
+ * what the digest takes: the payload of a message of a channel in its
+ * fingerprint.
+ *
+ * @param digest A hash or an HMAC of node:crypto.
+ * @param value The value.
+ * @internal
+ */
+const updateCanonical = (digest, value) => update(digest, value);
+
+module.exports = { hashJson, macJson, updateCanonical };

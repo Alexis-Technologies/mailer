@@ -331,6 +331,90 @@ test('Channels: text goes into the markup of a chat as text, its mass mentions m
   );
 });
 
+test('Channels: the fingerprint of a message of a channel is what it says', () => {
+  const { fingerprintOf } = require('../../src/internal/fingerprint.js');
+  const base = {
+    channel: 'slack',
+    to: 'C123',
+    text: 'Deployed',
+    media: [{ url: 'https://example.com/a.png', caption: 'A' }],
+    payload: { blocks: [{ type: 'section', text: 'x' }], b: 1 },
+    tags: ['deploys'],
+    priority: 'normal',
+    metadata: { b: '2', a: '1' },
+  };
+  const print = fingerprintOf(createChannelMessage(base));
+  assert.match(print, /^[0-9a-f]{64}$/);
+  // The order of keys of a payload or of metadata makes no other message.
+  assert.strictEqual(
+    fingerprintOf(
+      createChannelMessage({
+        ...base,
+        payload: { b: 1, blocks: [{ text: 'x', type: 'section' }] },
+        metadata: { a: '1', b: '2' },
+      }),
+    ),
+    print,
+  );
+  // Neither the key, which an attempt may set, nor the tenant or the end of validity.
+  assert.strictEqual(
+    fingerprintOf(
+      createChannelMessage({
+        ...base,
+        idempotencyKey: 'k',
+        tenantId: 'acme',
+        expiresAt: new Date('2030-01-01T00:00:00Z'),
+      }),
+    ),
+    print,
+  );
+  for (const change of [
+    { to: 'C124' },
+    { text: 'Deployed!' },
+    { media: [{ url: 'https://example.com/b.png', caption: 'A' }] },
+    { media: [{ url: 'https://example.com/a.png', caption: 'B' }] },
+    { payload: { blocks: [] } },
+    { buttons: [{ type: 'reply', text: 'OK', id: 'ok' }] },
+    { mentions: { everyone: true } },
+    { thread: '1.2' },
+    { priority: 'high' },
+    { tags: ['other'] },
+    { scheduledAt: new Date('2030-01-01T00:00:00Z') },
+    { metadata: { a: '1' } },
+    { channel: 'discord' },
+  ]) {
+    assert.notStrictEqual(
+      fingerprintOf(createChannelMessage({ ...base, ...change })),
+      print,
+      JSON.stringify(change),
+    );
+  }
+  // The bytes of a medium are not read for it.
+  let read = false;
+  const content = () => {
+    read = true;
+    return new Uint8Array(0);
+  };
+  fingerprintOf(
+    createChannelMessage({
+      channel: 'push',
+      to: { endpoint: 'https://push.example.com/1', keys: { p256dh: 'p', auth: 'a' } },
+      title: 'Hi',
+      data: { a: '1' },
+      media: [{ content, contentType: 'image/png' }],
+    }),
+  );
+  assert.strictEqual(read, false);
+  // A message of a channel never meets an email one, whatever its fields.
+  const email = createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 's',
+    content: { text: 't' },
+  });
+  assert.notStrictEqual(fingerprintOf(email), fingerprintOf({ ...email, channel: 'sms' }));
+});
+
 test('Channels: retry and pool give every attempt of a message one client reference', async () => {
   const { pinMessageId } = require('../../src/core/message-id.js');
   const { RetryTransport } = require('../../src/retry/index.js');
