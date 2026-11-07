@@ -4,7 +4,7 @@
 // every such source.
 
 const { combineSignals } = require('../core/abort-signal.js');
-const { warnThrown } = require('./callback.js');
+const { describeThrown, warnThrown } = require('./callback.js');
 const { createLog } = require('./log.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('./options.js');
 const { settledWithin } = require('./settle.js');
@@ -164,7 +164,7 @@ const runLease = async (source, handler, lease, jobsSignal, config, log) => {
     } catch (error) {
       log.write(
         'warn',
-        () => ({ jobId: lease.job.id, error: error?.message }),
+        () => ({ jobId: lease.job.id, error: describeThrown(error) }),
         'queue.lease.extend_failed',
       );
       // The store does not answer: past the next keep the lease will have run
@@ -213,7 +213,7 @@ const runLease = async (source, handler, lease, jobsSignal, config, log) => {
     // The lease runs out, and the job comes back.
     log.write(
       'warn',
-      () => ({ jobId: lease.job.id, error: error?.message }),
+      () => ({ jobId: lease.job.id, error: describeThrown(error) }),
       'queue.settle_failed',
     );
   }
@@ -244,7 +244,7 @@ const startConsumer = (source, handler, concurrency, outerSignal, config, log) =
       try {
         reserved = await source.reserve(config.leaseMilliseconds);
       } catch (error) {
-        log.write('warn', () => ({ error: error?.message }), 'queue.reserve_failed');
+        log.write('warn', () => ({ error: describeThrown(error) }), 'queue.reserve_failed');
         await wait(config.pollIntervalMilliseconds);
         continue;
       }

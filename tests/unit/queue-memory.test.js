@@ -509,6 +509,60 @@ test('Queue: a run whose lease cannot be extended stops before the lease runs ou
   assert.ok(records.includes('queue.lease.lost'));
 });
 
+test('Queue: the records of a failing source leave out the addresses its errors name', async () => {
+  // A store's error can quote what it was given, such as a duplicate key
+  // holding an address.
+  const failure = () => new Error('E11000 dup key: { key: "welcome:ann@example.com" }');
+  let reserves = 0;
+  const source = {
+    id: 'failing',
+    enqueue: async () => ({}),
+    reserve: async () => {
+      reserves++;
+      if (reserves === 1) throw failure();
+      if (reserves > 2) return {};
+      const job = { id: 'j', name: 'mail', data: {}, attempt: 1, maxAttempts: 1 };
+      return { lease: { job, token: 't' } };
+    },
+    extend: async () => {
+      throw failure();
+    },
+    ack: async () => {
+      throw failure();
+    },
+    retry: async () => {},
+    fail: async () => {},
+    release: async () => {},
+  };
+  const records = Object.create(null);
+  let onSettleFailed;
+  const settleFailed = new Promise((resolve) => {
+    onSettleFailed = resolve;
+  });
+  const logger = {
+    warn: (record, message) => {
+      records[message] = record;
+      if (message === 'queue.settle_failed') onSettleFailed();
+    },
+  };
+  const driver = createPollingDriver(source, {
+    leaseMilliseconds: 300,
+    pollIntervalMilliseconds: 2,
+    logger,
+  });
+  const consumer = driver.consume(async () => {
+    // Long enough for one keep of the lease (every 100 ms), which fails, and
+    // short of a second, after which the lease would be given up.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return { type: 'ack' };
+  });
+  await Promise.race([settleFailed, new Promise((resolve) => setTimeout(resolve, 2000))]);
+  await consumer.close();
+  for (const name of ['queue.reserve_failed', 'queue.lease.extend_failed', 'queue.settle_failed']) {
+    assert.strictEqual(records[name]?.error, 'E11000 dup key: { key: "welcome:[REDACTED]" }', name);
+  }
+});
+
 test('Queue: a job done with keeps no data, unless told; its duplicates are still told', async () => {
   const cases = [
     [undefined, [false, true]],

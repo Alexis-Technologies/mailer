@@ -7,6 +7,7 @@
 // worker.
 
 const { randomUUID } = require('node:crypto');
+const { describeThrown } = require('../internal/callback.js');
 const { createPollingDriver } = require('../internal/polling-driver.js');
 const { createLog } = require('../internal/log.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
@@ -434,7 +435,7 @@ const subscribe = (collection, listener, config) => {
       failed = true;
       config.log.write(
         'warn',
-        () => ({ error: error?.message, failures }),
+        () => ({ error: describeThrown(error), failures }),
         'queue.change_stream_failed',
       );
       reopen(current);

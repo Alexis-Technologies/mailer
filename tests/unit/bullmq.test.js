@@ -180,14 +180,17 @@ test('BullMQ: a worker runs the processor with the strategy of the queue, its ev
   // A failure the processor threw is its own; one BullMQ made is a lost job.
   const thrown = await failureOf(worker.processor(fakeJob(), 'token'));
   worker.emit('failed', { id: 'j1' }, thrown);
-  worker.emit('failed', { id: 'j2' }, new Error('job stalled more than allowable limit'));
+  // The records leave out the addresses an error names.
+  worker.emit('failed', { id: 'j2' }, new Error('job stalled, to ann@example.com'));
   worker.emit('stalled', 'j3');
-  worker.emit('error', new Error('connection lost'));
+  worker.emit('error', new Error('connection lost, for bob@example.com'));
   assert.deepStrictEqual(
     records.map(([level, message]) => `${level} ${message}`),
     ['error queue.job.lost', 'warn queue.job.stalled', 'error queue.worker.error'],
   );
   assert.strictEqual(records[0][2].jobId, 'j2');
+  assert.strictEqual(records[0][2].reason, 'job stalled, to [REDACTED]');
+  assert.strictEqual(records[2][2].error, 'connection lost, for [REDACTED]');
   await consumer.close();
   assert.strictEqual(worker.closed, 1);
 });

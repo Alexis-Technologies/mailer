@@ -218,8 +218,9 @@ test('Pool: the logger hears a selector that throws and a failover', async () =>
     transports: [
       {
         transport: failing(refused),
+        // A selector by recipient whose error names the address.
         selector: () => {
-          throw new Error('Selector bug');
+          throw new Error('No route for ann@example.com');
         },
       },
       { transport: failing(refused) },
@@ -229,7 +230,11 @@ test('Pool: the logger hears a selector that throws and a failover', async () =>
   assert.strictEqual((await pool.send(message())).successful, true);
   const warns = records.filter(([level]) => level === 'warn');
   assert.ok(warns.length >= 1);
-  assert.deepStrictEqual(warns[0][1], { transport: 'pool', index: 0, error: 'Selector bug' });
+  assert.deepStrictEqual(warns[0][1], {
+    transport: 'pool',
+    index: 0,
+    error: 'No route for [REDACTED]',
+  });
   assert.ok(records.some(([level, , text]) => level === 'debug' && text === 'Pool failing over'));
 });
 
@@ -303,4 +308,44 @@ test('Pool: verifyAll tells how each transport did, a revoked key among them', a
   const controller = new AbortController();
   controller.abort(new Error('stop'));
   await assert.rejects(pool.verifyAll({ signal: controller.signal }), /stop/);
+});
+
+test('Pool: a bug of a transport rejects the send rather than failing over', async () => {
+  const later = [];
+  const buggy = {
+    id: 'buggy',
+    // Reads a property of undefined.
+    send: async (sentMessage) => sentMessage.envelope.from,
+    async *sendMany() {},
+  };
+  const pool = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: buggy, priority: 2 },
+      { transport: failing({ successful: true, messageId: 'x' }, later), priority: 1 },
+    ],
+  });
+  // The bug may have struck after the message went out: sending it through
+  // another transport could deliver it twice, and would hide the bug.
+  await assert.rejects(pool.send(message()), TypeError);
+  assert.deepStrictEqual(later, []);
+  // A network failure that fetch reports as a TypeError still fails over.
+  const offline = {
+    id: 'offline',
+    send: async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+      });
+    },
+    async *sendMany() {},
+  };
+  const failover = new PoolTransport({
+    strategy: 'priority',
+    transports: [
+      { transport: offline, priority: 2 },
+      { transport: failing({ successful: true, messageId: 'x' }, later), priority: 1 },
+    ],
+  });
+  assert.strictEqual((await failover.send(message())).successful, true);
+  assert.strictEqual(later.length, 1);
 });

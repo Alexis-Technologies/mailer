@@ -181,7 +181,8 @@ export interface PoolVerification {
  * It fails over after a failure of a transport (an outage, a rate limit) or of
  * what it can express (`unsupported`: `scheduledAt` on SMTP, a limit of the
  * provider), and stops at a refused message (`validation`, `rejected`) or an
- * unknown delivery.
+ * unknown delivery.  A bug of a transport (a `TypeError` that is no failure of
+ * delivery, as `./retry` tells it) rejects the send rather than failing over.
  *
  * @example Round-robin load balancing
  * ```typescript

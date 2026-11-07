@@ -421,7 +421,9 @@ are those of the wrapped transport, reported through `onRetry`; a span shows
 them as `retry` events and in `mailer.retry.count`.
 
 An HTTP transport gives its spans `network.protocol.name` `http` with `url.scheme`
-(`https`), `server.address` and `server.port`; an SMTP one `smtp`. The `exception`
+(`https`), `server.address` and `server.port`; an SMTP one `smtp`. A transport of
+your own gets them from a `baseUrl` or `endpoint` of its config that is an HTTP
+URL; a host and a port in its config do not make it SMTP, which is told by its id. The `exception`
 event of a thrown error carries `exception.stacktrace`, with the message redacted
 like the rest of the error text.
 
