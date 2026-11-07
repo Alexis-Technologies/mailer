@@ -145,7 +145,7 @@ jobs:
       # The comparison table is generated from docs/comparison.json: a hand
       # edit of the table, or data without a regenerated table, fails here.
       - run: pnpm docs:comparison
-      - run: git diff --exit-code docs/guide/comparison.md
+      - run: git diff --exit-code docs/guide/comparison.md docs/guide/comparison-channels.md
       # A broken docs build (including dead links) should fail the PR, not the
       # deploy that follows it.
       - run: pnpm run docs:build
