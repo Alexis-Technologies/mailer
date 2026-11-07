@@ -7,6 +7,7 @@ const { isRawTransport, isVerifiableTransport } = require('../core/transport.js'
 const { refuseRaw } = require('../internal/capabilities.js');
 const { disposeOf, messageOf } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
+const { redactAddresses } = require('../internal/redact-addresses.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
 const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
@@ -374,7 +375,7 @@ class PoolTransport {
           onSelectorError: (error, index) =>
             this.log.write(
               'warn',
-              () => ({ index, error: messageOf(error) }),
+              () => ({ index, error: redactAddresses(messageOf(error)) }),
               'A pool selector threw; its transport is skipped',
             ),
         });
