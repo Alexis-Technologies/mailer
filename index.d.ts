@@ -342,6 +342,12 @@ export declare function createCalendarAttachment(calendar: CalendarConstructor):
  */
 export interface Message {
   /**
+   * The channel of the message, `email`, which {@link createMessage} sets.
+   * A message without one, such as an object of 1.x made by hand, is read as
+   * an email message at run time.
+   */
+  readonly channel: 'email';
+  /**
    * The email address of the sender of the message.
    */
   readonly sender: Address;
@@ -421,6 +427,14 @@ export interface Message {
    * transport documentation for details.
    */
   readonly idempotencyKey?: string;
+  /**
+   * The tenant the message is sent for: 1 to 256 characters without control
+   * characters.  No provider is sent it; the worker of `./queue` sets it from
+   * its job, and the decorators, the logs and the audit read it.  The
+   * fingerprint of the message and the keys of `./idempotency` do not: a
+   * tenant goes into an idempotency key through the key or its namespace.
+   */
+  readonly tenantId?: string;
   /**
    * The RFC 5322 message identifier of the message, without the enclosing
    * angle brackets.
@@ -646,6 +660,10 @@ export interface MessageConstructor {
    */
   readonly idempotencyKey?: string;
   /**
+   * The tenant the message is sent for.  See {@link Message.tenantId}.
+   */
+  readonly tenantId?: string;
+  /**
    * The RFC 5322 message identifier of the message.  The enclosing angle
    * brackets are optional and stripped, so both `abc@example.com` and
    * `<abc@example.com>` are accepted.
@@ -752,8 +770,10 @@ export interface ListFields {
 }
 /**
  * Creates a new email {@link Message} based on the provided constructor
- * parameters.  This function provides a more convenient API for creating
- * messages compared to constructing a {@link Message} object directly.
+ * parameters, its `channel` `email`.  This function provides a more
+ * convenient API for creating messages compared to constructing a
+ * {@link Message} object directly.  The messages of the other channels are
+ * made by `createChannelMessage` of `./channels`.
  *
  * @example
  * ```typescript
@@ -778,13 +798,236 @@ export interface ListFields {
  *                     object is invalid, when a message identifier is not
  *                     valid, when the date is not one RFC 5322 can express, or
  *                     when the calendar content is not a single well-formed
- *                     iCalendar object declaring one supported method, or when
- *                     `generateId` returns no dot-atom-text.
+ *                     iCalendar object declaring one supported method, when
+ *                     `tenantId` is not a string of 1 to 256 characters without
+ *                     control characters, or when `generateId` returns no
+ *                     dot-atom-text.
  */
 export declare function createMessage(
   constructor: MessageConstructor,
   options?: IdOptions,
 ): Message;
+
+// ─── The messages of the channels ────────────────────────────────────────────
+
+/**
+ * The channel a message goes through.  `email` is the {@link Message} of
+ * {@link createMessage}; the others are made by `createChannelMessage` of
+ * `./channels`, each with its own recipient and fields.
+ */
+export type Channel =
+  | 'email'
+  | 'sms'
+  | 'rcs'
+  | 'whatsapp'
+  | 'messenger'
+  | 'instagram'
+  | 'telegram'
+  | 'viber'
+  | 'slack'
+  | 'discord'
+  | 'teams'
+  | 'google-chat'
+  | 'push';
+/**
+ * A phone number in E.164: `+`, a country calling code and the national
+ * number, 15 digits at most, as `normalizePhone` of `./channels` gives it.
+ */
+export type E164 = `+${string}`;
+/**
+ * A picture, a video, an audio or a document of a message: at a URL the
+ * provider fetches, already held by the provider under its id (a WhatsApp
+ * media id, a Telegram `file_id`), or its bytes, which the transport uploads.
+ */
+export type ChannelMedia =
+  | {
+      readonly url: string;
+      readonly contentType?: `${string}/${string}`;
+      readonly filename?: string;
+      readonly caption?: string;
+    }
+  | {
+      readonly id: string;
+      readonly contentType?: `${string}/${string}`;
+      readonly filename?: string;
+      readonly caption?: string;
+    }
+  | {
+      readonly content: AttachmentContent;
+      readonly contentType: `${string}/${string}`;
+      readonly filename?: string;
+      readonly caption?: string;
+    };
+/**
+ * A button of a message: a link, a reply the recipient taps (a quick reply,
+ * a callback, whose `id` comes back in an inbound event), or a call.  How
+ * many a channel takes, and of which kind, its transport checks.
+ */
+export type ChannelButton =
+  | { readonly type: 'url'; readonly text: string; readonly url: string }
+  | { readonly type: 'reply'; readonly text: string; readonly id: string }
+  | { readonly type: 'call'; readonly text: string; readonly phone: E164 };
+/**
+ * Who a message of a work chat may notify.  None by default: `@everyone`,
+ * `@here` and `<!channel>` in the text are neutralized unless `everyone` is
+ * set, and only the users and roles named here are mentioned.
+ */
+export interface ChannelMentions {
+  readonly everyone?: boolean;
+  readonly users?: readonly string[];
+  readonly roles?: readonly string[];
+}
+/**
+ * A template the provider holds, such as an approved template of WhatsApp,
+ * which a message outside the 24-hour window must be: its name, its
+ * language, and the values of its parameters as the provider takes them.
+ */
+export interface ProviderTemplate {
+  readonly name: string;
+  readonly language: string;
+  readonly components?: readonly JsonObject[];
+}
+/**
+ * What every message of a channel other than email has.  Its recipient and
+ * the fields only it has are in its own type.
+ */
+export interface ChannelMessageBase<
+  TChannel extends Exclude<Channel, 'email'>,
+  TPayload extends JsonObject = JsonObject,
+> {
+  readonly channel: TChannel;
+  /** The sender: a number or a sender id, a bot, a page, as the channel names it. */
+  readonly from?: string;
+  /** The text, as the channel formats it (its own escaping by `./channels`). */
+  readonly text?: string;
+  readonly media?: readonly ChannelMedia[];
+  readonly buttons?: readonly ChannelButton[];
+  /**
+   * What the channel takes as it is, beside or instead of the text: a Block
+   * Kit of Slack, an Adaptive Card of Teams, an embed of Discord, the
+   * overrides of a push.  Its transport passes it on unchanged.
+   */
+  readonly payload?: TPayload;
+  readonly mentions?: ChannelMentions;
+  readonly tags: readonly string[];
+  readonly priority: Priority;
+  /**
+   * Values the provider keeps with the message and gives back with its
+   * events, `correlationId` among them, as for email.
+   */
+  readonly metadata?: Readonly<Record<string, string>>;
+  /** The tenant the message is sent for.  See {@link Message.tenantId}. */
+  readonly tenantId?: string;
+  readonly idempotencyKey?: string;
+  readonly scheduledAt?: Date;
+  /**
+   * When the message is no longer worth delivering: the validity period of
+   * an SMS, the TTL of a push.
+   */
+  readonly expiresAt?: Date;
+}
+/** An SMS, or an MMS with `media`. */
+export interface SmsMessage extends ChannelMessageBase<'sms'> {
+  readonly to: E164;
+}
+/** A message of RCS Business Messaging. */
+export interface RcsMessage extends ChannelMessageBase<'rcs'> {
+  readonly to: E164;
+}
+/** A message of the WhatsApp Business Platform. */
+export interface WhatsAppMessage extends ChannelMessageBase<'whatsapp'> {
+  readonly to: E164;
+  /** A template WhatsApp approved: what a message outside the 24-hour window must be. */
+  readonly template?: ProviderTemplate;
+}
+/** A message of Messenger, to a page-scoped id. */
+export interface MessengerMessage extends ChannelMessageBase<'messenger'> {
+  readonly to: string;
+}
+/** A message of Instagram, to an Instagram-scoped id. */
+export interface InstagramMessage extends ChannelMessageBase<'instagram'> {
+  readonly to: string;
+}
+/** A message of a Telegram bot, to a chat id or the `@username` of a channel. */
+export interface TelegramMessage extends ChannelMessageBase<'telegram'> {
+  readonly to: string | number;
+  /** The topic of a forum, or the message this one replies to, as Telegram names them. */
+  readonly thread?: string;
+}
+/** A message of a Viber bot, to a user id. */
+export interface ViberMessage extends ChannelMessageBase<'viber'> {
+  readonly to: string;
+}
+/**
+ * A message of Slack: to a channel or a user through the Web API, or to the
+ * channel of an incoming webhook, whose URL names it, without `to`.
+ */
+export interface SlackMessage extends ChannelMessageBase<'slack'> {
+  readonly to?: string;
+  /** The `ts` of the message this one replies to in a thread. */
+  readonly thread?: string;
+}
+/**
+ * A message of Discord: to a channel through a bot, or to the channel of a
+ * webhook, whose URL names it, without `to`.
+ */
+export interface DiscordMessage extends ChannelMessageBase<'discord'> {
+  readonly to?: string;
+  /** The thread of a forum or a channel. */
+  readonly thread?: string;
+}
+/**
+ * A message of Microsoft Teams: to a conversation a bot was installed in,
+ * or to the channel of a Workflows webhook, whose URL names it, without `to`.
+ */
+export interface TeamsMessage extends ChannelMessageBase<'teams'> {
+  readonly to?: { readonly serviceUrl: string; readonly conversationId: string };
+}
+/**
+ * A message of Google Chat: to a space through a Chat app, or to the space
+ * of a webhook, whose URL names it, without `to`.
+ */
+export interface GoogleChatMessage extends ChannelMessageBase<'google-chat'> {
+  readonly to?: string;
+  /** The key of the thread, which a webhook creates or replies in. */
+  readonly thread?: string;
+}
+/**
+ * A subscription of Web Push, as `PushManager.subscribe()` gives it in a
+ * browser: its endpoint and its keys, in base64url.
+ */
+export interface PushSubscription {
+  readonly endpoint: string;
+  readonly keys: { readonly p256dh: string; readonly auth: string };
+}
+/**
+ * A push notification: to the token of a device (FCM, APNs), a topic of FCM,
+ * or a subscription of Web Push.
+ */
+export interface PushMessage extends ChannelMessageBase<'push'> {
+  readonly to: { readonly token: string } | { readonly topic: string } | PushSubscription;
+  readonly title?: string;
+  /** The data the application receives with the notification, or alone for a silent one. */
+  readonly data?: Readonly<Record<string, string>>;
+}
+/** A message of a channel other than email. */
+export type ChannelMessage =
+  | SmsMessage
+  | RcsMessage
+  | WhatsAppMessage
+  | MessengerMessage
+  | InstagramMessage
+  | TelegramMessage
+  | ViberMessage
+  | SlackMessage
+  | DiscordMessage
+  | TeamsMessage
+  | GoogleChatMessage
+  | PushMessage;
+/** A message of any channel, email among them. */
+export type AnyMessage = Message | ChannelMessage;
+/** The message of a channel: `MessageOf<'sms'>` is {@link SmsMessage}. */
+export type MessageOf<C extends Channel> = Extract<AnyMessage, { readonly channel: C }>;
 
 /**
  * Generates a globally unique message identifier rooted in a domain.
@@ -995,7 +1238,7 @@ export type Priority = 'high' | 'normal' | 'low';
 export declare function comparePriority(a: Priority, b: Priority): number;
 
 /**
- * A machine-readable category for an email delivery failure.
+ * A machine-readable category for a delivery failure.
  *
  * `validation` and `rejected` say that the message itself was refused: no
  * transport would take it, so `./pool` stops failing over.  `unsupported`
@@ -1003,6 +1246,16 @@ export declare function comparePriority(a: Priority, b: Priority): number;
  * cannot express (`scheduledAt`, a second tag) or a limit of its provider
  * (recipients, attachments): another transport may, so `./pool` fails over
  * with it.  Neither is retried.
+ *
+ * The categories of the channels, which only their providers give, each
+ * by its own codes: `invalid-recipient`, a number or an id that is no
+ * recipient; `opted-out`, a recipient who asked for no more (an SMS STOP);
+ * `outside-window`, a message a channel takes only within its window of
+ * customer care (WhatsApp, 24 hours) unless it is a template; `blocked`, a
+ * recipient who blocked the sender (a Telegram bot); `not-on-channel`, a
+ * recipient the channel does not reach (no Viber, no RCS); `unregistered`,
+ * a device token or a subscription no longer valid; and `unreachable`, a
+ * phone out of reach for now.  Only `unreachable` is retryable.
  */
 export type ReceiptErrorCategory =
   | 'auth'
@@ -1015,9 +1268,16 @@ export type ReceiptErrorCategory =
   | 'server-error'
   | 'service-unavailable'
   | 'configuration'
-  | 'unknown';
+  | 'unknown'
+  | 'invalid-recipient'
+  | 'opted-out'
+  | 'outside-window'
+  | 'blocked'
+  | 'not-on-channel'
+  | 'unregistered'
+  | 'unreachable';
 /**
- * Structured information about an email delivery failure.
+ * Structured information about a delivery failure.
  */
 export interface ReceiptError<TProviderId extends string = string> {
   /**
@@ -1033,7 +1293,9 @@ export interface ReceiptError<TProviderId extends string = string> {
    */
   readonly category: ReceiptErrorCategory;
   /**
-   * Whether retrying the same message may succeed.
+   * Whether retrying the same message may succeed.  Unless the error says,
+   * `unreachable` is retryable, the other categories of the channels are
+   * not, and those of email follow its classification.
    */
   readonly retryable: boolean;
   /**
@@ -1054,7 +1316,7 @@ export interface ReceiptError<TProviderId extends string = string> {
   readonly providerDetails?: unknown;
 }
 /**
- * The response from the email service after sending an email message.
+ * The response of the service that was given a message.
  *
  * This type uses a discriminated union to ensure type safety:
  *
@@ -1084,6 +1346,21 @@ export type Receipt<TProviderId extends string = string> =
        * Provider or transport that produced this receipt.
        */
       readonly provider?: TProviderId;
+      /**
+       * The channel of the message, when the transport tells it.
+       */
+      readonly channel?: Channel;
+      /**
+       * How many parts of SMS the provider counts for the message, when it
+       * tells.
+       */
+      readonly segments?: number;
+      /**
+       * How far the provider took the message: `accepted` (the default), its
+       * delivery to come in its events, or `sent`, by a channel that reports
+       * no delivery (a work chat, a push), so that no later state comes.
+       */
+      readonly state?: 'accepted' | 'sent';
       /**
        * Number of attempts made before this receipt was produced.
        */
@@ -1127,6 +1404,14 @@ export type Receipt<TProviderId extends string = string> =
        */
       readonly provider?: TProviderId;
       /**
+       * The channel of the message, when the transport tells it.
+       */
+      readonly channel?: Channel;
+      /**
+       * How many parts of SMS the provider counted, when it tells.
+       */
+      readonly segments?: number;
+      /**
        * Number of attempts made before this receipt was produced.
        */
       readonly attempts?: number;
@@ -1164,6 +1449,10 @@ export interface CreateFailedReceiptOptions<
   readonly errors?: readonly ReceiptError<TProviderId>[];
   readonly attempts?: number;
   readonly timestamp?: string;
+  /** The channel of the message. */
+  readonly channel?: Channel;
+  /** How many parts of SMS the provider counted. */
+  readonly segments?: number;
   /**
    * Marks the delivery as unknown; the receipt and the errors made for it are
    * then not retryable.  See {@link Receipt}.
@@ -1225,44 +1514,49 @@ export declare function parseRetryAfter(
 ): number | undefined;
 
 /**
- * A common interface for email sending services.
+ * A common interface for the services that send messages: of email by
+ * default, of a channel with `TMessage` (`Transport<'twilio', SmsMessage>`),
+ * or of any channel (`Transport<'router', AnyMessage>`).
  */
-export interface Transport<TProviderId extends string = string> {
+export interface Transport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
   /**
    * Stable provider identifier for receipts produced by this transport.
    */
   readonly id: TProviderId;
   /**
-   * Sends a single message using the email service.
+   * Sends a single message using the service.
    * @param message The message to send.
    * @param options Optional parameters for sending the message.
    * @returns A promise that resolves to a receipt containing the result of
    *          the send operation.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
-   * Sends multiple messages using the email service.
+   * Sends multiple messages using the service.
    * @param messages An iterable of messages to send.
    * @param options Optional parameters for sending the messages.
    * @return An async iterable that yields receipts for each sent message.
    */
   sendMany(
-    messages: Iterable<Message>,
+    messages: Iterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /**
-   * Sends multiple messages using the email service.
+   * Sends multiple messages using the service.
    * @param messages An async iterable of messages to send.
    * @param options Optional parameters for sending the messages.
    * @return An async iterable that yields receipts for each sent message.
    */
   sendMany(
-    messages: AsyncIterable<Message>,
+    messages: AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
 }
 /**
- * Options for operations on the email service.
+ * Options for operations on a transport.
  */
 export interface TransportOptions {
   /**
@@ -1305,6 +1599,12 @@ export interface RetryEvent {
  * (a suppressed address, a refused message), `complained` as spam,
  * `unsubscribed`, `opened` and `clicked`; `unknown` for an event the model
  * has no name for, kept with its `raw` record.
+ *
+ * The channels add `sent` to the carrier or the platform, `delivered` to the
+ * device, `read` by the recipient, `failed` after the attempt (an SMS the
+ * carrier refused, its `error` classified), `expired` with its validity
+ * period over, and `subscribed` (an inbound START); an inbound STOP is
+ * `unsubscribed`.
  */
 export type DeliveryEventType =
   | 'accepted'
@@ -1316,7 +1616,12 @@ export type DeliveryEventType =
   | 'opened'
   | 'clicked'
   | 'unsubscribed'
-  | 'unknown';
+  | 'unknown'
+  | 'sent'
+  | 'read'
+  | 'failed'
+  | 'expired'
+  | 'subscribed';
 /**
  * How a recipient bounced: `hard` for good (an address that does not exist),
  * `soft` for now (a full mailbox), `undetermined` when the provider does not
@@ -1373,6 +1678,12 @@ export interface DeliveryEvent<TProviderId extends string = string> {
   readonly occurredAt?: Date;
   /** How the recipient bounced, for `bounced` and for a `deferred` bounce. */
   readonly bounce?: DeliveryBounce;
+  /**
+   * Why a message of a channel failed, for `failed` and `rejected`: the
+   * provider's code of the failure (a DLR status, an error code) and its
+   * category, as a receipt would give it.
+   */
+  readonly error?: { readonly category: ReceiptErrorCategory; readonly code: string };
   /** Why, for a rejection, a deferral or a bounce, as the provider words it. */
   readonly reason?: string;
   /** The link of a click. */
@@ -1392,7 +1703,10 @@ export interface DeliveryEvent<TProviderId extends string = string> {
  * transport), `accepted` by the provider, then `delivered`, `bounced` or
  * `complained` as its events tell; `failed` when no attempt will be made
  * again, and `delivery_unknown` when an attempt may have been taken, which
- * only its events can settle.
+ * only its events can settle.  A message of a channel may be `sent` to the
+ * carrier or the platform after `accepted` (the last state of a channel that
+ * reports no delivery), `read` after `delivered`, and `expired` when its
+ * validity period ended undelivered.
  */
 export type MessageState =
   | 'queued'
@@ -1403,7 +1717,10 @@ export type MessageState =
   | 'bounced'
   | 'complained'
   | 'failed'
-  | 'delivery_unknown';
+  | 'delivery_unknown'
+  | 'sent'
+  | 'read'
+  | 'expired';
 /** Why an attempt failed, in an audit event: no address in it. */
 export interface AuditError {
   readonly category: ReceiptErrorCategory;
@@ -1431,6 +1748,8 @@ export interface AuditEvent {
   /** The job of the queue; absent on the events of a webhook. */
   readonly jobId?: string;
   readonly tenantId?: string;
+  /** The channel of the message; absent for email, as the events of 1.x were written. */
+  readonly channel?: Channel;
   /** The attempt, from 1; 0 at enqueue and for the events of a webhook. */
   readonly attempt: number;
   /** The SHA-256 of the job, as enqueued. */
@@ -1667,7 +1986,8 @@ export declare function isRawTransport<TProviderId extends string>(
  */
 export interface VerifiableTransport<
   TProviderId extends string = string,
-> extends Transport<TProviderId> {
+  TMessage extends AnyMessage = Message,
+> extends Transport<TProviderId, TMessage> {
   /**
    * Checks connectivity, configured authentication, and transport prerequisites.
    * @param options Optional cancellation signal.
@@ -1682,9 +2002,12 @@ export interface VerifiableTransport<
  * @param transport The transport to inspect.
  * @returns Whether the transport implements the optional verification capability.
  */
-export declare function isVerifiableTransport<TProviderId extends string>(
-  transport: Transport<TProviderId>,
-): transport is VerifiableTransport<TProviderId>;
+export declare function isVerifiableTransport<
+  TProviderId extends string,
+  TMessage extends AnyMessage = Message,
+>(
+  transport: Transport<TProviderId, TMessage>,
+): transport is VerifiableTransport<TProviderId, TMessage>;
 
 /** Replayable, already serialized MIME bytes. @since 0.6.0 */
 export type RawMessageContent = AttachmentContent;

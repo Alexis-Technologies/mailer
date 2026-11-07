@@ -193,6 +193,20 @@ const classifyReceiptError = (error) => {
   return { category: 'unknown', retryable: false, code: 'unknown' };
 };
 
+// The categories of the channels, each retryable or not whatever the words
+// of the error: a phone out of reach may be reached later, a number that
+// opted out or a token no longer registered never. No word of a message
+// leads to them, so that no failure of email is classified anew.
+const CHANNEL_RETRYABLE = new Map([
+  ['invalid-recipient', false],
+  ['opted-out', false],
+  ['outside-window', false],
+  ['blocked', false],
+  ['not-on-channel', false],
+  ['unregistered', false],
+  ['unreachable', true],
+]);
+
 /**
  * Creates structured information about a delivery failure.
  *
@@ -206,7 +220,8 @@ const createReceiptError = (message, options = {}) => {
       ? classifyReceiptError(message)
       : classifyHttpStatus(options.statusCode);
   const category = options.category ?? classification.category;
-  const retryable = options.retryable ?? classification.retryable;
+  const retryable =
+    options.retryable ?? CHANNEL_RETRYABLE.get(category) ?? classification.retryable;
   let code = options.code;
   if (code == null) {
     if (options.statusCode != null) code = `http.${options.statusCode}`;
@@ -287,6 +302,8 @@ const createFailedReceipt = (error, options = {}) => {
     retryable,
     deliveryUnknown,
     provider,
+    channel: options.channel,
+    segments: options.segments,
     attempts: options.attempts,
     timestamp: options.timestamp ?? new Date().toISOString(),
   });

@@ -354,3 +354,69 @@ test('Core: generateId makes the identifiers, and what it returns is checked', (
     });
   }
 });
+
+test('Message: createMessage gives an email message its channel, and checks its tenant', () => {
+  const message = createMessage({ ...base, tenantId: 'acme' });
+  assert.strictEqual(message.channel, 'email');
+  assert.strictEqual(message.tenantId, 'acme');
+  assert.strictEqual(createMessage(base).tenantId, undefined);
+  for (const tenantId of ['', 'a\nb', 'x'.repeat(257), 42, null]) {
+    assert.throws(() => createMessage({ ...base, tenantId }), TypeError, String(tenantId));
+  }
+  assert.strictEqual(createMessage({ ...base, tenantId: 'x'.repeat(256) }).tenantId.length, 256);
+});
+
+test('Message: a copy of a message with a tenant createMessage refuses is refused again', () => {
+  const { checkMessage } = require('../../src/core/message.js');
+  const message = createMessage(base);
+  checkMessage({ ...message, tenantId: 'acme' });
+  // A message of 1.x, made by hand without a channel, is still an email.
+  const { channel: _channel, ...unchanneled } = message;
+  checkMessage(unchanneled);
+  assert.throws(() => checkMessage({ ...message, tenantId: 'a\u0000b' }), TypeError);
+});
+
+test('Receipt: the categories of the channels are retryable by category, not by words', () => {
+  // The words say a timeout, which would be retried: the category decides.
+  const optedOut = createReceiptError('Timed out: the number opted out.', {
+    category: 'opted-out',
+  });
+  assert.strictEqual(optedOut.retryable, false);
+  assert.strictEqual(optedOut.code, 'opted-out');
+  for (const category of [
+    'invalid-recipient',
+    'outside-window',
+    'blocked',
+    'not-on-channel',
+    'unregistered',
+  ]) {
+    assert.strictEqual(createReceiptError('Timed out.', { category }).retryable, false, category);
+  }
+  assert.strictEqual(
+    createReceiptError('Absent subscriber.', { category: 'unreachable' }).retryable,
+    true,
+  );
+  assert.strictEqual(
+    createReceiptError('Absent subscriber.', { category: 'unreachable', retryable: false })
+      .retryable,
+    false,
+  );
+  // The categories of email keep the classification of their words, as in 1.x.
+  assert.strictEqual(createReceiptError('Timed out.', { category: 'validation' }).retryable, true);
+  // No words lead to a category of the channels.
+  assert.strictEqual(
+    classifyReceiptError('The recipient opted out and is unreachable.').category,
+    'unknown',
+  );
+  const receipt = createFailedReceipt('The number opted out.', {
+    provider: 'twilio',
+    category: 'opted-out',
+    statusCode: 400,
+    channel: 'sms',
+    segments: 2,
+  });
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.channel, 'sms');
+  assert.strictEqual(receipt.segments, 2);
+  assert.strictEqual('channel' in createFailedReceipt('Busy', { statusCode: 503 }), false);
+});

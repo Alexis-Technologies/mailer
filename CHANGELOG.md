@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The channels: SMS, RCS, WhatsApp, Messenger, Instagram, Telegram, Viber, Slack, Discord,
+Teams, Google Chat and push go through the transports, the decorators, the queue and the
+audit of email, under one model of messages. A major, so that there is one name for each
+thing rather than one for email and one for the channels; what a store, a log of audit or a
+worker of 1.2 holds reads the same.
+
+### Changed
+
+- **Breaking: one model of messages for every channel.** `Message` has `channel: 'email'`,
+  which `createMessage` sets; a message without one, built by hand for 1.x, is still read as
+  email. The root gains the types of the twelve other channels (`SmsMessage` to
+  `PushMessage`, `ChannelMessage`, `AnyMessage`, `MessageOf<C>`, `Channel`), and `Transport`
+  and `VerifiableTransport` take the type of their messages as a second parameter,
+  `Message` by default, so that a transport of SMS takes no email and an email transport no
+  SMS.
+- **Breaking: the unions of the root are wider,** so a `switch` over one that was exhaustive is
+  not: `ReceiptErrorCategory` has `invalid-recipient`, `opted-out`, `outside-window`,
+  `blocked`, `not-on-channel`, `unregistered` and `unreachable`, which only the providers of
+  the channels give, by their codes (no words of an error lead to them, so no failure of
+  email is classified anew), each retryable by its category (`unreachable` alone);
+  `DeliveryEventType` has `sent`, `read`, `failed`, `expired` and `subscribed`, and
+  `MessageState` `sent`, `read` and `expired`.
+
+### Added
+
+- **`tenantId` of a message,** 1 to 256 characters without control characters, as a job takes
+  it. No provider is sent it; the fingerprint of a message and the keys of `./idempotency`
+  leave it out, so that a job 1.2 began to send finds its key after the upgrade.
+- **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
+  `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
+  audit event its `channel`.
+
 ## [1.2.1] - 2026-11-07
 
 A patch of 1.2.0: bugs found while planning 2.0, each with a test that fails without its fix.

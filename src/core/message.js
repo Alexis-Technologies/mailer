@@ -11,11 +11,11 @@ const { isAttachment } = require('./attachment.js');
 const { resolveCalendarContent } = require('./calendar.js');
 const { parseMessageId } = require('./message-id.js');
 const { addListHeaders } = require('./list.js');
-const { checkMetadata, checkScheduledAt } = require('../internal/message-checks.js');
+const { checkKey, checkMetadata, checkScheduledAt } = require('../internal/message-checks.js');
 
 /**
  * Creates a new email {@link Message} based on the provided constructor
- * parameters.  This function provides a more convenient API for creating
+ * parameters, its `channel` `email`.  This function provides a more convenient API for creating
  * messages compared to constructing a {@link Message} object directly.
  *
  * @example
@@ -44,11 +44,14 @@ const { checkMetadata, checkScheduledAt } = require('../internal/message-checks.
  *                     iCalendar object declaring one supported method, when a
  *                     field of `list` is invalid or also given in `headers`,
  *                     when `scheduledAt`, `tracking` or `metadata` is
- *                     invalid, or when `generateId` returns no dot-atom-text.
+ *                     invalid, when `tenantId` is not a string of 1 to 256
+ *                     characters without control characters, or when
+ *                     `generateId` returns no dot-atom-text.
  */
 const createMessage = (constructor, options) => {
   const sender = checkAddress('sender', constructor.from);
   return {
+    channel: 'email',
     sender,
     recipients: checkAddresses('recipient', constructor.to),
     ccRecipients: checkAddresses('CC', constructor.cc),
@@ -61,6 +64,7 @@ const createMessage = (constructor, options) => {
     tags: ensureArray(constructor.tags),
     headers: addListHeaders(new Headers(constructor.headers ?? {}), constructor.list),
     idempotencyKey: constructor.idempotencyKey,
+    tenantId: checkKey(constructor.tenantId, 'tenantId'),
     messageId:
       constructor.messageId == null ? undefined : checkMessageId('', constructor.messageId),
     date: checkDate(constructor.date),
@@ -281,6 +285,7 @@ const checkMessage = (message) => {
   checkMessageIds('references ', message.references);
   if (message.date !== undefined) checkDate(message.date);
   checkScheduledAt(message.scheduledAt);
+  checkKey(message.tenantId, 'tenantId');
   checkTracking(message.tracking);
   checkMetadata(message.metadata);
 };

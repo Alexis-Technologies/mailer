@@ -9,10 +9,16 @@ import {
   parseAddress,
   RawMessageValidationError,
   type Address,
+  type AnyMessage,
+  type Channel,
+  type ChannelMessage,
+  type E164,
   type IdGenerator,
   type IdKind,
   type MessageTracking,
   type Message,
+  type MessageOf,
+  type PushMessage,
   type RawTransport,
   type Receipt,
   type DeliveryBounce,
@@ -21,6 +27,9 @@ import {
   type ReceiptError,
   type ReceiptErrorCategory,
   type RetryEvent,
+  type SlackMessage,
+  type SmsMessage,
+  type TelegramMessage,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -33,6 +42,7 @@ const message = createMessage({
   content: { text: 'Hi', html: '<p>Hi</p>' },
 });
 expectType<Message>(message);
+expectType<'email'>(message.channel);
 expectType<Address>(message.sender);
 expectType<readonly Address[]>(message.recipients);
 expectError(createMessage({ from: 'alex@example.com', subject: 'Hello' }));
@@ -61,6 +71,64 @@ expectError(
     metadata: { orderId: 42 },
   }),
 );
+
+// The tenant of a message, beside its fields.
+const tenanted = createMessage({
+  from: 'a@example.com',
+  to: 'b@example.com',
+  subject: 'x',
+  content: { text: 'x' },
+  tenantId: 'acme',
+});
+expectType<string | undefined>(tenanted.tenantId);
+expectError(
+  createMessage({
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'x',
+    content: { text: 'x' },
+    tenantId: 42,
+  }),
+);
+
+// The messages of the channels: one type each, told apart by `channel`.
+const sms: SmsMessage = {
+  channel: 'sms',
+  to: '+380671234567',
+  text: 'Your code is 1234',
+  tags: [],
+  priority: 'high',
+};
+expectType<E164>(sms.to);
+expectError<SmsMessage>({ channel: 'sms', to: '0671234567', tags: [], priority: 'high' });
+expectError<SmsMessage>({ channel: 'sms', to: '+380671234567' });
+expectType<SmsMessage>({} as MessageOf<'sms'>);
+expectType<Message>({} as MessageOf<'email'>);
+expectAssignable<TelegramMessage>({ channel: 'telegram', to: 42, tags: [], priority: 'normal' });
+expectAssignable<SlackMessage>({
+  channel: 'slack',
+  text: 'Deployed',
+  payload: { blocks: [{ type: 'section' }] },
+  mentions: { everyone: false },
+  tags: [],
+  priority: 'normal',
+});
+expectAssignable<PushMessage>({
+  channel: 'push',
+  to: { endpoint: 'https://push.example.com/1', keys: { p256dh: 'p', auth: 'a' } },
+  title: 'Hi',
+  tags: [],
+  priority: 'normal',
+});
+expectError<PushMessage>({ channel: 'push', to: 'token', tags: [], priority: 'normal' });
+expectAssignable<Channel>('google-chat');
+expectError<Channel>('googleChat');
+const anyMessage = {} as AnyMessage;
+if (anyMessage.channel === 'sms') expectType<SmsMessage>(anyMessage);
+else if (anyMessage.channel === 'email') expectType<Message>(anyMessage);
+expectAssignable<AnyMessage>(sms);
+expectAssignable<ChannelMessage>(sms);
+expectError<ChannelMessage>(message);
 
 // The List-* fields of a newsletter.
 createMessage({
@@ -98,6 +166,9 @@ expectError(
 const receipt = {} as Receipt<'smtp'>;
 if (receipt.successful) {
   expectType<string>(receipt.messageId);
+  expectType<'accepted' | 'sent' | undefined>(receipt.state);
+  expectType<number | undefined>(receipt.segments);
+  expectType<Channel | undefined>(receipt.channel);
 } else {
   expectType<readonly string[]>(receipt.errorMessages);
 }
@@ -131,6 +202,26 @@ if (!unsupported.successful) {
 }
 expectAssignable<ReceiptErrorCategory>('unsupported');
 expectError(createReceiptError('x', { category: 'not-supported' }));
+// The categories of the channels, and the parts of an SMS on its receipt.
+const optedOut = createFailedReceipt('The number opted out.', {
+  provider: 'twilio',
+  category: 'opted-out',
+  channel: 'sms',
+  segments: 2,
+});
+if (!optedOut.successful) expectType<number | undefined>(optedOut.segments);
+for (const category of [
+  'invalid-recipient',
+  'opted-out',
+  'outside-window',
+  'blocked',
+  'not-on-channel',
+  'unregistered',
+  'unreachable',
+] as const) {
+  expectAssignable<ReceiptErrorCategory>(category);
+}
+expectError<ReceiptErrorCategory>('opted_out');
 
 const transport: Transport<'smtp'> = {
   id: 'smtp',
@@ -142,6 +233,18 @@ const transport: Transport<'smtp'> = {
 expectType<'smtp'>(transport.id);
 if (isRawTransport(transport)) expectType<RawTransport<'smtp'>>(transport);
 if (isVerifiableTransport(transport)) expectType<VerifiableTransport<'smtp'>>(transport);
+expectError(transport.send(sms));
+
+// A transport of a channel takes the messages of its channel alone.
+declare const twilio: Transport<'twilio', SmsMessage>;
+expectType<Promise<Receipt<'twilio'>>>(twilio.send(sms));
+expectError(twilio.send(message));
+if (isVerifiableTransport(twilio)) {
+  expectType<VerifiableTransport<'twilio', SmsMessage>>(twilio);
+}
+declare const router: Transport<'router', AnyMessage>;
+expectType<Promise<Receipt<'router'>>>(router.send(sms));
+expectType<Promise<Receipt<'router'>>>(router.send(message));
 
 expectAssignable<TypeError>(new RawMessageValidationError('Bad line.', 'content', 12, 2));
 
@@ -177,7 +280,13 @@ expectType<DeliveryEventType>(event.type);
 expectType<'hard' | 'soft' | 'undetermined' | undefined>(event.bounce?.kind);
 expectType<readonly string[]>(event.tags);
 expectAssignable<DeliveryBounce>({ kind: 'hard', code: '5.1.1' });
-expectError<DeliveryEventType>('sent');
+expectType<{ readonly category: ReceiptErrorCategory; readonly code: string } | undefined>(
+  event.error,
+);
+for (const type of ['sent', 'read', 'failed', 'expired', 'subscribed'] as const) {
+  expectAssignable<DeliveryEventType>(type);
+}
+expectError<DeliveryEventType>('opted_out');
 
 // The contracts of the reliability layer are types of the root.
 import type {
@@ -190,7 +299,11 @@ import type {
   QueueSource as RootQueueSource,
 } from '../../index.js';
 const reliabilityState: RootMessageState = 'delivery_unknown';
+for (const state of ['sent', 'read', 'expired'] as const) {
+  expectAssignable<RootMessageState>(state);
+}
 expectError<RootMessageState>('lost');
+expectAssignable<Channel | undefined>(({} as RootAuditEvent).channel);
 const reliabilityOutcome: RootQueueOutcome = {
   type: 'retry',
   delayMilliseconds: 1,

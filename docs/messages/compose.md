@@ -25,6 +25,11 @@ const message = createMessage({
 });
 ```
 
+The message it gives has `channel: 'email'`; the messages of SMS, chats and push,
+which 2.0 brings, are made by `createChannelMessage` of `./channels` instead.  A
+message without a `channel`, such as one built by hand for 1.x, is still read as
+an email message.
+
 The function automatically converts string email addresses to proper `Address`
 objects and validates the input.  You can provide email addresses as simple
 strings like `"user@example.com"` or with display names using the format
@@ -271,6 +276,27 @@ const message = createMessage({
 
 SMTP and JMAP ignore `tracking` and `metadata`, which have no meaning in the
 message itself.  Each provider's page says which of the three it takes.
+
+## Tenant
+
+`tenantId` names the tenant a message is sent for, 1 to 256 characters without
+control characters:
+
+```js
+const message = createMessage({
+  from: 'shop@example.com',
+  to: 'customer@example.com',
+  subject: 'Your order has shipped',
+  content: { html: '<p>…</p>' },
+  tenantId: 'acme',
+});
+```
+
+No provider is sent it.  The worker of [the queue](/guide/queue) sets it from its
+job, and the decorators, the logs and the audit read it.  The fingerprint of a
+message and the keys of `./idempotency` leave it out, so a message keeps its key
+whatever its tenant: to keep the keys of tenants apart, put the tenant into the
+key or into the `namespace` of `./idempotency`.
 
 ## Mailing lists and one-click unsubscribe
 
