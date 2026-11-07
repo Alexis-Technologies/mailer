@@ -413,3 +413,22 @@ test('Breaker: a clock that throws gives the last time it gave', async (t) => {
   time += 60_000;
   assert.strictEqual(breaker.state, 'half-open');
 });
+
+test('Breaker: a failed receipt without errors is judged by the classification of its text', async () => {
+  // A transport of the application need not give the structured errors.
+  const texts = ['Connection refused by api.example.com', 'Invalid recipient address'];
+  const inner = fakeTransport((_m, index) => ({
+    successful: false,
+    errorMessages: [texts[index % 2 === 0 ? 0 : 1]],
+  }));
+  const breaker = new CircuitBreakerTransport(inner, { failureThreshold: 2 });
+  // A network failure counts; a refused address answers that the provider is up.
+  assert.strictEqual((await breaker.send(message())).successful, false);
+  assert.strictEqual((await breaker.send(message())).successful, false);
+  assert.strictEqual(breaker.state, 'closed');
+  const down = fakeTransport(() => ({ successful: false, errorMessages: [texts[0]] }));
+  const tripped = new CircuitBreakerTransport(down, { failureThreshold: 2 });
+  await tripped.send(message());
+  await tripped.send(message());
+  assert.strictEqual(tripped.state, 'open');
+});

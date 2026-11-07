@@ -12,7 +12,7 @@
 // result counts only in the period of the circuit it was sent in, and a
 // batch that throws counts once.
 
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { warnThrown } = require('../internal/callback.js');
 const {
   disposeOf,
@@ -29,8 +29,16 @@ const FAILURE_CATEGORIES = new Set(['network', 'timeout', 'server-error', 'servi
 
 const isProviderFailure = (receipt) => {
   if (receipt.successful) return false;
-  for (const error of receipt.errors) {
-    if (FAILURE_CATEGORIES.has(error.category)) return true;
+  if (receipt.errors != null) {
+    for (const error of receipt.errors) {
+      if (FAILURE_CATEGORIES.has(error.category)) return true;
+    }
+    return false;
+  }
+  // A transport of the application may give no structured errors: the
+  // categories are those of its texts, as ./otel classifies such a receipt.
+  for (const text of receipt.errorMessages) {
+    if (FAILURE_CATEGORIES.has(classifyReceiptError(text).category)) return true;
   }
   return false;
 };
