@@ -1,7 +1,8 @@
 // Not ported: the delivery events of ./webhooks as states of a message:
-// `accepted`, `delivered`, `bounced` and `complained` are states, `rejected`
-// is `failed` with nothing sent, `deferred` keeps a message accepted, and an
-// open, a click or an unsubscribe is engagement, not a state.
+// `accepted`, `delivered`, `bounced` and `complained` are states, and those
+// of the channels `sent`, `read`, `failed` and `expired`; `rejected` is
+// `failed` with nothing sent, `deferred` keeps a message accepted, and an
+// open, a click, a subscription or an unsubscribe is engagement, not a state.
 
 const { toUuid } = require('../internal/uuid.js');
 
@@ -12,6 +13,10 @@ const STATES = new Map([
   ['bounced', 'bounced'],
   ['complained', 'complained'],
   ['rejected', 'failed'],
+  ['sent', 'sent'],
+  ['read', 'read'],
+  ['failed', 'failed'],
+  ['expired', 'expired'],
 ]);
 
 /**
@@ -51,6 +56,10 @@ const auditEventOfDeliveryEvent = (event, options = {}) => {
     provider: event.provider,
     deliveryEvent: { type: event.type, id: event.id },
   };
+  // An event of 1.x has no channel, which reads as email.
+  if (typeof event.channel === 'string' && event.channel !== 'email') {
+    audit.channel = event.channel;
+  }
   if (event.messageId !== undefined) audit.providerMessageId = event.messageId;
   if (event.rfcMessageId !== undefined) audit.messageId = event.rfcMessageId;
   if (Array.isArray(event.tags) && event.tags.length > 0) audit.tags = event.tags;

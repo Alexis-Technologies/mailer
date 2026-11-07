@@ -38,8 +38,8 @@ export type AuditLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fat
 export interface LoggerAuditSinkOptions {
   /**
    * The level of each state, over the defaults: `failed` at error;
-   * `delivery_unknown`, `bounced` and `complained` at warn; `rendered` and
-   * `submitted` at debug; the rest at info.
+   * `delivery_unknown`, `bounced`, `complained` and `expired` at warn;
+   * `rendered` and `submitted` at debug; the rest at info.
    */
   readonly levels?: Partial<Readonly<Record<MessageState, AuditLogLevel>>>;
 }
@@ -66,8 +66,9 @@ export declare function combineAuditSinks(...sinks: readonly AuditSink[]): Audit
 /**
  * The state of a message a delivery event tells: `accepted` (and `deferred`,
  * which keeps it accepted), `delivered`, `bounced`, `complained`, `failed` for
- * `rejected`; `undefined` for an open, a click, an unsubscribe and the
- * unknown.
+ * `rejected`, and those of the channels, `sent`, `read`, `failed` and
+ * `expired`; `undefined` for an open, a click, a subscription, an
+ * unsubscribe and the unknown.
  */
 export declare function stateOfDeliveryEvent(event: DeliveryEvent): MessageState | undefined;
 
@@ -80,7 +81,8 @@ export interface AuditEventOfDeliveryEventOptions {
 /**
  * The audit event of a delivery event: found by the `correlationId` the
  * message's metadata gave back (which `./queue` always writes), or by the
- * provider's id of the message.
+ * provider's id of the message; with the `channel` of the event unless it is
+ * email, which an event without one reads as.
  *
  * @returns The audit event, or `undefined` when the event tells no state or
  * names no message.
@@ -90,12 +92,16 @@ export declare function auditEventOfDeliveryEvent(
   options?: AuditEventOfDeliveryEventOptions,
 ): AuditEvent | undefined;
 
-/** Whether no later state but a complaint follows: `delivered`, `bounced`, `complained` and `failed`. */
+/**
+ * Whether no later state follows but a read or a complaint: `delivered`,
+ * `read`, `bounced`, `complained`, `failed` and `expired`.
+ */
 export declare function isFinalState(state: MessageState): boolean;
 
 /**
  * The state of a message from its events, whatever the order they came in:
  * the furthest along `queued`, `rendered`, `submitted`, `accepted` or
- * `delivery_unknown`, `delivered` or `failed`, `bounced`, `complained`.
+ * `delivery_unknown`, `sent`, `delivered`, `failed` or `expired`, `read`,
+ * `bounced`, `complained`; the later of two as far.
  */
 export declare function stateOf(events: Iterable<AuditEvent>): MessageState | undefined;

@@ -254,3 +254,61 @@ test('Audit: a batch goes to each sink, in one call where it can', async () => {
   );
   assert.deepStrictEqual(appended, ['e1', 'e2']);
 });
+
+test('Audit: the states of the channels rank between those of 1.2, which stores keep', () => {
+  const { rankOf } = require('../../src/audit/states.js');
+  assert.strictEqual(rankOf('sent'), 3.5);
+  assert.strictEqual(rankOf('expired'), 4);
+  assert.strictEqual(rankOf('read'), 4.5);
+  // Sent to the carrier settles an unknown delivery, and comes after the accept.
+  assert.strictEqual(stateOf([eventOf('sent'), eventOf('delivery_unknown')]), 'sent');
+  assert.strictEqual(stateOf([eventOf('sent'), eventOf('accepted')]), 'sent');
+  assert.strictEqual(stateOf([eventOf('delivered'), eventOf('sent')]), 'delivered');
+  assert.strictEqual(stateOf([eventOf('read'), eventOf('delivered')]), 'read');
+  assert.strictEqual(stateOf([eventOf('read'), eventOf('complained')]), 'complained');
+  // An expiry is as far as a failure: of the two, the later.
+  assert.strictEqual(stateOf([eventOf('failed'), eventOf('expired')]), 'expired');
+  for (const state of ['read', 'expired']) assert.ok(isFinalState(state), state);
+  assert.ok(!isFinalState('sent'));
+});
+
+test('Audit: the delivery events of a channel tell its states, and their channel', () => {
+  for (const type of ['sent', 'read', 'failed', 'expired']) {
+    assert.strictEqual(stateOfDeliveryEvent({ type }), type);
+  }
+  assert.strictEqual(stateOfDeliveryEvent({ type: 'subscribed' }), undefined);
+  const delivery = {
+    provider: 'twilio',
+    channel: 'sms',
+    type: 'delivered',
+    id: 'SM1:delivered',
+    messageId: 'SM1',
+    correlationId: 'job-1',
+    tags: [],
+    metadata: { correlationId: 'job-1' },
+    raw: {},
+  };
+  assert.strictEqual(auditEventOfDeliveryEvent(delivery).channel, 'sms');
+  // Email, and an event of 1.x without a channel, as the events of 1.2 were written.
+  assert.strictEqual(
+    'channel' in auditEventOfDeliveryEvent({ ...delivery, channel: 'email' }),
+    false,
+  );
+  const { channel: _channel, ...unchanneled } = delivery;
+  assert.strictEqual('channel' in auditEventOfDeliveryEvent(unchanneled), false);
+});
+
+test('Audit: the logger sink writes the states of the channels at their levels', () => {
+  const records = [];
+  const logger = {};
+  for (const level of ['info', 'warn']) {
+    logger[level] = (record, message) => records.push([level, message]);
+  }
+  const sink = createLoggerAuditSink(logger);
+  for (const state of ['sent', 'read', 'expired']) sink.append(eventOf(state));
+  assert.deepStrictEqual(records, [
+    ['info', 'mail.sent'],
+    ['info', 'mail.read'],
+    ['warn', 'mail.expired'],
+  ]);
+});

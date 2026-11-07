@@ -1,6 +1,8 @@
 // Not ported: the order of the states of a message, by which the state of
 // its events is read whatever the order they came in: a `delivered` that
-// comes before `delivery_unknown` is still delivered.
+// comes before `delivery_unknown` is still delivered. A store of audit events
+// keeps the rank of each (the MongoDB sink sorts by it), so the states of the
+// channels take ranks between those of 1.2 rather than moving them.
 
 const RANKS = new Map([
   ['queued', 0],
@@ -8,13 +10,18 @@ const RANKS = new Map([
   ['submitted', 2],
   ['accepted', 3],
   ['delivery_unknown', 3],
+  // To the carrier or the platform: the last state of a channel that tells
+  // no delivery, and what settles a delivery unknown.
+  ['sent', 3.5],
   ['delivered', 4],
   ['failed', 4],
+  ['expired', 4],
+  ['read', 4.5],
   ['bounced', 5],
   ['complained', 6],
 ]);
 
-const FINAL = new Set(['delivered', 'bounced', 'complained', 'failed']);
+const FINAL = new Set(['delivered', 'bounced', 'complained', 'failed', 'read', 'expired']);
 
 /**
  * The place of a state in the order of states: of two events at one time and
@@ -25,8 +32,8 @@ const FINAL = new Set(['delivered', 'bounced', 'complained', 'failed']);
 const rankOf = (state) => RANKS.get(state) ?? -1;
 
 /**
- * Whether no later state but a complaint follows: `delivered`, `bounced`,
- * `complained` and `failed`.
+ * Whether no later state follows but a read or a complaint: `delivered`,
+ * `read`, `bounced`, `complained`, `failed` and `expired`.
  *
  * @param state A state of a message.
  * @returns `true` for a final state.

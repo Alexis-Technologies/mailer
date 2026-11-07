@@ -1,6 +1,7 @@
 // Not ported: an audit sink that writes each event as a record of the
 // pino-like logger the application passes in: a failure at `error`, an
-// unknown delivery, a bounce and a complaint at `warn`, the rest at `info`.
+// unknown delivery, a bounce, a complaint and an expiry at `warn`, the
+// rendering and the submission at `debug`, the rest at `info`.
 
 const { createLog } = require('../internal/log.js');
 
@@ -9,10 +10,13 @@ const DEFAULT_LEVELS = Object.freeze({
   rendered: 'debug',
   submitted: 'debug',
   accepted: 'info',
+  sent: 'info',
   delivered: 'info',
+  read: 'info',
   bounced: 'warn',
   complained: 'warn',
   failed: 'error',
+  expired: 'warn',
   delivery_unknown: 'warn',
 });
 

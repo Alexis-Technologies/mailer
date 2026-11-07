@@ -37,6 +37,12 @@ worker of 1.2 holds reads the same.
 - **`tenantId` of a message,** 1 to 256 characters without control characters, as a job takes
   it. No provider is sent it; the fingerprint of a message and the keys of `./idempotency`
   leave it out, so that a job 1.2 began to send finds its key after the upgrade.
+- **The states of the channels in `./audit`:** `sent` ranks between `accepted` and
+  `delivered` (3.5), `expired` with `failed` (4) and `read` after `delivered` (4.5), so that
+  the ranks a store keeps from 1.2 stay; `read` and `expired` are final. `sent`, `read`,
+  `failed` and `expired` delivery events become those states, and an audit event takes the
+  `channel` of a delivery event that is not email. The logger sink writes `sent` and `read` at
+  info, `expired` at warn.
 - **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
   `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
   audit event its `channel`.

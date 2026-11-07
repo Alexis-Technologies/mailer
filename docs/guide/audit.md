@@ -16,10 +16,16 @@ queued ─▶ rendered ─▶ submitted ─▶ accepted ─▶ delivered │ bou
                           └─▶ delivery_unknown  (it may have been taken)
 ```
 
+A message of a channel may also be `sent` to the carrier or the platform after
+`accepted` (where a work chat or a push ends, as they tell no delivery), `read`
+after `delivered`, and `expired` when its validity period ended undelivered.
+
 `stateOf(events)` reads the state of a message from its events whatever their
 order: a `delivered` from a webhook settles a `delivery_unknown`, a `bounced`
-comes after a `delivered`. `isFinalState` is true for `delivered`, `bounced`,
-`complained` and `failed`.
+comes after a `delivered`, a `read` after a `delivered`. `isFinalState` is true
+for `delivered`, `read`, `bounced`, `complained`, `failed` and `expired`. The
+ranks of the states of 1.2 are those a store keeps, so the states of the
+channels rank between them (`sent` 3.5, `expired` 4, `read` 4.5).
 
 ## An event
 
@@ -62,8 +68,8 @@ const audit = combineAuditSinks(createLoggerAuditSink(logger), myDatabaseSink);
 - `createMemoryAuditSink({ maxEvents })` holds the events, with
   `eventsOf(correlationId)` and `stateOf(correlationId)`: for tests.
 - `createLoggerAuditSink(logger, { levels })` writes each event as a record
-  `mail.<state>`: `failed` at error; `delivery_unknown`, `bounced` and
-  `complained` at warn.
+  `mail.<state>`: `failed` at error; `delivery_unknown`, `bounced`,
+  `complained` and `expired` at warn.
 - `combineAuditSinks(...sinks)` tells each in turn, whatever another threw.
 - `createMongoAuditSink({ collection })` of [`./mongodb`](/guide/outbox), each
   event once by its id, in the transaction of the enqueue.
@@ -84,9 +90,11 @@ for (const event of events) {
 await commit();
 ```
 
-`accepted`, `delivered`, `bounced` and `complained` are states; `rejected` is
-`failed`; `deferred` keeps a message accepted; an open, a click and an
-unsubscribe are engagement, not states. The queue writes `correlationId` into
+`accepted`, `delivered`, `bounced` and `complained` are states, and so are
+`sent`, `read`, `failed` and `expired` of the channels; `rejected` is `failed`;
+`deferred` keeps a message accepted; an open, a click, a subscription and an
+unsubscribe are engagement, not states. An event of a channel other than email
+gives its `channel` to the audit event; one of email, or of 1.x, gives none. The queue writes `correlationId` into
 the metadata of each message, which the providers give back with its events.
 
 A webhook's event names its message by the `correlationId` the message's
