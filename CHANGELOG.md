@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-07
+
 A patch of 1.2.0: bugs found while planning 2.0, each with a test that fails without its fix.
 Nothing changes for a message, a job or what a store holds.
 
@@ -806,7 +808,8 @@ for code written against upyo 0.7:
   `./resend`, `./sendgrid`, `./mailgun`, `./plunk` and `./jmap` used to retry no 4xx at all, and
   waited without jitter, the first three without a cap.
 
-[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.2.0...HEAD
+[unreleased]: https://github.com/Alexis-Technologies/mailer/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/Alexis-Technologies/mailer/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Alexis-Technologies/mailer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Alexis-Technologies/mailer/releases/tag/v1.0.0
