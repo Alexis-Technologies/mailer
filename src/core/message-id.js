@@ -281,21 +281,46 @@ const domainOf = (address) => {
 // as long as the caller's message does.
 const pinnedMessages = new WeakMap();
 
+// A message of a channel has no Message-ID: what every attempt carries alike
+// is its client reference, its idempotency key, which a provider takes as the
+// `client-ref` of Vonage, the `sequence_id` of TurboSMS, the `messageId` of
+// RBM or the `nonce` of Discord, so that it deduplicates a send made again.
+const pinReference = (message, generator) => {
+  if (
+    typeof message.channel !== 'string' ||
+    message.channel === 'email' ||
+    message.idempotencyKey !== undefined
+  ) {
+    return message;
+  }
+  let pinned = pinnedMessages.get(message);
+  if (pinned === undefined) {
+    pinned = { ...message, idempotencyKey: generateId('idempotency-key', generator) };
+    pinnedMessages.set(message, pinned);
+  }
+  return pinned;
+};
+
 /**
- * Gives a message one Message-ID for all of its attempts.  `./retry` and
- * `./pool` send the same message more than once; without a fixed identifier
- * each attempt would compose a new one, and a message delivered twice after
- * an ambiguous failure would not read as one to its recipients' servers.
+ * Gives a message one Message-ID for all of its attempts, and a message of a
+ * channel one client reference.  `./retry` and `./pool` send the same
+ * message more than once; without a fixed identifier each attempt would
+ * compose a new one, and a message delivered twice after an ambiguous
+ * failure would not read as one to its recipients' servers, nor a send of
+ * SMS made again as one to its provider.
  *
  * @param message The message to send.
- * @param generator Optional generator of the left half of the identifier.
+ * @param generator Optional generator of the left half of the identifier,
+ * or of the client reference.
  * @returns The message itself when it has a Message-ID, either as
- * `messageId` or as a custom header; otherwise a copy carrying a generated
- * one, the same copy on every call for the same message.
+ * `messageId` or as a custom header, or a message of a channel with its
+ * `idempotencyKey`; otherwise a copy carrying a generated one, the same copy
+ * on every call for the same message.
  * @internal
  */
 const pinMessageId = (message, generator) => {
-  if (typeof message !== 'object' || message === null || message.sender == null) return message;
+  if (typeof message !== 'object' || message === null) return message;
+  if (message.sender == null) return pinReference(message, generator);
   if (message.messageId !== undefined || message.headers?.get('Message-ID') != null) {
     return message;
   }

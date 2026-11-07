@@ -24,7 +24,7 @@
   "./zeptomail": 8,
   "./smtp2go": 8.5,
   "./azure": 9.5,
-  "./scaleway": 8,
+  "./scaleway": 8.5,
   "./cloudflare": 8.5,
   "./pool": 4,
   "./retry": 3.5,

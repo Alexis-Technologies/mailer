@@ -330,3 +330,31 @@ test('Channels: text goes into the markup of a chat as text, its mass mentions m
     '@​everyone @​here &lt;!channel&gt; &lt;!here|here&gt; &lt;!everyone&gt; @heretic',
   );
 });
+
+test('Channels: retry and pool give every attempt of a message one client reference', async () => {
+  const { pinMessageId } = require('../../src/core/message-id.js');
+  const { RetryTransport } = require('../../src/retry/index.js');
+  const { fakeTransport, failed, sent } = require('../helpers/decorators/fake.js');
+  const message = createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Code 1234' });
+  const pinned = pinMessageId(message, () => 'ref-1');
+  assert.strictEqual(pinned.idempotencyKey, 'ref-1');
+  assert.strictEqual(pinMessageId(message), pinned);
+  assert.strictEqual(message.idempotencyKey, undefined);
+  // A key of the caller's is the reference.
+  const keyed = createChannelMessage({ ...message, idempotencyKey: 'otp:42' });
+  assert.strictEqual(pinMessageId(keyed), keyed);
+  // Before: each attempt of ./retry sent the message with no reference, so a
+  // provider could not tell a send made again.
+  const transport = fakeTransport((_message, index) =>
+    index === 0 ? failed('server-error') : sent('SM1'),
+  );
+  const retry = new RetryTransport(transport, { maxAttempts: 2, initialDelay: 1, maxDelay: 1 });
+  const receipt = await retry.send(message);
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(transport.calls.length, 2);
+  assert.ok(typeof transport.calls[0].message.idempotencyKey === 'string');
+  assert.strictEqual(
+    transport.calls[0].message.idempotencyKey,
+    transport.calls[1].message.idempotencyKey,
+  );
+});
