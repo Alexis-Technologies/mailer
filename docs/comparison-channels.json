@@ -1,0 +1,2905 @@
+{
+  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the package as published on npm as of 2026-10-22, not its README; the column of @alexify/mailer is its plan for the channels as of 2026-11-07 (2.0 unless a release is named): its reliability layer is in the code for email (1.2), and takes the messages of the channels in 2.0.",
+  "groups": [
+    {
+      "title": "Runtimes (from imports and package metadata, not run)",
+      "rows": [
+        {
+          "id": "nodeMin",
+          "title": "Node.js, minimum version"
+        },
+        {
+          "id": "deno",
+          "title": "Deno"
+        },
+        {
+          "id": "bun",
+          "title": "Bun"
+        },
+        {
+          "id": "edge",
+          "title": "Cloudflare Workers / edge"
+        },
+        {
+          "id": "browser",
+          "title": "Browser"
+        }
+      ]
+    },
+    {
+      "title": "Channels",
+      "rows": [
+        {
+          "id": "sms",
+          "title": "SMS"
+        },
+        {
+          "id": "rcs",
+          "title": "RCS"
+        },
+        {
+          "id": "whatsapp",
+          "title": "WhatsApp"
+        },
+        {
+          "id": "messenger",
+          "title": "Facebook Messenger"
+        },
+        {
+          "id": "instagram",
+          "title": "Instagram Direct"
+        },
+        {
+          "id": "telegram",
+          "title": "Telegram Bot API"
+        },
+        {
+          "id": "viber",
+          "title": "Viber"
+        },
+        {
+          "id": "slack",
+          "title": "Slack"
+        },
+        {
+          "id": "discord",
+          "title": "Discord"
+        },
+        {
+          "id": "teams",
+          "title": "Microsoft Teams"
+        },
+        {
+          "id": "googleChat",
+          "title": "Google Chat"
+        },
+        {
+          "id": "push",
+          "title": "Push (FCM, APNs, Web Push)"
+        },
+        {
+          "id": "otherChannels",
+          "title": "Other channels"
+        },
+        {
+          "id": "uaProviders",
+          "title": "Ukrainian providers"
+        }
+      ]
+    },
+    {
+      "title": "Providers and delivery reliability",
+      "rows": [
+        {
+          "id": "providers",
+          "title": "Providers, count"
+        },
+        {
+          "id": "failover",
+          "title": "Failover between providers"
+        },
+        {
+          "id": "channelFallback",
+          "title": "Fallback between channels"
+        },
+        {
+          "id": "retry",
+          "title": "Retry / backoff"
+        },
+        {
+          "id": "rateLimit",
+          "title": "Rate limiting"
+        },
+        {
+          "id": "circuitBreaker",
+          "title": "Circuit breaker"
+        },
+        {
+          "id": "timeout",
+          "title": "Timeout / AbortSignal"
+        },
+        {
+          "id": "queue",
+          "title": "Persistent queue (survives a restart)"
+        }
+      ]
+    },
+    {
+      "title": "Messages",
+      "rows": [
+        {
+          "id": "e164",
+          "title": "Phone numbers checked (E.164)"
+        },
+        {
+          "id": "segments",
+          "title": "SMS encoding and segments"
+        },
+        {
+          "id": "media",
+          "title": "Media"
+        },
+        {
+          "id": "buttons",
+          "title": "Buttons / keyboards"
+        },
+        {
+          "id": "waTemplates",
+          "title": "WhatsApp templates"
+        },
+        {
+          "id": "waWindow",
+          "title": "WhatsApp 24-hour window"
+        },
+        {
+          "id": "templates",
+          "title": "Built-in text templates"
+        },
+        {
+          "id": "batch",
+          "title": "Batch / bulk"
+        },
+        {
+          "id": "scheduled",
+          "title": "Scheduled sending"
+        },
+        {
+          "id": "idempotency",
+          "title": "Idempotency key"
+        }
+      ]
+    },
+    {
+      "title": "Delivery status and compliance",
+      "rows": [
+        {
+          "id": "receipts",
+          "title": "Delivery receipts, one model"
+        },
+        {
+          "id": "webhooks",
+          "title": "Status webhooks: parsing"
+        },
+        {
+          "id": "webhookSignature",
+          "title": "Webhook signature verification"
+        },
+        {
+          "id": "inbound",
+          "title": "Inbound messages"
+        },
+        {
+          "id": "optOut",
+          "title": "Opt-out (STOP) / suppression"
+        },
+        {
+          "id": "quietHours",
+          "title": "Quiet hours / user preferences"
+        }
+      ]
+    },
+    {
+      "title": "Observability and extensibility",
+      "rows": [
+        {
+          "id": "otel",
+          "title": "OpenTelemetry"
+        },
+        {
+          "id": "hooks",
+          "title": "Hooks / middleware"
+        },
+        {
+          "id": "mock",
+          "title": "Mock / test mode"
+        },
+        {
+          "id": "auditLog",
+          "title": "Local audit log / event journal"
+        }
+      ]
+    },
+    {
+      "title": "Quality, license, maturity",
+      "rows": [
+        {
+          "id": "types",
+          "title": "TypeScript types"
+        },
+        {
+          "id": "deps",
+          "title": "Runtime dependencies"
+        },
+        {
+          "id": "moduleFormat",
+          "title": "Module format"
+        },
+        {
+          "id": "license",
+          "title": "License"
+        },
+        {
+          "id": "version",
+          "title": "Version (2026-10-22)"
+        },
+        {
+          "id": "lastRelease",
+          "title": "Last release"
+        },
+        {
+          "id": "downloads",
+          "title": "npm downloads / week"
+        },
+        {
+          "id": "maintainer",
+          "title": "Owner / maintenance risk"
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "id": "mailer",
+      "name": "@alexify/mailer",
+      "direction": "unified + reliability",
+      "url": "https://github.com/Alexis-Technologies/mailer",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥22, CI on 22 and 24"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "CI: unit and runtime suites",
+          "note": "Through `npm:@alexify/mailer`."
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "CI: unit and runtime suites"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "not a target yet"
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "credentials stay on a server"
+        },
+        "sms": {
+          "mark": "🔜",
+          "text": "Twilio, Vonage, Infobip, Sinch, AWS End User Messaging"
+        },
+        "rcs": {
+          "mark": "🔜",
+          "text": "Google RBM, the SMS providers' RCS"
+        },
+        "whatsapp": {
+          "mark": "🔜",
+          "text": "Meta Cloud API"
+        },
+        "messenger": {
+          "mark": "🔜",
+          "text": "Send API of a page"
+        },
+        "instagram": {
+          "mark": "🔜",
+          "text": "Instagram messaging API"
+        },
+        "telegram": {
+          "mark": "🔜",
+          "text": "Bot API"
+        },
+        "viber": {
+          "mark": "🔜",
+          "text": "Bot API, Ukrainian providers"
+        },
+        "slack": {
+          "mark": "🔜",
+          "text": "Web API and incoming webhooks"
+        },
+        "discord": {
+          "mark": "🔜",
+          "text": "bot REST API and webhooks"
+        },
+        "teams": {
+          "mark": "🔜",
+          "text": "Workflows webhooks, Bot Framework"
+        },
+        "googleChat": {
+          "mark": "🔜",
+          "text": "space webhooks, Chat API"
+        },
+        "push": {
+          "mark": "🔜",
+          "text": "FCM HTTP v1, APNs, Web Push",
+          "note": "APNs requires HTTP/2, which Node’s `fetch` does not speak: it goes over `node:http2`. The tokens of FCM and APNs and the encryption of Web Push are `node:crypto`."
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "email: SMTP, sendmail, JMAP, 18 HTTP providers",
+          "note": "Email is the channel of 1.x. LINE, WeChat, KakaoTalk, Zalo, Mattermost, Rocket.Chat or Matrix may follow 2.0, each when a user needs it; Signal and iMessage have no official API for this."
+        },
+        "uaProviders": {
+          "mark": "🔜",
+          "text": "TurboSMS, AlphaSMS, SMSClub"
+        },
+        "providers": {
+          "mark": "🔜",
+          "text": "19 in 2.0, few per channel"
+        },
+        "failover": {
+          "mark": "🔜",
+          "text": "`./pool`, between providers of a channel"
+        },
+        "channelFallback": {
+          "mark": "🔜",
+          "text": "on refusal (2.1), or no receipt in time (2.2)",
+          "note": "A message moves on when the provider refused it, when the recipient is not on the channel, or when no receipt says it was delivered within a deadline; never after a send of unknown outcome without an idempotency key. Email is one of the channels to fall back to."
+        },
+        "retry": {
+          "mark": "🔜",
+          "text": "`./retry`: classified errors, `Retry-After`"
+        },
+        "rateLimit": {
+          "mark": "🔜",
+          "text": "`./ratelimit`, per channel and provider"
+        },
+        "circuitBreaker": {
+          "mark": "🔜",
+          "text": "`./breaker`, one probe when half-open"
+        },
+        "timeout": {
+          "mark": "🔜",
+          "text": "`AbortSignal`"
+        },
+        "queue": {
+          "mark": "🔜",
+          "text": "`./queue`: outbox in MongoDB, BullMQ"
+        },
+        "e164": {
+          "mark": "🔜",
+          "text": "without libphonenumber-js"
+        },
+        "segments": {
+          "mark": "🔜",
+          "text": "GSM-7 / UCS-2, before sending"
+        },
+        "media": {
+          "mark": "🔜"
+        },
+        "buttons": {
+          "mark": "🔜"
+        },
+        "waTemplates": {
+          "mark": "🔜"
+        },
+        "waWindow": {
+          "mark": "🔜",
+          "text": "from inbound timestamps (2.1)"
+        },
+        "templates": {
+          "mark": "🔜",
+          "text": "`./templates`: text by name, engines passed in"
+        },
+        "batch": {
+          "mark": "🔜"
+        },
+        "scheduled": {
+          "mark": "🔜",
+          "text": "a delay of the queue"
+        },
+        "idempotency": {
+          "mark": "🔜",
+          "text": "`./idempotency`, outbox + provider’s own keys"
+        },
+        "receipts": {
+          "mark": "🔜",
+          "text": "one model, every channel"
+        },
+        "webhooks": {
+          "mark": "🔜",
+          "text": "status of every provider (2.1)"
+        },
+        "webhookSignature": {
+          "mark": "🔜",
+          "text": "verified before parsing (2.1)"
+        },
+        "inbound": {
+          "mark": "🔜",
+          "text": "STOP and the WhatsApp window (2.1)"
+        },
+        "optOut": {
+          "mark": "🔜",
+          "text": "one list across channels and email (2.1)"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "not planned"
+        },
+        "otel": {
+          "mark": "🔜",
+          "text": "`./otel`"
+        },
+        "hooks": {
+          "mark": "🔜",
+          "text": "`./hooks`"
+        },
+        "mock": {
+          "mark": "🔜",
+          "text": "`./mock`"
+        },
+        "auditLog": {
+          "mark": "🔜",
+          "text": "`./audit`, append-only; numbers erasable (2.2)"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "hand-written, tsd"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "CJS, ESM `import`"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.2.1 (2026-11-07); channels in 2.0"
+        },
+        "lastRelease": {
+          "text": "2026-11-07"
+        },
+        "downloads": {
+          "mark": "—"
+        },
+        "maintainer": {
+          "text": "1 author, Alexis Technologies"
+        }
+      }
+    },
+    {
+      "id": "visulima",
+      "name": "@visulima/notification 2",
+      "direction": "unified, multi-channel",
+      "url": "https://github.com/visulima/visulima",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥22.14; not 23 or 24.0–24.9",
+          "note": "`engines`: `^22.14.0 || >=24.10.0`."
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "dropped in 2.0.0",
+          "note": "The 2.0.0 major release exists only to remove Deno as a supported runtime (CHANGELOG)."
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "declared; `fetch` + Web Crypto"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "declared; no `node:*` outside APNs",
+          "note": "Every SMS and chat provider and every webhook verifier uses only `fetch` and Web Crypto; APNs (`node:http2`) and the BullMQ / pg-boss / SQS queue adapters are Node-only."
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "Twilio, Vonage, Plivo, MessageBird, Telnyx, SNS"
+        },
+        "rcs": {
+          "mark": "❌",
+          "text": "no RCS code",
+          "note": "Plain text sent through a Twilio Messaging Service that has an RCS sender may be upgraded to RCS on Twilio's side; nothing in the library knows about it."
+        },
+        "whatsapp": {
+          "mark": "⚠️",
+          "text": "Twilio `whatsapp:` prefix only",
+          "note": "No Cloud API provider and no template support; the Twilio receiver detects WhatsApp and `reply()` re-adds the `whatsapp:` prefix."
+        },
+        "messenger": {
+          "mark": "❌"
+        },
+        "instagram": {
+          "mark": "❌"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "`sendMessage` text + webhook receiver",
+          "note": "The provider sends text and `parse_mode` only: `blocks`, `threadId` and media are dropped. The receiver checks the secret token only when `secretToken` is set."
+        },
+        "viber": {
+          "mark": "❌"
+        },
+        "slack": {
+          "mark": "✅",
+          "text": "Web API `chat.postMessage` or incoming webhook",
+          "note": "Blocks and threads are sent; the Slack receiver verifies signatures and parses events, slash commands and interactions."
+        },
+        "discord": {
+          "mark": "✅",
+          "text": "incoming webhook only, plus interactions receiver",
+          "note": "No bot API, so no DMs; `blocks` become `embeds`. When a handler takes over 2 s the receiver defers the interaction, but `reply()` posts through the channel webhook, not as the interaction follow-up."
+        },
+        "teams": {
+          "mark": "✅",
+          "text": "incoming webhook + outgoing-webhook receiver",
+          "note": "Without `blocks` it posts a legacy `MessageCard`, the Office 365 connector format Microsoft is retiring; a Workflows webhook needs an Adaptive Card envelope you pass as `blocks`."
+        },
+        "googleChat": {
+          "mark": "❌"
+        },
+        "push": {
+          "mark": "✅",
+          "text": "FCM HTTP v1, APNs, Web Push, Expo",
+          "note": "FCM needs an OAuth access token you obtain yourself; APNs uses `node:http2` and `node:crypto` (Node-only) and targets the sandbox unless `production: true`. Web Push is VAPID + RFC 8291 on Web Crypto."
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "email, in-app inbox, outbound webhook",
+          "note": "Email delegates to a `@visulima/email` instance; the in-app inbox has memory and unstorage stores."
+        },
+        "uaProviders": {
+          "mark": "❌"
+        },
+        "providers": {
+          "text": "16 + email via `@visulima/email`",
+          "note": "6 SMS, 4 chat, 4 push, in-app, outbound webhook; plus `failover`, `roundrobin`, `opentelemetry` and `mock` wrappers."
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "`createFailoverProvider`, round-robin",
+          "note": "Tries the next provider on any failure (no error classification), each after its own HTTP retries."
+        },
+        "channelFallback": {
+          "mark": "✅",
+          "text": "`route()` best-of channel order",
+          "note": "Moves on only when a send fails: a suppressed or deduplicated send counts as success, and nothing waits for a delivery receipt."
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "HTTP retries + `retryMiddleware`",
+          "note": "Each provider retries its POST 3 times on network errors, timeouts, 408/429 and 5xx (ignoring `Retry-After`); `retryMiddleware` and the queue worker retry again on top, and no idempotency key reaches the provider, so a timed-out SMS can go out more than once."
+        },
+        "rateLimit": {
+          "mark": "✅",
+          "text": "token-bucket middleware, in memory",
+          "note": "One bucket per `Notification`, shared by every channel and provider."
+        },
+        "circuitBreaker": {
+          "mark": "⚠️",
+          "text": "one breaker for all channels",
+          "note": "`circuitBreakerMiddleware` keeps a single state per instance, so failures of one SMS provider open it for push, chat and email too."
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "per-provider `timeout` (30 s), no `AbortSignal`"
+        },
+        "queue": {
+          "mark": "✅",
+          "text": "BullMQ, pg-boss, SQS, unstorage adapters",
+          "note": "The worker re-sends the whole message when any one channel fails; `UnstorageQueue` reservations never expire, so a crashed worker's job is stuck; `BullMqQueue` calls `getNextJob`, which a BullMQ `Queue` (as its docs say to pass) does not have."
+        },
+        "e164": {
+          "mark": "❌",
+          "text": "a type comment only"
+        },
+        "segments": {
+          "mark": "❌"
+        },
+        "media": {
+          "mark": "⚠️",
+          "text": "MMS URLs on Twilio, Telnyx",
+          "note": "Plivo advertises `media: true` but never sends `mediaUrls`; Telegram sends no media."
+        },
+        "buttons": {
+          "mark": "⚠️",
+          "text": "raw Slack blocks, Teams cards",
+          "note": "The Telegram provider drops `blocks`, so no inline keyboards; the Slack and Telegram receivers parse button callbacks."
+        },
+        "waTemplates": {
+          "mark": "❌"
+        },
+        "waWindow": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "`{{var}}`, Liquid, Handlebars, i18n",
+          "note": "Liquid, Handlebars and ICU messages need optional peers; rendering is a separate step, not part of `send()`."
+        },
+        "batch": {
+          "mark": "✅",
+          "text": "`sendMany` with concurrency, multi-recipient `to`",
+          "note": "A multi-recipient SMS counts as sent when any recipient succeeds, and the facade's receipt drops the per-recipient breakdown."
+        },
+        "scheduled": {
+          "mark": "✅",
+          "text": "`scheduledAt` on queue enqueue",
+          "note": "No provider reads the payload's `scheduledAt`, though Twilio and Telnyx advertise `scheduling: true`; the SQS adapter caps delays at 15 minutes."
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "in-memory `dedupeMiddleware` only",
+          "note": "The key never reaches a provider (despite its type doc), is not scoped per channel and is stored only after success, so after a partial failure a retry also skips the channel that failed."
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "one event type; only Twilio parses status",
+          "note": "`NotificationEvent` (queued … read) is shared, but Standard Webhooks maps unknown types to `delivered`, the Slack and SNS parsers always return `delivered`, and nothing links events to sends."
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "Twilio status, Standard Webhooks, SNS"
+        },
+        "webhookSignature": {
+          "mark": "✅",
+          "text": "HMAC, Ed25519, JWT, SNS certificates",
+          "note": "Twilio verification needs the public URL passed in; Telegram's secret token is optional."
+        },
+        "inbound": {
+          "mark": "✅",
+          "text": "8 receivers: SMS, Twilio WhatsApp, chat"
+        },
+        "optOut": {
+          "mark": "⚠️",
+          "text": "suppression hook; the list is yours",
+          "note": "A suppressed send is reported as `successful: true`, so `route()` stops there and does not try the next channel."
+        },
+        "quietHours": {
+          "mark": "⚠️",
+          "text": "per-channel opt-outs, no quiet hours"
+        },
+        "otel": {
+          "mark": "✅",
+          "text": "`telemetryMiddleware`: spans, counter, histogram",
+          "note": "Duck-typed: pass a tracer and meter; `@opentelemetry/api` is never imported."
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "middleware via `use()`"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "`mockProvider` records sends, `failWith`"
+        },
+        "auditLog": {
+          "mark": "⚠️",
+          "text": "in-memory event store, fed by hand",
+          "note": "`NotificationEventBus` and `MemoryEventStore` exist, but the library never emits an event to them."
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "0 (11 optional peers)",
+          "note": "bullmq, pg-boss, `@aws-sdk/client-sqs`, unstorage, liquidjs, handlebars, croner, intl-messageformat, `@opentelemetry/api`, `@visulima/email`, `@visulima/workflow`."
+        },
+        "moduleFormat": {
+          "text": "ESM only"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "2.0.0"
+        },
+        "lastRelease": {
+          "text": "2026-10-15"
+        },
+        "downloads": {
+          "text": "14k"
+        },
+        "maintainer": {
+          "text": "1 author (Anolilab), 52 versions since June"
+        }
+      }
+    },
+    {
+      "id": "thinwrap",
+      "name": "@thinwrap/notifications 1",
+      "direction": "stateless send facade",
+      "url": "https://github.com/thinwrap/notifications-ts",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥18"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "`crypto` import; needs `nodejs_compat`",
+          "note": "The `Sms` and `Push` facades statically import the SNS, FCM and APNs connectors, which use Node's `crypto` and `Buffer`; the chat connectors use only `fetch`."
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "server-only (README)"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "10, incl. Twilio, Vonage, Infobip, Sinch"
+        },
+        "rcs": {
+          "mark": "⚠️",
+          "text": "Twilio `contentSid` via a Messaging Service",
+          "note": "No RCS connector: Twilio Content API templates (`contentSid`, `contentVariables`) can go out as RCS when the Messaging Service has an RCS sender; the Infobip and Sinch connectors use SMS endpoints only."
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "Meta Cloud API"
+        },
+        "messenger": {
+          "mark": "❌"
+        },
+        "instagram": {
+          "mark": "❌"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "Bot API `sendMessage`"
+        },
+        "viber": {
+          "mark": "❌"
+        },
+        "slack": {
+          "mark": "✅",
+          "text": "incoming webhook only; blocks, threads",
+          "note": "Incoming webhooks by design, with no Web API (`chat.postMessage`): `providerMessageId` is `null`."
+        },
+        "discord": {
+          "mark": "✅",
+          "text": "incoming webhook only; embeds, components"
+        },
+        "teams": {
+          "mark": "✅",
+          "text": "Workflows or legacy webhook, Adaptive Card",
+          "note": "Wraps the text in an Adaptive Card envelope and treats a legacy connector's HTTP 200 error body as a failure."
+        },
+        "googleChat": {
+          "mark": "✅",
+          "text": "space webhook; cards v2, threads"
+        },
+        "push": {
+          "mark": "✅",
+          "text": "FCM v1, APNs, Expo, OneSignal, Beams, WonderPush",
+          "note": "No VAPID Web Push of its own. APNs refuses to send without an HTTP/2-capable `fetch` you inject (Node's is HTTP/1.1) and needs a `tokenCache` in production."
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "email, LINE, Mattermost, Rocket.Chat",
+          "note": "10 email providers: SES, Resend, Mailgun, SendGrid, Postmark, MailerSend, Mailtrap, Brevo, SparkPost, Scaleway."
+        },
+        "uaProviders": {
+          "mark": "❌"
+        },
+        "providers": {
+          "text": "35 across SMS, chat, push, email",
+          "note": "10 SMS, 9 chat (WhatsApp and Telegram included), 6 push, 10 email; you can also pass a connector of your own."
+        },
+        "failover": {
+          "mark": "❌"
+        },
+        "channelFallback": {
+          "mark": "❌"
+        },
+        "retry": {
+          "mark": "❌",
+          "text": "none; error codes + `Retry-After` exposed"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "only through an injected `fetch`"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "e164": {
+          "mark": "❌"
+        },
+        "segments": {
+          "mark": "❌"
+        },
+        "media": {
+          "mark": "⚠️",
+          "text": "Twilio/Telnyx MMS; WhatsApp via passthrough"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "Telegram keyboards, WhatsApp interactive, Slack blocks"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`type: 'template'`, Meta's shape"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "error 131047 is just `invalid_request`"
+        },
+        "templates": {
+          "mark": "❌"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "push multi-token `sendMessage()` only"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "provider `sendAt` (Twilio, Infobip, Sinch)"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "receipts": {
+          "mark": "❌",
+          "text": "status enums exported, never used",
+          "note": "`getMessageId` and `parseEventBody` from Novu are not implemented (MIGRATION.md)."
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "callback URL options, no parsing",
+          "note": "Twilio `statusCallback`, Infobip `notifyUrl`, Telnyx `webhookUrl`, Sinch `callbackUrl` are passed through."
+        },
+        "webhookSignature": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "optOut": {
+          "mark": "❌"
+        },
+        "quietHours": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "❌",
+          "text": "none; wrap the injected `fetch`"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "inject `fetch` or your own connector"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.2.0"
+        },
+        "lastRelease": {
+          "text": "2026-10-18"
+        },
+        "downloads": {
+          "text": "494"
+        },
+        "maintainer": {
+          "text": "1 author, 5 versions since June 2026",
+          "note": "The README lists the Vonage id as `nexmo`, but only `vonage` is accepted; MIGRATION.md says the alias was removed in 1.0."
+        }
+      }
+    },
+    {
+      "id": "novu",
+      "name": "@novu/framework 2",
+      "direction": "workflows + Novu server",
+      "url": "https://github.com/novuhq/novu",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "not declared (no `engines`)"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "Hono/h3 adapters, but imports Node built-ins",
+          "note": "The main entry statically imports `path`, `process`, `url` and `async_hooks` and reads `process.env` and `process.hrtime`, so a Worker needs `nodejs_compat`. Nothing in the package declares edge support. Sending itself runs on the Novu server."
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "server-side bridge"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "38 SMS provider ids, on Novu server"
+        },
+        "rcs": {
+          "mark": "❌",
+          "text": "no provider id"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "Cloud API (`whatsapp-business`)",
+          "note": "The `whatsapp-business` provider posts to `graph.facebook.com` (Meta's official API). Novu agents can also reply on WhatsApp."
+        },
+        "messenger": {
+          "mark": "❌",
+          "text": "no provider id"
+        },
+        "instagram": {
+          "mark": "❌",
+          "text": "no provider id"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "`telegram` chat provider and agents",
+          "note": "The `telegram` id is in `@novu/shared` 2.10.0 and in the framework's provider schemas. The last `@novu/providers` on npm (2.6.6, Feb 2025) has no Telegram code, so the sending code ships only inside the Novu server."
+        },
+        "viber": {
+          "mark": "❌",
+          "text": "no provider id"
+        },
+        "slack": {
+          "mark": "✅",
+          "text": "`slack`, `novu-slack`: OAuth app, webhooks, Novu server",
+          "note": "In `@novu/providers` 2.6.6, `slack` posts to the subscriber's incoming `webhookUrl`. `@novu/shared` 2.10.0 adds `slack_channel`/`slack_user` endpoints and a signing secret, and Slack is also an agent platform for inbound messages."
+        },
+        "discord": {
+          "mark": "✅",
+          "text": "`discord`: incoming webhook, on the Novu server",
+          "note": "Discord as an agent platform (inbound) is marked `comingSoon` in `@novu/shared`."
+        },
+        "teams": {
+          "mark": "✅",
+          "text": "`msteams`: Azure Bot, on the Novu server",
+          "note": "In `@novu/providers` 2.6.6, `msteams` posts to an incoming `webhookUrl`. `@novu/shared` 2.10.0 asks for a Microsoft App ID, client secret and tenant ID (Azure Bot / Bot Framework) and adds `ms_teams_channel`/`ms_teams_user` endpoints."
+        },
+        "googleChat": {
+          "mark": "🔜",
+          "text": "`google-chat` is marked `comingSoon`",
+          "note": "The framework's provider override schemas already have a `google-chat` key, but the integration catalog in `@novu/shared` 2.10.0 has no Google Chat provider. It appears only in the list of coming-soon agent platforms."
+        },
+        "push": {
+          "mark": "✅",
+          "text": "`fcm`, `apns`, `expo`, `one-signal`, `pushpad`…, Novu server",
+          "note": "The ids `pusher-beams`, `appio` and `push-webhook` also exist. Web Push works only through FCM's `webPush` override, Pushpad or OneSignal; no provider sends VAPID Web Push directly."
+        },
+        "otherChannels": {
+          "text": "email, in-app, LINE, iMessage, Webex, Mattermost, Zulip…",
+          "note": "Also Rocket.Chat, Ryver, GetStream, Grafana OnCall, a generic chat webhook, and tool steps (PagerDuty, Opsgenie, webhook). There is no voice channel."
+        },
+        "uaProviders": {
+          "mark": "❌"
+        },
+        "providers": {
+          "text": "86 provider ids (38 SMS)",
+          "note": "Counted in `@novu/shared` 2.10.0 `types/providers.js`: 23 email, 38 SMS, 16 chat, 8 push and 1 in-app. These include Novu's own demo and webhook providers. `@novu/providers` 2.6.6, the last version on npm, has 66 implementations."
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "routing by `primary`/conditions, no failover",
+          "note": "An integration has `primary`, `priority` and `conditions` fields. The published packages show no retry on another provider after an error."
+        },
+        "channelFallback": {
+          "mark": "⚠️",
+          "text": "step `skip` on in-app read state",
+          "note": "Only the in-app step returns a result (`seen`, `read`). The SMS, chat, email and push result schemas are empty, so a step cannot react to an SMS or WhatsApp delivery failure."
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "on the Novu server",
+          "note": "The package never retries a trigger. Retries happen in the server's job runner (the execution-details model in `@novu/shared` has an `isRetry` field)."
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "throttle step, on the Novu server"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "❌",
+          "text": "trigger `fetch` has no timeout or signal"
+        },
+        "queue": {
+          "mark": "⚠️",
+          "text": "jobs persisted on the Novu server"
+        },
+        "e164": {
+          "mark": "❌",
+          "text": "subscriber `phone` is a free string"
+        },
+        "segments": {
+          "mark": "❌"
+        },
+        "media": {
+          "mark": "⚠️",
+          "text": "chat card images, agent file replies",
+          "note": "The SMS step has `body` only and the email step has no attachments field."
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "chat cards (`Button`), in-app actions"
+        },
+        "waTemplates": {
+          "mark": "⚠️",
+          "text": "raw `template` object pass-through",
+          "note": "In `@novu/providers` 2.6.6, `whatsapp-business` sends a template only when it receives `customData.template`. The framework has no model for WhatsApp templates."
+        },
+        "waWindow": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "✅",
+          "text": "Liquid (liquidjs) in step controls"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "many subscribers or topics in `to`"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "delay steps (cron, date), on the Novu server"
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "`transactionId`, sent with the trigger",
+          "note": "The package sends `transactionId` and uses it to cancel a trigger. The package does not show whether the server rejects a duplicate."
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "`message.*` events, on the Novu server",
+          "note": "`@novu/shared` defines events such as `message.sent`, `message.delivered`, `message.failed` and `message.read` for Novu's outbound webhooks."
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "13 providers parsed, on the Novu server",
+          "note": "In `@novu/providers` 2.6.6, `parseEventBody` exists for 8 email providers and 5 SMS providers (Twilio, Plivo, Telnyx, Termii, RingCentral)."
+        },
+        "webhookSignature": {
+          "mark": "⚠️",
+          "text": "HMAC on the bridge only",
+          "note": "The bridge checks a `novu-signature` HMAC with a 5-minute window, but only when `NODE_ENV` is set to something other than `development`/`dev`, or when `strictAuthentication` is on. The provider code verifies no signatures on status webhooks."
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "agents' `onMessage`, through the Novu server",
+          "note": "The conversational providers are Slack, Telegram, WhatsApp Business, MS Teams, Sendblue and Novu email (`@novu/shared` `conversational-providers.js`)."
+        },
+        "optOut": {
+          "mark": "⚠️",
+          "text": "subscriber preferences, on the Novu server"
+        },
+        "quietHours": {
+          "mark": "⚠️",
+          "text": "preferences and weekly schedule, on the Novu server"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "step `skip`, provider overrides"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "preview with mocked payloads"
+        },
+        "auditLog": {
+          "mark": "⚠️",
+          "text": "activity feed, on the Novu server"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "11 (ajv, liquidjs, sanitize-html, `chat`…)",
+          "note": "There are also 13 optional peer dependencies (express, next, hono, zod, ai, langchain…)."
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "ISC"
+        },
+        "version": {
+          "text": "2.14.0"
+        },
+        "lastRelease": {
+          "text": "2026-09-28"
+        },
+        "downloads": {
+          "text": "43k"
+        },
+        "maintainer": {
+          "text": "company (Novu), active"
+        }
+      }
+    },
+    {
+      "id": "notifme",
+      "name": "notifme-sdk 1",
+      "direction": "unified, multi-channel",
+      "url": "https://github.com/notifme/notifme-sdk",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "not declared (no `engines`)"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "node-fetch, nodemailer, `crypto`"
+        },
+        "browser": {
+          "mark": "❌"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "9 providers"
+        },
+        "rcs": {
+          "mark": "❌"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "Infobip (BSP) only"
+        },
+        "messenger": {
+          "mark": "❌",
+          "text": "listed as a TODO in the source"
+        },
+        "instagram": {
+          "mark": "❌"
+        },
+        "telegram": {
+          "mark": "❌",
+          "text": "listed as a TODO in the source"
+        },
+        "viber": {
+          "mark": "❌"
+        },
+        "slack": {
+          "mark": "✅",
+          "text": "incoming webhook only"
+        },
+        "discord": {
+          "mark": "❌"
+        },
+        "teams": {
+          "mark": "❌"
+        },
+        "googleChat": {
+          "mark": "❌"
+        },
+        "push": {
+          "mark": "⚠️",
+          "text": "APNs, Web Push (VAPID), WNS, ADM; FCM broken",
+          "note": "From reading the code, not running it: the `fcm` provider passes its config as `gcm` settings (`lib/providers/push/fcm.js`). node-pushnotifications 3.1.1 sends Android tokens through its FCM v1 path, which reads `fcm` settings that are never set, and its `gcm` path uses Google's legacy API, shut down in 2024."
+        },
+        "otherChannels": {
+          "text": "email, voice (Twilio)"
+        },
+        "uaProviders": {
+          "mark": "❌"
+        },
+        "providers": {
+          "text": "24 plus `custom`",
+          "note": "7 email, 9 SMS, 4 push, and 1 each for voice (Twilio), web push, Slack and WhatsApp."
+        },
+        "failover": {
+          "mark": "✅",
+          "text": "`fallback` (default), `roundrobin`, custom function"
+        },
+        "channelFallback": {
+          "mark": "❌",
+          "text": "channels are sent in parallel",
+          "note": "`send()` sends every channel in the request at once with `Promise.all`. Nothing falls back from one channel to another."
+        },
+        "retry": {
+          "mark": "❌",
+          "text": "moves to the next provider, no backoff"
+        },
+        "rateLimit": {
+          "mark": "❌"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "❌",
+          "text": "node-fetch without a timeout"
+        },
+        "queue": {
+          "mark": "⚠️",
+          "text": "separate RabbitMQ plugin (2017)",
+          "note": "`notifme-sdk-queue-rabbitmq` 4.0.0 was last published in 2017 and gets ~9 downloads a week."
+        },
+        "e164": {
+          "mark": "❌",
+          "text": "only strips `+` for Infobip"
+        },
+        "segments": {
+          "mark": "❌",
+          "text": "a `type: 'unicode'` flag only"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "WhatsApp media URLs, email attachments"
+        },
+        "buttons": {
+          "mark": "⚠️",
+          "text": "Slack and web-push actions only"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`templateName`/`templateData` (Infobip)"
+        },
+        "waWindow": {
+          "mark": "❌"
+        },
+        "templates": {
+          "mark": "⚠️",
+          "text": "separate `notifme-template` (2017)"
+        },
+        "batch": {
+          "mark": "❌"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌"
+        },
+        "receipts": {
+          "mark": "❌"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "voice `statusCallback` pass-through only"
+        },
+        "webhookSignature": {
+          "mark": "❌"
+        },
+        "inbound": {
+          "mark": "❌"
+        },
+        "optOut": {
+          "mark": "❌"
+        },
+        "quietHours": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "`customize` callback, custom providers and strategies"
+        },
+        "mock": {
+          "mark": "✅",
+          "text": "notification catcher, logger provider",
+          "note": "A channel with no providers configured silently falls back to the logger provider. It logs the whole request (recipient included) to the console and reports success with a random id."
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "winston console logs only"
+        },
+        "types": {
+          "mark": "⚠️",
+          "text": "Flow in the package, `@types/notifme-sdk`"
+        },
+        "deps": {
+          "text": "8 (winston, nodemailer, node-fetch 2, web-push…)"
+        },
+        "moduleFormat": {
+          "text": "CJS only (Babel)"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.16.25"
+        },
+        "lastRelease": {
+          "text": "2025-03-25"
+        },
+        "downloads": {
+          "text": "705"
+        },
+        "maintainer": {
+          "text": "2 maintainers, no release since Mar 2025"
+        }
+      }
+    },
+    {
+      "id": "grammy",
+      "name": "grammy 1",
+      "direction": "Telegram bot framework",
+      "url": "https://github.com/grammyjs/grammY",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥12.20 / ≥14.13.1"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "Deno-first (`deno.land/x/grammy`)"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "`bun` webhook adapter"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "web bundle, `cloudflare-mod` adapter"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "`browser` export (`out/web.mjs`)"
+        },
+        "sms": {
+          "mark": "—"
+        },
+        "rcs": {
+          "mark": "—"
+        },
+        "whatsapp": {
+          "mark": "—"
+        },
+        "messenger": {
+          "mark": "—"
+        },
+        "instagram": {
+          "mark": "—"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "Bot API 10.3"
+        },
+        "viber": {
+          "mark": "—"
+        },
+        "slack": {
+          "mark": "—"
+        },
+        "discord": {
+          "mark": "—"
+        },
+        "teams": {
+          "mark": "—"
+        },
+        "googleChat": {
+          "mark": "—"
+        },
+        "push": {
+          "mark": "—"
+        },
+        "otherChannels": {
+          "mark": "—"
+        },
+        "uaProviders": {
+          "mark": "—"
+        },
+        "providers": {
+          "text": "1 (Telegram Bot API)"
+        },
+        "failover": {
+          "mark": "—"
+        },
+        "channelFallback": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "plugin `@grammyjs/auto-retry`",
+          "note": "The core retries only `getMe`, `deleteWebhook` (when polling starts) and `getUpdates`, never a send. The plugin's defaults are unlimited attempts and unlimited wait, and it also retries network errors, so a lost response can send a message twice."
+        },
+        "rateLimit": {
+          "mark": "⚠️",
+          "text": "plugin `transformer-throttler` (bottleneck)"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`timeoutSeconds` (500 s), AbortSignal"
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "no outbound queue"
+        },
+        "e164": {
+          "mark": "—"
+        },
+        "segments": {
+          "mark": "—"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "`InputFile`, `InputMediaBuilder`"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "`InlineKeyboard`, `Keyboard`"
+        },
+        "waTemplates": {
+          "mark": "—"
+        },
+        "waWindow": {
+          "mark": "—"
+        },
+        "templates": {
+          "mark": "⚠️",
+          "text": "plugins: i18n, fluent"
+        },
+        "batch": {
+          "mark": "❌"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "the Bot API has none"
+        },
+        "receipts": {
+          "mark": "—",
+          "text": "the Bot API has none"
+        },
+        "webhooks": {
+          "mark": "—",
+          "text": "updates only, no status events"
+        },
+        "webhookSignature": {
+          "mark": "✅",
+          "text": "`secretToken`, constant-time compare",
+          "note": "The check is optional: when no `secretToken` is set, `webhookCallback` accepts every request. Telegram sends a shared secret header and does not sign payloads."
+        },
+        "inbound": {
+          "mark": "✅",
+          "text": "long polling and 20+ webhook adapters"
+        },
+        "optOut": {
+          "mark": "❌"
+        },
+        "quietHours": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "`debug` logs only"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "middleware and API transformers"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "transformers, test DC, custom `fetch`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in (TS source)"
+        },
+        "deps": {
+          "text": "4 (node-fetch 2, debug, abort-controller, types)"
+        },
+        "moduleFormat": {
+          "text": "CJS for Node, ESM web bundle"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "1.46.0"
+        },
+        "lastRelease": {
+          "text": "2026-08-26"
+        },
+        "downloads": {
+          "text": "2.5M"
+        },
+        "maintainer": {
+          "text": "1 npm maintainer, active org"
+        }
+      }
+    },
+    {
+      "id": "ntba",
+      "name": "node-telegram-bot-api 2",
+      "direction": "Telegram Bot API client",
+      "url": "https://github.com/yagop/node-telegram-bot-api",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥18"
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "declared in README, web-standard core"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "declared, tests use `bun test`"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "core has no `node:*`"
+        },
+        "browser": {
+          "mark": "⚠️",
+          "text": "web-standard core, not declared"
+        },
+        "sms": {
+          "mark": "—"
+        },
+        "rcs": {
+          "mark": "—"
+        },
+        "whatsapp": {
+          "mark": "—"
+        },
+        "messenger": {
+          "mark": "—"
+        },
+        "instagram": {
+          "mark": "—"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "Bot API 10.3"
+        },
+        "viber": {
+          "mark": "—"
+        },
+        "slack": {
+          "mark": "—"
+        },
+        "discord": {
+          "mark": "—"
+        },
+        "teams": {
+          "mark": "—"
+        },
+        "googleChat": {
+          "mark": "—"
+        },
+        "push": {
+          "mark": "—"
+        },
+        "otherChannels": {
+          "mark": "—"
+        },
+        "uaProviders": {
+          "mark": "—"
+        },
+        "providers": {
+          "text": "1 (Telegram Bot API)"
+        },
+        "failover": {
+          "mark": "—"
+        },
+        "channelFallback": {
+          "mark": "—"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "429, network and 5xx errors, jittered backoff",
+          "note": "Two retries by default, on every method. A timed-out `sendMessage` is sent again, so a lost response can send a message twice."
+        },
+        "rateLimit": {
+          "mark": "✅",
+          "text": "opt-in token bucket, global and per chat"
+        },
+        "circuitBreaker": {
+          "mark": "❌"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "300 s by default, AbortSignal"
+        },
+        "queue": {
+          "mark": "❌"
+        },
+        "e164": {
+          "mark": "—"
+        },
+        "segments": {
+          "mark": "—"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "streaming `InputFile`, media groups"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "inline and reply keyboard builders"
+        },
+        "waTemplates": {
+          "mark": "—"
+        },
+        "waWindow": {
+          "mark": "—"
+        },
+        "templates": {
+          "mark": "❌",
+          "text": "`EntityBuilder` formatting only"
+        },
+        "batch": {
+          "mark": "❌"
+        },
+        "scheduled": {
+          "mark": "❌"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "the Bot API has none"
+        },
+        "receipts": {
+          "mark": "—",
+          "text": "the Bot API has none"
+        },
+        "webhooks": {
+          "mark": "—",
+          "text": "updates only, no status events"
+        },
+        "webhookSignature": {
+          "mark": "✅",
+          "text": "secret token required by default",
+          "note": "`webhookCallback` throws at setup unless you set `secretToken` or pass `allowUnauthenticated: true`. The comparison runs in constant time."
+        },
+        "inbound": {
+          "mark": "✅",
+          "text": "long polling and a web-standard webhook"
+        },
+        "optOut": {
+          "mark": "❌"
+        },
+        "quietHours": {
+          "mark": "❌"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "`DEBUG` tracing only"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "koa-style update middleware",
+          "note": "The only way to hook outgoing API calls is to inject your own `fetch`."
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "injectable `fetch`"
+        },
+        "auditLog": {
+          "mark": "❌"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in, generated from Bot API docs"
+        },
+        "deps": {
+          "text": "0"
+        },
+        "moduleFormat": {
+          "text": "ESM + CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "2.1.0 (2.2.0-rc2 on `next`)"
+        },
+        "lastRelease": {
+          "text": "2026-08-24"
+        },
+        "downloads": {
+          "text": "125k",
+          "note": "Most downloads are of 0.66/0.67. Version 2.1.0 gets ~8.7k a week (npm per-version API)."
+        },
+        "maintainer": {
+          "text": "2 maintainers, two rewrites in 2026",
+          "note": "Version 1.0.0 came out on 2026-06-12 and 2.0.0 on 2026-08-16. The README says v2 is a from-scratch redesign with no v1 compatibility."
+        }
+      }
+    },
+    {
+      "id": "twilio",
+      "name": "twilio 6",
+      "direction": "Twilio SDK",
+      "url": "https://github.com/twilio/twilio-node",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥20"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "Node `https`, `fs`, `crypto`",
+          "note": "`lib/base/RequestClient.js` builds an `https.Agent` for axios and reads `fs`; `lib/webhooks/webhooks.js` uses Node `crypto`."
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "Node-only"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "Messages API"
+        },
+        "rcs": {
+          "mark": "✅",
+          "text": "Messages API, RCS senders (`rcs:`)"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "official, Twilio as BSP"
+        },
+        "messenger": {
+          "mark": "✅",
+          "text": "Conversations `messenger` address type",
+          "note": "Notify's Facebook Messenger option (`facebookMessengerPageId`) is marked Deprecated in `lib/rest/notify/v1/service.d.ts`; Conversations is the remaining path."
+        },
+        "instagram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "telegram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "viber": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "slack": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "discord": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "teams": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "googleChat": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "push": {
+          "mark": "✅",
+          "text": "Notify: APNs, FCM (GCM legacy)",
+          "note": "No Web Push. The package does not mark Notify itself deprecated, only its Messenger and Alexa options; Conversations has separate APN/FCM credentials for its own client SDKs."
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "MMS, voice, video, email, in-app chat, Apple Messages",
+          "note": "Conversations still lists `gbm` (Google Business Messages), a channel Google shut down in 2024."
+        },
+        "uaProviders": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "providers": {
+          "text": "1 (its own)"
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "single provider"
+        },
+        "channelFallback": {
+          "mark": "⚠️",
+          "text": "provider-side RCS → SMS `fallbackFrom`"
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "opt-in `autoRetry`, HTTP 429 only",
+          "note": "Full-jitter exponential backoff, 3 retries by default; 5xx and network errors are never retried, and `maxRetries: 0` silently becomes 3 because of `||` (`lib/base/RequestClient.js`)."
+        },
+        "rateLimit": {
+          "mark": "❌",
+          "text": "none (agent `maxSockets` only)"
+        },
+        "circuitBreaker": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`timeout` (30 s default); no AbortSignal"
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "e164": {
+          "mark": "⚠️",
+          "text": "Lookups API (provider side)"
+        },
+        "segments": {
+          "mark": "⚠️",
+          "text": "provider-side `smartEncoded`, `numSegments`"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "`mediaUrl` (MMS, WhatsApp)"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "Content API (quick reply, card, list)"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`contentSid` + `contentVariables`"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "templates": {
+          "mark": "⚠️",
+          "text": "provider-side Content API only"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "Notify `toBinding` (provider side)"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "provider-side `sendAt` + `scheduleType`"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "none on Messages",
+          "note": "Only a few other APIs (Conversations v2, call Payments, user-defined messages) accept an idempotency key."
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "provider status enum; callbacks untyped"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "`statusCallback` URL only; no parser"
+        },
+        "webhookSignature": {
+          "mark": "✅",
+          "text": "`validateRequest` HMAC-SHA1, Express middleware",
+          "note": "Timing-safe compare, tries the URL with and without port, and `validateRequestWithBody` checks `bodySHA256` for JSON bodies (`lib/webhooks/webhooks.js`). The scheme has no timestamp, so replays are not rejected."
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "TwiML `MessagingResponse`; no parser"
+        },
+        "optOut": {
+          "mark": "⚠️",
+          "text": "provider-side (Messaging Service, consents API)"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "custom `httpClient` only"
+        },
+        "mock": {
+          "mark": "❌",
+          "text": "none",
+          "note": "Twilio test credentials work on the provider side; a custom `httpClient` can stub requests."
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "none (debug console logging)"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "6: axios, jsonwebtoken, qs, dayjs, …",
+          "note": "Also `https-proxy-agent@5` and `xmlbuilder` (TwiML)."
+        },
+        "moduleFormat": {
+          "text": "CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "6.2.0"
+        },
+        "lastRelease": {
+          "text": "2026-10-12"
+        },
+        "downloads": {
+          "text": "3.7M"
+        },
+        "maintainer": {
+          "text": "Twilio (company), active"
+        }
+      }
+    },
+    {
+      "id": "telnyx",
+      "name": "telnyx 7",
+      "direction": "Telnyx SDK",
+      "url": "https://github.com/team-telnyx/telnyx-node",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "not declared",
+          "note": "No `engines` field; the bundled README lists Node.js 20 LTS or later."
+        },
+        "deno": {
+          "mark": "✅",
+          "text": "declared (README), fetch-based"
+        },
+        "bun": {
+          "mark": "✅",
+          "text": "declared (README)"
+        },
+        "edge": {
+          "mark": "✅",
+          "text": "Workers, Vercel Edge declared; fetch only"
+        },
+        "browser": {
+          "mark": "✅",
+          "text": "declared; no browser guard",
+          "note": "There is no `dangerouslyAllowBrowser`-style check, so client-side use ships the API key."
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "Messages API (long/short code, alphanumeric)"
+        },
+        "rcs": {
+          "mark": "✅",
+          "text": "`messages.rcs.send()`, RCS agents"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "official, `messages.whatsapp()`"
+        },
+        "messenger": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "instagram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "telegram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "viber": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "slack": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "discord": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "teams": {
+          "mark": "❌",
+          "text": "none (Teams Phone voice only)",
+          "note": "The Teams resources (Operator Connect, direct routing, meeting bots) are telephony, not Teams messaging."
+        },
+        "googleChat": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "push": {
+          "mark": "❌",
+          "text": "none (call push credentials only)",
+          "note": "`mobilePushCredentials` (iOS/Android) only attach to SIP connections so Telnyx can wake its own calling SDK; there is no API to send push notifications."
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "MMS, voice, video rooms, fax, email"
+        },
+        "uaProviders": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "providers": {
+          "text": "1 (its own)"
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "single provider"
+        },
+        "channelFallback": {
+          "mark": "⚠️",
+          "text": "provider-side RCS → SMS/MMS fallback"
+        },
+        "retry": {
+          "mark": "✅",
+          "text": "2 retries, backoff + jitter, Retry-After",
+          "note": "Retries 408/409/429/5xx and timeouts, message POSTs included, but adds no idempotency key by itself; pass `Idempotency-Key` to avoid duplicate sends (`client.js`)."
+        },
+        "rateLimit": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "circuitBreaker": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "60 s default, per request; AbortSignal"
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "e164": {
+          "mark": "⚠️",
+          "text": "Number Lookup API (provider side)"
+        },
+        "segments": {
+          "mark": "⚠️",
+          "text": "provider-side `encoding`, `parts`"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "`media_urls`, WhatsApp media"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "WhatsApp `interactive`, RCS suggestions"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`template` + templates API"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "templates": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "batch": {
+          "mark": "❌",
+          "text": "none (group MMS only)"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "provider-side `send_at`, cancel"
+        },
+        "idempotency": {
+          "mark": "⚠️",
+          "text": "typed `Idempotency-Key` (provider), not automatic"
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "one Telnyx model (SMS/MMS/RCS/WA)"
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "typed `webhooks.unwrap()` events",
+          "note": "`JSON.parse` plus a TypeScript cast, with no runtime schema check (`lib/webhooks.js`)."
+        },
+        "webhookSignature": {
+          "mark": "✅",
+          "text": "Ed25519 (WebCrypto), 5-minute window"
+        },
+        "inbound": {
+          "mark": "✅",
+          "text": "typed `message.received` event"
+        },
+        "optOut": {
+          "mark": "⚠️",
+          "text": "provider opt-out list (read only)"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "hooks": {
+          "mark": "⚠️",
+          "text": "custom `fetch`, `logger` only"
+        },
+        "mock": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "none (logger only)"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "0 (optional peer `ws`)",
+          "note": "`ws` is needed only for the speech WebSocket helpers."
+        },
+        "moduleFormat": {
+          "text": "both (CJS + ESM)"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "7.28.0"
+        },
+        "lastRelease": {
+          "text": "2026-10-22"
+        },
+        "downloads": {
+          "text": "238k"
+        },
+        "maintainer": {
+          "text": "Telnyx (company), Stainless-generated",
+          "note": "Ships several releases a month (7.25 → 7.28 between 2026-10-06 and 2026-10-22)."
+        }
+      }
+    },
+    {
+      "id": "vonage",
+      "name": "@vonage/server-sdk 3",
+      "direction": "Vonage SDK",
+      "url": "https://github.com/Vonage/vonage-node-sdk",
+      "cells": {
+        "nodeMin": {
+          "mark": "✅",
+          "text": "≥22 (`engineStrict`)"
+        },
+        "deno": {
+          "mark": "⚠️",
+          "text": "`deno` export condition only",
+          "note": "package.json maps a long list of runtime conditions (deno, bun, workerd, …) to the same build; the README only mentions Node.js."
+        },
+        "bun": {
+          "mark": "⚠️",
+          "text": "`bun` export condition only"
+        },
+        "edge": {
+          "mark": "⚠️",
+          "text": "`workerd` condition, but Node APIs",
+          "note": "`@vonage/auth` imports Node `fs` and `crypto` at load, JWTs use `jsonwebtoken`, and `@vonage/server-client` reads `process.version` on every request."
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "`browser` export throws (Node-only)"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "Messages API and SMS API"
+        },
+        "rcs": {
+          "mark": "✅",
+          "text": "Messages API `rcs` channel",
+          "note": "The bundled `@vonage/messages` README lists RCS as Beta."
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "official, Messages API"
+        },
+        "messenger": {
+          "mark": "✅",
+          "text": "Messages API `messenger` channel"
+        },
+        "instagram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "telegram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "viber": {
+          "mark": "✅",
+          "text": "`viber_service` (Viber Business)"
+        },
+        "slack": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "discord": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "teams": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "googleChat": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "push": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "MMS, email, voice, video"
+        },
+        "uaProviders": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "providers": {
+          "text": "1 (its own)"
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "single provider"
+        },
+        "channelFallback": {
+          "mark": "⚠️",
+          "text": "provider-side `failover` array",
+          "note": "`MessageWithFailover` passes a `failover` list of channel messages to the Messages API; the SDK does not act on it."
+        },
+        "retry": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "rateLimit": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "circuitBreaker": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "opt-in `timeout`, no default",
+          "note": "`@vonage/server-client` uses an AbortController only when `timeout` is set; callers cannot pass their own AbortSignal."
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "e164": {
+          "mark": "⚠️",
+          "text": "Number Insight API (provider side)"
+        },
+        "segments": {
+          "mark": "⚠️",
+          "text": "provider-side `encodingType`"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "image, video, audio, file classes"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "RCS suggestions, Viber button, WA custom"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`WhatsAppTemplate` class"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "templates": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "batch": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "scheduled": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "provider-side; no Messages status types"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "SMS DLR type only; no parser"
+        },
+        "webhookSignature": {
+          "mark": "⚠️",
+          "text": "JWT `verifySignature`; SMS HMAC",
+          "note": "`@vonage/jwt` `verifySignature` checks the JWT but not its `payload_hash` against the body and is not re-exported by `@vonage/server-sdk`; SMS `verifySignature` compares with `===`, not timing-safe."
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "SMS `InboundMessage` type only"
+        },
+        "optOut": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "hooks": {
+          "mark": "❌",
+          "text": "none (global `fetch`, `debug` logs)"
+        },
+        "mock": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "none (`debug` logs)"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "17 (all `@vonage/*`)",
+          "note": "Third-party packages arrive transitively: `debug`, `jsonwebtoken`, `uuid`."
+        },
+        "moduleFormat": {
+          "text": "both (CJS + ESM)"
+        },
+        "license": {
+          "text": "Apache-2.0"
+        },
+        "version": {
+          "text": "3.30.1"
+        },
+        "lastRelease": {
+          "text": "2026-09-09"
+        },
+        "downloads": {
+          "text": "73k"
+        },
+        "maintainer": {
+          "text": "Vonage (company), active"
+        }
+      }
+    },
+    {
+      "id": "plivo",
+      "name": "plivo 4",
+      "direction": "Plivo SDK",
+      "url": "https://github.com/plivo/plivo-node",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "Node `http`/`https`, axios agents"
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "Node-only"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "Message API"
+        },
+        "rcs": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "official, `type: 'whatsapp'`"
+        },
+        "messenger": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "instagram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "telegram": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "viber": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "slack": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "discord": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "teams": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "googleChat": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "push": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "MMS, voice, number masking"
+        },
+        "uaProviders": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "providers": {
+          "text": "1 (its own)"
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "single provider"
+        },
+        "channelFallback": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "retry": {
+          "mark": "❌",
+          "text": "none for messages",
+          "note": "Only voice API calls are retried: twice on 5xx, immediately, without backoff (`dist/rest/axios.js`)."
+        },
+        "rateLimit": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "circuitBreaker": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "timeout": {
+          "mark": "⚠️",
+          "text": "opt-in `timeout`, no default"
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "e164": {
+          "mark": "⚠️",
+          "text": "Lookup API (provider side)"
+        },
+        "segments": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "`media_urls`/`media_ids` (MMS, WhatsApp)"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "WhatsApp `interactive` (joi-validated)"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "`template` param (joi-validated)"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "templates": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "`dst` array joined with `<`",
+          "note": "Bulk is done by the provider: the SDK only joins an array `dst` into Plivo's `<`-delimited form (`dist/resources/messages.js`)."
+        },
+        "scheduled": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "provider-side only; untyped"
+        },
+        "webhooks": {
+          "mark": "⚠️",
+          "text": "status `url` param; no parser"
+        },
+        "webhookSignature": {
+          "mark": "⚠️",
+          "text": "`validateV3Signature` HMAC-SHA256 + nonce",
+          "note": "Compares with `===` (not timing-safe) and does not track nonces against replay (`dist/utils/v3Security.js`)."
+        },
+        "inbound": {
+          "mark": "⚠️",
+          "text": "Plivo XML replies; no parser"
+        },
+        "optOut": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "hooks": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "mock": {
+          "mark": "❌",
+          "text": "none",
+          "note": "`dist/rest/client-test.js` is the SDK's own fixture client with hard-coded responses, not a documented test mode."
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "bundled `.d.ts`"
+        },
+        "deps": {
+          "text": "15, incl. deprecated `request`",
+          "note": "`request` backs only the bundled test client; runtime deps also include `@types/node@14` and the `querystring` shim. Importing the client overwrites the global `axios.defaults.httpAgent`/`httpsAgent` (`dist/rest/axios.js`)."
+        },
+        "moduleFormat": {
+          "text": "CJS"
+        },
+        "license": {
+          "text": "MIT"
+        },
+        "version": {
+          "text": "4.79.0"
+        },
+        "lastRelease": {
+          "text": "2026-07-28"
+        },
+        "downloads": {
+          "text": "23k"
+        },
+        "maintainer": {
+          "text": "Plivo (company), active"
+        }
+      }
+    },
+    {
+      "id": "sinch",
+      "name": "@sinch/sdk-core 1",
+      "direction": "Sinch SDK",
+      "url": "https://www.npmjs.com/package/@sinch/sdk-core",
+      "cells": {
+        "nodeMin": {
+          "mark": "⚠️",
+          "text": "not declared"
+        },
+        "deno": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "bun": {
+          "mark": "❌",
+          "text": "not declared"
+        },
+        "edge": {
+          "mark": "❌",
+          "text": "node-fetch 2, Node `crypto`/`stream`"
+        },
+        "browser": {
+          "mark": "❌",
+          "text": "Node-only"
+        },
+        "sms": {
+          "mark": "✅",
+          "text": "SMS API (batches)"
+        },
+        "rcs": {
+          "mark": "✅",
+          "text": "Conversation API `RCS`"
+        },
+        "whatsapp": {
+          "mark": "✅",
+          "text": "Conversation API (official BSP)"
+        },
+        "messenger": {
+          "mark": "✅",
+          "text": "Conversation API `MESSENGER`"
+        },
+        "instagram": {
+          "mark": "✅",
+          "text": "Conversation API `INSTAGRAM`"
+        },
+        "telegram": {
+          "mark": "✅",
+          "text": "Conversation API `TELEGRAM` channel"
+        },
+        "viber": {
+          "mark": "✅",
+          "text": "`VIBER`, `VIBERBM` channels"
+        },
+        "slack": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "discord": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "teams": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "googleChat": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "push": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otherChannels": {
+          "mark": "✅",
+          "text": "MMS, LINE, WeChat, KakaoTalk, Apple, voice, fax",
+          "note": "Apple Messages for Business is the Conversation channel `APPLEBC`; verification is in `@sinch/verification`."
+        },
+        "uaProviders": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "providers": {
+          "text": "1 (its own)"
+        },
+        "failover": {
+          "mark": "❌",
+          "text": "single provider"
+        },
+        "channelFallback": {
+          "mark": "⚠️",
+          "text": "provider-side `channel_priority_order`"
+        },
+        "retry": {
+          "mark": "⚠️",
+          "text": "HTTP 429 only, Retry-After + jitter",
+          "note": "On by default (3 retries, configurable `retryPolicy`); 5xx and network errors are not retried (`@sinch/sdk-client/dist/client/retry-policy.js`)."
+        },
+        "rateLimit": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "circuitBreaker": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "timeout": {
+          "mark": "✅",
+          "text": "`timeoutSeconds` (60 s default); no AbortSignal"
+        },
+        "queue": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "e164": {
+          "mark": "⚠️",
+          "text": "Number Lookup API (provider side)"
+        },
+        "segments": {
+          "mark": "⚠️",
+          "text": "provider-side `dryRun` (parts, encoding)"
+        },
+        "media": {
+          "mark": "✅",
+          "text": "media messages, MMS"
+        },
+        "buttons": {
+          "mark": "✅",
+          "text": "choice, card, carousel, list messages"
+        },
+        "waTemplates": {
+          "mark": "✅",
+          "text": "Conversation templates API"
+        },
+        "waWindow": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "templates": {
+          "mark": "⚠️",
+          "text": "provider-side `parameters`, templates API"
+        },
+        "batch": {
+          "mark": "⚠️",
+          "text": "provider batches (`to[]`)"
+        },
+        "scheduled": {
+          "mark": "⚠️",
+          "text": "provider-side SMS `send_at`"
+        },
+        "idempotency": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "receipts": {
+          "mark": "⚠️",
+          "text": "typed per API (SMS, Conversation)",
+          "note": "Conversation delivery events share one model across its channels; SMS delivery reports are a separate model."
+        },
+        "webhooks": {
+          "mark": "✅",
+          "text": "`parseEvent` for SMS and Conversation"
+        },
+        "webhookSignature": {
+          "mark": "⚠️",
+          "text": "HMAC-SHA256 with nonce + timestamp",
+          "note": "`validateWebhookSignature` compares with `===` (not timing-safe), never checks the timestamp's age, and re-serializes object bodies with `JSON.stringify` (`@sinch/sdk-client/dist/utils/authorization.helper.js`)."
+        },
+        "inbound": {
+          "mark": "✅",
+          "text": "MO events parsed (SMS, Conversation)"
+        },
+        "optOut": {
+          "mark": "⚠️",
+          "text": "provider consents API, `OPT_OUT` events"
+        },
+        "quietHours": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "otel": {
+          "mark": "❌",
+          "text": "none"
+        },
+        "hooks": {
+          "mark": "✅",
+          "text": "request/response plugins"
+        },
+        "mock": {
+          "mark": "⚠️",
+          "text": "Jest `*ApiFixture` classes"
+        },
+        "auditLog": {
+          "mark": "❌",
+          "text": "none (logger only)"
+        },
+        "types": {
+          "mark": "✅",
+          "text": "built in"
+        },
+        "deps": {
+          "text": "9 (all `@sinch/*`)",
+          "note": "Sub-packages bring `node-fetch@2.7.0` and `form-data`; `@sinch/sdk-client` requires `@sinch/sdk-core/package.json` without declaring it."
+        },
+        "moduleFormat": {
+          "text": "CJS"
+        },
+        "license": {
+          "text": "Apache-2.0"
+        },
+        "version": {
+          "text": "1.7.0"
+        },
+        "lastRelease": {
+          "text": "2026-10-15"
+        },
+        "downloads": {
+          "text": "11k"
+        },
+        "maintainer": {
+          "text": "Sinch (company), active"
+        }
+      }
+    }
+  ]
+}

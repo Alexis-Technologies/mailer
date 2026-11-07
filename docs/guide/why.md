@@ -79,5 +79,9 @@ key of a message before it is sent, and `./webhooks` reads what happened to it a
    the queue (providers that schedule do so in 1.1), List-Unsubscribe one-click and more providers
    (both in 1.1).
 
-Out of scope: SMS, push and WhatsApp, inbound mail, and the management APIs of the providers
-(domains, templates, statistics), which their official SDKs already cover.
+2.0 adds the other channels on the same layer: SMS and RCS, WhatsApp, Messenger and Instagram,
+Telegram and Viber, Slack, Discord, Teams and Google Chat, and push (FCM, APNs, Web Push), each
+compared with its libraries on [its own page](/guide/comparison-channels).
+
+Out of scope: inbound mail, and the management APIs of the providers (domains, templates,
+statistics, sender registration), which their official SDKs and dashboards already cover.

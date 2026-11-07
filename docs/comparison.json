@@ -1,5 +1,5 @@
 {
-  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README; the column of @alexify/mailer is this repository as of 2026-10-18.",
+  "legend": "✅ in the code · ⚠️ partial, or only on the provider side · ❌ none · 🔜 planned by the author, no code yet · — does not apply. Every cell was decided by reading the source of the project as of 2026-10-07, not its README; the column of @alexify/mailer is this repository as of 2026-11-07.",
   "groups": [
     {
       "title": "Runtimes (from imports and CI, not run)",
@@ -461,8 +461,9 @@
           "mark": "—"
         },
         "multiChannel": {
-          "mark": "❌",
-          "text": "out of scope"
+          "mark": "🔜",
+          "text": "SMS, RCS, chat apps and push in 2.0",
+          "note": "Compared with the libraries of those channels on [their own page](/guide/comparison-channels)."
         },
         "otel": {
           "mark": "✅",
@@ -495,10 +496,10 @@
           "text": "MIT"
         },
         "version": {
-          "text": "1.2.0"
+          "text": "1.2.1"
         },
         "lastCommit": {
-          "text": "2026-10 (this release)"
+          "text": "2026-11 (1.2.1)"
         },
         "tests": {
           "text": "183 / ~2690"
