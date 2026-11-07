@@ -27,6 +27,14 @@ Nodemailer, emailjs or Upyo, made of two parts:
    (`instrumentHandler` of `./otel`). Jobs are signed (HMAC) and may be sealed (a codec), their
    message dropped once done with; sources hold one contract (leases, redelivery, fencing, a
    limit of runs that end unsettled), with tenants in turn and a pause per tenant.
+3. **The other channels, from 2.0,** on the same reliability layer: SMS and RCS; WhatsApp,
+   Messenger and Instagram; Telegram and Viber; Slack, Discord, Microsoft Teams and Google Chat;
+   and push (FCM, APNs, Web Push), nineteen providers each through its own HTTP API (see "Code
+   ported for the channels"). One message model (`Message` for email, `ChannelMessage` for the
+   others), one queue, one audit, one model of delivery events, and in 2.1 one suppression list
+   and one fallback across the channels and email. They were planned as the sibling library
+   `@alexify/messenger`, which is not published; its comparison and its rules moved here.
+   `PLAN-channels.md` is the plan of 2.0 to 2.2, in stages.
 
 It has zero runtime dependencies and runs on Node.js ≥ 22, and on Bun and Deno through their
 Node compatibility (see "Platform"; no browser entry).
@@ -35,7 +43,10 @@ Node compatibility (see "Platform"; no browser entry).
 message model and the transport contract of upyo, with the delivery events of 1.1 and the
 contracts of the reliability layer of 1.2 as types; each transport, decorator, driver and helper
 is a subpath, and their API is under semver from 1.0.0. The crypto-shredding of the audit and
-suppression have no API yet; their direction is in "Roadmap" below.
+suppression have no API yet; their direction is in "Roadmap" below. **2.0, the channels, is being
+built** on `feature/messenger` after `PLAN-channels.md`; no channel is in the code until its
+stage 2 lands the contracts, and 2.0 is the major in which names and import paths change once
+(see "The channels" in "Roadmap").
 
 It is maintained by Alexis Technologies and set up like the sibling libraries
 `@alexify/metaschema` and `@alexify/protoarray` (the scaffold follows protoarray's
@@ -66,7 +77,7 @@ pnpm run lint                      # oxlint src tests scripts bench
 pnpm run format                    # oxfmt src tests scripts bench (format:check in CI)
 pnpm size [--check]                # esbuild bundle sizes; --check gates every entry by scripts/size-budgets.json
 pnpm bench [filter] [--json] [--save] [--compare]   # ops/sec harness, manual only; --save writes bench/baseline.json
-pnpm docs:comparison               # renders docs/comparison.json into docs/guide/comparison.md
+pnpm docs:comparison               # renders docs/comparison*.json into docs/guide/comparison*.md
 pnpm run docs:dev                  # VitePress dev server for docs/ (docs:build, docs:preview)
 ```
 
@@ -106,6 +117,15 @@ There is no `dependencies` or `peerDependencies` key in `package.json`, and ther
 
 - **The transports are built on `node:*` and `fetch`:** SMTP on `node:net`/`node:tls`, DKIM and
   the SES SigV4 signature on `node:crypto`, HTTP providers on the global `fetch`. No provider SDK.
+- **So are the channels (2.0):** the SMS and RCS APIs, Meta's Graph API, the bot APIs of Telegram
+  and Viber, Slack's Web API, Discord's REST API, the webhooks of Teams and Google Chat, FCM and
+  Web Push are HTTPS with JSON or form bodies over `fetch`. **APNs is the exception:** it
+  requires HTTP/2, which Node's `fetch` does not speak, so it goes over `node:http2`. The JWTs of
+  FCM (RS256, a service account) and APNs (ES256), the signatures of webhooks (HMAC, Ed25519) and
+  the encryption and VAPID of Web Push (RFC 8291, RFC 8292) are `node:crypto`. The SDKs of the
+  providers bring axios, `request`, `firebase-admin` and a dozen packages each.
+- **No phone-number library.** E.164 validation and the segments of an SMS are small enough to
+  write and test here, rather than bundling libphonenumber-js.
 - **Infrastructure drivers are injected.** An adapter for a queue or a store takes the client or
   module the application created (a BullMQ `Queue`, a `MongoClient` or `require('mongodb')`), the
   way `./mongodb` of `@alexify/metaschema` takes the driver module. The package never `require`s
@@ -822,6 +842,49 @@ with a test that fails without it; R for review):
   script whose mirror hung on nothing that kept the process alive ended with its send unsettled
   (on Node 22, so did the suite of `./tee`). The caller waits for it, so it keeps the process.
 
+## Code ported for the channels
+
+From 2.0 the package takes the features of the libraries of the channels where they lead, as 1.1
+took nodemailer's, unemail's and sently's; none is a base to port file by file (§3 of
+`PLAN-channels.md`, which says what each source gives and where it goes). The eleven MIT sources
+whose code may be ported have their notices in `LICENSE` and their entries in `SOURCES` of
+`tests/unit/attribution.test.js`: @thinwrap/notifications 1.2.0, @visulima/notification 2.0.0,
+twilio-node 6.2.0, node-telegram-bot-api 2.1.0, http_ece 1.2.1, message-segment-calculator
+1.3.0, split-sms 0.1.7, @parse/node-apn 8.1.1, @slack/bolt 5.1.0, @slack/web-api 8.3.0 and
+botframework-connector 4.1.6. Their clones, read-only, are in
+`~/Documents/open-source/messenger-alternatives/`, whose README indexes them.
+
+- **What is ported is the feature, onto the contracts of this package** (`Receipt`,
+  `createApiClient`, the injected `fetch`, the `signal`), not the HTTP layer, the retries or the
+  error model of the source. Pure functions and tables may come nearly as written (the error
+  tables of thinwrap, the signature of twilio-node, the record of http_ece, the GSM-7 table of
+  message-segment-calculator).
+- **A known bug of the source is fixed in the port,** in the same `feat:` commit, with a test
+  that fails on the source's behavior and an entry in the list below, under a prefix apart from
+  N, U, S and R: V visulima, T thinwrap, NV Novu, TG node-telegram-bot-api and grammY, TW
+  twilio-node, VG Vonage, SN Sinch, AP node-apn, FB firebase-admin, DC discord.js, SL the Slack
+  SDKs, VB viber-bot, BB botbuilder, EC http_ece. §8 of the plan lists the bugs found so far. A
+  ported test that pinned the source's behavior says "Changed in the port".
+- A ported file starts with the header of its source, as for upyo, its path relative to the root
+  of the package (in a monorepo, the package's directory):
+  ```js
+  // Ported from @thinwrap/notifications v1.2.0 (src/providers/twilio/twilio.connector.ts)
+  // https://github.com/thinwrap/notifications-ts — MIT, Copyright 2026 Dmitry Polyanovsky & contributors
+  ```
+  A second source is `// Also ported from <name> v<version> (<path>)` with its notice. A source in
+  JavaScript names a file of its own layout (`lib/client.js` of node-apn, `ece.js` of http_ece).
+- **The Apache-2.0 sources** (the SDKs of Vonage and Sinch, viber-bot, firebase-admin,
+  discord.js) are written from the providers' documentation, their algorithms being a few lines
+  each, so that the package stays MIT; their test vectors live in `tests/`, which is not
+  published, with a line of attribution in the test file. `web-push` (MPL-2.0) and the WhatsApp
+  Node SDK (Facebook Platform License) are not copied at all.
+- Ported suites keep their `describe`/`it`; `expect` becomes `node:assert`,
+  `vi.stubGlobal('fetch')` becomes `t.mock.method(globalThis, 'fetch')`, `vi.useFakeTimers`
+  becomes `t.mock.timers`, and `vi.mock('node:http2')` a local h2c server.
+- A source that no shipped file names when 2.0 is released leaves `LICENSE` and `SOURCES`.
+
+**Bugs of the sources fixed in the port:** none yet.
+
 ## Repository layout
 
 ```
@@ -852,10 +915,12 @@ scripts/
   size-budgets.json the min+gzip budget of each entry in KB (the root, and each subpath on top)
   check-dts.js      tsc --strict over the d.ts of every entry of the exports map
   check-pack.js     the tarball holds every file of the exports map and nothing outside `files`
-  comparison.js     renders docs/comparison.json into docs/guide/comparison.md
+  comparison.js     renders each docs/comparison*.json into its page of docs/guide/
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
 docs/               VitePress site (mailerat.vercel.app), not published
-  comparison.json   the feature matrix of 14 alternatives (the data of the comparison page)
+  comparison.json   the feature matrix of 14 email libraries (the data of the comparison page)
+  comparison-channels.json  the matrix of 11 libraries of SMS, chat apps and push
+PLAN-channels.md    the plan of 2.0 to 2.2 (the channels), in stages
 .claude/skills/     metaskills v1.0.5 skills (js-conventions, npm-publish adapted)
 ```
 
@@ -904,6 +969,35 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
   `accepted`, `delivered`, `bounced` and `complained` are the states above; `rejected` is
   `failed` before any attempt; `deferred` keeps a message `accepted`; `opened`, `clicked` and
   `unsubscribed` are engagement, not states; `unknown` keeps the provider's `raw` record.
+
+**The contracts of the channels** (2.0, `PLAN-channels.md` §4.1–4.2; they land in its stage 2,
+and until then none of this is in the code):
+
+- **`ChannelMessage`**, built by `createChannelMessage()` of `./channels`: `channel` (`sms`,
+  `rcs`, `whatsapp`, `messenger`, `instagram`, `telegram`, `viber`, `slack`, `discord`, `teams`,
+  `google-chat`, `push`), `to` (E.164 for SMS, RCS and WhatsApp; a scoped id for Messenger and
+  Instagram; a `chat_id`, a channel, a webhook, a device token or a Web Push subscription),
+  `from?`, `text`, `media`, `buttons`, a `payload` of the channel's own (Block Kit, an Adaptive
+  Card, an embed, a WhatsApp template), `mentions` (none unless allowed), `tags`, `priority`,
+  `metadata` (`correlationId` there, as for email), `tenantId`, `idempotencyKey`, `scheduledAt`,
+  `expiresAt`. `Message` gains `channel: 'email'` and `tenantId?`; a message without `channel` is
+  email at run time. `AnyMessage = Message | ChannelMessage`, `MessageOf<C>`.
+- **`Transport<TProviderId, TMessage extends AnyMessage = Message>`**, `VerifiableTransport`
+  likewise; `RawTransport` stays email's. `./router` sends each message through the transport of
+  its channel. A receipt gains `channel?`, `segments?` and `state?: 'accepted' | 'sent'` (a
+  channel that reports no delivery, such as a work chat or push, stops at `sent`).
+- **The categories of the channels:** `invalid-recipient`, `opted-out`, `outside-window` (the 24
+  hours of Meta), `blocked` (the user blocked the bot), `not-on-channel` (a reason to fall back),
+  `unregistered` (a push token or a subscription gone: drop it), none retried, and `unreachable`
+  (the handset, for now), retried; `retryable` defaults from the category. `./pool` stops its
+  failover at each of them but `unreachable`, which another route may reach.
+- **States and events:** the states gain `sent`, `read` and `expired` (ranks 3.5, 4.5 and 4, as
+  the ranks of 1.2 are persisted); `DeliveryEvent` gains `sent`, `read`, `failed`, `expired` and
+  `subscribed`, a required `channel` and `error?: { category, code }`. An inbound STOP is an
+  opt-out event.
+- **One queue:** one core with a strategy per kind of job; the email job stays `v: 1` byte for
+  byte, a job of a channel is `v: 2`, its `channel` sealed with the rest; the API loses `Mail`
+  (`createQueue`, `createJobHandler`, `prepareJob`, `parseJob`, `QueueError`).
 
 ## Roadmap
 
@@ -960,6 +1054,35 @@ sending as a queue delay (done in 1.2, `scheduledAt`; 1.1 schedules through the 
 can); a `Renderer` interface with an optional React Email adapter (no template
 engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
 
+**The channels (2.0 to 2.2, `PLAN-channels.md`).** From the comparison of 11 Node.js libraries of
+SMS, chat apps and push (`docs/comparison-channels.json`, 2026-10-22): the market is not short of
+providers or SDKs; it is thin in delivery receipts across channels, fallback on the outcome and a
+record of what happened, which is the layer this package has for email.
+
+- **2.0:** the contracts above; the names of observability without `email` (metrics
+  `mailer.message.*` with `mailer.channel`, log events `message.*`, audit events
+  `message.<state>`); `./webhooks/<provider>`; `./channels` (the builder, phone numbers, segments,
+  escaping) and `./router`; the decorators on channel messages, phone numbers redacted with
+  addresses; and nineteen providers: SMS (`./twilio`, `./vonage`, `./infobip`, `./sinch`,
+  `./aws-sms` on AWS End User Messaging; `./turbosms`, `./alphasms` and `./smsclub` for Ukraine),
+  RCS (`./rbm`), `./meta` (WhatsApp, Messenger, Instagram: one Graph client, one window),
+  `./telegram`, `./viber`, `./slack`, `./discord`, `./teams`, `./google-chat`, `./fcm`, `./apns`
+  and `./webpush`.
+- **2.1, a closed loop:** the webhooks of the channels, signature mandatory; one `./suppression`
+  for email and the channels, checked before a message is queued, with a bypass for
+  transactional messages (one-time codes); the 24-hour window of Meta; `./fallback` between
+  channels and email on refusal or `not-on-channel`, never after a send of unknown outcome
+  without an idempotency key; rate limits per channel (Telegram about 30 a second and 1 a second
+  per chat, Slack about 1 a second per channel, Discord's buckets from `X-RateLimit-*`).
+- **2.2:** the stores of suppression and of the window in `./mongodb`; the crypto-shredding of
+  recipients in `./audit`, addresses and numbers together; the fallback on no receipt within a
+  deadline.
+- **The rules of a channel:** E.164 normalization with a default country; the encoding (GSM-7 or
+  UCS-2) and the segments of an SMS (160/153, 70/67), counted before it is sent; the WhatsApp
+  template, required outside the window; text escaped for the markup of its channel (Slack's
+  mrkdwn, Telegram's HTML, Discord's Markdown) and mentions of everyone off unless allowed; the
+  size limits of each channel checked before a send rather than learned from a 400.
+
 **Decisions:**
 
 - **The transport is ported from upyo, not a wrapper over Nodemailer.** The comparison advises
@@ -969,22 +1092,41 @@ engine of its own; done in 1.1, `./render`); more providers (done in 1.1).
   ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
-- **One `./webhooks` entry, not one per provider.** Its fifteen verifiers come to some 15 KB
-  min+gzip, which a function that verifies one provider pays at its cold start; fifteen entries
-  more would be fifteen more parts of the API to keep under semver, for less than a kilobyte
-  each. If that cost is ever measured to matter, the entries can come later without a change
-  to the one there is.
+- **A shared `./webhooks` and an entry per provider (2.0).** 1.1 put its fifteen verifiers in
+  one entry (some 15 KB min+gzip), as fifteen more entries were fifteen more parts of the API
+  for less than a kilobyte each. With the channels they come to some thirty, which a function
+  that verifies one provider would pay for at its cold start, and 2.0 changes import paths
+  anyway: `./webhooks` keeps what they share (`claimDelivery`, the SNS verifier, the replay
+  stores, `WebhookVerificationError`, the types) and each verifier is `./webhooks/<provider>`,
+  named as its transport, with the names of its functions unchanged.
 - **One `./templates` entry, not one per engine.** The nine adapters weigh under a kilobyte
   each, the engines are passed in, and the core (loaders, variants, front matter, cache) is most
   of the entry, as the verifiers of `./webhooks` are of theirs.
 - **Templates are named, never pathed, and read through the loader.** No engine reads a file
   itself: includes, partials and layouts go through the renderer's loader, which holds them to
   its root; the one exception, MJML's `mj-include`, is off unless asked for.
-- **Eighteen providers, then few new ones.** The eight HTTP providers of upyo came with the port;
-  1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
-  SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare). Each
-  provider adds its webhooks and API drift to maintain, so another one waits for a user who needs
-  it.
+- **Thirty-seven providers, then few new ones.** The eight HTTP providers of upyo came with the
+  port; 1.1 adds the ten most used of unemail and sently (Postmark, Brevo, Mailjet, MailerSend,
+  SparkPost, ZeptoMail, SMTP2GO, Azure Communication Services, Scaleway and Cloudflare); 2.0 adds
+  the nineteen of the channels, few per channel. Each provider adds its webhooks and API drift to
+  maintain, so another one waits for a user who needs it, and none is released before a live run
+  of its e2e suite (see "Release process").
+- **The channels in mailer, in a major.** They were planned as `@alexify/messenger`; one package
+  shares the queue, the audit, the suppression list and the fallback across email and the other
+  channels. 2.0 rather than 1.3: staying additive would have made two families of every name
+  (metrics, log and audit events) and two queue APIs, for the sake of semver. What is persisted
+  keeps its bytes across the major whatever semver allows: the email job v1, its id, hash and
+  MAC, its Message-ID, the ids of audit events and the ranks of states.
+- **A subpath per vendor, not per channel:** `./twilio` holds SMS, MMS, WhatsApp and RCS, `./meta`
+  WhatsApp, Messenger and Instagram; AWS goes by service (`./aws-sms`, as `./ses`).
+- **HTTP APIs, not SDKs; official APIs only.** WhatsApp through the Cloud API or a BSP, never
+  through clients that drive WhatsApp Web (Baileys, whatsapp-web.js), which break its terms and
+  get numbers banned; Signal (bots only through the unofficial signal-cli) and iMessage (only
+  through Apple's certified providers) are out for the same reason.
+- **One message, the channel's own payload when needed.** The common fields (text, media,
+  buttons) cover a one-time code or an alert on every channel; a rich message of one platform
+  (Block Kit, an Adaptive Card, a Discord embed, a WhatsApp template) is passed as that
+  platform's payload, typed, rather than squeezed into a model that fits none.
 
 **What the competitors appear to get wrong, to not repeat** (findings from reading their code in
 October 2026, not reproduced except for emailjs, which was run against fake SMTP servers): no
@@ -996,9 +1138,26 @@ inline images in `multipart/mixed` instead of `multipart/related` (Upyo, unemail
 accepted but never read (Upyo `validateSsl`); no CRLF sanitization and `os.EOL` instead of CRLF
 (MIMEText). The Upyo ones came with the port and are on the list of "Code ported from upyo".
 
-**Out of scope:** SMS, WhatsApp and push (a `Channel` interface may stay, implementations no);
-inbound mail; the management APIs of the providers (domains, templates, statistics), which the
-official SDKs cover.
+**For the channels** (from reading the packages as published on npm in October 2026, not
+reproduced; the cells and notes of `docs/comparison-channels.json` name the files): a suppressed
+or deduplicated send reported as a success, which stops the fallback to the next channel, and a
+queue worker that sends every channel again when one failed (@visulima/notification); a status
+parser that maps an unknown event to `delivered` (@visulima/notification), or an accepted SMS
+always reported `sent`, never `queued` (@thinwrap/notifications); a channel with no provider that
+logs the whole request, recipient included, and reports success (notifme-sdk); message POSTs
+retried without an idempotency key (Telnyx unless one is passed, node-telegram-bot-api after a
+timeout, grammY's auto-retry without a limit); HTTP retries stacked at three levels, ignoring
+`Retry-After`, and one circuit breaker and rate limiter for every channel
+(@visulima/notification); webhook signatures compared with `===` (Vonage SMS, Plivo, Sinch), no
+window of time (Sinch, Plivo), a JWT checked without the hash of the body (Vonage), a body
+re-serialized before its HMAC (Sinch), and a check turned off by `NODE_ENV` (Novu's bridge); a
+queue reservation that never expires (@visulima/notification's unstorage queue); and an import
+that overwrites the global agents of axios (Plivo).
+
+**Out of scope:** inbound mail, and inbound messages of the channels beyond an opt-out and the
+window they open; unofficial clients (WhatsApp Web, signal-cli); quiet hours; the management APIs
+of the providers (domains, templates, statistics, sender registration, template approval, buying
+numbers), which their dashboards and SDKs cover.
 
 **To check before designing:** whether Fly.io restricts outgoing SMTP (it would make HTTP-first
 a requirement). Checked: per-tenant fairness (groups) is a feature of BullMQ Pro only; the type
@@ -1024,6 +1183,10 @@ differs on them, as of those versions:
   `--allow-sys=hostname` for the default EHLO name, which is `[127.0.0.1]` without it.
 - **Bun's TLS (BoringSSL)** takes no self-signed certificate that is not a CA as a root of
   trust, as Node and Deno do, so the tests that pass `ca` use `tests/fixtures/tls`.
+- **The channels (2.0):** APNs goes over `node:http2`, which Bun and Deno implement through their
+  Node compatibility, so `tests/runtime` sends to a local HTTP/2 server on all three. The replay
+  of Deno's `fetch` above would send an SMS twice from a provider without an idempotency key, so
+  the providers of the channels are tested for it on Deno as the email ones are.
 
 There is no `browser.js` and no `browser` field: sending from a browser would expose the
 credentials, and SMTP needs sockets. `src/` may use `node:*` modules freely. Edge runtimes are not
@@ -1108,6 +1271,15 @@ change. **This file wins** if they ever disagree.
   against local fake servers (`tests/helpers/smtp/mock-smtp-server.js` on `node:net`, servers on
   `node:http`) or a stubbed `fetch` (`t.mock.method(globalThis, 'fetch', …)`), never against a
   real provider in `pnpm test`.
+- **The channels (2.0):** a provider of a channel keeps its requests in `http-client.js`, as an
+  email one does, and has a place in the delivery matrix of the channels,
+  `tests/unit/delivery-channels.test.js`: the scenarios of `delivery.test.js` (an ambiguous answer
+  is `deliveryUnknown` without a retry, `Retry-After`, secrets and recipients redacted) with a
+  channel message, `delivery.test.js` checking each subpath with an `http-client.js` against one
+  matrix or the other. Webhooks are tested against recorded bodies with their real signatures.
+  Each provider has a row of `tests/e2e/channels.e2e.test.js`, one table as
+  `providers.e2e.test.js`, skipped until its variables are set; its live run gates its release
+  (see "Release process").
 - **Opt-in suites**, outside the gates: `tests/mailpit/` (`pnpm test:mailpit`, serial, as the
   inbox is shared; `docker compose -f tests/mailpit/docker-compose.yml up -d` and
   `MAILPIT_SMTP_HOST`/`MAILPIT_API_URL`, plus `MAILPIT_SENDMAIL="docker exec -i mailer-mailpit
@@ -1164,16 +1336,19 @@ published to npm, and lint/format do not cover it.
 - Only `docs/index.md` has frontmatter; links between pages are absolute and extensionless.
 - `ignoreDeadLinks` is off, so `pnpm docs:build` failing on a dead link is a feature.
 - The nav version label is read from `package.json`.
-- **The comparison page is generated.** `docs/guide/comparison.md` holds the prose; the table
-  between `<!-- comparison:start -->` and `<!-- comparison:end -->` is rendered by
-  `pnpm docs:comparison` from `docs/comparison.json` (`legend`, `groups[].rows[]`,
-  `libraries[].cells[rowId] = { mark, text, note? }`). Edit the data, never the table; CI fails on
-  a diff. The first library of the data is @alexify/mailer itself (this repository, with 🔜 for
-  the roadmap), which `custom.css` tints in the brand teal as the second column and pins beside
-  the features from 768px up; keep its cells true to the code when behavior changes. The page
-  takes the full width through `.VPDoc:has(.ml-matrix)` in `custom.css`. The findings in cells
-  come from reading the code and, except for emailjs, were not reproduced; the page says so, and
-  a bug claim should be reproduced before it is made stronger.
+- **The comparison pages are generated.** `docs/guide/comparison.md` (the email libraries) and
+  `docs/guide/comparison-channels.md` (the libraries of SMS, chat apps and push) hold the prose;
+  the table between `<!-- comparison:start -->` and `<!-- comparison:end -->` of each is rendered
+  by `pnpm docs:comparison` from `docs/comparison.json` and `docs/comparison-channels.json`
+  (`legend`, `groups[].rows[]`, `libraries[].cells[rowId] = { mark, text, note? }`). Edit the
+  data, never the table; CI fails on a diff of either. The first library of each is
+  @alexify/mailer itself (this repository, with 🔜 for the roadmap), which `custom.css` tints in
+  the brand teal as the second column and pins beside the features from 768px up; keep its cells
+  true to the code when behavior changes, and turn a 🔜 of the channels into ✅ only for what is
+  done. The pages take the full width through `.VPDoc:has(.ml-matrix)` in `custom.css`. The
+  findings in cells come from reading the code (for the channels, the packages as published on
+  npm as of 2026-10-22, moved from messenger) and, except for emailjs, were not reproduced; the
+  pages say so, and a bug claim should be reproduced before it is made stronger.
 - The brand is a teal "envelope" mark (`#0D6B63`, `#4CC2B5` on dark; a placeholder until a final
   logo): `docs/public/logo-mark*.svg`, `favicon.svg` (follows `prefers-color-scheme`),
   `favicon.png` and `logo.png` (the 1200×630 og:image, rendered from SVG with `rsvg-convert`).
@@ -1201,6 +1376,10 @@ it. The `npm-publish` skill walks through it step by step:
    `tests/bullmq`; `pnpm test:bun` and `pnpm test:deno` where they are installed; the bench of the
    outbox (`MONGODB_URL=… node bench/outbox.js`) when the outbox changed; and, as before,
    `pnpm test:mailpit` and the `pnpm test:e2e` suites of the providers that changed.
+   **From 2.0 a new provider is released only after a live run** of its `tests/e2e` suite on a
+   real account: one without it leaves the exports map, the docs and the CHANGELOG of the
+   release, and ships in a later minor once it has run (adding a provider is additive). A source
+   in `LICENSE` that no shipped file names leaves it before the release.
 4. Commit, merge into `main` (a squash merge, as #2 and #3), then tag `vX.Y.Z` on the commit of
    `main`, never on the feature branch.
 5. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`, which includes the size

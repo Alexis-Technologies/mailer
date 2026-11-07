@@ -40,7 +40,7 @@ pnpm run check:pack              # the tarball: every file of the exports map, n
 These are the same gates `prepublishOnly` runs. CI adds three more; run them too:
 
 ```bash
-pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md   # the table matches docs/comparison.json
+pnpm docs:comparison && git diff --exit-code docs/guide/comparison.md docs/guide/comparison-channels.md   # the tables match docs/comparison*.json
 pnpm run docs:build                                              # the docs site; a dead link fails it
 pnpm run test:bun && pnpm run test:deno                          # the unit and runtime suites on Bun and Deno
 ```
@@ -146,7 +146,7 @@ Scan for staleness:
 2. **Badges**: do the URLs point to `@alexify/<name>` and the `Alexis-Technologies` repository?
 3. **docs/**: guide and API pages for anything the release changed; the nav version label is read from `package.json` automatically. `pnpm run docs:build` must pass (dead links fail it)
 4. **docs/public/llms.txt**: key facts (exports, Node.js version, transports and providers)
-5. **docs/comparison.json**: when a release adds a feature the comparison tracks, or a compared library changed, edit the data and run `pnpm docs:comparison`; never edit the generated table by hand
+5. **docs/comparison.json** and **docs/comparison-channels.json**: when a release adds a feature a comparison tracks, or a compared library changed, edit the data and run `pnpm docs:comparison`; never edit a generated table by hand. The column of @alexify/mailer turns 🔜 into ✅ only for what the release does
 6. **SECURITY.md**: the supported-versions table on a major release, and the threat model when a transport, a provider or a security default changed
 
 Only edit if something is factually wrong or outdated. Don't rewrite style or add unsolicited content.
@@ -210,7 +210,10 @@ Then ask the user whether to run the opt-in suites against the real services, wh
 can: `pnpm test:e2e` with the sandbox credentials of the providers (each suite is skipped until
 its variables are set; `tests/e2e/providers.e2e.test.js` names those of the providers of 1.1),
 and `pnpm test:mailpit` against the local Mailpit. A release that changed a provider's mapping or
-its error handling should have run that provider's suite. Report which suites ran and which were
+its error handling should have run that provider's suite. From 2.0, a new provider ships only
+after a live run of its suite on a real account: one that has not run leaves the exports map,
+the docs and the CHANGELOG of the release (it ships in a later minor), and a source in
+`LICENSE` that no shipped file names leaves it. Report which suites ran and which were
 skipped.
 
 The release is published by hand (`pnpm run release`), after the merge into `main` and the tag
