@@ -905,7 +905,7 @@ src/
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
                     the base of the transports of 1.1 (provider-transport.js), what the
                     decorators and the queue share (backoff.js, thrown.js, fingerprint.js,
-                    canonical-json.js, path.js), the driver of a QueueSource (polling-driver.js), and abort.js,
+                    canonical-json.js, json.js, path.js), the driver of a QueueSource (polling-driver.js), and abort.js,
                     iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js, log.js
 tests/
   unit/*.test.js    node:test suites, one per area (<subpath>-<module>.test.js for a subpath)

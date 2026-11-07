@@ -1,7 +1,8 @@
-// Not ported: the data of a job as JSON, checked when it is enqueued: a
-// value that JSON would turn into another (a Date into a string, a Map into
-// `{}`, NaN into null) is refused with the path to it, so that a template does
-// not meet in the worker what the producer did not give it.
+// Not ported: a value as JSON holds it, checked: a value that JSON would turn
+// into another (a Date into a string, a Map into `{}`, NaN into null) is
+// refused with the path to it, so that a template of ./queue does not meet in
+// the worker what the producer did not give it, nor a provider of a channel a
+// payload other than the one the application built.
 
 const MAX_DEPTH = 32;
 
