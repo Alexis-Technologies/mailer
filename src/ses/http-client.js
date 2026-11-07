@@ -2,20 +2,22 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 // Changed after the port: the request goes through createApiClient of
 // internal/api-client.js, as that of every HTTP provider does, its SigV4
-// signature made by the authorize of each attempt, and SesApiError extends
-// its error; the messages and the errors of upstream stay.
+// signature made by the authorize of each attempt (internal/sigv4.js, which
+// every service of AWS shares), and SesApiError extends its error; the
+// messages and the errors of upstream stay.
 
-const { createHash, createHmac } = require('node:crypto');
 const { parseRetryAfter } = require('../core/receipt.js');
 const { ProviderApiError, createApiClient } = require('../internal/api-client.js');
+const { createSigV4Signer } = require('../internal/sigv4.js');
 
 class SesHttpClient {
   config;
-  #signingKey = null;
   #request;
+  #sign;
 
   constructor(config) {
     this.config = config;
+    this.#sign = createSigV4Signer(config.region, 'ses');
     const client = createApiClient(config, {
       id: 'ses',
       label: 'SES',
@@ -99,60 +101,7 @@ class SesHttpClient {
    * @returns The headers of the request, with the signature.
    */
   signRequest(url, options, credentials, service = 'ses') {
-    const parsedUrl = new URL(url);
-    const method = options.method || 'GET';
-    const headers = new Headers(options.headers);
-
-    const host = parsedUrl.host;
-    const path = parsedUrl.pathname + parsedUrl.search;
-    const region = this.config.region;
-
-    const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
-    const dateStamp = amzDate.substring(0, 8);
-
-    headers.set('Host', host);
-    headers.set('X-Amz-Date', amzDate);
-
-    if (credentials.sessionToken) {
-      headers.set('X-Amz-Security-Token', credentials.sessionToken);
-    }
-
-    const signedHeaders =
-      'host;x-amz-date' + (credentials.sessionToken ? ';x-amz-security-token' : '');
-    const canonicalHeaders =
-      `host:${host}\nx-amz-date:${amzDate}\n` +
-      (credentials.sessionToken ? `x-amz-security-token:${credentials.sessionToken}\n` : '');
-
-    const payloadHash = sha256Hex(options.body || '');
-    const canonicalRequest = `${method}\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
-
-    const algorithm = 'AWS4-HMAC-SHA256';
-    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = `${algorithm}\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
-
-    const signingKey = this.getSigningKey(credentials.secretAccessKey, credentialScope);
-    const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
-
-    const authorizationHeader = `${algorithm} Credential=${credentials.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-    headers.set('Authorization', authorizationHeader);
-
-    return headers;
-  }
-
-  // The signing key depends only on the secret and the scope (a day, a
-  // region, a service), so it is derived once a day rather than per request.
-  getSigningKey(secretAccessKey, credentialScope) {
-    const cached = this.#signingKey;
-    if (cached?.scope === credentialScope && cached.secretAccessKey === secretAccessKey) {
-      return cached.key;
-    }
-    let key = `AWS4${secretAccessKey}`;
-    for (const part of credentialScope.split('/')) {
-      key = createHmac('sha256', key).update(part).digest();
-    }
-    this.#signingKey = { scope: credentialScope, secretAccessKey, key };
-    return key;
+    return this.#sign(url, options, credentials, service);
   }
 
   headersToRecord(headers) {
@@ -163,8 +112,6 @@ class SesHttpClient {
     return record;
   }
 }
-
-const sha256Hex = (data) => createHash('sha256').update(data).digest('hex');
 
 const createSesApiError = (response, text, attempt) => {
   let errorData;

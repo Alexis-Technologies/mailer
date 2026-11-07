@@ -897,7 +897,8 @@ src/
                     layer (http.js, api-client.js for every HTTP provider but JMAP,
                     api.js for the conversions of the providers of 1.1, api-steps.js for
                     what a provider of any channel shares of them, body.js, unsent.js,
-                    delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
+                    delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js,
+                    sigv4.js for the services of AWS),
                     receipts (provider.js, refusal.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,
                     capabilities.js, batch.js, base64.js, uuid.js),
