@@ -900,7 +900,7 @@ src/
                     delivery-unknown.js, config.js, loopback.js, public-url.js (the check of
                     ./attachments and of Web Push), validate-ssl.js, verify.js, sigv4.js for
                     the services of AWS, jwt.js, token-cache.js and google-auth.js for the
-                    tokens of the channels),
+                    tokens of the channels, http2.js, a fetch over node:http2 for APNs),
                     receipts (provider.js, refusal.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,
                     capabilities.js, batch.js, base64.js, uuid.js),
