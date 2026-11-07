@@ -40,6 +40,19 @@ worker of 1.2 holds reads the same.
   `recordMessage`, the text of a failure or a retry is redacted of the recipient as the message
   names it (a chat id, a push token, an endpoint). `LoggerTransport<P, TMessage>` takes the
   messages of the transport wrapped.
+- **Breaking: the metrics of `./otel` are `mailer.message.*`** (were `mailer.email.*`):
+  `attempts`, `duration`, `messages`, `retries`, `size` (was `mailer.email.message.size`),
+  `attachments`, `active_sends` and the new `segments` (of an SMS, as its receipt counts them),
+  each with `mailer.channel`, and the priority is `mailer.priority` (was `email.priority`). A
+  span is named by the channel of its message (`email send`, `sms send`) unless `spanPrefix` is
+  set, whose default is no longer `email`; a batch by the channel its messages share
+  (`message send_batch` for several). A message of a channel, whose size read its subject and
+  threw, has a span of its own attributes (`mailer.channel`, the length of its text, its media,
+  the segments and encoding of an SMS, its tenant, its sender only with `recordSensitiveData`,
+  its recipient never) and events (`message.sent`, `message.send_failed`), and its error text is
+  redacted of its recipient as it names it. A span of email adds `mailer.channel` and
+  `mailer.tenant.id`; its other attributes are those of 1.x. `OpenTelemetryTransport<P,
+  TMessage>` takes the messages of the transport wrapped.
 
 ### Added
 

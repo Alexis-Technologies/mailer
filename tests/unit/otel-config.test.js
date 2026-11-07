@@ -29,7 +29,9 @@ describe('config', () => {
       assert.equal(config.tracing.enabled, true);
       assert.equal(config.tracing.samplingRate, 1.0);
       assert.equal(config.tracing.recordSensitiveData, false);
-      assert.equal(config.tracing.spanPrefix, 'email');
+      // Changed after the port: a span is named by the channel of its
+      // message unless a prefix is set.
+      assert.equal(config.tracing.spanPrefix, undefined);
     });
 
     it('should merge custom configuration', () => {

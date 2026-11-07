@@ -1,6 +1,13 @@
 import { metrics, trace } from '@opentelemetry/api';
 import { expectAssignable, expectError, expectType } from 'tsd';
-import { createMessage, type Receipt, type Transport } from '../../index.js';
+import {
+  createMessage,
+  type RawTransport,
+  type Receipt,
+  type SmsMessage,
+  type Transport,
+  type VerifiableTransport,
+} from '../../index.js';
 import { MockTransport } from '../../src/mock/index.js';
 import {
   OpenTelemetryTransport,
@@ -56,3 +63,15 @@ instrumentHandler(queueHandler, {
   tracerProvider: trace.getTracerProvider(),
   meterProvider: metrics.getMeterProvider(),
 });
+
+// The decorator of a transport of a channel takes its messages, and one of
+// email still sends raw MIME.
+declare const twilio: Transport<'twilio', SmsMessage>;
+const traced = new OpenTelemetryTransport(twilio, {
+  tracing: { enabled: false },
+  metrics: { enabled: false },
+});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(traced);
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(createOpenTelemetryTransport(twilio));
+declare const ses: Transport<'ses'>;
+expectAssignable<RawTransport<'ses'>>(new OpenTelemetryTransport(ses));

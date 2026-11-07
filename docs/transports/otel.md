@@ -313,6 +313,19 @@ await tracer.startActiveSpan('user-registration', async (span) => {
 
 The email sending operation appears as a child span in your distributed trace,
 showing its relationship to the broader user registration flow.
+
+A span is named by the channel of its message, `email send` or `sms send`, unless
+`tracing.spanPrefix` names them all. A batch is `email send_batch` until its
+messages are read, then named by the channel they share, or `message send_batch`
+for several. The attributes of a span of email are those of 1.x, with
+`mailer.channel` and `mailer.tenant.id`; a span of a channel has
+`mailer.channel`, `mailer.priority`, `mailer.message.tags`,
+`mailer.message.text.length`, `mailer.message.media.count`, `mailer.message.size`
+and `mailer.tenant.id`, the segments and the encoding of an SMS as
+`countSegments` counts them (`mailer.message.segments`,
+`mailer.message.encoding`), its sender (`mailer.message.from`) only with
+`recordSensitiveData`, and its recipient never. Its events are `message.sent` and
+`message.send_failed`, and its count of errors `mailer.error.count`.
 This makes it easy to understand how email delivery affects overall request
 performance and to identify bottlenecks in your system.
 
@@ -399,20 +412,28 @@ takes precedence over it.
 The instruments follow the naming of the OpenTelemetry semantic conventions:
 dotted names under `metrics.prefix` (`mailer` by default), with the unit in the
 `unit` of the instrument rather than in its name, which an exporter such as
-Prometheus turns into its own (`mailer_email_attempts_total`):
+Prometheus turns into its own (`mailer_message_attempts_total`). Each carries
+`mailer.channel`, the channel of its message (`email`, `sms`, `telegram`…), but
+for a batch whose messages differ and the count of active batches, whose
+messages are not read yet:
 
 | Instrument | Kind | Unit | Attributes |
 |---|---|---|---|
-| `mailer.email.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
-| `mailer.email.duration` | histogram | `s` | as `mailer.email.attempts` |
-| `mailer.email.messages` | counter | `{message}` | `mailer.transport.name`, `email.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it |
-| `mailer.email.retries` | counter | `{retry}` | `mailer.transport.name`, `error.type` |
-| `mailer.email.message.size` | histogram | `By` | `mailer.transport.name`, `email.priority`, `email.content.type` |
-| `mailer.email.attachments` | histogram | `{attachment}` | as `mailer.email.message.size` |
-| `mailer.email.active_sends` | up-down counter | `{send}` | `mailer.transport.name` |
+| `mailer.message.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.channel`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
+| `mailer.message.duration` | histogram | `s` | as `mailer.message.attempts` |
+| `mailer.message.messages` | counter | `{message}` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it |
+| `mailer.message.retries` | counter | `{retry}` | `mailer.transport.name`, `mailer.channel`, `error.type` |
+| `mailer.message.size` | histogram | `By` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, and `email.content.type` for email |
+| `mailer.message.attachments` | histogram | `{attachment}` | as `mailer.message.size`: the attachments of an email, the media of a message of a channel |
+| `mailer.message.segments` | histogram | `{segment}` | `mailer.transport.name`, `mailer.channel`: the segments of an SMS its receipt counts |
+| `mailer.message.active_sends` | up-down counter | `{send}` | `mailer.transport.name`, `mailer.channel` |
 
-A message is counted once in `mailer.email.messages`, when its receipt comes back;
-a send operation, of one message or a whole batch, once in `mailer.email.attempts`.
+In 1.x the instruments were `mailer.email.*` (the size `mailer.email.message.size`),
+without `mailer.channel`, and the priority was `email.priority`; a dashboard or an
+alert on those names has to follow.
+
+A message is counted once in `mailer.message.messages`, when its receipt comes back;
+a send operation, of one message or a whole batch, once in `mailer.message.attempts`.
 `error.type` is the category of the failure, from `errorClassifier`. A failure
 of unknown delivery, which the provider may have taken, carries
 `mailer.delivery_unknown` on its span and its count of messages: those are the
@@ -436,7 +457,8 @@ to monitor your email system's health.
 With `tracing.recordSensitiveData` off, the default, a span records the sender's
 domain rather than its address, and the error text it records, in its status
 and in its `exception` and `email.send_failed` events, has every address
-and every phone number in E.164 replaced by `[REDACTED]`. An SMTP rejection such as
+and every phone number in E.164 replaced by `[REDACTED]`, and so the recipient of
+the message of a channel as it names it (a chat id, a push token). An SMTP rejection such as
 `RCPT TO failed for bob@example.com: 550 No such user` is recorded as
 `RCPT TO failed for [REDACTED]: 550 No such user`. Turn the option on only for
 a backend where personal data is allowed.

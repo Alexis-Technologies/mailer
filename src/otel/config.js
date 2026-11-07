@@ -16,7 +16,8 @@ const DEFAULT_CONFIG = {
     enabled: true,
     samplingRate: 1.0,
     recordSensitiveData: false,
-    spanPrefix: 'email',
+    // None: a span is named by the channel of its message (`email send`).
+    spanPrefix: undefined,
   },
 };
 

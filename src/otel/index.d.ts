@@ -4,10 +4,10 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Message,
   QueueHandler,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -138,8 +138,10 @@ export interface TracingConfig extends ObservabilityConfig {
    */
   readonly recordSensitiveData?: boolean;
   /**
-   * Custom span name prefix.
-   * @default "email"
+   * Custom span name prefix, in place of the channel of the message.
+   * @default the channel of the message: `email send`, `sms send`; a batch
+   * `email send_batch` until its messages are read, then named by the channel
+   * they share (`message send_batch` for several)
    */
   readonly spanPrefix?: string;
 }
@@ -300,8 +302,11 @@ export declare function defaultErrorClassifier(error: unknown): string;
  * });
  * ```
  */
-export declare class OpenTelemetryTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class OpenTelemetryTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /**
@@ -317,15 +322,16 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
    * @throws {TypeError} When `auto`, `serviceName`, `serviceVersion` or
    *                     `metrics.samplingRate` is set.
    */
-  constructor(transport: Transport<TProviderId>, config?: OpenTelemetryConfig);
+  constructor(transport: Transport<TProviderId, TMessage>, config?: OpenTelemetryConfig);
   /**
-   * Sends a single email message with OpenTelemetry observability.
+   * Sends a single message, of email or of a channel, with OpenTelemetry
+   * observability.
    *
-   * @param message The email message to send.
+   * @param message The message to send.
    * @param options Optional transport options including abort signal.
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends serialized MIME through the wrapped transport, in a span of its own (`send_raw`) and the metrics of a send.  A wrapped
    * transport without `sendRaw()` gives a failed receipt of the category
@@ -337,14 +343,15 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
    */
   verify(options?: TransportOptions): Promise<void>;
   /**
-   * Sends multiple email messages with OpenTelemetry observability.
+   * Sends multiple messages with OpenTelemetry observability, measured by
+   * the channel they share.
    *
    * @param messages An iterable or async iterable of messages to send.
    * @param options Optional transport options including abort signal.
    * @returns An async iterable that yields receipts for each sent message.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /**
@@ -409,10 +416,13 @@ export declare class OpenTelemetryTransport<TProviderId extends string = string>
  * });
  * ```
  */
-export declare function createOpenTelemetryTransport<TProviderId extends string = string>(
-  baseTransport: Transport<TProviderId>,
+export declare function createOpenTelemetryTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>(
+  baseTransport: Transport<TProviderId, TMessage>,
   config?: OpenTelemetryConfig,
-): OpenTelemetryTransport<TProviderId>;
+): OpenTelemetryTransport<TProviderId, TMessage>;
 /**
  * Creates a custom email attribute extractor function for OpenTelemetry
  * spans and metrics.

@@ -13,6 +13,33 @@ const MAX_RECORDED_ERROR_MESSAGES = 10;
 
 const HTTP_SCHEMES = new Set(['http:', 'https:']);
 
+// A message without a channel is email, as 1.x made them.
+const channelOf = (message) => message.channel ?? 'email';
+
+// The channel the messages of a batch share: `undefined` until one is read,
+// `null` once two differ.
+const sharedChannel = (shared, channel) =>
+  shared === undefined || shared === channel ? channel : null;
+
+// Counts a message of a batch in its totals, and gives its channel: an email
+// has its recipients and attachments, a message of a channel one recipient
+// and its media.
+const addToTotals = (totals, message, size) => {
+  const channel = channelOf(message);
+  totals.count++;
+  if (channel === 'email') {
+    totals.recipients +=
+      message.recipients.length + message.ccRecipients.length + message.bccRecipients.length;
+    totals.attachments += message.attachments.length;
+  } else {
+    totals.recipients++;
+    totals.attachments += message.media?.length ?? 0;
+  }
+  totals.size += size;
+  totals.channel = sharedChannel(totals.channel, channel);
+  return channel;
+};
+
 // Passes the messages of a batch on one at a time, telling `onMessage` of each.
 const observeMessages = async function* (messages, onMessage) {
   for await (const message of messages) {
@@ -125,14 +152,16 @@ class OpenTelemetryTransport {
   }
 
   /**
-   * Sends a single email message with OpenTelemetry observability.
+   * Sends a single message, of email or of a channel, with OpenTelemetry
+   * observability.
    *
-   * @param message The email message to send.
+   * @param message The message to send.
    * @param options Optional transport options including abort signal.
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
   async send(message, options) {
     const startTime = performance.now();
+    const channel = channelOf(message);
     // Estimated once, for the span, the metrics and the custom attributes.
     const messageSize = estimateMessageSize(message);
 
@@ -144,11 +173,11 @@ class OpenTelemetryTransport {
     );
 
     // Record metrics start
-    this.metricsCollector?.recordSendStart(this.transportName);
+    this.metricsCollector?.recordSendStart(this.transportName, channel);
     this.metricsCollector?.recordMessage(message, this.transportName, messageSize);
 
     return this.observe(
-      { startTime, span, messageSize, priority: message.priority },
+      { startTime, span, messageSize, priority: message.priority, channel },
       (sendOptions) => this.wrappedTransport.send(message, sendOptions),
       options,
     );
@@ -173,9 +202,9 @@ class OpenTelemetryTransport {
       this.extractNetworkAttributes(),
       messageSize,
     );
-    this.metricsCollector?.recordSendStart(this.transportName);
+    this.metricsCollector?.recordSendStart(this.transportName, 'email');
     return this.observe(
-      { startTime, span, messageSize, priority: 'normal' },
+      { startTime, span, messageSize, priority: 'normal', channel: 'email' },
       (sendOptions) => this.wrappedTransport.sendRaw(message, sendOptions),
       options,
     );
@@ -194,7 +223,7 @@ class OpenTelemetryTransport {
    * outcome, the error and the end.
    */
   async observe(context, deliver, options) {
-    const { startTime, span, messageSize, priority } = context;
+    const { startTime, span, messageSize, priority, channel } = context;
     try {
       // Apply custom attributes if configured
       if (this.config.attributeExtractor && span) {
@@ -208,14 +237,21 @@ class OpenTelemetryTransport {
       }
 
       // Delegate to wrapped transport
-      const receipt = await deliver(this.withRetryRecording(options, span));
+      const receipt = await deliver(this.withRetryRecording(options, span, channel));
       const duration = (performance.now() - startTime) / 1000; // Convert to seconds
-      this.metricsCollector?.recordMessageOutcome(this.transportName, priority, receipt);
+      this.metricsCollector?.recordMessageOutcome(this.transportName, channel, priority, receipt);
 
       // Record success/failure
       if (receipt.successful) {
         span?.recordSuccess(receipt.messageId);
-        this.metricsCollector?.recordAttempt(this.transportName, 'send', duration, 'success');
+        this.metricsCollector?.recordAttempt(
+          this.transportName,
+          'send',
+          duration,
+          'success',
+          undefined,
+          channel,
+        );
       } else {
         const errorCategory = this.classifyReceipt(receipt);
         span?.recordFailure(receipt.errorMessages);
@@ -226,6 +262,7 @@ class OpenTelemetryTransport {
           duration,
           'failure',
           errorCategory,
+          channel,
         );
       }
 
@@ -241,17 +278,20 @@ class OpenTelemetryTransport {
         duration,
         'failure',
         errorCategory,
+        channel,
       );
 
       throw error;
     } finally {
-      this.metricsCollector?.recordSendEnd(this.transportName);
+      this.metricsCollector?.recordSendEnd(this.transportName, channel);
       span?.end();
     }
   }
 
   /**
-   * Sends multiple email messages with OpenTelemetry observability.
+   * Sends multiple messages with OpenTelemetry observability.  The batch is
+   * measured by the channel its messages share, and goes without one when
+   * they differ (a router).
    *
    * @param messages An iterable or async iterable of messages to send.
    * @param options Optional transport options including abort signal.
@@ -270,18 +310,14 @@ class OpenTelemetryTransport {
 
     // The messages are observed as the wrapped transport reads them rather
     // than collected first, so a batch of any length takes bounded memory.
-    // The priority of each waits in `pending` for the receipt that answers it.
-    const totals = { count: 0, recipients: 0, attachments: 0, size: 0 };
+    // The priority and the channel of each wait in `pending` for the receipt
+    // that answers it.
+    const totals = { count: 0, recipients: 0, attachments: 0, size: 0, channel: undefined };
     const pending = [];
     let head = 0;
     const observed = observeMessages(messages, (message) => {
       const size = estimateMessageSize(message);
-      totals.count++;
-      totals.recipients +=
-        message.recipients.length + message.ccRecipients.length + message.bccRecipients.length;
-      totals.attachments += message.attachments.length;
-      totals.size += size;
-      pending.push(message.priority);
+      pending.push({ priority: message.priority, channel: addToTotals(totals, message, size) });
       metrics?.recordMessage(message, transportName, size);
     });
 
@@ -295,12 +331,12 @@ class OpenTelemetryTransport {
       const sendOptions = this.withRetryRecording(options, span);
       for await (const receipt of this.wrappedTransport.sendMany(observed, sendOptions)) {
         // A receipt answers the oldest message still waiting for one.
-        const priority = head < pending.length ? pending[head++] : 'unknown';
+        const answered = head < pending.length ? pending[head++] : UNANSWERED;
         if (head === pending.length) {
           pending.length = 0;
           head = 0;
         }
-        metrics?.recordMessageOutcome(transportName, priority, receipt);
+        metrics?.recordMessageOutcome(transportName, answered.channel, answered.priority, receipt);
         if (receipt.deliveryUnknown === true) span?.setAttributes(DELIVERY_UNKNOWN);
 
         if (receipt.successful) {
@@ -316,9 +352,10 @@ class OpenTelemetryTransport {
       const duration = (performance.now() - startTime) / 1000;
 
       // Record batch completion
-      metrics?.recordBatch(transportName, duration, successCount, failureCount);
+      metrics?.recordBatch(transportName, duration, successCount, failureCount, totals.channel);
 
       // Update span based on results
+      span?.setBatchChannel(totals.channel);
       if (failureCount === 0) {
         span?.recordSuccess();
       } else if (successCount > 0) {
@@ -333,14 +370,23 @@ class OpenTelemetryTransport {
       const duration = (performance.now() - startTime) / 1000;
       const errorCategory = this.classifyError(error);
 
+      span?.setBatchChannel(totals.channel);
       span?.recordError(error, errorCategory);
-      metrics?.recordAttempt(transportName, 'send_batch', duration, 'failure', errorCategory);
+      metrics?.recordAttempt(
+        transportName,
+        'send_batch',
+        duration,
+        'failure',
+        errorCategory,
+        totals.channel,
+      );
 
       throw error;
     } finally {
       // Also when the caller stops reading the receipts early.
       metrics?.recordSendEnd(transportName);
       if (span) {
+        span.setBatchChannel(totals.channel);
         span.recordBatchTotals(totals);
         // Apply custom attributes if configured
         if (this.config.attributeExtractor) {
@@ -437,9 +483,10 @@ class OpenTelemetryTransport {
 
   /**
    * The options passed on to the wrapped transport: its retries are recorded
-   * on the span and in the metrics, and still reach the caller's `onRetry`.
+   * on the span and in the metrics, with the channel of the message of a
+   * send, and still reach the caller's `onRetry`.
    */
-  withRetryRecording(options, span) {
+  withRetryRecording(options, span, channel) {
     const metrics = this.metricsCollector;
     if (span == null && metrics == null) return options;
     const onRetry = options?.onRetry;
@@ -448,7 +495,7 @@ class OpenTelemetryTransport {
       onRetry: (event) => {
         const errorType = this.classifyError(event.error);
         span?.recordRetry(event.attempt, errorType);
-        metrics?.recordRetry(this.transportName, errorType);
+        metrics?.recordRetry(this.transportName, errorType, channel);
         onRetry?.(event);
       },
     };
@@ -474,6 +521,9 @@ class OpenTelemetryTransport {
     return this.classifyError(syntheticError);
   }
 }
+
+// What a receipt the batch has no message for is recorded with.
+const UNANSWERED = { priority: 'unknown', channel: undefined };
 
 // A failure the provider may have taken: the message is to be reconciled
 // from its events, not sent again.

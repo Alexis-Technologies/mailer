@@ -23,7 +23,8 @@ const plain = (config, receipt = { successful: true, messageId: 'm1' }) => ({
 });
 const outcome = (priority, status) => ({
   'mailer.transport.name': 'unknown',
-  'email.priority': priority,
+  'mailer.channel': 'email',
+  'mailer.priority': priority,
   'mailer.status': status,
 });
 const collect = async (iterable) => {
@@ -252,7 +253,7 @@ test('OTel: a message is counted once, with its priority and its outcome', async
   );
   const messages = meterProvider
     .getAllRecords()
-    .find((metric) => metric.name === 'mailer.email.messages');
+    .find((metric) => metric.name === 'mailer.message.messages');
   assert.deepStrictEqual(messages.records, [
     { value: 1, attributes: outcome('high', 'success') },
     { value: 1, attributes: outcome('normal', 'success') },
@@ -278,7 +279,7 @@ test('OTel: a batch is a success, a partial failure or a failure', async () => {
     await collect(transport.sendMany([createTestMessage(), createTestMessage()]));
     const attempts = meterProvider
       .getAllRecords()
-      .find((metric) => metric.name === 'mailer.email.attempts');
+      .find((metric) => metric.name === 'mailer.message.attempts');
     assert.strictEqual(attempts.records.length, 1);
     assert.strictEqual(attempts.records[0].attributes['mailer.status'], status);
   }
@@ -294,7 +295,7 @@ test('OTel: the duration buckets reach the histogram as advice', () => {
     new OpenTelemetryTransport(plain({}), { tracerProvider, meterProvider, metrics });
     const duration = meterProvider
       .getAllRecords()
-      .find((metric) => metric.name === 'mailer.email.duration');
+      .find((metric) => metric.name === 'mailer.message.duration');
     assert.deepStrictEqual(duration.options.advice, { explicitBucketBoundaries: buckets });
   }
 });
@@ -383,10 +384,11 @@ test('OTel: the retries of the wrapped transport reach the span, the metrics and
   }
   const retries = meterProvider
     .getAllRecords()
-    .find((metric) => metric.name === 'mailer.email.retries');
+    .find((metric) => metric.name === 'mailer.message.retries');
   assert.strictEqual(retries.records.length, 4);
   assert.deepStrictEqual(retries.records[0].attributes, {
     'mailer.transport.name': 'unknown',
+    'mailer.channel': 'email',
     'error.type': 'service-unavailable',
   });
 
@@ -437,13 +439,14 @@ test('OTel: the instruments are named after the semantic conventions', () => {
     instruments.push(`${metric.instrument} ${metric.name} ${metric.options.unit}`);
   }
   assert.deepStrictEqual(instruments.sort(), [
-    'counter billing.email.attempts {attempt}',
-    'counter billing.email.messages {message}',
-    'counter billing.email.retries {retry}',
-    'histogram billing.email.attachments {attachment}',
-    'histogram billing.email.duration s',
-    'histogram billing.email.message.size By',
-    'upDownCounter billing.email.active_sends {send}',
+    'counter billing.message.attempts {attempt}',
+    'counter billing.message.messages {message}',
+    'counter billing.message.retries {retry}',
+    'histogram billing.message.attachments {attachment}',
+    'histogram billing.message.duration s',
+    'histogram billing.message.segments {segment}',
+    'histogram billing.message.size By',
+    'upDownCounter billing.message.active_sends {send}',
   ]);
 });
 
@@ -504,7 +507,7 @@ test('OTel: a failure of unknown delivery is told apart, on the span and the cou
   for (const span of spans) assert.strictEqual(span.attributes['mailer.delivery_unknown'], true);
   const counted = [];
   for (const metric of otel.meterProvider.getAllRecords()) {
-    if (metric.name !== 'mailer.email.messages') continue;
+    if (metric.name !== 'mailer.message.messages') continue;
     for (const record of metric.records) counted.push(record.attributes['mailer.delivery_unknown']);
   }
   assert.deepStrictEqual(counted, [true, true]);
@@ -524,10 +527,166 @@ test('OTel: the message counter takes the category and the code of a failure', a
   await transport.send(createTestMessage());
   const counted = [];
   for (const metric of otel.meterProvider.getAllRecords()) {
-    if (metric.name !== 'mailer.email.messages') continue;
+    if (metric.name !== 'mailer.message.messages') continue;
     for (const record of metric.records) {
       counted.push([record.attributes['error.type'], record.attributes['mailer.error.code']]);
     }
   }
   assert.deepStrictEqual(counted, [['rate-limit', 'http.429']]);
+});
+
+test('OTel: a message of a channel has a span and metrics of its channel, not its recipient', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = createChannelMessage({
+    channel: 'sms',
+    to: '+380671234567',
+    from: 'Alexis',
+    text: 'Код: 1234',
+    tenantId: 'acme',
+    priority: 'high',
+  });
+  const telegram = createChannelMessage({ channel: 'telegram', to: 987654321, text: 'Hi' });
+  for (const recordSensitiveData of [false, true]) {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(
+      plain({}, (message) =>
+        message.channel === 'sms'
+          ? { successful: true, messageId: 'SM1', segments: 1 }
+          : {
+              successful: false,
+              errorMessages: ['Forbidden: bot was blocked by the user 987654321'],
+              errors: [{ message: 'blocked', category: 'blocked' }],
+              retryable: false,
+            },
+      ),
+      { tracerProvider, meterProvider, tracing: { recordSensitiveData } },
+    );
+    // Before: the size of a message read its subject and threw.
+    assert.strictEqual((await transport.send(sms)).successful, true);
+    assert.strictEqual((await transport.send(telegram)).successful, false);
+    const [sent, failed] = tracerProvider.getAllSpans();
+    // The mock span holds its name and kind among its attributes.
+    const { 'span.name': name, 'span.kind': _kind, ...attributes } = sent.attributes;
+    assert.strictEqual(name, 'sms send');
+    assert.deepStrictEqual(attributes, {
+      'operation.name': 'sms.send',
+      'operation.type': 'sms',
+      'mailer.channel': 'sms',
+      'mailer.priority': 'high',
+      'mailer.message.tags': '[]',
+      'mailer.message.text.length': 9,
+      'mailer.message.media.count': 0,
+      'mailer.message.size': 12,
+      'mailer.transport.name': 'unknown',
+      'mailer.retry.count': 0,
+      'mailer.batch.size': 1,
+      'mailer.message.segments': 1,
+      'mailer.message.encoding': 'UCS-2',
+      ...(recordSensitiveData && { 'mailer.message.from': 'Alexis' }),
+      'mailer.tenant.id': 'acme',
+      'mailer.message.id': 'SM1',
+    });
+    assert.deepStrictEqual(
+      sent.events.map((event) => event.name),
+      ['message.sent'],
+    );
+    assert.strictEqual(failed.attributes['span.name'], 'telegram send');
+    assert.deepStrictEqual(
+      failed.events.map((event) => event.name),
+      ['message.send_failed'],
+    );
+    assert.strictEqual(failed.attributes['mailer.error.count'], 1);
+    // The chat id, which no rule of addresses or numbers finds, is redacted.
+    assert.strictEqual(
+      failed.status.message,
+      recordSensitiveData
+        ? 'Forbidden: bot was blocked by the user 987654321'
+        : 'Forbidden: bot was blocked by the user [REDACTED]',
+    );
+    assert.ok(!JSON.stringify(sent.attributes).includes('380671234567'));
+
+    const metric = (instrument) =>
+      meterProvider
+        .getAllRecords()
+        .find((record) => record.name === `mailer.message.${instrument}`);
+    assert.deepStrictEqual(
+      metric('messages').records.map((record) => record.attributes),
+      [
+        {
+          'mailer.transport.name': 'unknown',
+          'mailer.channel': 'sms',
+          'mailer.priority': 'high',
+          'mailer.status': 'success',
+        },
+        {
+          'mailer.transport.name': 'unknown',
+          'mailer.channel': 'telegram',
+          'mailer.priority': 'normal',
+          'mailer.status': 'failure',
+          'error.type': 'blocked',
+        },
+      ],
+    );
+    assert.deepStrictEqual(metric('segments').records, [
+      { value: 1, attributes: { 'mailer.transport.name': 'unknown', 'mailer.channel': 'sms' } },
+    ]);
+    assert.deepStrictEqual(
+      metric('size').records.map((record) => [record.value, record.attributes['mailer.channel']]),
+      [
+        [12, 'sms'],
+        [2, 'telegram'],
+      ],
+    );
+    assert.deepStrictEqual(
+      metric('attempts').records.map((record) => record.attributes['mailer.channel']),
+      ['sms', 'telegram'],
+    );
+    const active = metric('active_sends').records;
+    assert.strictEqual(active.length, 4);
+    assert.strictEqual(active[0].attributes['mailer.channel'], 'sms');
+  }
+});
+
+test('OTel: a batch is named and measured by the channel its messages share', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = (text) => createChannelMessage({ channel: 'sms', to: '+380671234567', text });
+  const telegram = createChannelMessage({ channel: 'telegram', to: 42, text: 'Hi' });
+  const run = async (messages, tracing = {}) => {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(plain({}), {
+      tracerProvider,
+      meterProvider,
+      tracing,
+    });
+    await collect(transport.sendMany(messages));
+    const [span] = tracerProvider.getAllSpans();
+    const attempt = meterProvider
+      .getAllRecords()
+      .find((record) => record.name === 'mailer.message.attempts').records[0];
+    return { span, attempt };
+  };
+  const shared = await run([sms('a'), sms('b')]);
+  assert.strictEqual(shared.span.attributes['span.name'], 'sms send_batch');
+  assert.strictEqual(shared.span.attributes['operation.name'], 'sms.send_batch');
+  assert.strictEqual(shared.span.attributes['mailer.channel'], 'sms');
+  assert.strictEqual(shared.span.attributes['mailer.batch.total_recipients'], 2);
+  assert.deepStrictEqual(
+    shared.span.events.map((event) => event.name),
+    ['message.sent'],
+  );
+  assert.strictEqual(shared.attempt.attributes['mailer.channel'], 'sms');
+
+  const mixed = await run([sms('a'), telegram, createTestMessage()]);
+  assert.strictEqual(mixed.span.attributes['span.name'], 'message send_batch');
+  assert.strictEqual(mixed.span.attributes['operation.name'], 'message.send_batch');
+  assert.strictEqual('mailer.channel' in mixed.span.attributes, false);
+  assert.strictEqual('mailer.channel' in mixed.attempt.attributes, false);
+
+  // A batch of email keeps its name, and a prefix names every span.
+  const email = await run([createTestMessage()]);
+  assert.strictEqual(email.span.attributes['span.name'], 'email send_batch');
+  assert.strictEqual(email.span.attributes['mailer.channel'], 'email');
+  assert.strictEqual(email.attempt.attributes['mailer.channel'], 'email');
+  const prefixed = await run([sms('a')], { spanPrefix: 'notify' });
+  assert.strictEqual(prefixed.span.attributes['span.name'], 'notify send_batch');
 });

@@ -18,18 +18,37 @@ const utf8Length = (text) => {
   return Buffer.byteLength(text, 'utf8');
 };
 
+// The fields of a message of a channel that go as JSON, counted as such.
+const JSON_FIELDS = ['buttons', 'payload', 'template', 'data'];
+
+// What a message of a channel sends: its text and title, the JSON of its
+// buttons, payload, template and data, and a flat guess per medium, which
+// goes by its URL or id rather than its bytes.
+const estimateChannelMessageSize = (message) => {
+  let size = 0;
+  if (message.text !== undefined) size += utf8Length(message.text);
+  if (message.title !== undefined) size += utf8Length(message.title);
+  for (const field of JSON_FIELDS) {
+    if (message[field] !== undefined) size += utf8Length(JSON.stringify(message[field]));
+  }
+  if (message.media !== undefined) size += message.media.length * 100;
+  return size;
+};
+
 /**
  * Estimates the wire size of a message, in bytes.
  *
  * This is an estimate, not a measurement: the header block is a flat guess, and
  * an attachment contributes only its framing rather than its content, which
  * would mean reading every attachment to report a span attribute.  What it does
- * count, it counts in the units it claims.
+ * count, it counts in the units it claims.  A message of a channel counts
+ * what its provider is sent of it.
  *
- * @param message The message to measure.
+ * @param message The message to measure, of email or of a channel.
  * @returns The estimated size in bytes.
  */
 const estimateMessageSize = (message) => {
+  if ((message.channel ?? 'email') !== 'email') return estimateChannelMessageSize(message);
   let size = 0;
 
   // Headers estimate (rough)

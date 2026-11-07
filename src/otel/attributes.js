@@ -1,7 +1,8 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/attributes.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { redactRecipients } = require('../internal/redact-addresses.js');
+const { redactMessageRecipient } = require('../internal/channel/recipient.js');
+const { countSegments } = require('../internal/channel/segments.js');
 const { estimateMessageSize } = require('./message-size.js');
 
 /**
@@ -50,9 +51,13 @@ class EmailAttributeExtractor {
   }
 
   /**
-   * Extracts attributes for a single message send operation.
+   * Extracts attributes for a single message send operation: those of email
+   * for an email, of `extractChannelAttributes` for a message of a channel.
    */
   extractMessageAttributes(message, messageSize = estimateMessageSize(message)) {
+    if ((message.channel ?? 'email') !== 'email') {
+      return this.extractChannelAttributes(message, messageSize);
+    }
     const attributes = {
       // General operation attributes (following OTel patterns)
       'operation.name': 'email.send',
@@ -67,6 +72,7 @@ class EmailAttributeExtractor {
       'email.tags': JSON.stringify(message.tags),
 
       // Upyo-specific attributes (vendor namespace)
+      'mailer.channel': 'email',
       'mailer.transport.name': this.transportName,
       'mailer.retry.count': 0, // Will be updated by transport if retries occur
       'mailer.batch.size': 1,
@@ -76,6 +82,7 @@ class EmailAttributeExtractor {
     if (this.transportVersion) {
       attributes['mailer.transport.version'] = this.transportVersion;
     }
+    if (message.tenantId !== undefined) attributes['mailer.tenant.id'] = message.tenantId;
 
     // Conditionally add sensitive data
     if (this.recordSensitiveData) {
@@ -97,6 +104,40 @@ class EmailAttributeExtractor {
   }
 
   /**
+   * Extracts attributes for the send of a message of a channel: its channel,
+   * the length of its text, its media, the segments and the encoding of an
+   * SMS as `countSegments` of `./channels` counts them, and its tenant; its
+   * sender only when sensitive data is recorded, and its recipient never.
+   */
+  extractChannelAttributes(message, messageSize) {
+    const channel = message.channel;
+    const attributes = {
+      'operation.name': `${channel}.send`,
+      'operation.type': channel,
+      'mailer.channel': channel,
+      'mailer.priority': message.priority,
+      'mailer.message.tags': JSON.stringify(message.tags),
+      'mailer.message.text.length': message.text?.length ?? 0,
+      'mailer.message.media.count': message.media?.length ?? 0,
+      'mailer.message.size': messageSize,
+      'mailer.transport.name': this.transportName,
+      'mailer.retry.count': 0,
+      'mailer.batch.size': 1,
+    };
+    if (this.transportVersion) attributes['mailer.transport.version'] = this.transportVersion;
+    if (channel === 'sms' && message.text !== undefined) {
+      const counted = countSegments(message.text);
+      attributes['mailer.message.segments'] = counted.segments;
+      attributes['mailer.message.encoding'] = counted.encoding;
+    }
+    if (this.recordSensitiveData && message.from !== undefined) {
+      attributes['mailer.message.from'] = message.from;
+    }
+    if (message.tenantId !== undefined) attributes['mailer.tenant.id'] = message.tenantId;
+    return attributes;
+  }
+
+  /**
    * Extracts attributes for the send of serialized MIME: its envelope and
    * size, with the sender's address under the same rule as a message's.
    */
@@ -105,6 +146,7 @@ class EmailAttributeExtractor {
     const attributes = {
       'operation.name': 'email.send_raw',
       'operation.type': 'email',
+      'mailer.channel': 'email',
       'email.to.count': message?.envelope?.to?.length ?? 0,
       'mailer.transport.name': this.transportName,
       'mailer.retry.count': 0,
@@ -121,9 +163,26 @@ class EmailAttributeExtractor {
 
   /**
    * Extracts attributes for batch send operations, from the totals of the
-   * messages the batch read.
+   * messages the batch read: those of email for a batch of email (or of none),
+   * and for a batch of a channel or of several (`totals.channel` `null`),
+   * those of a batch of messages.
    */
   extractBatchAttributes(totals) {
+    const channel = totals.channel;
+    if (channel !== undefined && channel !== 'email') {
+      const attributes = {
+        'operation.name': `${channel ?? 'message'}.send_batch`,
+        'operation.type': channel ?? 'message',
+        'mailer.batch.size': totals.count,
+        'mailer.batch.total_recipients': totals.recipients,
+        'mailer.batch.total_media': totals.attachments,
+        'mailer.batch.total_size': totals.size,
+        'mailer.transport.name': this.transportName,
+      };
+      if (channel !== null) attributes['mailer.channel'] = channel;
+      if (this.transportVersion) attributes['mailer.transport.version'] = this.transportVersion;
+      return attributes;
+    }
     const attributes = {
       // General operation attributes
       'operation.name': 'email.send_batch',
@@ -136,6 +195,7 @@ class EmailAttributeExtractor {
       'email.batch.total_size': totals.size,
 
       // Upyo-specific attributes
+      'mailer.channel': 'email',
       'mailer.transport.name': this.transportName,
       'mailer.batch.size': totals.count,
     };
@@ -173,7 +233,7 @@ class EmailAttributeExtractor {
   /**
    * Extracts error-related attributes.
    */
-  extractErrorAttributes(error, errorCategory) {
+  extractErrorAttributes(error, errorCategory, message) {
     const attributes = {
       'error.type': errorCategory,
     };
@@ -184,7 +244,7 @@ class EmailAttributeExtractor {
       // Only record error message if not sensitive data mode or if it's a safe error,
       // and then without the addresses a safe-looking message may still name.
       if (this.recordSensitiveData || this.isSafeErrorMessage(error.message)) {
-        attributes['error.message'] = this.describeError(error.message);
+        attributes['error.message'] = this.describeError(error.message, message);
       }
     }
 
@@ -193,11 +253,12 @@ class EmailAttributeExtractor {
 
   /**
    * Prepares error text for a span status or event: as it is when sensitive
-   * data is recorded, otherwise without the addresses it names, such as the
-   * recipient of an SMTP rejection.
+   * data is recorded, otherwise without the addresses and phone numbers it
+   * names, such as the recipient of an SMTP rejection, nor the recipient of
+   * the message of a channel it is about, as the message names it.
    */
-  describeError(text) {
-    return this.recordSensitiveData ? text : redactRecipients(text);
+  describeError(text, message) {
+    return this.recordSensitiveData ? text : redactMessageRecipient(text, message);
   }
 
   detectContentType(message) {
