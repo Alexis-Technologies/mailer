@@ -11,6 +11,7 @@ const { createMessage } = require('../core/message.js');
 const { generateSenderMessageId } = require('../core/message-id.js');
 const { parseAddress } = require('../core/address.js');
 const { toBase64 } = require('../internal/base64.js');
+const { MAX_KEY_LENGTH, checkKey } = require('../internal/message-checks.js');
 const { deriveJobId } = require('./derive.js');
 const { hashJson } = require('./hash.js');
 const { toJson } = require('./json.js');
@@ -62,7 +63,6 @@ const V1_KEYS = new Set([
   'kid',
   'trace',
 ]);
-const MAX_KEY_LENGTH = 256;
 const MIN_ID_SECRET_BYTES = 32;
 const DEFAULTS = Object.freeze({
   namespace: 'mail',
@@ -72,22 +72,6 @@ const DEFAULTS = Object.freeze({
 });
 
 const isText = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max;
-
-const hasControl = (text) => {
-  for (let index = 0; index < text.length; index++) {
-    const code = text.charCodeAt(index);
-    if (code < 0x20 || code === 0x7f) return true;
-  }
-  return false;
-};
-
-const checkKey = (value, name) => {
-  if (value === undefined) return undefined;
-  if (!isText(value, MAX_KEY_LENGTH) || hasControl(value)) {
-    throw new TypeError(`${name} must be a string of 1 to ${MAX_KEY_LENGTH} characters.`);
-  }
-  return value;
-};
 
 const checkDateField = (value, name) => {
   if (value === undefined) return undefined;

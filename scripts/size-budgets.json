@@ -1,5 +1,5 @@
 {
-  ".": 10,
+  ".": 10.5,
   "./mime": 7.5,
   "./attachments": 4.5,
   "./render": 3,
@@ -12,7 +12,7 @@
   "./resend": 8,
   "./sendgrid": 8,
   "./mailgun": 8,
-  "./mailtrap": 7.5,
+  "./mailtrap": 8,
   "./maileroo": 7.5,
   "./lettermint": 7.5,
   "./plunk": 7,

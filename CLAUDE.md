@@ -897,8 +897,9 @@ src/
                     layer (http.js, api-client.js for every HTTP provider but JMAP,
                     api.js for the conversions of the providers of 1.1, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
-                    receipts (provider.js, refusal.js), message fields (headers.js, raw.js,
-                    schedule.js, tracking.js, capabilities.js, batch.js, base64.js, uuid.js),
+                    receipts (provider.js, refusal.js), message fields (message-checks.js,
+                    which every channel shares, headers.js, raw.js, schedule.js, tracking.js,
+                    capabilities.js, batch.js, base64.js, uuid.js),
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),
                     the base of the transports of 1.1 (provider-transport.js), what the
                     decorators and the queue share (backoff.js, thrown.js, fingerprint.js,
