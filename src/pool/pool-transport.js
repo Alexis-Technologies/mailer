@@ -220,7 +220,7 @@ class PoolTransport {
     const attemptedIndices = new Set();
     // Failover stops when another transport could only deliver the message a
     // second time (delivery unknown) or would refuse it too (the message
-    // itself was rejected).  A message one transport cannot send as it is
+    // itself, or its recipient, was rejected).  A message one transport cannot send as it is
     // (`unsupported`) goes on to the next, which may.
     const failure = {
       errorMessages: [],
@@ -551,13 +551,29 @@ const isFailedReceipt = (value) => {
   );
 };
 
-// A rejection of the message itself, as opposed to one of the transport
-// (authentication, rate limit, outage) or of what it can express
-// (`unsupported`), which another transport may not share.
+// The failures another transport of the channel would meet too: the message
+// itself refused (`validation`, `rejected`), or its recipient, who is no
+// recipient of the channel, opted out, blocked the bot, is outside the 24
+// hours of Meta, is gone from push, or is not on the channel at all (a reason
+// for ./fallback to another channel, not for another provider of this one).
+// A failure of the transport (authentication, rate limit, outage), of what it
+// can express (`unsupported`), or a handset `unreachable`, which another
+// route may reach, fails over.
+const STOP_FAILOVER = new Set([
+  'validation',
+  'rejected',
+  'invalid-recipient',
+  'opted-out',
+  'outside-window',
+  'blocked',
+  'unregistered',
+  'not-on-channel',
+]);
+
 const hasMessageRejection = (errors) => {
   if (errors == null) return false;
   for (const error of errors) {
-    if (error.category === 'validation' || error.category === 'rejected') return true;
+    if (STOP_FAILOVER.has(error.category)) return true;
   }
   return false;
 };

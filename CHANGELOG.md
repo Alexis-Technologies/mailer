@@ -95,6 +95,13 @@ worker of 1.2 holds reads the same.
   `getMessagesByChannel` gives the messages of a channel; `getMessagesBySubject` looks at email
   alone, where a message of a channel matched `undefined`. `MockTransport<TMessage>` takes email
   by default.
+- **`./pool` stops its failover at a recipient no provider of the channel would reach:**
+  `invalid-recipient`, `opted-out`, `outside-window`, `blocked`, `unregistered` and
+  `not-on-channel`, as at `validation` and `rejected`, where an opted-out number went through
+  every provider of the pool; `unreachable` fails over, as another route may reach the handset.
+  `PoolTransport<P, TMessage>`, its entries, selectors and strategies take the messages of one
+  channel, and a pool of transports of several channels is a type error (a `./router` sends
+  them). The categories are in the guide of a custom transport.
 - **`./hooks` takes the messages of the channels:** a copy `beforeSend` returns of one is
   checked again as `createChannelMessage` checks it, where every such copy was refused as
   `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and

@@ -4,11 +4,11 @@
 /// <reference lib="esnext.disposable" />
 
 import {
+  AnyMessage,
   IdOptions,
   Logger,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -18,11 +18,14 @@ import {
 /**
  * Result of transport selection by a strategy.
  */
-export interface TransportSelection<TProviderId extends string = string> {
+export interface TransportSelection<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
   /**
    * The selected transport entry.
    */
-  readonly entry: ResolvedTransportEntry<TProviderId>;
+  readonly entry: ResolvedTransportEntry<TProviderId, TMessage>;
   /**
    * Index of the selected transport in the original list.
    */
@@ -31,7 +34,10 @@ export interface TransportSelection<TProviderId extends string = string> {
 /**
  * Base interface for transport selection strategies.
  */
-export interface Strategy<TProviderId extends string = string> {
+export interface Strategy<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
   /**
    * Selects a transport for sending a message.
    *
@@ -43,10 +49,10 @@ export interface Strategy<TProviderId extends string = string> {
    *          available.
    */
   select(
-    message: Message,
-    transports: readonly ResolvedTransportEntry<TProviderId>[],
+    message: TMessage,
+    transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[],
     attemptedIndices: ReadonlySet<number>,
-  ): TransportSelection<TProviderId> | undefined;
+  ): TransportSelection<TProviderId, TMessage> | undefined;
   /**
    * Resets any internal state of the strategy.
    */
@@ -60,15 +66,20 @@ export type PoolStrategy = 'round-robin' | 'weighted' | 'priority' | 'selector-b
 /**
  * Function that determines if a transport should handle a specific message.
  */
-export type TransportSelector = (message: Message) => boolean;
+export type TransportSelector<TMessage extends AnyMessage = Message> = (
+  message: TMessage,
+) => boolean;
 /**
  * Configuration for a transport entry in the pool.
  */
-export interface TransportEntry<TProviderId extends string = string> {
+export interface TransportEntry<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
   /**
    * The transport instance to use.
    */
-  readonly transport: Transport<TProviderId>;
+  readonly transport: Transport<TProviderId, TMessage>;
   /**
    * Weight for weighted distribution strategy.
    * Higher values mean more traffic. Defaults to 1.
@@ -84,7 +95,7 @@ export interface TransportEntry<TProviderId extends string = string> {
    * If provided, this transport will only be used for messages
    * where the selector returns true.
    */
-  readonly selector?: TransportSelector;
+  readonly selector?: TransportSelector<TMessage>;
   /**
    * Whether this transport is enabled.
    * Disabled transports are skipped. Defaults to true.
@@ -92,18 +103,23 @@ export interface TransportEntry<TProviderId extends string = string> {
   readonly enabled?: boolean;
 }
 /**
- * Configuration options for the pool transport.
+ * Configuration options for the pool transport: its transports are those of
+ * one channel, `TMessage` (email by default); the transports of several
+ * channels go in a `./router`, each channel's own pool behind it.
  */
-export interface PoolConfig<TProviderId extends string = string> extends IdOptions {
+export interface PoolConfig<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> extends IdOptions {
   /**
    * The strategy to use for selecting transports.
    * Can be a built-in strategy name or a custom Strategy instance.
    */
-  readonly strategy: PoolStrategy | Strategy<TProviderId>;
+  readonly strategy: PoolStrategy | Strategy<TProviderId, TMessage>;
   /**
    * The transports in the pool.
    */
-  readonly transports: readonly TransportEntry<TProviderId>[];
+  readonly transports: readonly TransportEntry<TProviderId, TMessage>[];
   /**
    * Maximum number of retry attempts after the initial send attempt fails.
    * Set to 0 to disable retries. Defaults to enough retries to try every
@@ -130,9 +146,12 @@ export interface PoolConfig<TProviderId extends string = string> extends IdOptio
 /**
  * Resolved pool configuration with defaults applied.
  */
-export interface ResolvedPoolConfig<TProviderId extends string = string> {
-  readonly strategy: PoolStrategy | Strategy<TProviderId>;
-  readonly transports: readonly ResolvedTransportEntry<TProviderId>[];
+export interface ResolvedPoolConfig<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
+  readonly strategy: PoolStrategy | Strategy<TProviderId, TMessage>;
+  readonly transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[];
   readonly maxRetries: number;
   readonly timeout?: number;
   readonly random?: () => number;
@@ -141,11 +160,14 @@ export interface ResolvedPoolConfig<TProviderId extends string = string> {
 /**
  * Resolved transport entry with defaults applied.
  */
-export interface ResolvedTransportEntry<TProviderId extends string = string> {
-  readonly transport: Transport<TProviderId>;
+export interface ResolvedTransportEntry<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+> {
+  readonly transport: Transport<TProviderId, TMessage>;
   readonly weight: number;
   readonly priority: number;
-  readonly selector?: TransportSelector;
+  readonly selector?: TransportSelector<TMessage>;
   readonly enabled: boolean;
 }
 /**
@@ -180,8 +202,12 @@ export interface PoolVerification {
  *
  * It fails over after a failure of a transport (an outage, a rate limit) or of
  * what it can express (`unsupported`: `scheduledAt` on SMTP, a limit of the
- * provider), and stops at a refused message (`validation`, `rejected`) or an
- * unknown delivery.  A bug of a transport (a `TypeError` that is no failure of
+ * provider), and over a handset `unreachable`, which another route may reach;
+ * it stops at a refused message (`validation`, `rejected`), at a recipient
+ * another transport of the channel would fail too (`invalid-recipient`,
+ * `opted-out`, `outside-window`, `blocked`, `unregistered`, `not-on-channel`,
+ * the last a reason for `./fallback` to another channel) and at an unknown
+ * delivery.  Its transports are those of one channel.  A bug of a transport (a `TypeError` that is no failure of
  * delivery, as `./retry` tells it) rejects the send rather than failing over.
  *
  * @example Round-robin load balancing
@@ -228,24 +254,24 @@ export interface PoolVerification {
  * });
  * ```
  */
-export declare class PoolTransport<TProviderId extends string = string>
-  implements
-    RawTransport<TProviderId | 'pool'>,
-    VerifiableTransport<TProviderId | 'pool'>,
-    AsyncDisposable
+export declare class PoolTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId | 'pool', TMessage>, AsyncDisposable
 {
   readonly id = 'pool';
   /**
    * The resolved configuration used by this pool transport.
    */
-  readonly config: ResolvedPoolConfig<TProviderId>;
+  readonly config: ResolvedPoolConfig<TProviderId, TMessage>;
   /**
    * Creates a new PoolTransport instance.
    *
    * @param config Configuration options for the pool transport.
    * @throws {Error} If the configuration is invalid.
    */
-  constructor(config: PoolConfig<TProviderId>);
+  constructor(config: PoolConfig<TProviderId, TMessage>);
   /**
    * Sends a single email message using the pool strategy.
    *
@@ -253,11 +279,11 @@ export declare class PoolTransport<TProviderId extends string = string>
    * selected transport fails, the pool will retry with other transports
    * up to the configured retry limit.
    *
-   * @param message The email message to send.
+   * @param message The message to send.
    * @param options Optional transport options including abort signal.
    * @returns A promise that resolves to a receipt indicating success or failure.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId | 'pool'>>;
   /**
    * Sends serialized MIME through the transports that send raw messages,
    * with the strategy and the failover of `send()`; a selector is not asked,
@@ -289,7 +315,7 @@ export declare class PoolTransport<TProviderId extends string = string>
    * @returns An async iterable of receipts, one for each message.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId | 'pool'>>;
   /**
@@ -312,7 +338,8 @@ export declare class PoolTransport<TProviderId extends string = string>
  */
 export declare class RoundRobinStrategy<
   TProviderId extends string = string,
-> implements Strategy<TProviderId> {
+  TMessage extends AnyMessage = Message,
+> implements Strategy<TProviderId, TMessage> {
   /**
    * Selects the next transport in round-robin order.
    *
@@ -324,10 +351,10 @@ export declare class RoundRobinStrategy<
    *          attempted.
    */
   select(
-    _message: Message,
-    transports: readonly ResolvedTransportEntry<TProviderId>[],
+    _message: TMessage,
+    transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[],
     attemptedIndices: ReadonlySet<number>,
-  ): TransportSelection<TProviderId> | undefined;
+  ): TransportSelection<TProviderId, TMessage> | undefined;
   /**
    * Resets the round-robin counter to start from the beginning.
    */
@@ -344,7 +371,8 @@ export declare class RoundRobinStrategy<
  */
 export declare class WeightedStrategy<
   TProviderId extends string = string,
-> implements Strategy<TProviderId> {
+  TMessage extends AnyMessage = Message,
+> implements Strategy<TProviderId, TMessage> {
   /**
    * @param options `random`, the source of the random choices.
    */
@@ -360,10 +388,10 @@ export declare class WeightedStrategy<
    *          attempted.
    */
   select(
-    _message: Message,
-    transports: readonly ResolvedTransportEntry<TProviderId>[],
+    _message: TMessage,
+    transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[],
     attemptedIndices: ReadonlySet<number>,
-  ): TransportSelection<TProviderId> | undefined;
+  ): TransportSelection<TProviderId, TMessage> | undefined;
   /**
    * Resets the strategy (no-op for weighted strategy as it's stateless).
    */
@@ -380,7 +408,8 @@ export declare class WeightedStrategy<
  */
 export declare class PriorityStrategy<
   TProviderId extends string = string,
-> implements Strategy<TProviderId> {
+  TMessage extends AnyMessage = Message,
+> implements Strategy<TProviderId, TMessage> {
   /**
    * @param options `random`, the source of the random choices.
    */
@@ -396,10 +425,10 @@ export declare class PriorityStrategy<
    *          attempted.
    */
   select(
-    _message: Message,
-    transports: readonly ResolvedTransportEntry<TProviderId>[],
+    _message: TMessage,
+    transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[],
     attemptedIndices: ReadonlySet<number>,
-  ): TransportSelection<TProviderId> | undefined;
+  ): TransportSelection<TProviderId, TMessage> | undefined;
   /**
    * Resets the strategy (no-op for priority strategy as it's stateless).
    */
@@ -416,7 +445,8 @@ export declare class PriorityStrategy<
  */
 export declare class SelectorStrategy<
   TProviderId extends string = string,
-> implements Strategy<TProviderId> {
+  TMessage extends AnyMessage = Message,
+> implements Strategy<TProviderId, TMessage> {
   /**
    * @param options `random`, the source of the random choices, and
    *                `onSelectorError`, told of a selector that throws (its
@@ -436,10 +466,10 @@ export declare class SelectorStrategy<
    * @returns The selected transport or `undefined` if no transport matches.
    */
   select(
-    message: Message,
-    transports: readonly ResolvedTransportEntry<TProviderId>[],
+    message: TMessage,
+    transports: readonly ResolvedTransportEntry<TProviderId, TMessage>[],
     attemptedIndices: ReadonlySet<number>,
-  ): TransportSelection<TProviderId> | undefined;
+  ): TransportSelection<TProviderId, TMessage> | undefined;
   /**
    * Resets the strategy (no-op for selector strategy as it's stateless).
    */

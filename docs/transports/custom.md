@@ -367,6 +367,19 @@ with `retryable`, rather than leaving both to the words of the message:
 | `rate-limit`, `network`, `timeout`, `server-error`, `service-unavailable` | The provider cannot take it now; usually retryable. | fails over |
 | `unknown` | Anything else. | fails over |
 
+A transport of a channel has seven more, which it gives from the codes of its
+provider, never from the words of an error. None is retried but `unreachable`:
+
+| Category | Meaning | `./pool` |
+| --- | --- | --- |
+| `invalid-recipient` | No recipient of the channel: a number that is not one, a chat that does not exist. | stops |
+| `opted-out` | The recipient sent STOP, or unsubscribed. | stops |
+| `outside-window` | The 24 hours of Meta since the recipient's last message are over: only a template goes. | stops |
+| `blocked` | The recipient blocked the bot, or left the chat. | stops |
+| `unregistered` | A push token or a Web Push subscription is gone: drop it. | stops |
+| `not-on-channel` | The recipient is not on the channel at all (no Viber, no RCS): a reason for `./fallback` to another channel, not for another provider of this one. | stops |
+| `unreachable` | The handset is off or out of coverage, for now; retried later. Another route may reach it. | fails over |
+
 ```js
 if (message.scheduledAt != null) {
   return createFailedReceipt('My service cannot schedule a message.', {

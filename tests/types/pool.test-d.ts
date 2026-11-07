@@ -1,5 +1,12 @@
 import { expectAssignable, expectError, expectType } from 'tsd';
-import { createMessage, type Receipt } from '../../index.js';
+import {
+  createMessage,
+  type RawTransport,
+  type Receipt,
+  type SmsMessage,
+  type Transport,
+  type VerifiableTransport,
+} from '../../index.js';
 import { MockTransport } from '../../src/mock/index.js';
 import {
   PoolTransport,
@@ -56,3 +63,29 @@ expectError(
 const verified = await pool.verifyAll();
 expectType<PoolVerification[]>(verified);
 expectType<'verified' | 'failed' | 'unverifiable'>(verified[0].status);
+
+// A pool of the transports of a channel takes its messages.
+declare const twilio: Transport<'twilio', SmsMessage>;
+declare const vonage: Transport<'vonage', SmsMessage>;
+const sms = new PoolTransport({
+  strategy: 'priority',
+  transports: [
+    { transport: twilio, priority: 2, selector: (message) => message.to.startsWith('+380') },
+    { transport: vonage },
+  ],
+});
+expectAssignable<VerifiableTransport<'twilio' | 'vonage' | 'pool', SmsMessage>>(sms);
+declare const smsMessage: SmsMessage;
+expectType<Promise<Receipt<'twilio' | 'vonage' | 'pool'>>>(sms.send(smsMessage));
+expectAssignable<Strategy<'twilio', SmsMessage>>(new RoundRobinStrategy<'twilio', SmsMessage>());
+declare const ses: Transport<'ses'>;
+expectAssignable<RawTransport<'ses' | 'pool'>>(
+  new PoolTransport({ strategy: 'priority', transports: [{ transport: ses }] }),
+);
+// The transports of several channels go in a router, not a pool.
+expectError(
+  new PoolTransport({
+    strategy: 'priority',
+    transports: [{ transport: ses }, { transport: twilio }],
+  }),
+);

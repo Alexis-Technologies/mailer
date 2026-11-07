@@ -254,6 +254,11 @@ Failover stops in two cases where another transport could not help:
 - **The message itself was refused**, an error of category `validation` or
   `rejected`: another provider would refuse it too.  The receipt is not
   retryable.
+- **Its recipient cannot be reached on the channel** by any provider of it: a
+  pool of SMS or chat providers stops at `invalid-recipient`, `opted-out`,
+  `outside-window`, `blocked`, `unregistered` and `not-on-channel`, also not
+  retryable. `not-on-channel` is what `./fallback` moves to another channel on.
+  An `unreachable` handset fails over, as another route may reach it.
 - **The delivery is unknown** (`receipt.deliveryUnknown`): the transport timed
   out, or lost its connection, after the message went out, so it may have
   been accepted.  The pool's own `timeout` counts as such.  Another provider
@@ -269,7 +274,13 @@ over.
 
 Every attempt of one `send()` carries the same `Message-ID`: a message without
 one gets a generated one before the first attempt, so a recipient's server can
-tell a duplicate apart.
+tell a duplicate apart. A message of a channel carries one `idempotencyKey`
+likewise, which its providers send as their client reference.
+
+The transports of a pool are those of one channel: in TypeScript,
+`PoolTransport<P, SmsMessage>` takes SMS providers, and a pool of an email
+transport and an SMS one is a type error. The transports of several channels go
+in a `./router`, each channel's pool behind it.
 
 ### Determinism and identifiers
 

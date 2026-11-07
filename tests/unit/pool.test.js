@@ -349,3 +349,36 @@ test('Pool: a bug of a transport rejects the send rather than failing over', asy
   assert.strictEqual((await failover.send(message())).successful, true);
   assert.strictEqual(later.length, 1);
 });
+
+test('Pool: failover stops at a recipient of a channel no route would reach, not at an unreachable handset', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Code 1234' });
+  // Before: only validation and rejected stopped it, so an opted-out number
+  // was sent through every provider of the pool.
+  for (const [category, isFailedOver] of [
+    ['invalid-recipient', false],
+    ['opted-out', false],
+    ['outside-window', false],
+    ['blocked', false],
+    ['unregistered', false],
+    ['not-on-channel', false],
+    ['unreachable', true],
+    ['unsupported', true],
+  ]) {
+    const second = [];
+    const pool = new PoolTransport({
+      strategy: 'priority',
+      transports: [
+        { transport: failing(rejected(category)), priority: 2 },
+        { transport: failing({ successful: true, messageId: 'SM2' }, second), priority: 1 },
+      ],
+    });
+    const receipt = await pool.send(sms);
+    assert.strictEqual(second.length === 1, isFailedOver, category);
+    assert.strictEqual(receipt.successful, isFailedOver, category);
+    if (!isFailedOver) {
+      assert.strictEqual(receipt.retryable, false);
+      assert.strictEqual(receipt.errors[0].category, category);
+    }
+  }
+});
