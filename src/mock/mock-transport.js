@@ -3,6 +3,7 @@
 
 const { sleep } = require('../internal/sleep.js');
 const { createFailedReceipt } = require('../core/receipt.js');
+const { recipientOf } = require('../internal/channel/recipient.js');
 const { createMockConfig } = require('./config.js');
 
 const hasAddress = (addresses, email) => {
@@ -15,13 +16,6 @@ const hasAddress = (addresses, email) => {
 
 // A message without a channel is email, as 1.x made them.
 const channelOf = (message) => message.channel ?? 'email';
-
-// The recipient of a message of a channel as a string: its number or id, or
-// the token, topic, endpoint or conversation its object names.
-const recipientOf = (to) => {
-  if (typeof to !== 'object' || to === null) return to === undefined ? undefined : String(to);
-  return to.token ?? to.topic ?? to.endpoint ?? to.conversationId;
-};
 
 /**
  * A mock transport implementation for testing purposes.
