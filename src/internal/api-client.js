@@ -90,6 +90,26 @@ const defaultFinalError = (provider) => (error, attempts) =>
         cause: error,
       });
 
+/**
+ * The body of a request as it goes, and the Content-Type it needs unless the
+ * caller gives one: FormData as it is (fetch writes its boundary); a form of
+ * URLSearchParams as its text, `application/x-www-form-urlencoded` (Twilio,
+ * Vonage, the Query API of AWS, an exchange of OAuth), so that a signature
+ * reads what is sent; a string as it is, of the caller's type (the JSON of
+ * `application/x-amz-json-1.0`); bytes as they are (a record of Web Push);
+ * anything else as JSON.
+ *
+ * @internal
+ */
+const bodyOf = (body) => {
+  if (body === undefined || body instanceof FormData || typeof body === 'string') return { body };
+  if (body instanceof URLSearchParams) {
+    return { body: body.toString(), type: 'application/x-www-form-urlencoded' };
+  }
+  if (body instanceof Uint8Array) return { body, type: 'application/octet-stream' };
+  return { body: JSON.stringify(body), type: 'application/json' };
+};
+
 const retryableOf = (error) =>
   typeof error.retryable === 'boolean' ? error.retryable : isRetryableFailure(error);
 
@@ -111,13 +131,16 @@ const readErrorText = async (response) => {
  * @param provider `id`, the provider's id; `label`, its name in messages;
  * `authorize(headers, request)`, which adds its credentials; optional
  * `messageOf(json, text)`, the message of an error answer, and
- * `classify(status, json)`, `{ category, retryable, code }` of one.  A
- * provider with errors of its own replaces any of: `read(response, text,
- * attempt)`, the result of a 2xx; `reject(response, text, attempt)`, the
- * error of another answer, `text` undefined when it could not be read;
- * `timeoutError()`; `finalError(error, attempts)`; `acceptedError(error,
- * attempts)`, a failure after a 2xx; and `isAnswer(error)`, a refusal in a
- * 2xx (see `requestWithRetry`).
+ * `classify(status, json, headers)`, `{ category, retryable, code,
+ * retryAfterMilliseconds }` of one, the wait of a body in place of
+ * `Retry-After`.  A provider with errors of its own replaces any of:
+ * `read(response, text, attempt)`, the result of a 2xx, which a request may
+ * replace too; `reject(response, text, attempt)`, the error of another
+ * answer, `text` undefined when it could not be read; `timeoutError()`;
+ * `finalError(error, attempts)`; `acceptedError(error, attempts)`, a failure
+ * after a 2xx; `isAnswer(error)`, a refusal in a 2xx; `accepts(status)`, an
+ * answer read as a 2xx is, which a request may replace; `retryDelayMs(attempt,
+ * error)`; and `sleep(milliseconds, signal)` (see `requestWithRetry`).
  * @returns `{ log, fetchWithAuth, request }`.
  * @internal
  */
@@ -142,10 +165,13 @@ const createApiClient = (config, provider) => {
     const message =
       (provider.messageOf ?? defaultMessageOf)(json, text) ??
       (text.trim() === '' ? `HTTP ${response.status}` : shorten(text.trim()));
-    const classified = provider.classify?.(response.status, json) ?? {};
+    const classified = provider.classify?.(response.status, json, response.headers) ?? {};
     return new ProviderApiError(provider.id, `${provider.label}: ${message}`, {
       statusCode: response.status,
-      retryAfterMilliseconds: parseRetryAfter(response.headers.get('Retry-After')),
+      // Some APIs tell the wait in their body (Telegram, Discord) rather than
+      // in Retry-After.
+      retryAfterMilliseconds:
+        classified.retryAfterMilliseconds ?? parseRetryAfter(response.headers.get('Retry-After')),
       attempts: attempt + 1,
       category: classified.category,
       retryable: classified.retryable,
@@ -161,20 +187,19 @@ const createApiClient = (config, provider) => {
 
   /**
    * Sends one request and reads its answer: `{ status, headers, json }` of a
-   * 2xx, an empty body as `null`, or what the provider's `read` makes of it.
-   * A 2xx whose body is not JSON fails as of unknown delivery, as the
-   * provider may have taken the request.  A body of FormData goes as it is,
-   * any other as JSON, serialized once for every attempt.
+   * 2xx, an empty body as `null`, or what the `read` of the request or of the
+   * provider makes of it.  A 2xx whose body is not JSON fails as of unknown
+   * delivery, as the provider may have taken the request, unless a `read`
+   * takes it (a webhook of Slack answers `ok`).  The body goes as `bodyOf`
+   * makes it, once for every attempt; the `Content-Type` and `Accept` of the
+   * caller, in any case, are kept.
    */
   const request = (options) => {
-    const isForm = options.body instanceof FormData;
-    const headers = { Accept: 'application/json', ...options.headers };
-    let body;
-    if (isForm) body = options.body;
-    else if (options.body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-      body = JSON.stringify(options.body);
-    }
+    const headers = new Headers(options.headers);
+    if (!headers.has('accept')) headers.set('Accept', 'application/json');
+    const { body, type } = bodyOf(options.body);
+    if (type !== undefined && !headers.has('content-type')) headers.set('Content-Type', type);
+    const readAnswer = options.read ?? read;
     return requestWithRetry({
       log,
       signal: options.signal,
@@ -185,7 +210,7 @@ const createApiClient = (config, provider) => {
       isIdempotent: options.isIdempotent === true,
       send: (signal) =>
         fetchWithAuth(options.url, { method: options.method ?? 'POST', headers, body }, signal),
-      read: async (response, attempt) => read(response, await readText(response), attempt),
+      read: async (response, attempt) => readAnswer(response, await readText(response), attempt),
       reject: async (response, attempt) => reject(response, await readErrorText(response), attempt),
       // What the provider says of an error is retried as it says, a 420 of
       // SparkPost's spent limit among them; the status says the rest.
@@ -194,6 +219,9 @@ const createApiClient = (config, provider) => {
       finalError,
       wrapAccepted: provider.acceptedError,
       isAnswer: provider.isAnswer,
+      accepts: options.accepts ?? provider.accepts,
+      retryDelayMs: provider.retryDelayMs,
+      sleep: provider.sleep,
     });
   };
 

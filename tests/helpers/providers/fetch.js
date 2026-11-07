@@ -1,16 +1,29 @@
-// Not ported: a stubbed fetch for the tests of the HTTP providers of 1.1,
-// keeping each request with its headers and its body.
+// Not ported: a stubbed fetch for the tests of the HTTP providers, keeping
+// each request with its headers and its body, read as JSON or as a form by
+// its Content-Type.
+
+const parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
 
 const stubFetch = (t, respond) => {
   const requests = [];
   t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
+    const headers = new Headers(init.headers);
+    const isText = typeof init.body === 'string';
+    const isForm = headers.get('content-type') === 'application/x-www-form-urlencoded';
     const request = {
       url: String(input),
       method: init.method ?? 'GET',
-      headers: new Headers(init.headers),
+      headers,
       redirect: init.redirect,
       body: init.body,
-      json: typeof init.body === 'string' ? JSON.parse(init.body) : undefined,
+      json: isText && !isForm ? parseJson(init.body) : undefined,
+      form: isText && isForm ? new URLSearchParams(init.body) : undefined,
     };
     requests.push(request);
     return respond(request, requests.length - 1);

@@ -216,3 +216,94 @@ test('API: the errors of 1.0 keep their names, arguments and fields over the sha
   );
   assert.strictEqual(providerFailure('mailtrap', read).errors[0].category, 'timeout');
 });
+
+test('API: a form, a string and bytes go as they are, with the type the caller gave', async (t) => {
+  const requests = stubFetch(t, () => json({ id: '1' }));
+  const signed = [];
+  const demo = client({}, { authorize: (headers, request) => signed.push(request.body) });
+  const form = new URLSearchParams({ To: '+380671234567', Body: 'Code 1234' });
+  await demo.request({ url: 'https://api.example.com/sms', body: form });
+  await demo.request({
+    url: 'https://sms-voice.us-east-1.amazonaws.com/',
+    body: '{"DestinationPhoneNumber":"+380671234567"}',
+    headers: { 'content-type': 'application/x-amz-json-1.0', accept: 'application/json' },
+  });
+  await demo.request({ url: 'https://push.example.com/1', body: new Uint8Array([1, 2]) });
+  await demo.request({
+    url: 'https://push.example.com/2',
+    body: new Uint8Array([3]),
+    headers: { 'Content-Type': 'application/webpush' },
+  });
+  // A JSON body keeps a type of the caller's in lower case, rather than both.
+  await demo.request({
+    url: 'https://api.example.com/json',
+    body: { a: 1 },
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+  assert.strictEqual(requests[0].body, 'To=%2B380671234567&Body=Code+1234');
+  assert.strictEqual(requests[0].form.get('To'), '+380671234567');
+  assert.strictEqual(requests[0].headers.get('content-type'), 'application/x-www-form-urlencoded');
+  // The signature reads the body as it goes.
+  assert.strictEqual(signed[0], requests[0].body);
+  assert.strictEqual(requests[1].headers.get('content-type'), 'application/x-amz-json-1.0');
+  assert.strictEqual(requests[1].headers.get('accept'), 'application/json');
+  assert.strictEqual(requests[1].json.DestinationPhoneNumber, '+380671234567');
+  assert.deepStrictEqual(requests[2].body, new Uint8Array([1, 2]));
+  assert.strictEqual(requests[2].headers.get('content-type'), 'application/octet-stream');
+  assert.strictEqual(requests[3].headers.get('content-type'), 'application/webpush');
+  assert.strictEqual(requests[4].headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.deepStrictEqual(requests[4].json, { a: 1 });
+});
+
+test('API: the wait of a body, a rate limit in a 400, and the delays of the provider', async (t) => {
+  const answers = [
+    json({ ok: false, error_code: 429, parameters: { retry_after: 3 } }, 429),
+    json({ error: { code: 4, message: 'Application request limit reached' } }, 400),
+    json({ ok: true }),
+  ];
+  stubFetch(t, () => answers.shift());
+  const waits = [];
+  const delays = [];
+  const answer = await client(
+    { retries: 2 },
+    {
+      classify: (status, body, headers) => {
+        assert.ok(headers instanceof Headers);
+        if (body?.parameters?.retry_after !== undefined) {
+          return { category: 'rate-limit', retryable: true, retryAfterMilliseconds: 3000 };
+        }
+        return body?.error?.code === 4 ? { category: 'rate-limit', retryable: true } : {};
+      },
+      retryDelayMs: (attempt) => {
+        delays.push(attempt);
+        return 10;
+      },
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    },
+  ).request({ url: 'https://api.example.com/send', body: {}, hasIdempotencyKey: true });
+  assert.deepStrictEqual(answer.json, { ok: true });
+  assert.deepStrictEqual(delays, [0, 1]);
+  // At least the wait the body asked for, then the provider's own delay.
+  assert.deepStrictEqual(waits, [3000, 10]);
+});
+
+test('API: a request reads an answer of its own, and takes a status as one', async (t) => {
+  const answers = [new Response('ok', { status: 200 }), new Response('gone', { status: 404 })];
+  stubFetch(t, () => answers.shift());
+  const demo = client();
+  const text = await demo.request({
+    url: 'https://hooks.slack.com/services/T/B/X',
+    body: { text: 'Deployed' },
+    read: (response, body) => ({ status: response.status, text: body }),
+  });
+  assert.deepStrictEqual(text, { status: 200, text: 'ok' });
+  const missing = await demo.request({
+    url: 'https://api.example.com/token',
+    method: 'GET',
+    accepts: (status) => status === 404,
+    read: (response, body) => ({ status: response.status, text: body }),
+  });
+  assert.deepStrictEqual(missing, { status: 404, text: 'gone' });
+});
