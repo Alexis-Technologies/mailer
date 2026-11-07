@@ -4,7 +4,7 @@
 
 const { inspect } = require('node:util');
 const { generateId } = require('../core/id.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { warnLimited } = require('../internal/warn.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
 const { PendingQueue } = require('./pending-queue.js');
@@ -209,7 +209,7 @@ class LoggerTransport {
       attempt: event.attempt,
       delayMilliseconds: event.delayMilliseconds,
       errorMessage:
-        this.config.recordMessage === false ? redactAddresses(errorMessage) : errorMessage,
+        this.config.recordMessage === false ? redactRecipients(errorMessage) : errorMessage,
       ...(statusCode == null ? {} : { statusCode }),
     });
   }
@@ -361,7 +361,7 @@ class LoggerTransport {
     } catch (error) {
       warnLimited(
         'MAILER_LOGGER_FAILED',
-        `The logger of LoggerTransport threw: ${redactAddresses(describe(error))}`,
+        `The logger of LoggerTransport threw: ${redactRecipients(describe(error))}`,
       );
     }
   }
@@ -372,14 +372,14 @@ class LoggerTransport {
 // and without the provider's raw response.
 const redactFailure = (receipt) => {
   const errorMessages = [];
-  for (const text of receipt.errorMessages) errorMessages.push(redactAddresses(text));
+  for (const text of receipt.errorMessages) errorMessages.push(redactRecipients(text));
   let errors = receipt.errors;
   if (errors != null) {
     errors = [];
     for (const error of receipt.errors) {
       errors.push({
         ...error,
-        message: redactAddresses(error.message),
+        message: redactRecipients(error.message),
         providerDetails: undefined,
       });
     }

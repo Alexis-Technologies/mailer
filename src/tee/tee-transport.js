@@ -13,7 +13,7 @@
 const { pinMessageId } = require('../core/message-id.js');
 const { isRawTransport } = require('../core/transport.js');
 const { describeThrown, warnLimited, warnThrown } = require('../internal/callback.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { gatedSendMany } = require('../internal/gate.js');
@@ -23,7 +23,7 @@ const { timerMs } = require('../internal/sleep.js');
 const describe = (outcome) => {
   if (outcome.skipped !== undefined) return outcome.skipped;
   if (outcome.error !== undefined) return describeThrown(outcome.error);
-  return redactAddresses(outcome.receipt.errorMessages[0] ?? 'no error message');
+  return redactRecipients(outcome.receipt.errorMessages[0] ?? 'no error message');
 };
 
 // A send of a mirror that does not settle by `timeout`, as one that ignores

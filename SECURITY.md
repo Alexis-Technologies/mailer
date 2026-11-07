@@ -62,8 +62,11 @@ are next. The principles all of it is designed around:
 - **Credentials and personal data stay out of logs.** A transport shows `[REDACTED]` in place of
   its SMTP password, OAuth2 tokens, provider key and DKIM private key when it is inspected,
   logged or serialized. `./otel` and `./logger` record addresses only when told to
-  (`recordSensitiveData`, `recordMessage`); otherwise the addresses that error text names, such
-  as the recipient of an SMTP rejection, are redacted. A receipt returned to the application
+  (`recordSensitiveData`, `recordMessage`); otherwise the addresses and the phone numbers in
+  E.164 that error text names, such as the recipient of an SMTP rejection or the number an SMS
+  provider refused, are redacted; so are they in the records of the queue, of its drivers and of
+  the decorators. The credentials of the channels (the auth token of Twilio, the token of a bot,
+  the URL of a webhook, the key of VAPID, a service account) are redacted by their names. A receipt returned to the application
   keeps its full error text: logging it is the application's to scrub.
 - **Webhooks are verified before they are read.** A delivery event is read only from a request
   whose signature verifies, or, where the provider signs nothing, whose Basic credentials or token
@@ -93,7 +96,8 @@ are next. The principles all of it is designed around:
   and Nunjucks run JavaScript, so templates that tenants write belong to Liquid, Handlebars or
   Mustache.
 - **The audit holds no recipient.** An event names its message by `correlationId`, with the
-  hashes of its job and message; the text of an error in it has its addresses redacted.
+  hashes of its job and message; the text of an error in it has its addresses and phone numbers
+  redacted.
 - **The audit log can forget a person** (planned). Recipients are stored as a keyed hash and an
   encrypted block whose key can be destroyed, so a request to erase someone's data does not require
   editing an append-only log.

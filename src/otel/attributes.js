@@ -1,7 +1,7 @@
 // Ported from upyo v0.7.0 (packages/opentelemetry/src/attributes.ts)
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { estimateMessageSize } = require('./message-size.js');
 
 /**
@@ -197,7 +197,7 @@ class EmailAttributeExtractor {
    * recipient of an SMTP rejection.
    */
   describeError(text) {
-    return this.recordSensitiveData ? text : redactAddresses(text);
+    return this.recordSensitiveData ? text : redactRecipients(text);
   }
 
   detectContentType(message) {

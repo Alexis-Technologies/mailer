@@ -6,7 +6,7 @@
 const { warnThrown } = require('../internal/callback.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 const { checkRetainData } = require('../internal/queue-options.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { namedError, rateLimitError, retryError } = require('./backoff.js');
 
 const jobOf = (job) => ({
@@ -114,7 +114,7 @@ const createBullMQProcessor = (handler, options = {}) => {
         // Its reason goes into the dashboards of the queue.
         throw namedError(
           'UnrecoverableError',
-          redactAddresses(`${outcome.code}: ${outcome.reason}`),
+          redactRecipients(`${outcome.code}: ${outcome.reason}`),
         );
       case 'release':
         return release(job, token, outcome, now);

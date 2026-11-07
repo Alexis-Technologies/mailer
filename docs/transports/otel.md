@@ -436,7 +436,7 @@ to monitor your email system's health.
 With `tracing.recordSensitiveData` off, the default, a span records the sender's
 domain rather than its address, and the error text it records, in its status
 and in its `exception` and `email.send_failed` events, has every address
-replaced by `[REDACTED]`. An SMTP rejection such as
+and every phone number in E.164 replaced by `[REDACTED]`. An SMTP rejection such as
 `RCPT TO failed for bob@example.com: 550 No such user` is recorded as
 `RCPT TO failed for [REDACTED]: 550 No such user`. Turn the option on only for
 a backend where personal data is allowed.

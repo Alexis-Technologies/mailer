@@ -107,7 +107,7 @@ the receipt could make the caller send the message again.
 The retries of the wrapped transport, those an HTTP provider makes on its own and
 those of a `./retry` inside the logger transport, are logged as `email.retrying`
 events, with the attempt that failed, the wait in milliseconds, the text of the
-error (its addresses replaced by `[REDACTED]` unless the message is recorded)
+error (its addresses and phone numbers replaced by `[REDACTED]` unless the message is recorded)
 and its `statusCode` when it has one. They come from `onRetry` of the send
 options, which still reaches a callback of your own.
 
@@ -167,7 +167,7 @@ found by it.
 
 Messages are excluded from logs by default, and so are the addresses that the
 error text of a failure names: with `recordMessage` off, `errorMessages`,
-`errors` and `receipt` are logged with every address replaced by `[REDACTED]`
+`errors` and `receipt` are logged with every address and phone number replaced by `[REDACTED]`
 (`RCPT TO failed for [REDACTED]: 550 No such user`), and without the
 provider's raw response (`providerDetails`). The `recordMessage` option has two
 modes, both of which log the failure as it is:

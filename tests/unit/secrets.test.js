@@ -177,3 +177,28 @@ test('Secrets: the transports and decorators of 1.1 show no credentials either',
     }
   }
 });
+
+test('Secrets: the credentials of the channels are redacted by their names', () => {
+  // Before: the auth token of Twilio, the token of a bot, the URL of a
+  // webhook, the key of VAPID and a service account of Google were printed.
+  const config = {
+    accountSid: 'AC123',
+    authToken: SECRET,
+    botToken: SECRET,
+    webhookUrl: `https://hooks.slack.com/services/T/B/${SECRET}`,
+    signingSecret: SECRET,
+    vapidPrivateKey: SECRET,
+    serviceAccount: { client_email: 'fcm@example.iam.gserviceaccount.com', private_key: SECRET },
+    credentials: {
+      private_key: SECRET,
+      client_secret: SECRET,
+      access_token: SECRET,
+      refresh_token: SECRET,
+    },
+    headers: { 'X-Viber-Auth-Token': SECRET, 'x-goog-api-key': SECRET },
+  };
+  const copy = redactSecrets(config);
+  assert.ok(!JSON.stringify(copy).includes(SECRET), JSON.stringify(copy));
+  assert.strictEqual(copy.accountSid, 'AC123');
+  assert.strictEqual(copy.serviceAccount, '[REDACTED]');
+});

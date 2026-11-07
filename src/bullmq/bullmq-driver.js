@@ -6,7 +6,7 @@
 
 const { describeThrown, warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { toUuid } = require('../internal/uuid.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { checkRetainData, retentionOf } = require('../internal/queue-options.js');
@@ -138,7 +138,7 @@ const auditLost = async (audit, job, error) => {
     error: {
       category: 'unknown',
       code: 'queue.lost',
-      message: redactAddresses(String(error?.message ?? 'lost')).slice(0, 500),
+      message: redactRecipients(String(error?.message ?? 'lost')).slice(0, 500),
       retryable: false,
     },
   };

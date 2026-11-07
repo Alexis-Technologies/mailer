@@ -7,7 +7,7 @@ const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
 const { isUnsentRequestError } = require('./unsent.js');
 const { abortReason, isAbortError, sleep, timerMs } = require('./sleep.js');
-const { redactAddresses } = require('./redact-addresses.js');
+const { redactRecipients } = require('./redact-addresses.js');
 
 /**
  * The delay before retry `attempt` (from 0): one second, doubled each time.
@@ -177,7 +177,7 @@ const requestWithRetry = async (request) => {
         attempt: attempt + 1,
         delayMilliseconds: waitMs,
         statusCode: failure.statusCode,
-        error: redactAddresses(failure.message),
+        error: redactRecipients(failure.message),
       }),
       'Retrying request',
     );

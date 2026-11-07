@@ -2,7 +2,7 @@
 // hook, a store) that throws: the send and its receipt go on, and the failure
 // becomes a process warning rather than vanishing, as a logger's does.
 
-const { redactAddresses } = require('./redact-addresses.js');
+const { redactRecipients } = require('./redact-addresses.js');
 const { warnLimited } = require('./warn.js');
 
 /**
@@ -12,7 +12,7 @@ const { warnLimited } = require('./warn.js');
  * @internal
  */
 const describeThrown = (error) =>
-  redactAddresses(error instanceof Error ? error.message : String(error));
+  redactRecipients(error instanceof Error ? error.message : String(error));
 
 /**
  * Emits a process warning for a function of the application that threw.

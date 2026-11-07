@@ -11,8 +11,13 @@ const INSPECT = Symbol.for('nodejs.util.inspect.custom');
 const REDACTED = '[REDACTED]';
 
 // The credential fields of the transports' configurations, and the header
-// names that carry credentials, compared in lower case.
+// names that carry credentials, compared in lower case: those of the
+// channels too, the auth token of Twilio, the token of a bot, the URL of a
+// webhook (its secret is in it), the key of VAPID, a service account of
+// Google with the snake_case fields of its JSON, and the headers of Viber
+// and Google.
 const SECRET_KEYS = new Set([
+  'access_token',
   'accesskey',
   'accesstoken',
   'api-key',
@@ -21,26 +26,37 @@ const SECRET_KEYS = new Set([
   'apisecret',
   'apitoken',
   'authorization',
+  'authtoken',
   'bearertoken',
+  'bottoken',
+  'client_secret',
   'clientsecret',
   'connectionstring',
   'cookie',
   'pass',
   'password',
+  'private_key',
   'privatekey',
   'proxy-authorization',
+  'refresh_token',
   'refreshtoken',
   'secret',
   'secretaccesskey',
   'secretkey',
   'servertoken',
+  'serviceaccount',
   'sessiontoken',
+  'signingsecret',
   'token',
+  'vapidprivatekey',
+  'webhookurl',
   'x-api-key',
   'x-auth-token',
+  'x-goog-api-key',
   'x-lettermint-token',
   'x-postmark-server-token',
   'x-smtp2go-api-key',
+  'x-viber-auth-token',
 ]);
 
 // Plain objects and class instances are copied; built-in values such as a

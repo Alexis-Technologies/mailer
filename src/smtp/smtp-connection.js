@@ -12,7 +12,7 @@ const { StringDecoder } = require('node:string_decoder');
 const { connect: tlsConnect, TLSSocket } = require('node:tls');
 const { generateId } = require('../core/id.js');
 const { createLog } = require('../internal/log.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { createSmtpConfig } = require('./config.js');
 const { SmtpDsnUnsupportedError } = require('./delivery-status.js');
 const { checkSmtpPath } = require('./envelope.js');
@@ -361,7 +361,7 @@ const describeCommands = (commands, authenticating) => {
     if (command.startsWith('AUTH ')) {
       described.push(`AUTH ${command.slice(5).split(' ')[0]} [REDACTED]`);
     } else {
-      described.push(authenticating ? '[REDACTED]' : redactAddresses(command));
+      described.push(authenticating ? '[REDACTED]' : redactRecipients(command));
     }
   }
   return described;

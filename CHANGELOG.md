@@ -58,6 +58,13 @@ worker of 1.2 holds reads the same.
   without a route failing as `unsupported`; `sendMany` gives the messages of a channel that
   come in a row to its transport's `sendMany`, the receipts in order; `verify` checks each
   route, and disposal disposes of each transport once.
+- **Phone numbers are redacted with the addresses:** every text that went through
+  `redactAddresses` (the records and spans of the decorators, the warnings, the retries of the
+  HTTP providers, the reasons the queue writes into its store and its audit, the drivers of
+  BullMQ and of a source) has its phone numbers in E.164 replaced by `[REDACTED]` too; and the
+  credentials of the channels (`authToken`, `botToken`, `webhookUrl`, `signingSecret`,
+  `vapidPrivateKey`, `serviceAccount` and the fields of its JSON, the headers of Viber and Google)
+  are redacted from an inspected or serialized transport by their names.
 - **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
   `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
   audit event its `channel`.

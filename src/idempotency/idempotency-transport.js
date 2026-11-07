@@ -22,7 +22,7 @@ const {
   verifyWrapped,
 } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { gatedSendMany } = require('../internal/gate.js');
 const { createIdempotencyConfig } = require('./config.js');
 const { fingerprintOf } = require('../internal/fingerprint.js');
@@ -166,7 +166,7 @@ class IdempotencyTransport {
     if (record.fingerprint !== fingerprint) {
       this.#log.write(
         'warn',
-        () => ({ code: 'idempotency.key_reused', key: redactAddresses(key) }),
+        () => ({ code: 'idempotency.key_reused', key: redactRecipients(key) }),
         'A key was used again.',
       );
       return createFailedReceipt(
@@ -182,14 +182,14 @@ class IdempotencyTransport {
     if (record.state === 'done' && record.receipt !== undefined) {
       this.#log.write(
         'debug',
-        () => ({ code: 'idempotency.hit', key: redactAddresses(key) }),
+        () => ({ code: 'idempotency.hit', key: redactRecipients(key) }),
         'A send was answered as before.',
       );
       return record.receipt;
     }
     this.#log.write(
       'info',
-      () => ({ code: 'idempotency.in_flight', key: redactAddresses(key) }),
+      () => ({ code: 'idempotency.in_flight', key: redactRecipients(key) }),
       'A send of the key is out.',
     );
     // The category is given, as the words of the text, which hold the key,

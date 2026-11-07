@@ -28,7 +28,7 @@ const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.j
 const { refusalFailure } = require('../internal/refusal.js');
 const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { abortReason, isCallerAbort, timerMs } = require('../internal/sleep.js');
 const { Fifo } = require('../internal/gate.js');
@@ -207,7 +207,7 @@ const receiptOf = (result, path, messageId) => {
     });
   }
   if (result.contentError !== undefined) return failureOf(result.contentError);
-  const said = result.stderr === '' ? '' : `: ${redactAddresses(result.stderr)}`;
+  const said = result.stderr === '' ? '' : `: ${redactRecipients(result.stderr)}`;
   if (result.timedOut) {
     // Stopped once it had the whole message, it may have queued it.
     return createFailedReceipt(`sendmail did not exit in time${said}`, {

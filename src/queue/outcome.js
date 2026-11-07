@@ -5,7 +5,7 @@
 // for; and one of unknown delivery is not, as it may have been taken.
 
 const { computeBackoff, retryAfterOf } = require('../internal/backoff.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 
 // The failures of the operator rather than of the message: a key revoked, a
 // domain not verified. They may pass once fixed, after a longer wait.
@@ -19,7 +19,7 @@ const MAX_REASON = 500;
  * @internal
  */
 const reasonOf = (text) => {
-  const redacted = redactAddresses(String(text));
+  const redacted = redactRecipients(String(text));
   return redacted.length > MAX_REASON ? `${redacted.slice(0, MAX_REASON)}…` : redacted;
 };
 

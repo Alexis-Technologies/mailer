@@ -7,7 +7,7 @@ const { isRawTransport, isVerifiableTransport } = require('../core/transport.js'
 const { refuseRaw } = require('../internal/capabilities.js');
 const { disposeOf, messageOf } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
-const { redactAddresses } = require('../internal/redact-addresses.js');
+const { redactRecipients } = require('../internal/redact-addresses.js');
 const { isProgrammerError } = require('../internal/programmer-error.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
@@ -379,7 +379,7 @@ class PoolTransport {
           onSelectorError: (error, index) =>
             this.log.write(
               'warn',
-              () => ({ index, error: redactAddresses(messageOf(error)) }),
+              () => ({ index, error: redactRecipients(messageOf(error)) }),
               'A pool selector threw; its transport is skipped',
             ),
         });
