@@ -981,10 +981,12 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
   `failed` before any attempt; `deferred` keeps a message `accepted`; `opened`, `clicked` and
   `unsubscribed` are engagement, not states; `unknown` keeps the provider's `raw` record.
 
-**The contracts of the channels** (2.0, `PLAN-channels.md` §4.1–4.2, its stage 2: the types of
-the root, `./channels`, `./router` and the tables of `./audit` are in the code; the decorators,
-the queue and the webhooks of the channels are its stages 4 to 6, so none of them takes a
-message of a channel yet):
+**The contracts of the channels** (2.0, `PLAN-channels.md` §4.1–4.2: the types of the root,
+`./channels`, `./router` and the tables of `./audit` are in the code since its stage 2, the
+shared layer since stage 3, and the decorators take a message of a channel since stage 4, with
+the names of 2.0 (`message.*` log events, `mailer.message.*` metrics with `mailer.channel`,
+`message.<state>` audit records); the queue and the webhooks of the channels are stages 5 and
+6):
 
 - **`ChannelMessage`**, built by `createChannelMessage()` of `./channels` (its modules in
   `src/internal/channel/`): `channel` (`sms`, `rcs`, `whatsapp`, `messenger`, `instagram`,
@@ -1006,8 +1008,9 @@ message of a channel yet):
   hours of Meta), `blocked` (the user blocked the bot), `not-on-channel` (a reason to fall back),
   `unregistered` (a push token or a subscription gone: drop it), none retried, and `unreachable`
   (the handset, for now), retried; `retryable` defaults from the category (`CHANNEL_RETRYABLE`
-  of `core/receipt.js`), and no word of an error leads to them. `./pool` will stop its failover
-  at each of them but `unreachable`, which another route may reach (stage 4).
+  of `core/receipt.js`), and no word of an error leads to them. `./pool` stops its failover
+  at each of them but `unreachable`, which another route may reach (`STOP_FAILOVER`), and its
+  transports are of one channel (a pool of several is a type error; `./router` sends them).
 - **States and events:** the states gain `sent`, `read` and `expired` (ranks 3.5, 4.5 and 4, as
   the ranks of 1.2 are persisted); `DeliveryEvent` gains `sent`, `read`, `failed`, `expired` and
   `subscribed`, a required `channel` (`email` for the verifiers of 1.x) and
