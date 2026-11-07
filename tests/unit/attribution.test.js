@@ -1,8 +1,9 @@
 // Every file the package ships says where it comes from: the attribution header
 // of the project it is a port of (upyo for most of the transport; nodemailer,
-// unemail and sently for the features of 1.1; the notices are in LICENSE), or
-// that it is not ported (CLAUDE.md, "Code ported from upyo" and "Code ported
-// from nodemailer, unemail and sently").
+// unemail and sently for the features of 1.1; the libraries of the channels
+// for 2.0; the notices are in LICENSE), or that it is not ported (CLAUDE.md,
+// "Code ported from upyo", "Code ported from nodemailer, unemail and sently"
+// and "Code ported for the channels").
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -16,6 +17,24 @@ const UPYO_FILE = 'packages\\/[a-z-]+\\/src\\/[\\w./-]+\\.ts';
 const UPYO_TYPES = 'packages\\/[a-z-]+\\/src(?:\\/[\\w./-]+)?';
 const SRC_FILE = 'src\\/[\\w./-]+\\.ts';
 const SRC_TYPES = 'src(?:\\/[\\w./-]+)?';
+// A source in JavaScript: a file of `lib/`, or at the root of the package.
+const JS_FILE = '[\\w./-]+\\.js';
+const JS_TYPES = 'lib(?:\\/[\\w./-]+)?';
+
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The libraries of the channels, whose notices LICENSE carries as "Portions of
+// this software are derived from <name> (<url>), version <version>".
+const channelSource = ({ name, url, version, holder, file = SRC_FILE, types = SRC_TYPES }) => ({
+  name,
+  version,
+  notice: `// ${url} — MIT, Copyright ${holder}`,
+  license: new RegExp(
+    `derived from ${escape(name)}\\s+\\(${escape(url)}\\), version ${escape(version)}\\b`,
+  ),
+  file,
+  types,
+});
 
 const SOURCES = [
   {
@@ -54,15 +73,87 @@ const SOURCES = [
     file: SRC_FILE,
     types: SRC_TYPES,
   },
+  ...[
+    {
+      name: '@thinwrap/notifications',
+      url: 'https://github.com/thinwrap/notifications-ts',
+      version: '1.2.0',
+      holder: '2026 Dmitry Polyanovsky & contributors',
+    },
+    {
+      name: '@visulima/notification',
+      url: 'https://github.com/visulima/visulima',
+      version: '2.0.0',
+      holder: '2026 visulima',
+    },
+    {
+      name: 'twilio-node',
+      url: 'https://github.com/twilio/twilio-node',
+      version: '6.2.0',
+      holder: '2023 Twilio, Inc.',
+    },
+    {
+      name: 'node-telegram-bot-api',
+      url: 'https://github.com/yagop/node-telegram-bot-api',
+      version: '2.1.0',
+      holder: '2019 Yago',
+    },
+    {
+      name: 'http_ece',
+      url: 'https://github.com/web-push-libs/encrypted-content-encoding',
+      version: '1.2.1',
+      holder: '2015 Martin Thomson',
+      file: JS_FILE,
+      types: JS_TYPES,
+    },
+    {
+      name: 'message-segment-calculator',
+      url: 'https://github.com/TwilioDevEd/message-segment-calculator',
+      version: '1.3.0',
+      holder: '2021 Twilio Inc',
+    },
+    {
+      name: 'split-sms',
+      url: 'https://github.com/Codesleuth/split-sms',
+      version: '0.1.7',
+      holder: '2014 David Wood',
+      file: JS_FILE,
+      types: JS_TYPES,
+    },
+    {
+      name: '@parse/node-apn',
+      url: 'https://github.com/parse-community/node-apn',
+      version: '8.1.1',
+      holder: '2010 Andrew Naylor, Parse Platform',
+      file: JS_FILE,
+      types: JS_TYPES,
+    },
+    {
+      name: '@slack/bolt',
+      url: 'https://github.com/slackapi/bolt-js',
+      version: '5.1.0',
+      holder: 'Robots & Pencils, Slack Technologies, LLC',
+    },
+    {
+      name: '@slack/web-api',
+      url: 'https://github.com/slackapi/node-slack-sdk',
+      version: '8.3.0',
+      holder: 'Slack Technologies, LLC',
+    },
+    {
+      name: 'botframework-connector',
+      url: 'https://github.com/microsoft/botbuilder-js',
+      version: '4.1.6',
+      holder: 'Microsoft Corporation',
+    },
+  ].map(channelSource),
 ];
-
-const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // The header lines that name a source: the first line of a port (`Ported
 // from`, or `Types ported from` in a d.ts), and `Also ported from` for a
 // second source further down.
 const patternsOf = (source) => {
-  const prefix = `${source.name} v${escape(source.version)} \\(`;
+  const prefix = `${escape(source.name)} v${escape(source.version)} \\(`;
   return {
     ported: new RegExp(`^\\/\\/ Ported from ${prefix}${source.file}[),]`),
     types: new RegExp(`^\\/\\/ Types ported from ${prefix}${source.types}[),]`),
@@ -193,6 +284,41 @@ test('Attribution: a second source needs its own notice', () => {
   assert.strictEqual(
     problemOf('src/a.js', `${header.join('\n')}\ncode`),
     'src/a.js has the sently header without its notice',
+  );
+});
+
+test('Attribution: the libraries of the channels have their headers', () => {
+  const sourceNamed = (name) => SOURCES.find((source) => source.name === name);
+  const thinwrap = sourceNamed('@thinwrap/notifications');
+  const ece = sourceNamed('http_ece');
+  const connector = 'src/providers/twilio/twilio.connector.ts';
+  assert.strictEqual(
+    problemOf(
+      'src/a.js',
+      `// Ported from @thinwrap/notifications v1.2.0 (${connector})\n${thinwrap.notice}\n`,
+    ),
+    undefined,
+  );
+  assert.strictEqual(
+    problemOf(
+      'src/a.d.ts',
+      `// Types ported from @thinwrap/notifications v1.2.0 (src/providers)\n${thinwrap.notice}\n`,
+    ),
+    undefined,
+  );
+  // A source in JavaScript names a file of its own layout.
+  assert.strictEqual(
+    problemOf('src/a.js', `// Ported from http_ece v1.2.1 (ece.js)\n${ece.notice}\n`),
+    undefined,
+  );
+  // The name of a scope is matched as written, not as a pattern.
+  assert.match(
+    problemOf('src/a.js', `// Ported from @thinwrapXnotifications v1.2.0 (${connector})\n`),
+    /starts with neither/,
+  );
+  assert.strictEqual(
+    problemOf('src/a.js', `// Ported from http_ece v1.2.1 (ece.js)\n${thinwrap.notice}\n`),
+    'src/a.js has the http_ece header without its notice',
   );
 });
 
