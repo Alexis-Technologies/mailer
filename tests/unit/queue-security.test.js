@@ -10,7 +10,7 @@ const {
   parseMailJob,
   prepareMailJob,
 } = require('../../src/queue/index.js');
-const { hashJson } = require('../../src/queue/hash.js');
+const { hashJson } = require('../../src/internal/canonical-json.js');
 const { UNHASHED } = require('../../src/queue/job.js');
 const { fakeTransport } = require('../helpers/decorators/fake.js');
 const { manualClock } = require('../helpers/queue/clock.js');

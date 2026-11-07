@@ -7,7 +7,7 @@
 const { Buffer } = require('node:buffer');
 const { timingSafeEqual } = require('node:crypto');
 const { MailQueueError } = require('./errors.js');
-const { macJson } = require('./hash.js');
+const { macJson } = require('../internal/canonical-json.js');
 
 const MIN_SECRET_BYTES = 32;
 const KEY_ID = /^[A-Za-z0-9._-]{1,64}$/;

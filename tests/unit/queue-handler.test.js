@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMemoryAuditSink } = require('../../src/audit/index.js');
 const { createMailJobHandler, prepareMailJob } = require('../../src/queue/index.js');
-const { hashJson } = require('../../src/queue/hash.js');
+const { hashJson } = require('../../src/internal/canonical-json.js');
 const { markDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
 const {
   TemplateNotFoundError,

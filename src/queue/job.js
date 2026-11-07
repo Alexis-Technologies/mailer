@@ -13,7 +13,7 @@ const { parseAddress } = require('../core/address.js');
 const { toBase64 } = require('../internal/base64.js');
 const { MAX_KEY_LENGTH, checkKey } = require('../internal/message-checks.js');
 const { deriveJobId } = require('./derive.js');
-const { hashJson } = require('./hash.js');
+const { hashJson } = require('../internal/canonical-json.js');
 const { toJson } = require('./json.js');
 const { keyringOf, signJob } = require('./signing.js');
 

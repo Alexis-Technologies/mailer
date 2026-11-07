@@ -3,7 +3,7 @@
 // hash, which holds the job to what was enqueued.
 
 const { MailQueueError } = require('./errors.js');
-const { hashJson } = require('./hash.js');
+const { hashJson } = require('../internal/canonical-json.js');
 const { MAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
 const { keyringOf, verifyJob } = require('./signing.js');
 

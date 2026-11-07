@@ -1,6 +1,9 @@
-// Not ported: the SHA-256 of a value of JSON, its keys in order, so that the
-// same job hashes the same whatever order its fields were written in; and the
-// HMAC of the same form, which only a holder of the key can make.
+// Not ported: the SHA-256 of a value of JSON in its canonical form, its keys
+// in order, so that the same job hashes the same whatever order its fields
+// were written in; and the HMAC of the same form, which only a holder of the
+// key can make. The jobs of ./queue are hashed and signed with it, and a
+// payload of a channel (a Block Kit, an Adaptive Card) is fingerprinted with
+// it, so it is shared rather than kept by the queue.
 
 const { createHash, createHmac } = require('node:crypto');
 
