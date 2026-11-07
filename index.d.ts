@@ -1641,6 +1641,8 @@ export interface DeliveryBounce {
 export interface DeliveryEvent<TProviderId extends string = string> {
   /** The provider that told it. */
   readonly provider: TProviderId;
+  /** The channel of the message: `email` for the providers of email. */
+  readonly channel: Channel;
   /** What happened. */
   readonly type: DeliveryEventType;
   /**

@@ -53,6 +53,7 @@ test('Webhooks MailerSend: the HMAC of the body, an event taken once', async () 
   const { events } = delivery;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'mailersend',
+    channel: 'email',
     type: 'bounced',
     id: 'act-1:activity.hard_bounced',
     messageId: 'msg-1',
@@ -159,6 +160,7 @@ test('Webhooks Mailtrap: a signed batch, in JSON or JSON Lines, each event once'
   const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'mailtrap',
+    channel: 'email',
     type: 'delivered',
     id: 'ev-1',
     messageId: 'mt-1',
@@ -265,6 +267,7 @@ test('Webhooks Brevo: the configured token is required', async () => {
   });
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'brevo',
+    channel: 'email',
     type: 'bounced',
     id: 'hard_bounce:<1@smtp-relay.mailin.fr>:bob@example.com:1800000000',
     messageId: '<1@smtp-relay.mailin.fr>',
@@ -325,6 +328,7 @@ test('Webhooks Mailjet: Basic credentials are required; the MessageUUID is the i
   const { events } = await verifier.verify({ body, headers: { authorization: basic('mj', 'pw') } });
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'mailjet',
+    channel: 'email',
     type: 'bounced',
     id: 'bounce:uuid-1:bob@example.com:1800000000',
     messageId: 'uuid-1',
@@ -397,6 +401,7 @@ test('Webhooks SparkPost: Basic credentials are required; the transmission is th
   assert.strictEqual(events.length, 1);
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'sparkpost',
+    channel: 'email',
     type: 'bounced',
     id: 'ev-1',
     messageId: 'tx-1',

@@ -65,6 +65,7 @@ test('Webhooks SendGrid: a signed batch is an event per record', async () => {
     { ...events[0], metadata: { ...events[0].metadata } },
     {
       provider: 'sendgrid',
+      channel: 'email',
       type: 'bounced',
       id: 'ev-bounce',
       messageId: 'x-msg-1',

@@ -66,6 +66,7 @@ test('Webhooks Scaleway: an SNS message signed by a certificate the trust chain 
   const { events } = await verifier.verify({ body: JSON.stringify(scwMessage(record)) });
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'scaleway',
+    channel: 'email',
     type: 'bounced',
     id: 'ev-1',
     messageId: 'em-1',
@@ -211,6 +212,7 @@ test('Webhooks Lettermint: the HMAC of the time and body, within a window, once'
   const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'lettermint',
+    channel: 'email',
     type: 'bounced',
     id: 'del-1',
     messageId: 'lm-1',
@@ -293,6 +295,7 @@ test('Webhooks Maileroo: the HMAC of the body, an event per recipient, once', as
   assert.strictEqual(events.length, 2);
   assert.deepStrictEqual(plain(events[1]), {
     provider: 'maileroo',
+    channel: 'email',
     type: 'rejected',
     id: 'ev-1:1',
     messageId: 'ref-1',
@@ -374,6 +377,7 @@ test('Webhooks SMTP2GO: Basic credentials, a body of JSON or of a form', async (
   });
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'smtp2go',
+    channel: 'email',
     type: 'bounced',
     id: 'bounce:1abc-2def:bob@example.com:2027-01-15T08:00:00Z',
     messageId: '1abc-2def',
@@ -506,6 +510,7 @@ test('Webhooks Azure: Event Grid events with the token, and the validation hande
   const { events } = taken;
   assert.deepStrictEqual(plain(events[0]), {
     provider: 'azure',
+    channel: 'email',
     type: 'bounced',
     id: 'eg-1',
     messageId: 'op-1',

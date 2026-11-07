@@ -66,6 +66,7 @@ test('Webhooks Resend: a bounce is an event per recipient, with its kind', async
     { ...events[1], metadata: { ...events[1].metadata } },
     {
       provider: 'resend',
+      channel: 'email',
       type: 'bounced',
       id: 'msg_b:1',
       messageId: 'e-1',

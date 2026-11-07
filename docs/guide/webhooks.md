@@ -67,6 +67,7 @@ as many events.
 | Field | |
 | --- | --- |
 | `provider` | The provider, such as `ses`. |
+| `channel` | The channel of the message: `email` for every provider of this page. |
 | `type` | `accepted`, `delivered`, `deferred`, `bounced`, `rejected`, `complained`, `unsubscribed`, `opened`, `clicked` or `unknown`. |
 | `id` | The id of the event, the same each time the provider sends it again. |
 | `messageId` | The provider's id of the message, the `messageId` of its receipt. |

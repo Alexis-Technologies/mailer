@@ -627,7 +627,12 @@ const recipientOf = (value) => {
  * @internal
  */
 const createEvent = (fields) => {
-  const event = { provider: fields.provider, type: fields.type, id: fields.id };
+  const event = {
+    provider: fields.provider,
+    channel: fields.channel ?? 'email',
+    type: fields.type,
+    id: fields.id,
+  };
   for (const name of OPTIONAL_FIELDS) {
     const value = name === 'recipient' ? recipientOf(fields[name]) : fields[name];
     if (value !== undefined && value !== '') event[name] = value;

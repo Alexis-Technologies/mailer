@@ -58,6 +58,7 @@ test('Webhooks Mailgun: a signed event, its message id that of the receipt', asy
     { ...events[0], metadata: { ...events[0].metadata } },
     {
       provider: 'mailgun',
+      channel: 'email',
       type: 'delivered',
       id: 'mg-event-1',
       messageId: '<20270115.1@mg.example.com>',
@@ -174,6 +175,7 @@ test('Webhooks Postmark: credentials are required, and compared', async () => {
     { ...events[0], metadata: { ...events[0].metadata } },
     {
       provider: 'postmark',
+      channel: 'email',
       type: 'delivered',
       id: 'Delivery:pm-1:bob@example.com:2027-01-15T08:00:00.000Z',
       messageId: 'pm-1',

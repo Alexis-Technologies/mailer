@@ -76,6 +76,7 @@ test('Webhooks SES: a bounce is an event per recipient, hard or soft', async () 
     { ...events[0], metadata: { ...events[0].metadata } },
     {
       provider: 'ses',
+      channel: 'email',
       type: 'bounced',
       id: 'sns-1:0',
       messageId: 'ses-message-1',

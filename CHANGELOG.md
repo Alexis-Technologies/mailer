@@ -29,6 +29,8 @@ worker of 1.2 holds reads the same.
   email is classified anew), each retryable by its category (`unreachable` alone);
   `DeliveryEventType` has `sent`, `read`, `failed`, `expired` and `subscribed`, and
   `MessageState` `sent`, `read` and `expired`.
+- **Breaking: a delivery event names its channel,** `channel` required in `DeliveryEvent`:
+  `email` for the fifteen verifiers of `./webhooks`.
 
 ### Added
 
