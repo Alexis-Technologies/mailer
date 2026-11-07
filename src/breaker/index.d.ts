@@ -4,10 +4,10 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Logger,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -97,8 +97,11 @@ export interface ResolvedCircuitBreakerConfig {
  * const guarded = new CircuitBreakerTransport(transport, { failureThreshold: 5 });
  * ```
  */
-export declare class CircuitBreakerTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class CircuitBreakerTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /** The resolved options. */
@@ -108,11 +111,11 @@ export declare class CircuitBreakerTransport<TProviderId extends string = string
    * @param config The options.
    * @throws {TypeError} If an option is invalid.
    */
-  constructor(transport: Transport<TProviderId>, config?: CircuitBreakerConfig);
+  constructor(transport: Transport<TProviderId, TMessage>, config?: CircuitBreakerConfig);
   /** The state of the circuit, `half-open` when the next send would be a probe. */
   readonly state: CircuitState;
   /** Sends one message, unless the circuit is open. */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message, unless the circuit is open.  A wrapped transport
    * without `sendRaw()` gives a failed receipt of the category
@@ -125,7 +128,7 @@ export declare class CircuitBreakerTransport<TProviderId extends string = string
    * receipts in the order of the messages.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the wrapped transport, whatever the state of the circuit. */

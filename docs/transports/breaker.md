@@ -35,6 +35,10 @@ const transport = new CircuitBreakerTransport(new SesTransport(sesConfig), {
   answered within `probeTimeoutMs`. A probe the caller aborts, or that a batch
   is left with when its caller stops reading, decides nothing.
 
+None of the categories of the channels counts: a recipient that opted out,
+blocked the bot or is unreachable says nothing of the provider. A transport of a
+channel is wrapped as one of email is, and keeps the type of its messages.
+
 A result counts only in the period of the circuit it was sent in: a late one of
 a send made before the circuit opened, or before it closed again, changes
 nothing. A batch whose `sendMany()` throws is one failure, not one per message. The state is that of the instance;

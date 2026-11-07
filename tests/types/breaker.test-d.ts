@@ -3,6 +3,7 @@ import {
   createMessage,
   type RawTransport,
   type Receipt,
+  type SmsMessage,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -36,3 +37,10 @@ expectError(new CircuitBreakerTransport(inner, { failureThreshold: '5' }));
 // A pino-like logger, or none.
 new CircuitBreakerTransport(inner, { logger: { warn() {}, info() {}, debug() {} } });
 expectError(new CircuitBreakerTransport(inner, { logger: 'pino' }));
+
+// The decorator of a transport of a channel takes its messages.
+declare const twilio: Transport<'twilio', SmsMessage>;
+declare const smsMessage: SmsMessage;
+const sms = new CircuitBreakerTransport(twilio, {});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectType<Promise<Receipt<'twilio'>>>(sms.send(smsMessage));
