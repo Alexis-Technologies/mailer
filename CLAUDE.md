@@ -895,7 +895,8 @@ src/
   <subpath>/        one directory per subpath: index.js + index.d.ts + its modules
   internal/         private modules shared by subpaths, not in the exports map: the request
                     layer (http.js, api-client.js for every HTTP provider but JMAP,
-                    api.js for the conversions of the providers of 1.1, body.js, unsent.js,
+                    api.js for the conversions of the providers of 1.1, api-steps.js for
+                    what a provider of any channel shares of them, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, validate-ssl.js, verify.js),
                     receipts (provider.js, refusal.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,

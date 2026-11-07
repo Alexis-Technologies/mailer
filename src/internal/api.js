@@ -1,11 +1,10 @@
 // Not ported: what the HTTP providers added in 1.1 share, once rather than a
-// copy in each: the client of api-client.js, the receipts of a batch in the
-// order of its messages, their attachments, addresses and header fields, and
-// the steps of one send.
+// copy in each: the client of api-client.js, their attachments, addresses and
+// header fields, and the steps of one send and the receipts of a batch of
+// api-steps.js, which the providers of the channels take alone.
 
 const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { createFailedReceipt } = require('../core/receipt.js');
 const { toBase64 } = require('./base64.js');
 const { canonicalHeaderName } = require('./headers.js');
 const { convertAttachments, visitCustomHeaders, withCalendarAttachment } = require('./provider.js');
@@ -17,31 +16,7 @@ const {
   providerFailure,
   truncateErrorText,
 } = require('./api-client.js');
-
-/**
- * The receipts of a batch in the order of its messages: those of
- * `receiptOf(index)` for the payloads that were sent, and the failures of the
- * others.
- *
- * @internal
- */
-const mergeBatch = function* (slots, receiptOf) {
-  for (let i = 0; i < slots.length; i++) {
-    yield typeof slots[i] === 'number' ? receiptOf(slots[i]) : slots[i];
-  }
-};
-
-/**
- * Checks the credential a provider needs when the transport is made.
- *
- * @internal
- */
-const checkCredential = (value, name, label) => {
-  if (typeof value !== 'string' || value === '') {
-    throw new TypeError(`${label} needs ${name}.`);
-  }
-  return value;
-};
+const { checkCredential, mergeBatch, sendConverted, sentWith } = require('./api-steps.js');
 
 /**
  * The attachments of a message, an iCalendar part among them, each with its
@@ -111,41 +86,6 @@ const headerFieldsOf = (message) => {
   });
   return fields;
 };
-
-/**
- * Sends one message of a provider: `convert(message, signal)`, then
- * `request(payload, options)`, then `receiptOf(answer)`.  The caller's abort
- * is thrown; any other failure is the receipt of `failureOf(error)`, the
- * provider's by default.
- *
- * @internal
- */
-const sendConverted = async (message, options, steps) => {
-  const signal = options?.signal;
-  signal?.throwIfAborted();
-  try {
-    const payload = await steps.convert(message, signal);
-    signal?.throwIfAborted();
-    return steps.receiptOf(await steps.request(payload, options));
-  } catch (error) {
-    if (isCallerAbort(error, signal)) throw error;
-    return steps.failureOf === undefined
-      ? providerFailure(steps.provider, error)
-      : steps.failureOf(error);
-  }
-};
-
-/**
- * The receipt of an answer that should name the message: a success with its
- * id, or, without one, a failure of unknown delivery, as the provider took
- * the request.
- *
- * @internal
- */
-const sentWith = (provider, messageId, missing) =>
-  typeof messageId === 'string' && messageId !== ''
-    ? { successful: true, messageId, provider }
-    : createFailedReceipt(missing, { provider, category: 'unknown', deliveryUnknown: true });
 
 /**
  * An address as a provider writes it: `{ [emailKey]: the address in A-labels,
