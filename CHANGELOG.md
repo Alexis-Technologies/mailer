@@ -31,6 +31,15 @@ worker of 1.2 holds reads the same.
   `MessageState` `sent`, `read` and `expired`.
 - **Breaking: a delivery event names its channel,** `channel` required in `DeliveryEvent`:
   `email` for the fifteen verifiers of `./webhooks`.
+- **Breaking: the events of `./logger` are `message.sending`, `message.sent`,
+  `message.failed` and `message.retrying`** (were `email.*`), each with the `channel` of its
+  message (`email` for an email and raw MIME), and their texts name a message (`Sending
+  message.`). A message of a channel is logged with `recipientCount`, `mediaCount`,
+  `buttonCount`, `hasTemplate`, `hasPayload` and `priority`, where its properties threw, its
+  recipient only within the message of `recordMessage`, and `inline` writes its text; without
+  `recordMessage`, the text of a failure or a retry is redacted of the recipient as the message
+  names it (a chat id, a push token, an endpoint). `LoggerTransport<P, TMessage>` takes the
+  messages of the transport wrapped.
 
 ### Added
 

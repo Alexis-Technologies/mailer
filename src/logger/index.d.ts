@@ -5,12 +5,12 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   IdOptions,
   Logger,
   LoggerLevel,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -23,17 +23,17 @@ import type {
 export type { Logger, LoggerLevel, LogMethod } from '../../index.js';
 
 /**
- * Log levels used for email delivery lifecycle events.
+ * Log levels used for the delivery lifecycle events of a message.
  */
 export interface LoggerTransportLevels {
   /**
-   * Level used before an email is handed to the transport.
+   * Level used before a message is handed to the transport.
    *
    * @default "debug"
    */
   readonly sending?: LoggerLevel;
   /**
-   * Level used after an email is sent successfully.
+   * Level used after a message is sent successfully.
    *
    * @default "info"
    */
@@ -57,8 +57,12 @@ export interface LoggerTransportLevels {
  * Options for {@link LoggerTransport}.
  *
  * @typeParam TProviderId The provider id of the wrapped transport.
+ * @typeParam TMessage The messages of the wrapped transport, email by default.
  */
-export interface LoggerTransportOptions<TProviderId extends string = 'logger'> extends IdOptions {
+export interface LoggerTransportOptions<
+  TProviderId extends string = 'logger',
+  TMessage extends AnyMessage = Message,
+> extends IdOptions {
   /**
    * The logger to write to. It must have a method for each configured level;
    * the transport checks that when it is made.
@@ -70,17 +74,20 @@ export interface LoggerTransportOptions<TProviderId extends string = 'logger'> e
    * When omitted, the logger transport only logs the delivery and returns a
    * synthetic successful receipt.
    */
-  readonly transport?: Transport<TProviderId>;
+  readonly transport?: Transport<TProviderId, TMessage>;
   /**
-   * How to include the complete email message in logs.
+   * How to include the complete message in logs.
    *
    * `"properties"` adds the message to the structured properties while
    * keeping the lifecycle message on one line.  `"inline"` also renders the
-   * subject and body beneath the lifecycle message.  Plain text is preferred
-   * when it is defined; otherwise, the HTML body is rendered.
+   * subject and body of an email beneath the lifecycle message, or the text
+   * of a message of a channel.  Plain text is preferred when it is defined;
+   * otherwise, the HTML body is rendered.
    *
    * Messages may contain sensitive or large values, including email bodies,
-   * headers, and attachment data.
+   * headers, and attachment data.  Without this option, no recipient is
+   * logged: neither the addresses of email nor the `to` of a message of a
+   * channel, which the text of a failure is redacted of.
    *
    * @default undefined
    */
@@ -96,35 +103,45 @@ export interface LoggerTransportOptions<TProviderId extends string = 'logger'> e
  *
  * @typeParam TProviderId The provider id of the wrapped transport.
  */
-export interface ResolvedLoggerTransportOptions<TProviderId extends string = 'logger'> {
+export interface ResolvedLoggerTransportOptions<
+  TProviderId extends string = 'logger',
+  TMessage extends AnyMessage = Message,
+> {
   /** The logger written to. */
   readonly logger: Logger;
   /** Transport that performs the actual delivery, if configured. */
-  readonly transport?: Transport<TProviderId>;
+  readonly transport?: Transport<TProviderId, TMessage>;
   /** Resolved complete-message recording mode, or `false` when disabled. */
   readonly recordMessage: 'properties' | 'inline' | false;
   /** Resolved delivery lifecycle log levels. */
   readonly levels: Required<LoggerTransportLevels>;
 }
 
-type LoggerTransportConstructorArguments<TProviderId extends string> = [TProviderId] extends [
-  'logger',
-]
-  ? [options: LoggerTransportOptions<TProviderId>]
+type LoggerTransportConstructorArguments<
+  TProviderId extends string,
+  TMessage extends AnyMessage,
+> = [TProviderId] extends ['logger']
+  ? [options: LoggerTransportOptions<TProviderId, TMessage>]
   : [
-      options: LoggerTransportOptions<TProviderId> & {
-        readonly transport: Transport<TProviderId>;
+      options: LoggerTransportOptions<TProviderId, TMessage> & {
+        readonly transport: Transport<TProviderId, TMessage>;
       },
     ];
 
 /**
- * Transport that records email delivery lifecycle events through a logger the
- * application passes in: any pino-like logger whose methods take the
- * properties first and the message second (`logger.info(properties, message)`).
- * The events are `email.sending`, `email.sent`, `email.retrying` and
- * `email.failed`; a thrown error is logged under `err`, the key pino
- * serializes.  A retry is logged with its attempt, its wait and the text of its
- * error, without the addresses in it unless the message is recorded.
+ * Transport that records the delivery lifecycle of messages, of email or of a
+ * channel, through a logger the application passes in: any pino-like logger
+ * whose methods take the properties first and the message second
+ * (`logger.info(properties, message)`).  The events are `message.sending`,
+ * `message.sent`, `message.retrying` and `message.failed`, each with the
+ * `channel` of its message (`email` for one of email or raw MIME); a thrown
+ * error is logged under `err`, the key pino serializes.  A retry is logged
+ * with its attempt, its wait and the text of its error, without the
+ * addresses and phone numbers in it unless the message is recorded.
+ *
+ * A message of a channel is logged with `recipientCount` (1), `mediaCount`,
+ * `buttonCount`, `hasTemplate`, `hasPayload` and `priority`, and its `to`
+ * only within the message, with `recordMessage`.
  *
  * With no wrapped transport, this class acts as a log-only transport and
  * returns synthetic successful receipts.  When a transport is supplied, it
@@ -133,13 +150,16 @@ type LoggerTransportConstructorArguments<TProviderId extends string> = [TProvide
  * @typeParam TProviderId The provider id of the wrapped transport, or
  *                        `"logger"` in log-only mode.
  */
-export declare class LoggerTransport<TProviderId extends string = 'logger'>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class LoggerTransport<
+  TProviderId extends string = 'logger',
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   /** Provider id used by receipts from this transport. */
   readonly id: TProviderId;
   /** Fully resolved transport options. */
-  readonly config: ResolvedLoggerTransportOptions<TProviderId>;
+  readonly config: ResolvedLoggerTransportOptions<TProviderId, TMessage>;
   /**
    * Creates a logger transport.
    *
@@ -148,18 +168,18 @@ export declare class LoggerTransport<TProviderId extends string = 'logger'>
    * @throws {TypeError} If the logger is missing, or has no method for a
    *                     configured level.
    */
-  constructor(...[options]: LoggerTransportConstructorArguments<TProviderId>);
+  constructor(...[options]: LoggerTransportConstructorArguments<TProviderId, TMessage>);
   /**
-   * Sends one email while recording its delivery lifecycle.
+   * Sends one message while recording its delivery lifecycle.
    *
-   * @param message The email message to send.
+   * @param message The message to send.
    * @param options Optional transport options, including cancellation.
    * @returns The wrapped transport receipt, or a synthetic successful receipt
    *          in log-only mode.
    * @throws {DOMException} If the operation is aborted.
    * @throws {Error} If the wrapped transport throws an error.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends serialized MIME through the wrapped transport, its lifecycle logged with the envelope for the message.  A wrapped
    * transport without `sendRaw()` gives a failed receipt of the category
@@ -171,7 +191,7 @@ export declare class LoggerTransport<TProviderId extends string = 'logger'>
    */
   verify(options?: TransportOptions): Promise<void>;
   /**
-   * Sends multiple emails while recording each delivery lifecycle.
+   * Sends multiple messages while recording each delivery lifecycle.
    *
    * A wrapped transport's `sendMany()` implementation is used directly so
    * provider-specific batching and streaming behavior are preserved.
@@ -179,14 +199,14 @@ export declare class LoggerTransport<TProviderId extends string = 'logger'>
    * early closes the wrapped iterator without draining it, preserving its
    * cancellation behavior.
    *
-   * @param messages Email messages to send.
+   * @param messages The messages to send.
    * @param options Optional transport options, including cancellation.
    * @returns An async iterable of unmodified delivery receipts.
    * @throws {DOMException} If the operation is aborted.
    * @throws {Error} If the wrapped transport throws an error.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /**

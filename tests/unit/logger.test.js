@@ -55,8 +55,8 @@ test('Logger: a pino logger records the lifecycle, with the error serialized', a
   assert.deepStrictEqual(
     lines.map(({ level, msg, event }) => [level, msg, event]),
     [
-      [20, 'Sending email.', 'email.sending'],
-      [50, 'Failed to send email: TypeError: Connection refused.', 'email.failed'],
+      [20, 'Sending message.', 'message.sending'],
+      [50, 'Failed to send message: TypeError: Connection refused.', 'message.failed'],
     ],
   );
   assert.strictEqual(lines[1].err.type, 'TypeError');
@@ -126,10 +126,10 @@ test('Logger: a retry of the wrapped transport is logged, and still reaches onRe
   }
 
   assert.deepStrictEqual(heard, [1]);
-  const retries = calls.filter((call) => call.properties.event === 'email.retrying');
+  const retries = calls.filter((call) => call.properties.event === 'message.retrying');
   assert.strictEqual(retries.length, 2);
   assert.strictEqual(retries[0].level, 'warn');
-  assert.strictEqual(retries[0].text, 'Retrying email.');
+  assert.strictEqual(retries[0].text, 'Retrying message.');
   assert.strictEqual(retries[0].properties.operation, 'send');
   assert.strictEqual(retries[0].properties.recipientCount, 1);
   assert.strictEqual(retries[1].properties.operation, 'sendMany');
@@ -201,7 +201,7 @@ test('Logger: a failure of unknown delivery says so at the top of its line', asy
     logger,
   });
   await transport.send(message());
-  assert.strictEqual(lines[0].event, 'email.failed');
+  assert.strictEqual(lines[0].event, 'message.failed');
   assert.strictEqual(lines[0].deliveryUnknown, true);
   const known = new LoggerTransport({
     transport: { id: 'p', send: async () => ({ successful: false, errorMessages: ['no'] }) },
@@ -209,4 +209,94 @@ test('Logger: a failure of unknown delivery says so at the top of its line', asy
   });
   await known.send(message());
   assert.strictEqual('deliveryUnknown' in lines[1], false);
+});
+
+test('Logger: a message of a channel is logged with its channel and counts, not its recipient', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const records = [];
+  const record = (level) => (properties, text) => records.push({ level, properties, text });
+  const logger = {
+    debug: record('debug'),
+    info: record('info'),
+    warn: record('warn'),
+    error: record('error'),
+  };
+  const telegram = createChannelMessage({
+    channel: 'telegram',
+    to: 987654321,
+    text: 'Your code is 1234',
+    buttons: [{ type: 'url', text: 'Open', url: 'https://example.com/' }],
+  });
+  const failing = {
+    id: 'telegram',
+    send: async (_message, options) => {
+      options.onRetry({
+        attempt: 1,
+        delayMilliseconds: 10,
+        error: new Error('Bad Request: chat 987654321 not found'),
+      });
+      return {
+        successful: false,
+        errorMessages: ['Forbidden: bot was blocked by the user 987654321, +380671234567'],
+        errors: [{ message: 'chat 987654321', category: 'blocked', providerDetails: { chat: 1 } }],
+        retryable: false,
+      };
+    },
+  };
+  // Before: the properties read the recipients of email and threw.
+  await new LoggerTransport({ logger, transport: failing }).send(telegram);
+  assert.deepStrictEqual(
+    records.map((entry) => [entry.properties.event, entry.text]),
+    [
+      ['message.sending', 'Sending message.'],
+      ['message.retrying', 'Retrying message.'],
+      ['message.failed', 'Failed to send message.'],
+    ],
+  );
+  const {
+    event: _event,
+    operation: _operation,
+    transportId: _id,
+    ...sending
+  } = records[0].properties;
+  assert.deepStrictEqual(sending, {
+    channel: 'telegram',
+    recipientCount: 1,
+    mediaCount: 0,
+    buttonCount: 1,
+    hasTemplate: false,
+    hasPayload: false,
+    priority: 'normal',
+  });
+  // The recipient, a chat id no phone number, is redacted as it is written.
+  assert.strictEqual(
+    records[1].properties.errorMessage,
+    'Error: Bad Request: chat [REDACTED] not found',
+  );
+  assert.deepStrictEqual(records[2].properties.errorMessages, [
+    'Forbidden: bot was blocked by the user [REDACTED], [REDACTED]',
+  ]);
+  assert.strictEqual(records[2].properties.errors[0].message, 'chat [REDACTED]');
+  assert.strictEqual(records[2].properties.errors[0].providerDetails, undefined);
+  assert.ok(!JSON.stringify(records).includes('987654321'));
+
+  // Inline, the text of the message follows the line; an email names its channel.
+  records.length = 0;
+  const inline = new LoggerTransport({ logger, recordMessage: 'inline' });
+  await inline.send(telegram);
+  await inline.send(createChannelMessage({ channel: 'slack', payload: { blocks: [] } }));
+  await inline.send(message());
+  assert.deepStrictEqual(
+    records.map((entry) => [entry.properties.channel, entry.text]),
+    [
+      ['telegram', 'Sending message.\n\nYour code is 1234'],
+      ['telegram', 'Message sent.\n\nYour code is 1234'],
+      ['slack', 'Sending message.'],
+      ['slack', 'Message sent.'],
+      ['email', 'Sending message.\n\nSubject: Hello\n\nHi'],
+      ['email', 'Message sent.\n\nSubject: Hello\n\nHi'],
+    ],
+  );
+  assert.strictEqual(records[0].properties.message, telegram);
+  assert.strictEqual(records[2].properties.hasPayload, true);
 });

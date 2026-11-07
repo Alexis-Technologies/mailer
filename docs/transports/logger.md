@@ -105,7 +105,7 @@ with the code `MAILER_LOGGER_FAILED` (`process.on('warning', …)`), since losin
 the receipt could make the caller send the message again.
 
 The retries of the wrapped transport, those an HTTP provider makes on its own and
-those of a `./retry` inside the logger transport, are logged as `email.retrying`
+those of a `./retry` inside the logger transport, are logged as `message.retrying`
 events, with the attempt that failed, the wait in milliseconds, the text of the
 error (its addresses and phone numbers replaced by `[REDACTED]` unless the message is recorded)
 and its `statusCode` when it has one. They come from `onRetry` of the send
@@ -144,22 +144,36 @@ const transport = new LoggerTransport({
 });
 ```
 
-- `sending`: Level for `email.sending` events. Defaults to `"debug"`.
-- `sent`: Level for `email.sent` events. Defaults to `"info"`.
-- `failed`: Level for failed receipts and thrown errors. Defaults to `"error"`.
-- `retrying`: Level for `email.retrying` events. Defaults to `"warn"`.
+- `sending`: Level for `message.sending` events. Defaults to `"debug"`.
+- `sent`: Level for `message.sent` events. Defaults to `"info"`.
+- `failed`: Level for `message.failed` events, failed receipts and thrown errors.
+  Defaults to `"error"`.
+- `retrying`: Level for `message.retrying` events. Defaults to `"warn"`.
 
 The transport checks when it is made that the logger has a method for each of these
 levels, that of `retrying` only when it wraps a transport, and throws a
 `TypeError` otherwise.
 
-Every event includes the operation, transport id, recipient counts, attachment
-count, and priority. Completion events additionally include duration and receipt or
-error details. Instead of a category, give the transport a child logger with the
+Every event includes the `channel` of its message (`email` for an email and for
+raw MIME), the operation, transport id, recipient counts, attachment count, and
+priority. Completion events additionally include duration and receipt or error
+details. Instead of a category, give the transport a child logger with the
 bindings you want (`logger.child({ component: 'mail' })`).
 
+A message of a channel of `./channels` is logged with `recipientCount` (1),
+`mediaCount`, `buttonCount`, `hasTemplate`, `hasPayload` and `priority`. Its
+recipient is never a field of its own: it is only in the message, which
+`recordMessage` adds. Without it, the text of a failure or a retry is redacted of
+the recipient as the message names it, which a provider's error may repeat
+though it is no address and no phone number (a chat id, a push token, an
+endpoint), as well as of addresses and phone numbers.
+
+In 1.x the events were `email.sending`, `email.sent`, `email.failed` and
+`email.retrying`, and their texts named an email; a query or an alert on those
+names has to follow.
+
 A failed receipt of unknown delivery, which the provider may have taken, adds
-`deliveryUnknown: true` to the fields of its `email.failed` line, so that the
+`deliveryUnknown: true` to the fields of its `message.failed` line, so that the
 messages to reconcile from the provider's events, rather than send again, can be
 found by it.
 
@@ -175,8 +189,8 @@ modes, both of which log the failure as it is:
 - `"properties"`: Adds the complete `Message` object to the structured properties
   of every lifecycle event. The log message itself remains on one line.
 - `"inline"`: Adds the same `message` property and renders the subject and body
-  beneath the lifecycle message. This format is convenient when reading local
-  development logs.
+  beneath the lifecycle message, or the text of a message of a channel. This
+  format is convenient when reading local development logs.
 
 Use `"properties"` when a destination will process the message as structured data:
 

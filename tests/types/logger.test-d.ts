@@ -1,6 +1,14 @@
 import pino from 'pino';
 import { expectAssignable, expectError, expectType } from 'tsd';
-import { createMessage, type Receipt, type Transport } from '../../index.js';
+import {
+  createMessage,
+  type AnyMessage,
+  type RawTransport,
+  type Receipt,
+  type SmsMessage,
+  type Transport,
+  type VerifiableTransport,
+} from '../../index.js';
 import { MockTransport } from '../../src/mock/index.js';
 import {
   LoggerTransport,
@@ -40,3 +48,13 @@ expectError(new LoggerTransport<'base'>({ logger }));
 expectError(new LoggerTransport({ logger, recordMessage: true }));
 expectError(new LoggerTransport({}));
 expectError<LoggerTransportOptions>({ logger, levels: { sent: 'warning' } });
+
+// A logger of a transport of a channel takes its messages, and raw MIME
+// still goes through one of email.
+declare const twilio: Transport<'twilio', SmsMessage>;
+const sms = new LoggerTransport({ logger, transport: twilio });
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectError(sms.send(message));
+expectAssignable<RawTransport<'mock'>>(decorated);
+const everyChannel = new LoggerTransport<'logger', AnyMessage>({ logger });
+expectAssignable<Transport<'logger', AnyMessage>>(everyChannel);

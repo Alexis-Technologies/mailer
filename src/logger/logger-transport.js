@@ -4,6 +4,7 @@
 
 const { inspect } = require('node:util');
 const { generateId } = require('../core/id.js');
+const { redactMessageRecipient } = require('../internal/channel/recipient.js');
 const { redactRecipients } = require('../internal/redact-addresses.js');
 const { warnLimited } = require('../internal/warn.js');
 const { resolveLoggerTransportOptions } = require('./config.js');
@@ -15,10 +16,14 @@ const { disposeOf, verifyWrapped } = require('../internal/decorator.js');
 // A raw message has its envelope where a message has its recipients.
 const isRawMessage = (message) => message.envelope != null && message.recipients == null;
 
+// A message without a channel is email, as 1.x made them.
+const channelOf = (message) => message.channel ?? 'email';
+
 /**
- * Transport that records email delivery lifecycle events through a logger the
- * application passes in: any pino-like logger whose methods take the
- * properties first and the message second (`logger.info(properties, message)`).
+ * Transport that records the delivery lifecycle of messages, of email or of a
+ * channel, through a logger the application passes in: any pino-like logger
+ * whose methods take the properties first and the message second
+ * (`logger.info(properties, message)`).
  *
  * With no wrapped transport, this class acts as a log-only transport and
  * returns synthetic successful receipts.  When a transport is supplied, it
@@ -53,9 +58,9 @@ class LoggerTransport {
   }
 
   /**
-   * Sends one email while recording its delivery lifecycle.
+   * Sends one message while recording its delivery lifecycle.
    *
-   * @param message The email message to send.
+   * @param message The message to send, of email or of a channel.
    * @param options Optional transport options, including cancellation.
    * @returns The wrapped transport receipt, or a synthetic successful receipt
    *          in log-only mode.
@@ -93,7 +98,7 @@ class LoggerTransport {
   }
 
   /**
-   * Sends multiple emails while recording each delivery lifecycle.
+   * Sends multiple messages while recording each delivery lifecycle.
    *
    * A wrapped transport's `sendMany()` implementation is used directly so
    * provider-specific batching and streaming behavior are preserved.
@@ -101,7 +106,7 @@ class LoggerTransport {
    * early closes the wrapped iterator without draining it, preserving its
    * cancellation behavior.
    *
-   * @param messages Email messages to send.
+   * @param messages The messages to send.
    * @param options Optional transport options, including cancellation.
    * @returns An async iterable of unmodified delivery receipts.
    * @throws {DOMException} If the operation is aborted.
@@ -201,15 +206,17 @@ class LoggerTransport {
   logRetry(event, message, operation) {
     const errorMessage = describe(event.error);
     const statusCode = event.error?.statusCode;
-    this.log(this.config.levels.retrying, 'Retrying email.', {
+    this.log(this.config.levels.retrying, 'Retrying message.', {
       ...(message == null ? {} : this.getMessageProperties(message)),
-      event: 'email.retrying',
+      event: 'message.retrying',
       operation,
       transportId: this.id,
       attempt: event.attempt,
       delayMilliseconds: event.delayMilliseconds,
       errorMessage:
-        this.config.recordMessage === false ? redactRecipients(errorMessage) : errorMessage,
+        this.config.recordMessage === false
+          ? redactMessageRecipient(errorMessage, message)
+          : errorMessage,
       ...(statusCode == null ? {} : { statusCode }),
     });
   }
@@ -225,9 +232,9 @@ class LoggerTransport {
   }
 
   logSending(message, operation) {
-    this.log(this.config.levels.sending, this.getMessageText('Sending email.', message), {
+    this.log(this.config.levels.sending, this.getMessageText('Sending message.', message), {
       ...this.getMessageProperties(message),
-      event: 'email.sending',
+      event: 'message.sending',
       operation,
       transportId: this.id,
     });
@@ -242,10 +249,10 @@ class LoggerTransport {
     if (receipt.successful) {
       this.log(
         this.config.levels.sent,
-        this.getMessageText('Email sent.', pendingMessage?.message),
+        this.getMessageText('Message sent.', pendingMessage?.message),
         {
           ...messageProperties,
-          event: 'email.sent',
+          event: 'message.sent',
           operation,
           transportId: this.id,
           durationMilliseconds,
@@ -257,13 +264,16 @@ class LoggerTransport {
       return;
     }
 
-    const failure = this.config.recordMessage === false ? redactFailure(receipt) : receipt;
+    const failure =
+      this.config.recordMessage === false
+        ? redactFailure(receipt, pendingMessage?.message)
+        : receipt;
     this.log(
       this.config.levels.failed,
-      this.getMessageText('Failed to send email.', pendingMessage?.message),
+      this.getMessageText('Failed to send message.', pendingMessage?.message),
       {
         ...messageProperties,
-        event: 'email.failed',
+        event: 'message.failed',
         operation,
         transportId: this.id,
         durationMilliseconds,
@@ -282,11 +292,11 @@ class LoggerTransport {
   logThrownError(error, message, operation, startedAt, extraProperties = {}) {
     this.log(
       this.config.levels.failed,
-      this.getMessageText(`Failed to send email: ${describe(error)}`, message),
+      this.getMessageText(`Failed to send message: ${describe(error)}`, message),
       {
         ...(message == null ? {} : this.getMessageProperties(message)),
         ...extraProperties,
-        event: 'email.failed',
+        event: 'message.failed',
         operation,
         transportId: this.id,
         durationMilliseconds: performance.now() - startedAt,
@@ -322,11 +332,28 @@ class LoggerTransport {
   getMessageProperties(message) {
     if (isRawMessage(message)) {
       return {
+        channel: 'email',
         recipientCount: message.envelope.to.length,
         ...(this.config.recordMessage === false ? {} : { envelope: message.envelope }),
       };
     }
+    const channel = channelOf(message);
+    // A message of a channel has one recipient, which only the message
+    // itself names, with recordMessage.
+    if (channel !== 'email') {
+      return {
+        channel,
+        recipientCount: 1,
+        mediaCount: message.media?.length ?? 0,
+        buttonCount: message.buttons?.length ?? 0,
+        hasTemplate: message.template !== undefined,
+        hasPayload: message.payload !== undefined,
+        priority: message.priority,
+        ...(this.config.recordMessage === false ? {} : { message }),
+      };
+    }
     return {
+      channel,
       recipientCount: message.recipients.length,
       ccRecipientCount: message.ccRecipients.length,
       bccRecipientCount: message.bccRecipients.length,
@@ -342,6 +369,11 @@ class LoggerTransport {
   getMessageText(lifecycleMessage, message) {
     if (this.config.recordMessage !== 'inline' || message == null || isRawMessage(message)) {
       return lifecycleMessage;
+    }
+    if (channelOf(message) !== 'email') {
+      return message.text === undefined
+        ? lifecycleMessage
+        : `${lifecycleMessage}\n\n${message.text}`;
     }
 
     const content =
@@ -368,18 +400,21 @@ class LoggerTransport {
 }
 
 // Unless the message itself is logged, a failure is logged without the
-// addresses its error text names, such as the recipient of an SMTP rejection,
-// and without the provider's raw response.
-const redactFailure = (receipt) => {
+// addresses and numbers its error text names, such as the recipient of an
+// SMTP rejection, without the recipient of the message of a channel, which
+// may be an id or a token, and without the provider's raw response.
+const redactFailure = (receipt, message) => {
   const errorMessages = [];
-  for (const text of receipt.errorMessages) errorMessages.push(redactRecipients(text));
+  for (const text of receipt.errorMessages) {
+    errorMessages.push(redactMessageRecipient(text, message));
+  }
   let errors = receipt.errors;
   if (errors != null) {
     errors = [];
     for (const error of receipt.errors) {
       errors.push({
         ...error,
-        message: redactRecipients(error.message),
+        message: redactMessageRecipient(error.message, message),
         providerDetails: undefined,
       });
     }

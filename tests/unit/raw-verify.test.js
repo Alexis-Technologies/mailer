@@ -199,8 +199,8 @@ test('Raw: the logger logs a raw send by its envelope, addresses only when asked
   assert.deepStrictEqual(
     records.map((record) => [record.properties.event, record.properties.recipientCount]),
     [
-      ['email.sending', 2],
-      ['email.sent', 2],
+      ['message.sending', 2],
+      ['message.sent', 2],
     ],
   );
   assert.strictEqual(records[0].properties.envelope, undefined);
@@ -208,10 +208,10 @@ test('Raw: the logger logs a raw send by its envelope, addresses only when asked
   records.length = 0;
   await new LoggerTransport({ transport: mock, logger, recordMessage: 'inline' }).sendRaw(raw());
   assert.deepStrictEqual(records[0].properties.envelope.to, ['bob@example.com']);
-  assert.strictEqual(records[0].text, 'Sending email.');
+  assert.strictEqual(records[0].text, 'Sending message.');
   records.length = 0;
   assertRefused(await new LoggerTransport({ transport: plain(), logger }).sendRaw(raw()), 'plain');
-  assert.strictEqual(records.at(-1).properties.event, 'email.failed');
+  assert.strictEqual(records.at(-1).properties.event, 'message.failed');
   const logOnly = await new LoggerTransport({ logger }).sendRaw(raw());
   assert.strictEqual(logOnly.successful, true);
   await new LoggerTransport({ logger }).verify();

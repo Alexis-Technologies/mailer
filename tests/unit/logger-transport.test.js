@@ -3,6 +3,8 @@
 // message is the rendered text (no LogTape template), an error is under `err`,
 // and the levels are pino's.
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
+// Changed after the port: the events are `message.*` (were `email.*`), and
+// their texts name a message, as a message of a channel is logged too.
 
 const { strict: assert } = require('node:assert');
 const { describe, it } = require('node:test');
@@ -49,9 +51,9 @@ describe('LoggerTransport', () => {
       assert.equal(recorder.records.length, 2);
       recorder.assertLogged({
         level: 'debug',
-        message: 'Sending email.',
+        message: 'Sending message.',
         properties: {
-          event: 'email.sending',
+          event: 'message.sending',
           operation: 'send',
           transportId: 'logger',
           recipientCount: 2,
@@ -63,9 +65,9 @@ describe('LoggerTransport', () => {
       });
       recorder.assertLogged({
         level: 'info',
-        message: 'Email sent.',
+        message: 'Message sent.',
         properties: {
-          event: 'email.sent',
+          event: 'message.sent',
           operation: 'send',
           transportId: 'logger',
           messageId: receipt.messageId,
@@ -92,13 +94,13 @@ describe('LoggerTransport', () => {
 
       recorder.assertLogged({
         level: 'trace',
-        message: 'Sending email.',
-        properties: { event: 'email.sending', message },
+        message: 'Sending message.',
+        properties: { event: 'message.sending', message },
       });
       recorder.assertLogged({
         level: 'warn',
-        message: 'Email sent.',
-        properties: { event: 'email.sent', message },
+        message: 'Message sent.',
+        properties: { event: 'message.sent', message },
       });
     });
   });
@@ -113,12 +115,12 @@ describe('LoggerTransport', () => {
       await transport.send(message);
 
       recorder.assertLogged({
-        message: /^Sending email\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.sending', message },
+        message: /^Sending message\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.sending', message },
       });
       recorder.assertLogged({
-        message: /^Email sent\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.sent', message },
+        message: /^Message sent\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.sent', message },
       });
     });
   });
@@ -141,8 +143,8 @@ describe('LoggerTransport', () => {
       await transport.send(message);
 
       recorder.assertLogged({
-        message: /^Failed to send email\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.failed', message },
+        message: /^Failed to send message\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.failed', message },
       });
     });
   });
@@ -170,12 +172,12 @@ describe('LoggerTransport', () => {
       await transport.send(alternativeMessage);
 
       recorder.assertLogged({
-        message: /^Email sent\.\n\nSubject: HTML message\n\n<p>Hello from HTML\.<\/p>$/,
-        properties: { event: 'email.sent', message: htmlMessage },
+        message: /^Message sent\.\n\nSubject: HTML message\n\n<p>Hello from HTML\.<\/p>$/,
+        properties: { event: 'message.sent', message: htmlMessage },
       });
       recorder.assertLogged({
-        message: /^Email sent\.\n\nSubject: Alternative message\n\n$/,
-        properties: { event: 'email.sent', message: alternativeMessage },
+        message: /^Message sent\.\n\nSubject: Alternative message\n\n$/,
+        properties: { event: 'message.sent', message: alternativeMessage },
       });
     });
   });
@@ -205,7 +207,7 @@ describe('LoggerTransport', () => {
       recorder.assertLogged({
         level: 'info',
         properties: {
-          event: 'email.sent',
+          event: 'message.sent',
           transportId: 'base',
           messageId: 'base-message-1',
           provider: 'base',
@@ -235,9 +237,9 @@ describe('LoggerTransport', () => {
       assert.deepEqual(receipt.errorMessages, ['Provider rejected the message.']);
       recorder.assertLogged({
         level: 'fatal',
-        message: 'Failed to send email.',
+        message: 'Failed to send message.',
         properties: {
-          event: 'email.failed',
+          event: 'message.failed',
           operation: 'send',
           transportId: 'base',
           errorMessages: receipt.errorMessages,
@@ -268,9 +270,9 @@ describe('LoggerTransport', () => {
       assert.equal(thrown, error);
       recorder.assertLogged({
         level: 'error',
-        message: /Failed to send email/,
+        message: /Failed to send message/,
         properties: {
-          event: 'email.failed',
+          event: 'message.failed',
           operation: 'send',
           transportId: 'base',
           err: error,
@@ -310,28 +312,28 @@ describe('LoggerTransport', () => {
         receipts.map((receipt) => receipt.successful && receipt.messageId),
         ['base-batch-1', 'base-batch-2'],
       );
-      assert.equal(recorder.filter({ properties: { event: 'email.sending' } }).length, 2);
-      assert.equal(recorder.filter({ properties: { event: 'email.sent' } }).length, 2);
+      assert.equal(recorder.filter({ properties: { event: 'message.sending' } }).length, 2);
+      assert.equal(recorder.filter({ properties: { event: 'message.sent' } }).length, 2);
       assert.ok(recorder.records.every((record) => record.properties.operation === 'sendMany'));
       assert.deepEqual(
         recorder.records.map((record) => record.properties.message),
         [message, message, secondMessage, secondMessage],
       );
       recorder.assertLogged({
-        message: /^Sending email\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.sending', message },
+        message: /^Sending message\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.sending', message },
       });
       recorder.assertLogged({
-        message: /^Email sent\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.sent', message },
+        message: /^Message sent\.\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.sent', message },
       });
       recorder.assertLogged({
-        message: /^Sending email\.\n\nSubject: Second message\n\nAnother message\.$/,
-        properties: { event: 'email.sending', message: secondMessage },
+        message: /^Sending message\.\n\nSubject: Second message\n\nAnother message\.$/,
+        properties: { event: 'message.sending', message: secondMessage },
       });
       recorder.assertLogged({
-        message: /^Email sent\.\n\nSubject: Second message\n\nAnother message\.$/,
-        properties: { event: 'email.sent', message: secondMessage },
+        message: /^Message sent\.\n\nSubject: Second message\n\nAnother message\.$/,
+        properties: { event: 'message.sent', message: secondMessage },
       });
     });
   });
@@ -357,7 +359,7 @@ describe('LoggerTransport', () => {
 
       assert.deepEqual(base.sentMessages, [message, secondMessage]);
       assert.equal(base.yieldedReceiptCount, 1);
-      assert.equal(recorder.filter({ properties: { event: 'email.sent' } }).length, 1);
+      assert.equal(recorder.filter({ properties: { event: 'message.sent' } }).length, 1);
     });
   });
 
@@ -381,7 +383,7 @@ describe('LoggerTransport', () => {
       }
 
       assert.deepEqual(base.sentMessages, [message]);
-      assert.equal(recorder.filter({ properties: { event: 'email.sent' } }).length, 1);
+      assert.equal(recorder.filter({ properties: { event: 'message.sent' } }).length, 1);
     });
   });
 
@@ -444,7 +446,7 @@ describe('LoggerTransport', () => {
       assert.equal(thrown, error);
       assert.deepEqual(base.sentMessages, [message, secondMessage]);
       const failures = recorder.filter({
-        properties: { event: 'email.failed' },
+        properties: { event: 'message.failed' },
       });
       assert.equal(failures.length, 2);
       assert.deepEqual(
@@ -458,13 +460,13 @@ describe('LoggerTransport', () => {
       assert.ok(failures.every((record) => record.properties.err === error));
       recorder.assertLogged({
         message:
-          /^Failed to send email: TypeError: Batch transport failed\.[\s\S]*\n\nSubject: Test message\n\nHello from Upyo\.$/,
-        properties: { event: 'email.failed', message },
+          /^Failed to send message: TypeError: Batch transport failed\.[\s\S]*\n\nSubject: Test message\n\nHello from Upyo\.$/,
+        properties: { event: 'message.failed', message },
       });
       recorder.assertLogged({
         message:
-          /^Failed to send email: TypeError: Batch transport failed\.[\s\S]*\n\nSubject: Second message\n\nAnother message\.$/,
-        properties: { event: 'email.failed', message: secondMessage },
+          /^Failed to send message: TypeError: Batch transport failed\.[\s\S]*\n\nSubject: Second message\n\nAnother message\.$/,
+        properties: { event: 'message.failed', message: secondMessage },
       });
     });
   });
@@ -494,9 +496,9 @@ describe('LoggerTransport', () => {
       }, error);
 
       recorder.assertLogged({
-        message: /^Failed to send email: TypeError: Batch transport failed before consuming\./,
+        message: /^Failed to send message: TypeError: Batch transport failed before consuming\./,
         properties: (properties) =>
-          properties.event === 'email.failed' && !('message' in properties),
+          properties.event === 'message.failed' && !('message' in properties),
       });
     });
   });

@@ -442,3 +442,21 @@ test('Channels: retry and pool give every attempt of a message one client refere
     transport.calls[1].message.idempotencyKey,
   );
 });
+
+test('Channels: the recipient of a message is redacted as it is written, unless it is short', () => {
+  const {
+    recipientOf,
+    redactMessageRecipient,
+  } = require('../../src/internal/channel/recipient.js');
+  assert.strictEqual(recipientOf(undefined), undefined);
+  assert.strictEqual(recipientOf(42), '42');
+  assert.strictEqual(recipientOf({ topic: 'news' }), 'news');
+  const push = { to: { endpoint: 'https://push.example/sub/abcdef' } };
+  assert.strictEqual(
+    redactMessageRecipient('410 at https://push.example/sub/abcdef for bob@example.com', push),
+    '410 at [REDACTED] for [REDACTED]',
+  );
+  // A chat 42 would replace the 42 of any text.
+  assert.strictEqual(redactMessageRecipient('chat 42 of 420', { to: 42 }), 'chat 42 of 420');
+  assert.strictEqual(redactMessageRecipient('no message +380671234567'), 'no message [REDACTED]');
+});
