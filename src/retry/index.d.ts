@@ -4,6 +4,7 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   IdOptions,
   Logger,
   Message,
@@ -12,7 +13,6 @@ import type {
   Transport,
   TransportOptions,
   RawMessage,
-  RawTransport,
   VerifiableTransport,
 } from '../../index.js';
 
@@ -200,8 +200,11 @@ interface ResolvedRetryConfig<TProviderId extends string = string> {
 /**
  * Transport decorator that retries transient delivery failures.
  */
-export declare class RetryTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class RetryTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /**
@@ -215,7 +218,7 @@ export declare class RetryTransport<TProviderId extends string = string>
    * @param config Retry configuration.
    * @throws {RangeError} If retry configuration is invalid.
    */
-  constructor(transport: Transport<TProviderId>, config?: RetryConfig<TProviderId>);
+  constructor(transport: Transport<TProviderId, TMessage>, config?: RetryConfig<TProviderId>);
   /**
    * Sends one message, retrying retryable failures.
    *
@@ -224,7 +227,7 @@ export declare class RetryTransport<TProviderId extends string = string>
    * @returns The final delivery receipt.
    * @throws {DOMException} If the operation is aborted.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends serialized MIME through the wrapped transport, retrying retryable failures as `send()` does.  A wrapped
    * transport without `sendRaw()` gives a failed receipt of the category
@@ -246,7 +249,7 @@ export declare class RetryTransport<TProviderId extends string = string>
    * @throws {DOMException} If the operation is aborted.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /**
@@ -265,7 +268,10 @@ export declare class RetryTransport<TProviderId extends string = string>
  * @returns A retrying transport decorator.
  * @throws {RangeError} If retry configuration is invalid.
  */
-export declare function createRetryTransport<TProviderId extends string = string>(
-  baseTransport: Transport<TProviderId>,
+export declare function createRetryTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>(
+  baseTransport: Transport<TProviderId, TMessage>,
   config?: RetryConfig<TProviderId>,
-): RetryTransport<TProviderId>;
+): RetryTransport<TProviderId, TMessage>;

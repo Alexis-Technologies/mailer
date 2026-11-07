@@ -95,6 +95,14 @@ or `SyntaxError` that is no recognizable delivery failure (such as reading a
 property of `undefined`) rejects the send at once, without a retry, while a
 network failure that `fetch` reports as a `TypeError` is still retried.
 
+A transport of a channel retries the same way. Of the categories of the
+channels, only `unreachable` (a handset off for now) is retryable; an opted-out
+or blocked recipient, a push token gone, or one outside the 24-hour window of
+Meta is not. Every attempt of a message of a channel carries the same
+`idempotencyKey`, generated before the first when it has none, which its
+provider takes as its client reference. In TypeScript the decorator takes the
+messages of the transport it wraps (`RetryTransport<'twilio', SmsMessage>`).
+
 You can override classification with `shouldRetry` when a provider needs
 application-specific logic:
 
