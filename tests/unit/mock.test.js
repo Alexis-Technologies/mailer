@@ -102,3 +102,54 @@ test('Mock: reset() clears the raw messages too', async () => {
   transport.reset();
   assert.deepStrictEqual(transport.getSentRawMessages(), []);
 });
+
+test('Mock: the messages of a channel are found by their recipient and their channel', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const transport = new MockTransport();
+  const email = message('Hi');
+  const sms = createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Code 1234' });
+  const telegram = createChannelMessage({ channel: 'telegram', to: 42, text: 'Hi' });
+  const push = createChannelMessage({ channel: 'push', to: { token: 'device-1' }, text: 'Hi' });
+  const webPush = createChannelMessage({
+    channel: 'push',
+    to: {
+      endpoint: 'https://push.example/sub/1',
+      keys: {
+        p256dh:
+          'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
+        auth: 'tBHItJI5svbpez7KI4CCXg',
+      },
+    },
+    text: 'Hi',
+  });
+  const teams = createChannelMessage({
+    channel: 'teams',
+    to: { serviceUrl: 'https://smba.trafficmanager.net/emea/', conversationId: 'conv-1' },
+    text: 'Hi',
+  });
+  const slack = createChannelMessage({ channel: 'slack', text: 'Hi' });
+  for (const sent of [email, sms, telegram, push, webPush, teams, slack]) {
+    await transport.send(sent);
+  }
+  // Before: getMessagesTo read the recipients of email from every message
+  // and threw on the first of a channel.
+  assert.deepStrictEqual(transport.getMessagesTo('+380671234567'), [sms]);
+  assert.deepStrictEqual(transport.getMessagesTo(42), [telegram]);
+  assert.deepStrictEqual(transport.getMessagesTo('42'), [telegram]);
+  assert.deepStrictEqual(transport.getMessagesTo('device-1'), [push]);
+  assert.deepStrictEqual(transport.getMessagesTo('https://push.example/sub/1'), [webPush]);
+  assert.deepStrictEqual(transport.getMessagesTo('conv-1'), [teams]);
+  assert.deepStrictEqual(transport.getMessagesTo('bob@example.com'), [email]);
+  assert.deepStrictEqual(transport.getMessagesTo('undefined'), []);
+  assert.deepStrictEqual(transport.getMessagesByChannel('push'), [push, webPush]);
+  assert.deepStrictEqual(transport.getMessagesByChannel('email'), [email]);
+  // A message of a channel has no subject, which made it match undefined.
+  assert.deepStrictEqual(transport.getMessagesBySubject(undefined), []);
+  assert.deepStrictEqual(transport.getMessagesBySubject('Hi'), [email]);
+  // An email message made by hand, with no channel and no Cc, is email.
+  const { channel: _channel, ccRecipients: _cc, ...manual } = email;
+  transport.clearSentMessages();
+  await transport.send(manual);
+  assert.deepStrictEqual(transport.getMessagesTo('bob@example.com'), [manual]);
+  assert.deepStrictEqual(transport.getMessagesByChannel('email'), [manual]);
+});

@@ -2,9 +2,10 @@
 // https://github.com/dahlia/upyo — MIT, Copyright 2025 Hong Minhee
 
 import type {
+  AnyMessage,
+  Channel,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   TransportOptions,
   VerifiableTransport,
@@ -101,8 +102,14 @@ type ResolvedMockConfig = Required<MockConfig>;
  * making it useful for unit testing email functionality. It provides
  * comprehensive testing capabilities including message verification,
  * behavior simulation, and async utilities.
+ *
+ * It takes email by default, and the messages of a channel with `TMessage`
+ * (`new MockTransport<SmsMessage>()`, or `AnyMessage` for a mock of every
+ * channel). It sends raw MIME too, as a `RawTransport<'mock'>`.
  */
-export declare class MockTransport implements RawTransport<'mock'>, VerifiableTransport<'mock'> {
+export declare class MockTransport<
+  TMessage extends AnyMessage = Message,
+> implements VerifiableTransport<'mock', TMessage> {
   readonly id = 'mock';
   /**
    * The resolved configuration used by this mock transport.
@@ -125,7 +132,7 @@ export declare class MockTransport implements RawTransport<'mock'>, VerifiableTr
    * @returns A promise that resolves to a receipt indicating success or failure.
    * @throws {DOMException} When the operation is aborted via `AbortSignal`.
    */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<'mock'>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<'mock'>>;
   /**
    * Takes serialized MIME as `send()` takes a message: it is kept apart from
    * the messages and answered with the next response.
@@ -151,7 +158,7 @@ export declare class MockTransport implements RawTransport<'mock'>, VerifiableTr
    * @throws {DOMException} When the operation is aborted via `AbortSignal`.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<'mock'>>;
   /**
@@ -159,13 +166,13 @@ export declare class MockTransport implements RawTransport<'mock'>, VerifiableTr
    *
    * @returns A readonly array containing copies of all sent messages.
    */
-  getSentMessages(): readonly Message[];
+  getSentMessages(): readonly TMessage[];
   /**
    * Get the last message that was sent, or undefined if no messages have been sent.
    *
    * @returns The most recently sent message, or undefined if none.
    */
-  getLastSentMessage(): Message | undefined;
+  getLastSentMessage(): TMessage | undefined;
   /**
    * Get the total number of messages that have been sent.
    *
@@ -230,31 +237,42 @@ export declare class MockTransport implements RawTransport<'mock'>, VerifiableTr
    * @param predicate A function that tests each message.
    * @returns The first matching message, or undefined if none found.
    */
-  findMessageBy(predicate: (message: Message) => boolean): Message | undefined;
+  findMessageBy(predicate: (message: TMessage) => boolean): TMessage | undefined;
   /**
    * Find all messages matching the given predicate.
    *
    * @param predicate A function that tests each message.
    * @returns An array of all matching messages.
    */
-  findMessagesBy(predicate: (message: Message) => boolean): readonly Message[];
+  findMessagesBy(predicate: (message: TMessage) => boolean): readonly TMessage[];
   /**
-   * Get all messages sent to a specific email address.
+   * Get all messages sent to a specific recipient.
    *
-   * Searches through To, CC, and BCC recipients to find messages
-   * that were sent to the specified email address.
+   * Searches the To, CC, and BCC recipients of email, and the `to` of a
+   * message of a channel: a number or an id, or the token, topic, endpoint
+   * or conversation it names.
    *
-   * @param email The email address to search for.
-   * @returns An array of messages sent to the specified address.
+   * @param recipient The email address, number or id to search for.
+   * @returns An array of messages sent to the specified recipient.
    */
-  getMessagesTo(email: string): readonly Message[];
+  getMessagesTo(recipient: string | number): readonly TMessage[];
   /**
-   * Get all messages with a specific subject.
+   * Get all messages of a channel, email among them.
+   *
+   * @param channel The channel of the messages.
+   * @returns An array of the messages of that channel.
+   */
+  getMessagesByChannel<C extends Channel>(
+    channel: C,
+  ): readonly Extract<TMessage, { readonly channel: C }>[];
+  /**
+   * Get all email messages with a specific subject; a message of another
+   * channel has none.
    *
    * @param subject The exact subject line to match.
    * @returns An array of messages with the specified subject.
    */
-  getMessagesBySubject(subject: string): readonly Message[];
+  getMessagesBySubject(subject: string): readonly Extract<TMessage, Message>[];
   /**
    * Wait for a specific number of messages to be sent.
    *
@@ -282,7 +300,7 @@ export declare class MockTransport implements RawTransport<'mock'>, VerifiableTr
    * @throws {Error} When the timeout is exceeded before finding a matching
    *                 message.
    */
-  waitForMessage(predicate: (message: Message) => boolean, timeout?: number): Promise<Message>;
+  waitForMessage(predicate: (message: TMessage) => boolean, timeout?: number): Promise<TMessage>;
   /**
    * Reset the transport to its initial state.
    *

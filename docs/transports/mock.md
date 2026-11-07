@@ -235,6 +235,26 @@ These querying capabilities make it easy to write comprehensive tests that
 verify not just that emails were sent, but that the right emails were sent
 to the right recipients with the correct content.
 
+### Messages of the channels
+
+The mock takes the messages of `createChannelMessage` as it takes email.
+`getMessagesTo()` matches the `to` of a message of a channel: a phone number or
+an id, or the token, topic, endpoint or conversation its object names.
+`getMessagesByChannel()` gives the messages of one channel, and
+`getMessagesBySubject()` looks at email alone, as no other channel has a
+subject. In TypeScript the mock takes email by default; a mock of a channel
+names its message, and one in a router of several channels takes them all:
+
+```js
+const { createChannelMessage } = require('@alexify/mailer/channels');
+
+const transport = new MockTransport(); // MockTransport<SmsMessage> in TypeScript
+await transport.send(createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Hi' }));
+
+console.log(transport.getMessagesTo('+380671234567').length); // 1
+console.log(transport.getMessagesByChannel('sms').length); // 1
+```
+
 ## Async testing patterns
 
 Many email workflows are asynchronous, such as sending emails after user

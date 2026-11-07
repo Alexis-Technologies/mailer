@@ -68,6 +68,11 @@ worker of 1.2 holds reads the same.
 - **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
   `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
   audit event its `channel`.
+- **`./mock` takes the messages of the channels:** `getMessagesTo` matches the `to` of one (a
+  number or an id, or the token, topic, endpoint or conversation it names), where it threw;
+  `getMessagesByChannel` gives the messages of a channel; `getMessagesBySubject` looks at email
+  alone, where a message of a channel matched `undefined`. `MockTransport<TMessage>` takes email
+  by default.
 
 ## [1.2.1] - 2026-11-07
 

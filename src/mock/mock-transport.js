@@ -6,10 +6,21 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { createMockConfig } = require('./config.js');
 
 const hasAddress = (addresses, email) => {
+  if (addresses == null) return false;
   for (const address of addresses) {
     if (address.address === email) return true;
   }
   return false;
+};
+
+// A message without a channel is email, as 1.x made them.
+const channelOf = (message) => message.channel ?? 'email';
+
+// The recipient of a message of a channel as a string: its number or id, or
+// the token, topic, endpoint or conversation its object names.
+const recipientOf = (to) => {
+  if (typeof to !== 'object' || to === null) return to === undefined ? undefined : String(to);
+  return to.token ?? to.topic ?? to.endpoint ?? to.conversationId;
 };
 
 /**
@@ -43,7 +54,7 @@ class MockTransport {
   }
 
   /**
-   * Sends an email message through the mock transport.
+   * Sends a message, of email or of a channel, through the mock transport.
    *
    * The message is stored in memory and can be retrieved for testing verification.
    * Respects configured delays, failure rates, and response overrides.
@@ -267,31 +278,48 @@ class MockTransport {
   }
 
   /**
-   * Get all messages sent to a specific email address.
+   * Get all messages sent to a specific recipient.
    *
-   * Searches through To, CC, and BCC recipients to find messages
-   * that were sent to the specified email address.
+   * Searches the To, CC, and BCC recipients of email, and the `to` of a
+   * message of a channel: a number or an id, or the token, topic, endpoint
+   * or conversation it names.
    *
-   * @param email The email address to search for.
-   * @returns An array of messages sent to the specified address.
+   * @param recipient The email address, number or id to search for.
+   * @returns An array of messages sent to the specified recipient.
    */
-  getMessagesTo(email) {
-    return this.findMessagesBy(
-      (message) =>
-        hasAddress(message.recipients, email) ||
-        hasAddress(message.ccRecipients, email) ||
-        hasAddress(message.bccRecipients, email),
-    );
+  getMessagesTo(recipient) {
+    const wanted = String(recipient);
+    return this.findMessagesBy((message) => {
+      if (channelOf(message) !== 'email') return recipientOf(message.to) === wanted;
+      return (
+        hasAddress(message.recipients, wanted) ||
+        hasAddress(message.ccRecipients, wanted) ||
+        hasAddress(message.bccRecipients, wanted)
+      );
+    });
   }
 
   /**
-   * Get all messages with a specific subject.
+   * Get all messages of a channel, email among them.
+   *
+   * @param channel The channel of the messages.
+   * @returns An array of the messages of that channel.
+   */
+  getMessagesByChannel(channel) {
+    return this.findMessagesBy((message) => channelOf(message) === channel);
+  }
+
+  /**
+   * Get all email messages with a specific subject; a message of another
+   * channel has none.
    *
    * @param subject The exact subject line to match.
    * @returns An array of messages with the specified subject.
    */
   getMessagesBySubject(subject) {
-    return this.findMessagesBy((message) => message.subject === subject);
+    return this.findMessagesBy(
+      (message) => channelOf(message) === 'email' && message.subject === subject,
+    );
   }
 
   /**
