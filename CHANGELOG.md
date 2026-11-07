@@ -40,6 +40,8 @@ worker of 1.2 holds reads the same.
   `recordMessage`, the text of a failure or a retry is redacted of the recipient as the message
   names it (a chat id, a push token, an endpoint). `LoggerTransport<P, TMessage>` takes the
   messages of the transport wrapped.
+- **Breaking: the logger sink of `./audit` writes `message.<state>`** (was `mail.<state>`),
+  with the `channel` of the message, `email` for an event of 1.x, which names none.
 - **Breaking: the metrics of `./otel` are `mailer.message.*`** (were `mailer.email.*`):
   `attempts`, `duration`, `messages`, `retries`, `size` (was `mailer.email.message.size`),
   `attachments`, `active_sends` and the new `segments` (of an SMS, as its receipt counts them),

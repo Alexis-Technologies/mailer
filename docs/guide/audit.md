@@ -68,8 +68,9 @@ const audit = combineAuditSinks(createLoggerAuditSink(logger), myDatabaseSink);
 - `createMemoryAuditSink({ maxEvents })` holds the events, with
   `eventsOf(correlationId)` and `stateOf(correlationId)`: for tests.
 - `createLoggerAuditSink(logger, { levels })` writes each event as a record
-  `mail.<state>`: `failed` at error; `delivery_unknown`, `bounced`,
-  `complained` and `expired` at warn.
+  `message.<state>` (`mail.<state>` in 1.x) with the `channel` of its message,
+  `email` for an event that names none: `failed` at error; `delivery_unknown`,
+  `bounced`, `complained` and `expired` at warn.
 - `combineAuditSinks(...sinks)` tells each in turn, whatever another threw.
 - `createMongoAuditSink({ collection })` of [`./mongodb`](/guide/outbox), each
   event once by its id, in the transaction of the enqueue.

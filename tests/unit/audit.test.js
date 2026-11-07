@@ -191,13 +191,13 @@ test('Audit: the logger sink writes each state at its level', () => {
   }
   sink.append({ ...eventOf('queued'), state: 'other' });
   assert.deepStrictEqual(records, [
-    ['info', 'mail.queued', 'queued', 'audit'],
-    ['debug', 'mail.rendered', 'rendered', 'audit'],
-    ['warn', 'mail.accepted', 'accepted', 'audit'],
-    ['error', 'mail.failed', 'failed', 'audit'],
-    ['warn', 'mail.delivery_unknown', 'delivery_unknown', 'audit'],
-    ['warn', 'mail.complained', 'complained', 'audit'],
-    ['info', 'mail.other', 'other', 'audit'],
+    ['info', 'message.queued', 'queued', 'audit'],
+    ['debug', 'message.rendered', 'rendered', 'audit'],
+    ['warn', 'message.accepted', 'accepted', 'audit'],
+    ['error', 'message.failed', 'failed', 'audit'],
+    ['warn', 'message.delivery_unknown', 'delivery_unknown', 'audit'],
+    ['warn', 'message.complained', 'complained', 'audit'],
+    ['info', 'message.other', 'other', 'audit'],
   ]);
   assert.throws(() => createLoggerAuditSink(), /needs a logger/);
   assert.throws(
@@ -302,13 +302,16 @@ test('Audit: the logger sink writes the states of the channels at their levels',
   const records = [];
   const logger = {};
   for (const level of ['info', 'warn']) {
-    logger[level] = (record, message) => records.push([level, message]);
+    logger[level] = (record, message) => records.push([level, message, record.channel]);
   }
   const sink = createLoggerAuditSink(logger);
-  for (const state of ['sent', 'read', 'expired']) sink.append(eventOf(state));
+  for (const state of ['sent', 'read']) sink.append({ ...eventOf(state), channel: 'sms' });
+  // An event of 1.x, which names no channel, is of email.
+  sink.append(eventOf('expired'));
+  // Before: every record was mail.<state>, without the channel.
   assert.deepStrictEqual(records, [
-    ['info', 'mail.sent'],
-    ['info', 'mail.read'],
-    ['warn', 'mail.expired'],
+    ['info', 'message.sent', 'sms'],
+    ['info', 'message.read', 'sms'],
+    ['warn', 'message.expired', 'email'],
   ]);
 });

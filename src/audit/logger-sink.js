@@ -1,7 +1,9 @@
 // Not ported: an audit sink that writes each event as a record of the
-// pino-like logger the application passes in: a failure at `error`, an
-// unknown delivery, a bounce, a complaint and an expiry at `warn`, the
-// rendering and the submission at `debug`, the rest at `info`.
+// pino-like logger the application passes in, `message.<state>` with the
+// channel of its message (`email` for an event of 1.x, which has none): a
+// failure at `error`, an unknown delivery, a bounce, a complaint and an
+// expiry at `warn`, the rendering and the submission at `debug`, the rest at
+// `info`.
 
 const { createLog } = require('../internal/log.js');
 
@@ -43,7 +45,11 @@ const createLoggerAuditSink = (logger, options = {}) => {
   const log = createLog(logger, { component: 'audit' });
   return {
     append(event) {
-      log.write(levels[event.state] ?? 'info', () => ({ ...event }), `mail.${event.state}`);
+      log.write(
+        levels[event.state] ?? 'info',
+        () => ({ ...event, channel: event.channel ?? 'email' }),
+        `message.${event.state}`,
+      );
     },
   };
 };

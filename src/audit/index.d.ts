@@ -46,7 +46,8 @@ export interface LoggerAuditSinkOptions {
 
 /**
  * Makes an audit sink that writes each event as a record of a pino-like
- * logger, its message `mail.<state>`.
+ * logger, its message `message.<state>` (`mail.<state>` in 1.x), with the
+ * `channel` of its message, `email` for an event that names none.
  *
  * @throws {TypeError} If the logger is none or a level is unknown.
  */
