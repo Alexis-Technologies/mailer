@@ -205,8 +205,11 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
   ]);
   await outbox.source.enqueue(requestOf('a'));
   assert.strictEqual(woken, 1);
-  stream.listeners.get('error')(new Error('not a replica set'));
-  assert.deepStrictEqual(records, [['queue.change_stream_failed', 'not a replica set']]);
+  // The record keeps the error's text without the addresses it names.
+  stream.listeners.get('error')(new Error('not a replica set (ann@example.com)'));
+  assert.deepStrictEqual(records, [
+    ['queue.change_stream_failed', 'not a replica set ([REDACTED])'],
+  ]);
   unsubscribe();
   await new Promise(setImmediate);
   assert.strictEqual(collection.streams.length, 0);
