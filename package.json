@@ -188,6 +188,10 @@
     "./channels": {
       "types": "./src/channels/index.d.ts",
       "default": "./src/channels/index.js"
+    },
+    "./router": {
+      "types": "./src/router/index.d.ts",
+      "default": "./src/router/index.js"
     }
   },
   "directories": {

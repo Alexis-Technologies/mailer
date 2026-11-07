@@ -8,6 +8,7 @@
 
 const { toJson } = require('../json.js');
 const { checkKey, checkMetadata, checkScheduledAt, hasControl } = require('../message-checks.js');
+const { CHANNELS } = require('./channels.js');
 const { isE164, normalizePhone } = require('./phone.js');
 
 const throwTypeError = (message) => {
@@ -17,20 +18,6 @@ const throwTypeError = (message) => {
 const PHONE = new Set(['sms', 'rcs', 'whatsapp']);
 const SCOPED = new Set(['messenger', 'instagram', 'viber']);
 const WEBHOOK = new Set(['slack', 'discord', 'google-chat']);
-const CHANNELS = new Set([
-  'sms',
-  'rcs',
-  'whatsapp',
-  'messenger',
-  'instagram',
-  'telegram',
-  'viber',
-  'slack',
-  'discord',
-  'teams',
-  'google-chat',
-  'push',
-]);
 const PRIORITIES = new Set(['high', 'normal', 'low']);
 // The fields every channel takes, and those of some.
 const COMMON = new Set([
@@ -411,4 +398,4 @@ const checkChannelMessage = (message) => {
  */
 const isChannelMessage = (value) => isObject(value) && CHANNELS.has(value.channel);
 
-module.exports = { CHANNELS, checkChannelMessage, createChannelMessage, isChannelMessage };
+module.exports = { checkChannelMessage, createChannelMessage, isChannelMessage };

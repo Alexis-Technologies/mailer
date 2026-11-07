@@ -53,6 +53,11 @@ worker of 1.2 holds reads the same.
   UCS-2 by code unit, 160/153 and 70/67, no character split; the tables and cases of Twilio's
   message-segment-calculator and of split-sms). `escapeTelegramHtml`, `escapeSlackText`,
   `escapeDiscordMarkdown` and `neutralizeMentions` put text into the markup of a chat as text.
+- **`./router`, a transport of every channel:** `createRouter({ email, sms, telegram, … })`
+  sends each message through the transport of its `channel` (none is email), a channel
+  without a route failing as `unsupported`; `sendMany` gives the messages of a channel that
+  come in a row to its transport's `sendMany`, the receipts in order; `verify` checks each
+  route, and disposal disposes of each transport once.
 - **What a receipt tells of a channel:** `channel`, `segments` (the parts of an SMS) and
   `state` (`sent` for a channel that reports no delivery); a delivery event its `error`, and an
   audit event its `channel`.

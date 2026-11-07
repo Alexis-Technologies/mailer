@@ -77,7 +77,10 @@ const guide = [
   },
   {
     text: 'Channels',
-    items: [{ text: 'Messages of the channels', link: '/channels/messages' }],
+    items: [
+      { text: 'Messages of the channels', link: '/channels/messages' },
+      { text: 'Router', link: '/channels/router' },
+    ],
   },
   {
     text: 'Transports',

@@ -40,5 +40,6 @@
   "./queue": 19.5,
   "./bullmq": 4.5,
   "./mongodb": 7.5,
-  "./channels": 6
+  "./channels": 6,
+  "./router": 1.5
 }
