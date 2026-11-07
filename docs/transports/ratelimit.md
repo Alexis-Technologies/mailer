@@ -46,7 +46,18 @@ of the transport stops the waits, each rejecting with an `AbortError`.
 ```js
 const perTenant = new RateLimitTransport(transport, {
   limit: 10,
-  key: (message) => message.metadata?.tenant ?? 'default',
+  key: (message) => message.tenantId ?? 'default',
+});
+```
+
+The limits of a chat are per chat as well as per bot: Telegram takes about one
+message a second in a chat, so a key of the recipient spaces the messages of
+one chat while the others go:
+
+```js
+const perChat = new RateLimitTransport(telegram, {
+  limit: 1,
+  key: (message) => String(message.to),
 });
 ```
 

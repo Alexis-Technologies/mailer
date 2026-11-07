@@ -3,6 +3,7 @@ import {
   createMessage,
   type RawTransport,
   type Receipt,
+  type SmsMessage,
   type Transport,
   type VerifiableTransport,
 } from '../../index.js';
@@ -41,3 +42,13 @@ new RateLimitTransport(inner, {
 new RateLimitTransport(inner, { limit: 1, maxQueue: 100, logger: { info() {}, debug() {} } });
 expectError(new RateLimitTransport(inner, { limit: 1, logger: 'pino' }));
 expectError(new RateLimitTransport(inner, { limit: 1, maxQueue: '100' }));
+
+// The decorator of a transport of a channel takes its messages.
+declare const twilio: Transport<'twilio', SmsMessage>;
+declare const smsMessage: SmsMessage;
+const sms = new RateLimitTransport(twilio, {
+  limit: 1,
+  key: (message) => ('channel' in message ? message.to : ''),
+});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectType<Promise<Receipt<'twilio'>>>(sms.send(smsMessage));

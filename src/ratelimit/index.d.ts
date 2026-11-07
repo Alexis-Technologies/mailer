@@ -4,10 +4,10 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Logger,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   Transport,
   TransportOptions,
@@ -37,7 +37,7 @@ export interface RateLimitStore {
 /**
  * The options of {@link RateLimitTransport}.
  */
-export interface RateLimitConfig {
+export interface RateLimitConfig<TMessage extends AnyMessage = Message> {
   /** The tokens a bucket gains every `intervalMs`: the sustained rate. */
   readonly limit: number;
   /**
@@ -66,12 +66,12 @@ export interface RateLimitConfig {
    * The bucket of a message, such as its tenant; one bucket for all without
    * it.
    */
-  readonly key?: (message: Message | RawMessage) => string;
+  readonly key?: (message: TMessage | RawMessage) => string;
   /**
    * The tokens a message takes, such as its number of recipients for SES;
    * 1 without it.  A cost over `burst` is refused.
    */
-  readonly cost?: (message: Message | RawMessage) => number;
+  readonly cost?: (message: TMessage | RawMessage) => number;
   /**
    * The most buckets kept: past it, the least used full bucket is dropped,
    * which loses nothing; when none is full, the least used with no waiter,
@@ -111,14 +111,14 @@ export interface RateLimitConfig {
 /**
  * The options of {@link RateLimitTransport}, with their defaults.
  */
-export interface ResolvedRateLimitConfig {
+export interface ResolvedRateLimitConfig<TMessage extends AnyMessage = Message> {
   readonly limit: number;
   readonly intervalMs: number;
   readonly burst: number;
   readonly mode: 'wait' | 'reject';
   readonly maxWaitMs: number;
-  readonly key?: (message: Message | RawMessage) => string;
-  readonly cost?: (message: Message | RawMessage) => number;
+  readonly key?: (message: TMessage | RawMessage) => string;
+  readonly cost?: (message: TMessage | RawMessage) => number;
   readonly maxKeys: number;
   readonly maxQueue: number;
   readonly now: () => number;
@@ -144,20 +144,23 @@ export interface ResolvedRateLimitConfig {
  * });
  * ```
  */
-export declare class RateLimitTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class RateLimitTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /** The resolved options. */
-  readonly config: ResolvedRateLimitConfig;
+  readonly config: ResolvedRateLimitConfig<TMessage>;
   /**
    * @param transport The transport to throttle.
    * @param config The options.
    * @throws {TypeError} If an option is invalid.
    */
-  constructor(transport: Transport<TProviderId>, config: RateLimitConfig);
+  constructor(transport: Transport<TProviderId, TMessage>, config: RateLimitConfig<TMessage>);
   /** Sends one message once its bucket has its tokens. */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message once its bucket has its tokens.  A wrapped transport
    * without `sendRaw()` gives a failed receipt of the category
@@ -170,7 +173,7 @@ export declare class RateLimitTransport<TProviderId extends string = string>
    * place, the receipts in the order of the messages.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the wrapped transport, without taking tokens. */
