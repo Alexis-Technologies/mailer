@@ -978,18 +978,23 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
   `failed` before any attempt; `deferred` keeps a message `accepted`; `opened`, `clicked` and
   `unsubscribed` are engagement, not states; `unknown` keeps the provider's `raw` record.
 
-**The contracts of the channels** (2.0, `PLAN-channels.md` §4.1–4.2; they land in its stage 2,
-and until then none of this is in the code):
+**The contracts of the channels** (2.0, `PLAN-channels.md` §4.1–4.2, its stage 2: the types of
+the root, `./channels`, `./router` and the tables of `./audit` are in the code; the decorators,
+the queue and the webhooks of the channels are its stages 4 to 6, so none of them takes a
+message of a channel yet):
 
-- **`ChannelMessage`**, built by `createChannelMessage()` of `./channels`: `channel` (`sms`,
-  `rcs`, `whatsapp`, `messenger`, `instagram`, `telegram`, `viber`, `slack`, `discord`, `teams`,
-  `google-chat`, `push`), `to` (E.164 for SMS, RCS and WhatsApp; a scoped id for Messenger and
-  Instagram; a `chat_id`, a channel, a webhook, a device token or a Web Push subscription),
-  `from?`, `text`, `media`, `buttons`, a `payload` of the channel's own (Block Kit, an Adaptive
-  Card, an embed, a WhatsApp template), `mentions` (none unless allowed), `tags`, `priority`,
-  `metadata` (`correlationId` there, as for email), `tenantId`, `idempotencyKey`, `scheduledAt`,
-  `expiresAt`. `Message` gains `channel: 'email'` and `tenantId?`; a message without `channel` is
-  email at run time. `AnyMessage = Message | ChannelMessage`, `MessageOf<C>`.
+- **`ChannelMessage`**, built by `createChannelMessage()` of `./channels` (its modules in
+  `src/internal/channel/`): `channel` (`sms`, `rcs`, `whatsapp`, `messenger`, `instagram`,
+  `telegram`, `viber`, `slack`, `discord`, `teams`, `google-chat`, `push`), `to` (E.164 for SMS,
+  RCS and WhatsApp, normalized with `defaultCountry`; a scoped id for Messenger, Instagram and
+  Viber; a chat id or `@channel` of Telegram; none for the webhook of a work chat; a device token,
+  a topic or a Web Push subscription), `from?`, `text`, `media`, `buttons`, a `payload` of the
+  channel's own as JSON (Block Kit, an Adaptive Card, an embed, the overrides of a push),
+  `mentions` (none unless allowed), `tags`, `priority`, `metadata` (`correlationId` there, as for
+  email), `tenantId`, `idempotencyKey`, `scheduledAt`, `expiresAt`; WhatsApp's `template`,
+  `thread` of four, and push's `title` and `data`. A field of another channel is refused.
+  `Message` has `channel: 'email'` and `tenantId?`; a message without `channel` is email at run
+  time. `AnyMessage = Message | ChannelMessage`, `MessageOf<C>`.
 - **`Transport<TProviderId, TMessage extends AnyMessage = Message>`**, `VerifiableTransport`
   likewise; `RawTransport` stays email's. `./router` sends each message through the transport of
   its channel. A receipt gains `channel?`, `segments?` and `state?: 'accepted' | 'sent'` (a
@@ -997,12 +1002,18 @@ and until then none of this is in the code):
 - **The categories of the channels:** `invalid-recipient`, `opted-out`, `outside-window` (the 24
   hours of Meta), `blocked` (the user blocked the bot), `not-on-channel` (a reason to fall back),
   `unregistered` (a push token or a subscription gone: drop it), none retried, and `unreachable`
-  (the handset, for now), retried; `retryable` defaults from the category. `./pool` stops its
-  failover at each of them but `unreachable`, which another route may reach.
+  (the handset, for now), retried; `retryable` defaults from the category (`CHANNEL_RETRYABLE`
+  of `core/receipt.js`), and no word of an error leads to them. `./pool` will stop its failover
+  at each of them but `unreachable`, which another route may reach (stage 4).
 - **States and events:** the states gain `sent`, `read` and `expired` (ranks 3.5, 4.5 and 4, as
   the ranks of 1.2 are persisted); `DeliveryEvent` gains `sent`, `read`, `failed`, `expired` and
-  `subscribed`, a required `channel` and `error?: { category, code }`. An inbound STOP is an
-  opt-out event.
+  `subscribed`, a required `channel` (`email` for the verifiers of 1.x) and
+  `error?: { category, code }`. An inbound STOP is `unsubscribed`.
+- **What 2.0 keeps byte for byte** is pinned by `tests/unit/golden.test.js` on values of 1.2.1:
+  the fingerprint of a message (which reads neither `channel` nor `tenantId`), the JSON, hash,
+  HMAC, id, Message-ID and Content-IDs of a mail job, the envelope of a sealed one, the ids of
+  audit events, the ranks of 1.2 and the keys of `./idempotency`; and by the jobs 1.2.1 wrote in
+  `tests/fixtures/queue/`, which are never written again. A test there that fails is a break.
 - **One queue:** one core with a strategy per kind of job; the email job stays `v: 1` byte for
   byte, a job of a channel is `v: 2`, its `channel` sealed with the rest; the API loses `Mail`
   (`createQueue`, `createJobHandler`, `prepareJob`, `parseJob`, `QueueError`).
