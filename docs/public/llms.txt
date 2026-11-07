@@ -12,7 +12,10 @@ Key facts:
   unemail and sently did better and adds delivery events with verified webhooks; 1.2 adds the
   queue (`/queue`, `/bullmq`, `/mongodb`), templates (`/templates`), the audit (`/audit`) and
   the spans and metrics of the queue's worker (`instrumentHandler` of `/otel`); jobs are signed
-  (HMAC) and may be sealed by a codec, dropped once done with, and tenants can take turns
+  (HMAC) and may be sealed by a codec, dropped once done with, and tenants can take turns;
+  2.0, in progress and not released, adds SMS, RCS, WhatsApp, Messenger, Instagram, Telegram,
+  Viber, Slack, Discord, Teams, Google Chat and push (FCM, APNs, Web Push) on the same layer
+  (compared at /guide/comparison-channels)
 - Package (npm): `@alexify/mailer`, installed with `npm install @alexify/mailer`
 - Node.js >= 22, tested on Bun and Deno too; CommonJS with ESM named-import interop;
   hand-written d.ts per entry

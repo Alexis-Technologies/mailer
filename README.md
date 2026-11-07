@@ -12,7 +12,8 @@ and eighteen HTTP providers, and on top of them what the other libraries leave t
 application: a persistent queue, on BullMQ or a transactional outbox in MongoDB, whose workers
 render templates of the engine you use and know a permanent failure from a temporary one, an
 audit of every state of a message, one model of delivery events and idempotency; next
-suppression. Zero runtime dependencies.
+suppression. 2.0, in the making, brings SMS, chat apps and push onto the same layer. Zero runtime
+dependencies.
 
 > **Status: 1.2 is the transport layer and the reliability layer on it.** 1.0 ported
 > the transport from [upyo](https://github.com/dahlia/upyo) 0.7.0; 1.1 adds what
@@ -57,6 +58,20 @@ suppression. Zero runtime dependencies.
   your template engine (EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache, React Email)
   and the collections of MongoDB. CommonJS with ESM named imports and hand-written TypeScript
   typings, no build step.
+
+## Channels (2.0, in progress)
+
+2.0 adds the channels that are not email, each provider through its own HTTP API rather than its
+SDK, on the reliability layer above: SMS (Twilio, Vonage, Infobip, Sinch, AWS End User Messaging,
+and TurboSMS, AlphaSMS and SMSClub for Ukraine), RCS (Google RBM), WhatsApp, Messenger and
+Instagram (Meta's APIs), Telegram, Viber, Slack, Discord, Microsoft Teams, Google Chat, and push
+(FCM, APNs, Web Push). A channel message is checked before it is sent (an E.164 number, the
+segments of an SMS, the WhatsApp template outside the 24-hour window, text escaped for the
+channel's markup, mentions of everyone off unless allowed), goes through the same queue, audit,
+idempotency and decorators as an email, and fails in classes of its own (an opt-out, a blocked
+bot, an unregistered push token: never retried). 2.1 closes the loop: the verified webhooks of
+the channels, one suppression list for email and the channels, and a fallback from WhatsApp to
+SMS to email on the outcome of a message. 1.x is email only; no channel is released yet.
 
 ## Installation
 
@@ -159,7 +174,11 @@ The same names import from ESM (`import { SmtpTransport } from '@alexify/mailer/
 
 The [comparison](https://mailerat.vercel.app/guide/comparison) puts Nodemailer, emailjs, Upyo,
 unemail, sently, worker-mailer, edge-mailer, MIMEText and the SDKs of Resend, SendGrid, Mailgun,
-Postmark, Mailtrap and Amazon SES side by side, feature by feature, from their source code.
+Postmark, Mailtrap and Amazon SES side by side, feature by feature, from their source code. The
+[comparison for the channels](https://mailerat.vercel.app/guide/comparison-channels) does the
+same for eleven libraries of SMS, chat apps and push (@visulima/notification,
+@thinwrap/notifications, Novu, notifme-sdk, the SDKs of Twilio, Telnyx, Vonage, Plivo and Sinch,
+grammY and node-telegram-bot-api), from their published packages.
 
 ## Credits
 
@@ -168,7 +187,18 @@ The transport layer is a port of [upyo](https://github.com/dahlia/upyo) 0.7.0 by
 ported from [nodemailer](https://github.com/nodemailer/nodemailer) 10.0.16 by Andris Reinman
 (MIT-0), [unemail](https://github.com/productdevbook/unemail) 0.7.0 (MIT) and
 [sently](https://github.com/omqkhafi/sently) 1.2.2 (MIT), with their known bugs fixed in the port.
-Their notices are in [LICENSE](./LICENSE).
+The channels of 2.0 take features from
+[@thinwrap/notifications](https://github.com/thinwrap/notifications-ts),
+[@visulima/notification](https://github.com/visulima/visulima),
+[twilio-node](https://github.com/twilio/twilio-node),
+[node-telegram-bot-api](https://github.com/yagop/node-telegram-bot-api),
+[http_ece](https://github.com/web-push-libs/encrypted-content-encoding),
+[message-segment-calculator](https://github.com/TwilioDevEd/message-segment-calculator),
+[split-sms](https://github.com/Codesleuth/split-sms),
+[@parse/node-apn](https://github.com/parse-community/node-apn), the
+[Slack SDKs](https://github.com/slackapi) and
+[botframework-connector](https://github.com/microsoft/botbuilder-js) (all MIT), fixing their
+known bugs in the port. Their notices are in [LICENSE](./LICENSE).
 
 ## Changelog
 
