@@ -1,0 +1,81 @@
+{
+  "request": {
+    "id": "669781af-54c4-4ce4-8f01-dbbc982b308d",
+    "name": "mail",
+    "hash": "7067fc1ab88acadde4a282da201ead38f1438777b55ebeb79720c851d81e9bcd",
+    "priority": "high",
+    "maxAttempts": 5,
+    "enqueuedAt": 1792314000000,
+    "unique": true,
+    "tenantId": "acme"
+  },
+  "data": {
+    "v": 1,
+    "kind": "content",
+    "content": {
+      "html": "<p>Paid</p>",
+      "text": "Paid"
+    },
+    "from": {
+      "name": "Hirevel",
+      "address": "billing@example.com"
+    },
+    "to": [
+      {
+        "address": "ada@example.com"
+      },
+      {
+        "name": "Grace",
+        "address": "grace@example.org"
+      }
+    ],
+    "replyTo": [
+      {
+        "address": "support@example.com"
+      }
+    ],
+    "subject": "Your receipt",
+    "attachments": [
+      {
+        "filename": "receipt.txt",
+        "contentType": "text/plain",
+        "inline": false,
+        "contentId": "99a96837-35b9-441c-a3a2-7cf939b32dc6@example.com",
+        "data": "UGFpZA=="
+      },
+      {
+        "filename": "logo.png",
+        "contentType": "image/png",
+        "inline": true,
+        "contentId": "11a6be93-bc92-4e04-9cbd-bea79ab229a0@example.com",
+        "data": "iVBORw=="
+      }
+    ],
+    "priority": "high",
+    "tags": ["receipt"],
+    "headers": {
+      "x-campaign": "spring"
+    },
+    "list": {
+      "unsubscribe": "https://example.com/u",
+      "oneClick": true
+    },
+    "messageId": "c0560d27-3646-43f5-a9fe-9f7a4ff360ee@example.com",
+    "inReplyTo": ["order-42@example.com"],
+    "tracking": {
+      "opens": false
+    },
+    "metadata": {
+      "plan": "pro",
+      "correlationId": "669781af-54c4-4ce4-8f01-dbbc982b308d"
+    },
+    "idempotencyKey": "receipt:42",
+    "tenantId": "acme",
+    "correlationId": "669781af-54c4-4ce4-8f01-dbbc982b308d",
+    "expiresAt": "2026-10-25T09:00:00.000Z",
+    "enqueuedAt": "2026-10-18T09:00:00.000Z",
+    "hash": "7067fc1ab88acadde4a282da201ead38f1438777b55ebeb79720c851d81e9bcd",
+    "kid": "k1",
+    "mac": "995da1fc815911910d7b82830738d181c0d052184f400b4bbe65f918344adf94"
+  }
+}
