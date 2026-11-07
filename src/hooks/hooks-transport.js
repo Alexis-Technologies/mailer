@@ -15,6 +15,7 @@
 const { checkMessage } = require('../core/message.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { warnThrown } = require('../internal/callback.js');
+const { checkChannelMessage, isChannelMessage } = require('../internal/channel/message.js');
 const {
   disposeOf,
   messageOf,
@@ -166,10 +167,12 @@ class HooksTransport {
       };
     }
     // A copy of the message with fields changed did not go through
-    // createMessage, which the transports rely on: its checks run again.
+    // createMessage or createChannelMessage, which the transports rely on:
+    // their checks run again.
     if (name !== 'beforeSendRaw') {
       try {
-        checkMessage(replaced);
+        if (isChannelMessage(replaced)) checkChannelMessage(replaced);
+        else checkMessage(replaced);
       } catch (error) {
         return {
           receipt: this.#refusal(
@@ -222,13 +225,15 @@ class HooksTransport {
 }
 
 // What a hook may hand on in place of the message: one of `createMessage`
-// for beforeSend, which the converters of the providers rely on to have
-// checked its fields, and a raw message with its envelope for beforeSendRaw.
+// or of `createChannelMessage` for beforeSend, which the converters of the
+// providers rely on to have checked its fields, and a raw message with its
+// envelope for beforeSendRaw.
 const isShaped = (name, value) => {
   if (value === null || typeof value !== 'object') return false;
   if (name === 'beforeSendRaw') {
     return typeof value.envelope === 'object' && value.envelope !== null;
   }
+  if (isChannelMessage(value)) return true;
   return typeof value.sender?.address === 'string' && Array.isArray(value.recipients);
 };
 

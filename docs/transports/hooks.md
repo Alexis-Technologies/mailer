@@ -31,7 +31,7 @@ to heed it; an abort while `beforeSend` runs sends nothing.
 
 | Hook | Called | When it throws |
 | --- | --- | --- |
-| `beforeSend(message, context)` | before a message is sent; it may return a message of `createMessage` to send in its place (anything else refuses it) | the message is not sent; its receipt is `rejected` (code `hooks.refused`), not retryable |
+| `beforeSend(message, context)` | before a message is sent; it may return a message of `createMessage`, or of `createChannelMessage`, to send in its place, checked again as they check one (anything else refuses it) | the message is not sent; its receipt is `rejected` (code `hooks.refused`), not retryable |
 | `beforeSendRaw(raw, context)` | before a raw message is sent, the same way | the same |
 | `afterSend(receipt, message, context)` | after every send, its receipt successful or not | a process warning (`MAILER_HOOK_FAILED`); the receipt stands |
 | `onRetry(event, context)` | before each retry of the wrapped transport, or of a `./retry` inside it, not awaited | a process warning, a promise that rejects too |
@@ -46,3 +46,13 @@ send, so concurrent sends never hear each other's retries; the caller's own
 `sendMany()` goes through the `sendMany()` of the wrapped transport, each
 message between its hooks, one `beforeSend` refuses answered in place; its
 `onRetry` hears the retries with the context of the batch.
+
+The hooks take the messages of the transport they wrap: email, or a channel
+of `./channels` (`HooksTransport<'twilio', SmsMessage>` in TypeScript), so a
+`beforeSend` may add a line to an SMS as it adds a header to an email:
+
+```js
+const sms = new HooksTransport(twilio, {
+  beforeSend: (message) => ({ ...message, text: `${message.text} STOP: 4040` }),
+});
+```

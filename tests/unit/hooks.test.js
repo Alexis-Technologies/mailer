@@ -311,3 +311,38 @@ test('Hooks: an onRetry hook whose promise rejects is a warning', async (t) => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepStrictEqual(warnings, ['MAILER_HOOK_FAILED']);
 });
+
+test('Hooks: a copy of a message of a channel goes, checked as createChannelMessage checks it', async () => {
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Code 1234' });
+  const inner = fakeTransport();
+  // Before: a message of a channel was not shaped as an email, so every copy
+  // a hook returned was refused, as rejected, which stops the failover of a
+  // pool.
+  const signed = new HooksTransport(inner, {
+    beforeSend: (m) => ({ ...m, text: `${m.text} STOP: 4040` }),
+  });
+  const receipt = await signed.send(sms);
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(inner.calls[0].message.text, 'Code 1234 STOP: 4040');
+  assert.strictEqual(inner.calls[0].message.channel, 'sms');
+  // A message of a channel the hook leaves goes as it is.
+  assert.strictEqual(
+    (await new HooksTransport(inner, { beforeSend: () => {} }).send(sms)).successful,
+    true,
+  );
+  const copies = [
+    (m) => ({ ...m, to: '067 123 45 67' }),
+    (m) => ({ ...m, to: '+380671234567\r\nX-Evil: 1' }),
+    (m) => ({ ...m, subject: 'Not of SMS' }),
+    (m) => ({ ...m, text: undefined }),
+    (m) => ({ ...m, priority: 'urgent' }),
+  ];
+  for (const copy of copies) {
+    const hooks = new HooksTransport(inner, { beforeSend: copy });
+    const refused = await hooks.send(sms);
+    assert.strictEqual(refused.errors[0].code, 'hooks.refused', String(copy));
+    assert.match(refused.errorMessages[0], /returned an invalid message/);
+  }
+  assert.strictEqual(inner.calls.length, 2);
+});

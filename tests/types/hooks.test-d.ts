@@ -1,7 +1,9 @@
 import { expectAssignable, expectError, expectType } from 'tsd';
 import {
   createMessage,
+  type RawMessage,
   type RawTransport,
+  type SmsMessage,
   type Receipt,
   type Transport,
   type VerifiableTransport,
@@ -38,3 +40,18 @@ expectType<Promise<Receipt<'postmark'>>>(hooked.send(message));
 expectType<AsyncIterable<Receipt<'postmark'>>>(hooked.sendMany([message]));
 new HooksTransport(inner);
 expectError(new HooksTransport(inner, { afterSend: 'log' }));
+
+// The hooks of a transport of a channel take its messages.
+declare const twilio: Transport<'twilio', SmsMessage>;
+const sms = new HooksTransport(twilio, {
+  beforeSend: (message) => {
+    expectType<SmsMessage>(message);
+    return { ...message, text: `${message.text ?? ''} (STOP to opt out)` };
+  },
+  afterSend: (_receipt, message) => {
+    expectType<SmsMessage | RawMessage>(message);
+  },
+});
+expectAssignable<VerifiableTransport<'twilio', SmsMessage>>(sms);
+expectError(sms.send(message));
+expectError(new HooksTransport(twilio, { beforeSend: () => message }));

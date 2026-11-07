@@ -4,9 +4,9 @@
 /// <reference lib="esnext.disposable" />
 
 import type {
+  AnyMessage,
   Message,
   RawMessage,
-  RawTransport,
   Receipt,
   RetryEvent,
   Transport,
@@ -29,18 +29,21 @@ export interface HookContext {
 }
 
 /**
- * The hooks of {@link HooksTransport}.  A hook may be async; it is awaited.
+ * The hooks of {@link HooksTransport}, for the messages `TMessage` (email by
+ * default).  A hook may be async; it is awaited.
  */
-export interface Hooks {
+export interface Hooks<TMessage extends AnyMessage = Message> {
   /**
-   * Before a message is sent: it may return a message to send in its place;
-   * when it throws, the message is not sent and its receipt is `rejected`
-   * (code `hooks.refused`), not retryable.
+   * Before a message is sent: it may return a message to send in its place,
+   * which is checked again as `createMessage` or `createChannelMessage`
+   * checks one; when it throws, or returns one they refuse, the message is
+   * not sent and its receipt is `rejected` (code `hooks.refused`), not
+   * retryable.
    */
   readonly beforeSend?: (
-    message: Message,
+    message: TMessage,
     context: HookContext,
-  ) => Message | void | Promise<Message | void>;
+  ) => TMessage | void | Promise<TMessage | void>;
   /** Before a raw message is sent, as `beforeSend`. */
   readonly beforeSendRaw?: (
     message: RawMessage,
@@ -52,7 +55,7 @@ export interface Hooks {
    */
   readonly afterSend?: (
     receipt: Receipt,
-    message: Message | RawMessage,
+    message: TMessage | RawMessage,
     context: HookContext,
   ) => void | Promise<void>;
   /**
@@ -67,7 +70,7 @@ export interface Hooks {
    */
   readonly onError?: (
     error: unknown,
-    message: Message | RawMessage,
+    message: TMessage | RawMessage,
     context: HookContext,
   ) => void | Promise<void>;
   /** The clock of `startedAt`, in milliseconds. */
@@ -79,7 +82,8 @@ export interface Hooks {
  * the one it wraps: `beforeSend` may replace or refuse a message, `afterSend`
  * hears every receipt, `onRetry` every retry and `onError` every thrown
  * error.  The context is that of each send, so concurrent sends never hear
- * each other's.
+ * each other's.  It takes the messages of the transport it wraps, of email
+ * or of a channel, and sends raw MIME through one that does.
  *
  * @example
  * ```js
@@ -92,20 +96,23 @@ export interface Hooks {
  * });
  * ```
  */
-export declare class HooksTransport<TProviderId extends string = string>
-  implements RawTransport<TProviderId>, VerifiableTransport<TProviderId>, AsyncDisposable
+export declare class HooksTransport<
+  TProviderId extends string = string,
+  TMessage extends AnyMessage = Message,
+>
+  implements VerifiableTransport<TProviderId, TMessage>, AsyncDisposable
 {
   readonly id: TProviderId;
   /** The hooks, checked. */
-  readonly config: Hooks & { readonly now: () => number };
+  readonly config: Hooks<TMessage> & { readonly now: () => number };
   /**
    * @param transport The transport to wrap.
    * @param hooks The hooks.
    * @throws {TypeError} If a hook is not a function.
    */
-  constructor(transport: Transport<TProviderId>, hooks?: Hooks);
+  constructor(transport: Transport<TProviderId, TMessage>, hooks?: Hooks<TMessage>);
   /** Sends one message between its hooks. */
-  send(message: Message, options?: TransportOptions): Promise<Receipt<TProviderId>>;
+  send(message: TMessage, options?: TransportOptions): Promise<Receipt<TProviderId>>;
   /**
    * Sends a raw message between `beforeSendRaw` and `afterSend`.  A wrapped
    * transport without `sendRaw()` gives a failed receipt of the category
@@ -117,7 +124,7 @@ export declare class HooksTransport<TProviderId extends string = string>
    * between its hooks; one `beforeSend` refuses is answered in place.
    */
   sendMany(
-    messages: Iterable<Message> | AsyncIterable<Message>,
+    messages: Iterable<TMessage> | AsyncIterable<TMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<TProviderId>>;
   /** Verifies the wrapped transport. */

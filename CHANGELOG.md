@@ -73,6 +73,10 @@ worker of 1.2 holds reads the same.
   `getMessagesByChannel` gives the messages of a channel; `getMessagesBySubject` looks at email
   alone, where a message of a channel matched `undefined`. `MockTransport<TMessage>` takes email
   by default.
+- **`./hooks` takes the messages of the channels:** a copy `beforeSend` returns of one is
+  checked again as `createChannelMessage` checks it, where every such copy was refused as
+  `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and
+  `Hooks<TMessage>` take the messages of the transport wrapped.
 
 ## [1.2.1] - 2026-11-07
 

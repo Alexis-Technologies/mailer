@@ -34,7 +34,7 @@
   "./breaker": 3.5,
   "./ratelimit": 4,
   "./idempotency": 5,
-  "./hooks": 3,
+  "./hooks": 8,
   "./tee": 3.5,
   "./audit": 2.5,
   "./queue": 20,
