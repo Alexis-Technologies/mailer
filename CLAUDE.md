@@ -484,6 +484,11 @@ fails without it; ported tests that pinned the old behavior say "Changed after t
     `smtp`, one with a `domain` was given `api.mailgun.net` as its `server.address`, and an
     `endpoint` of any scheme was `http`. SMTP and Mailgun's default URL are told by the
     transport's name (its id), and a URL gives `http` only when it is one.
+89. pool: every error a transport threw was recorded and failed over, so a bug such as
+    reading a property of `undefined` was hidden in the receipt, and one that struck after
+    the message went out sent it again through the next transport. A bug, as `./retry`
+    tells it since 65 (`isProgrammerError`, now `internal/programmer-error.js`), rejects
+    the send; a fetch failure still fails over.
 
 ## Code ported from nodemailer, unemail and sently
 

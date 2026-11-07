@@ -8,6 +8,7 @@ const { refuseRaw } = require('../internal/capabilities.js');
 const { disposeOf, messageOf } = require('../internal/decorator.js');
 const { createLog } = require('../internal/log.js');
 const { redactAddresses } = require('../internal/redact-addresses.js');
+const { isProgrammerError } = require('../internal/programmer-error.js');
 const { createFailedReceipt, createReceiptError } = require('../core/receipt.js');
 const { createPoolConfig } = require('./config.js');
 const { RoundRobinStrategy } = require('./strategies/round-robin-strategy.js');
@@ -284,6 +285,9 @@ class PoolTransport {
       receipt = await sendOnce(selection.entry.transport, sendOptions.options);
     } catch (error) {
       if (sendOptions.abortedByCaller() && isCallerAbort(error, options?.signal)) throw error;
+      // A bug of the transport, which may have struck after the message went
+      // out: another transport could deliver it twice, and would hide it.
+      if (isProgrammerError(error)) throw error;
       recordThrown(failure, error, transportId);
       return undefined;
     } finally {
