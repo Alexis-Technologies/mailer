@@ -899,7 +899,8 @@ src/
                     what a provider of any channel shares of them, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, public-url.js (the check of
                     ./attachments and of Web Push), validate-ssl.js, verify.js, sigv4.js for
-                    the services of AWS),
+                    the services of AWS, jwt.js, token-cache.js and google-auth.js for the
+                    tokens of the channels),
                     receipts (provider.js, refusal.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,
                     capabilities.js, batch.js, base64.js, uuid.js),

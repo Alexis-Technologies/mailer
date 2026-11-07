@@ -307,3 +307,17 @@ test('API: a request reads an answer of its own, and takes a status as one', asy
   });
   assert.deepStrictEqual(missing, { status: 404, text: 'gone' });
 });
+
+test('API: authorize hears the signal of the attempt, for a token it waits for', async (t) => {
+  stubFetch(t, () => json({ id: '1' }));
+  const signals = [];
+  const caller = new AbortController();
+  await client({}, { authorize: (headers, request) => signals.push(request.signal) }).request({
+    url: 'https://api.example.com/send',
+    body: {},
+    signal: caller.signal,
+  });
+  assert.ok(signals[0] instanceof AbortSignal);
+  caller.abort();
+  assert.ok(signals[0].aborted);
+});

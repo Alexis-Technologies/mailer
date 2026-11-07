@@ -129,7 +129,8 @@ const readErrorText = async (response) => {
  * @param config The resolved configuration: `fetch`, `headers`, `retries`,
  * `timeout` and `logger`.
  * @param provider `id`, the provider's id; `label`, its name in messages;
- * `authorize(headers, request)`, which adds its credentials; optional
+ * `authorize(headers, { url, method, body, signal })`, which adds its
+ * credentials, a token it waits for under the signal of the attempt; optional
  * `messageOf(json, text)`, the message of an error answer, and
  * `classify(status, json, headers)`, `{ category, retryable, code,
  * retryAfterMilliseconds }` of one, the wait of a body in place of
@@ -149,7 +150,13 @@ const createApiClient = (config, provider) => {
 
   const fetchWithAuth = async (url, options, signal) => {
     const headers = new Headers(options.headers);
-    await provider.authorize(headers, { url, method: options.method ?? 'GET', body: options.body });
+    // The signal of the attempt, which a token the request waits for hears.
+    await provider.authorize(headers, {
+      url,
+      method: options.method ?? 'GET',
+      body: options.body,
+      signal,
+    });
     for (const name in config.headers) {
       if (Object.hasOwn(config.headers, name)) headers.set(name, config.headers[name]);
     }
