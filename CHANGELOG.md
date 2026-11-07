@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+A patch of 1.2.0: bugs found while planning 2.0, each with a test that fails without its fix.
+Nothing changes for a message, a job or what a store holds.
+
+### Fixed
+
+- **A bug of a transport behind `./pool` was failed over and hidden:** a `TypeError` such as
+  reading a property of `undefined` became an error of the receipt, and one that struck after the
+  message went out sent it again through the next transport. It rejects the send, as `./retry`
+  does; a network failure that `fetch` reports as a `TypeError` still fails over.
+- **`./breaker` threw a `TypeError` for a failed receipt without `errors`,** which the type of a
+  receipt allows and a transport of the application may give, so the send rejected and its
+  receipt was lost. Such a receipt is judged by the category `classifyReceiptError` gives each of
+  its `errorMessages`.
+- **Records named the addresses of an error's text:** those of the polling driver
+  (`queue.reserve_failed`, `queue.lease.extend_failed`, `queue.settle_failed`), the outbox's
+  `queue.change_stream_failed`, the BullMQ driver's `queue.worker.error` and `queue.job.lost`, and
+  the pool's record of a selector that threw. They are redacted, as the warnings already were.
+- **`./otel` guessed the network attributes of a span from the shape of a config:** a transport
+  of the application with a `host` and a `port` was traced as SMTP, one with a `domain` to
+  `api.mailgun.net`, and an `endpoint` of any scheme as HTTP. SMTP and Mailgun are told by the
+  transport's id, and only an HTTP URL is HTTP; the built-in transports get the attributes they
+  had.
+- **`reset()` of `./mock` kept the messages of `sendRaw()`;** it clears them, as
+  `clearSentMessages()` does.
+
 ## [1.2.0] - 2026-10-20
 
 The reliability layer of the roadmap, on the transport of 1.1: a persistent queue, on BullMQ or a
