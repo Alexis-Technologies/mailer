@@ -2,7 +2,7 @@
 // that lends its jobs is held to (the memory queue, the MongoDB outbox on a
 // fake collection and on MongoDB itself), so that their semantics stay one:
 // the order of priorities, leases, redelivery, fencing, releases that spend
-// no attempt, and the pause.
+// no attempt, the pause, and the jobs of email and of the channels alike.
 const { test } = require('node:test');
 const assert = require('node:assert');
 
@@ -236,6 +236,61 @@ const sourceContract = (name, makeSource, options = {}) => {
       assert.strictEqual((await source.reserve(LEASE)).lease, undefined);
       await source.resume({ tenantId: 'a' });
       assert.strictEqual((await source.reserve(LEASE)).lease.job.id, 'a1');
+    },
+  );
+
+  contract(
+    'a job of a channel is lent with its name and data, apart from email',
+    async (source) => {
+      const { prepareJob } = require('../../../src/queue/index.js');
+      const now = () => START;
+      const sms = prepareJob(
+        {
+          channel: 'sms',
+          kind: 'content',
+          to: '+380671234567',
+          text: 'Code 1234',
+          idempotencyKey: 'k',
+        },
+        { now },
+      ).request;
+      const email = prepareJob(
+        {
+          kind: 'content',
+          from: 'a@example.com',
+          to: 'b@example.com',
+          subject: 's',
+          content: { text: 't' },
+          idempotencyKey: 'k',
+        },
+        { now },
+      ).request;
+      // A sealed job of a channel: its channel in `enc`, its name in clear.
+      const sealed = requestOf('sealed', {
+        name: 'push',
+        data: {
+          v: 2,
+          hash: 'h',
+          enqueuedAt: '2026-10-18T09:00:00.000Z',
+          correlationId: 'c',
+          enc: 'x',
+        },
+      });
+      for (const request of [sms, email, sealed]) {
+        assert.deepStrictEqual(await source.enqueue(request), { id: request.id, duplicate: false });
+      }
+      assert.strictEqual((await source.enqueue(sms)).duplicate, true);
+      const lent = {};
+      for (let index = 0; index < 3; index++) {
+        const { lease } = await source.reserve(LEASE);
+        lent[lease.job.id] = [lease.job.name, lease.job.data];
+        await source.ack(lease, null);
+      }
+      assert.deepStrictEqual(lent, {
+        [sms.id]: ['sms', sms.data],
+        [email.id]: ['mail', email.data],
+        sealed: ['push', sealed.data],
+      });
     },
   );
 

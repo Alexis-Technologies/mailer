@@ -1,4 +1,4 @@
-// Not ported: the stores of ./mongodb and the mail queue of ./queue on
+// Not ported: the stores of ./mongodb and the queue of ./queue on
 // MongoDB itself (tests/mongodb/docker-compose.yml), skipped unless
 // MONGODB_URL is set. Each test has a database of its own, dropped after.
 const { test } = require('node:test');
@@ -314,5 +314,57 @@ test(
     );
     assert.equal(await outbox.retryFailed(id), true);
     assert.equal((await outbox.stats()).ready, 1);
+  },
+);
+
+test(
+  'MongoDB (replica set): the jobs of a channel run from an outbox of their own, in the transaction of the enqueue',
+  { skip },
+  async (t) => {
+    const { client, db, queue: emailQueue, audit, worker } = await setup(t);
+    const outbox = createMongoOutbox({
+      collection: db.collection('message_outbox'),
+      pollIntervalMilliseconds: 20,
+    });
+    await outbox.ensureIndexes();
+    const smsQueue = createQueue({ driver: outbox, audit });
+    const key = randomUUID();
+    const session = client.startSession();
+    t.after(() => session.endSession());
+    let otp;
+    await session.withTransaction(async () => {
+      await db.collection('logins').insertOne({ key }, { session });
+      otp = await smsQueue.enqueue(
+        {
+          channel: 'sms',
+          kind: 'content',
+          to: '+380671234567',
+          text: 'Your code is 1234',
+          idempotencyKey: key,
+        },
+        { transaction: session },
+      );
+    });
+    const mail = await emailQueue.enqueue(job({ idempotencyKey: key }));
+    assert.notEqual(otp.id, mail.id);
+    const stored = await db.collection('message_outbox').findOne({ _id: otp.id });
+    assert.equal(stored.name, 'sms');
+    assert.equal(await db.collection('mail_outbox').findOne({ _id: otp.id }), null);
+    const smsTransport = fakeTransport();
+    const consumer = smsQueue.createWorker({ transport: smsTransport });
+    t.after(() => consumer.close({ timeoutMilliseconds: 1000 }));
+    worker({ transport: fakeTransport() });
+    await until(async () => (await audit.stateOf(otp.correlationId)) === 'accepted');
+    assert.equal(smsTransport.calls[0].message.to, '+380671234567');
+    const events = await audit.eventsOf(otp.correlationId);
+    assert.deepEqual(
+      events.map((event) => [event.state, event.channel]),
+      [
+        ['queued', 'sms'],
+        ['rendered', 'sms'],
+        ['submitted', 'sms'],
+        ['accepted', 'sms'],
+      ],
+    );
   },
 );
