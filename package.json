@@ -324,6 +324,10 @@
     "./alphasms": {
       "types": "./src/alphasms/index.d.ts",
       "default": "./src/alphasms/index.js"
+    },
+    "./smsclub": {
+      "types": "./src/smsclub/index.d.ts",
+      "default": "./src/smsclub/index.js"
     }
   },
   "directories": {

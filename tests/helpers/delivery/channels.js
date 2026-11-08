@@ -18,6 +18,7 @@ const { TeamsTransport } = require('../../../src/teams/index.js');
 const { GoogleChatTransport } = require('../../../src/google-chat/index.js');
 const { TurboSmsTransport } = require('../../../src/turbosms/index.js');
 const { AlphaSmsTransport } = require('../../../src/alphasms/index.js');
+const { SmsClubTransport } = require('../../../src/smsclub/index.js');
 
 const TEAMS_WEBHOOK =
   'https://prod-00.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=TeamsWebhookSecret';
@@ -587,6 +588,21 @@ const channelProviders = [
         headers: { 'Retry-After': String(seconds) },
       }),
     secrets: ['AlphaSmsSecret'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'SMS Club',
+    create: (extra) =>
+      new SmsClubTransport({ retries: 1, ...extra, token: 'SmsClubSecret', sender: 'MyBrand' }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () => Response.json({ success_request: { info: { 106: '380671234567' } } }),
+    rateLimited: (seconds) =>
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Retry-After': String(seconds) },
+      }),
+    secrets: ['SmsClubSecret'],
     recipient: '380671234567',
   },
 ];

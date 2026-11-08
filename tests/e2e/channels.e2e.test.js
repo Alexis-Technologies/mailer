@@ -368,6 +368,14 @@ const PROVIDERS = [
     message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.ALPHASMS_TO, text }),
   },
   {
+    name: 'SMS Club',
+    Transport: require('../../src/smsclub/index.js').SmsClubTransport,
+    needs: ['SMSCLUB_TOKEN', 'SMSCLUB_SENDER', 'SMSCLUB_TO'],
+    config: () => ({ token: env.SMSCLUB_TOKEN, sender: env.SMSCLUB_SENDER }),
+    refused: () => ({ token: 'invalid', sender: env.SMSCLUB_SENDER }),
+    message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.SMSCLUB_TO, text }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

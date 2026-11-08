@@ -246,6 +246,9 @@ worker of 1.2 holds reads the same.
 - **`./alphasms`, AlphaSMS:** SMS and Viber to a phone number through its JSON API, a hybrid by
   `type: 'viber+sms'` in the payload; the `success` of the 200, then of its item, fails the
   message by the words of its error, and the receipt's segments are its `parts`.
+- **`./smsclub`, SMS Club:** SMS through its JSON API with the token of the account, the id of
+  the SMS the key of the `info` of the answer; a refusal told by its status (453, the same SMS
+  within two minutes, is `rejected`).
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

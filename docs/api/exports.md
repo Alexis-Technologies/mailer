@@ -73,6 +73,7 @@ model of delivery events.
 | `@alexify/mailer/google-chat` | `GoogleChatTransport` | [Google Chat](/channels/google-chat) |
 | `@alexify/mailer/turbosms` | `TurboSmsTransport` | [TurboSMS](/channels/turbosms) |
 | `@alexify/mailer/alphasms` | `AlphaSmsTransport` | [AlphaSMS](/channels/alphasms) |
+| `@alexify/mailer/smsclub` | `SmsClubTransport` | [SMS Club](/channels/smsclub) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
