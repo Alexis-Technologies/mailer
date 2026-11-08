@@ -135,6 +135,20 @@ test('Vonage: a part sent without its id is of unknown delivery, not refused', a
   assert.strictEqual(receipt.errors[0].category, 'unknown');
 });
 
+test('Vonage: a correlation id of up to 100 characters is the client-ref', async (t) => {
+  // Before (C24): one of 41 to 100 characters, which the SMS API takes, was
+  // not sent, so no receipt found its message.
+  const requests = stubFetch(t, () => parts('0'));
+  await transport().send(sms({ metadata: { correlationId: 'c'.repeat(100) } }));
+  assert.strictEqual(requests[0].form.get('client-ref'), 'c'.repeat(100));
+  await transport().send(sms({ metadata: { correlationId: 'c'.repeat(101) } }));
+  assert.strictEqual(requests[1].form.get('client-ref'), null);
+  assert.throws(
+    () => transport({ callback: `https://example.com/${'x'.repeat(90)}` }),
+    /more than 100 characters/,
+  );
+});
+
 test('Vonage: what an SMS cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => parts('0'));
   const cases = [

@@ -20,7 +20,7 @@ const { classifyStatus, createVonageClient } = require('./http-client.js');
 
 const PROVIDER = 'vonage';
 const MAX_TEXT = 3200;
-const MAX_CLIENT_REF = 40;
+const MAX_CLIENT_REF = 100;
 const MIN_TTL_MS = 20_000;
 const MAX_TTL_MS = 604_800_000;
 const OWN_FIELDS = new Set(['api_key', 'api_secret', 'to', 'text']);

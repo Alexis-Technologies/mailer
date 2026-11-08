@@ -1065,6 +1065,9 @@ that fails without it; C for the channels):
 - C23. vonage: a part of status 0 without a `message-id` was taken for a failed part and
   classified by the status 0, a `validation` refusal of an SMS Vonage sent. It is sent, of no
   id: the receipt is of unknown delivery.
+- C24. vonage: a correlation id of 41 to 100 characters, which the SMS API takes as its
+  `client-ref`, was left out, so no delivery receipt found its message; and a `callback` over the
+  100 characters of the API was taken. Both bounds are those of the API.
 
 ## Repository layout
 

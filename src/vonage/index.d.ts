@@ -44,7 +44,7 @@ export interface VonageConfig extends TransportDependencies {
 /**
  * A transport of SMS over the SMS API of Vonage (`/sms/json`).  An SMS goes
  * from its `from` or the transport's, as `unicode` when it is no text of
- * GSM-7, `expiresAt` its `ttl`, the correlation id its `client-ref` (40
+ * GSM-7, `expiresAt` its `ttl`, the correlation id its `client-ref` (100
  * characters at most), which its delivery receipts give back; `payload`
  * holds the fields of the form over those (`message-class`,
  * `status-report-req`), but the credentials, the number and the text.

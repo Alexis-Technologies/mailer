@@ -35,7 +35,7 @@ await vonage.send(
 | `from`, or none | `from`, else the transport's |
 | `text` | `text`, as `type: unicode` when it is no text of GSM-7 |
 | `expiresAt` | `ttl`, twenty seconds to a week |
-| `metadata.correlationId` | `client-ref`, 40 characters at most, which the receipts give back |
+| `metadata.correlationId` | `client-ref`, 100 characters at most, which the receipts give back |
 | `payload` | the fields of the form over those (`message-class`, `status-report-req`), but the credentials, the number and the text |
 
 Media, buttons and a text of more than 3200 characters are refused before any

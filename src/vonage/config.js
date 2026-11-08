@@ -5,6 +5,8 @@ const { checkCredential } = require('../internal/api-steps.js');
 const { checkWebhookUrl } = require('../internal/channel/webhook-url.js');
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
+const MAX_CALLBACK = 100;
+
 /**
  * Resolves the options of the Vonage transport.
  *
@@ -30,7 +32,13 @@ const createVonageConfig = (config = {}) => {
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
   checkSecureUrl(resolved.baseUrl, 'baseUrl');
-  if (resolved.callback !== undefined) checkWebhookUrl(resolved.callback, 'callback');
+  if (resolved.callback !== undefined) {
+    checkWebhookUrl(resolved.callback, 'callback');
+    // The longest callback the SMS API takes.
+    if (resolved.callback.length > MAX_CALLBACK) {
+      throw new TypeError(`VonageTransport: callback is more than ${MAX_CALLBACK} characters.`);
+    }
+  }
   checkConcurrency(resolved.concurrency);
   return resolved;
 };
