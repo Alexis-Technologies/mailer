@@ -261,18 +261,6 @@ export interface BasicWebhookVerifierOptions {
 }
 
 /**
- * Makes the verifier of Postmark's webhooks, whose URL carries Basic
- * credentials (`https://user:password@…`), compared in constant time.
- * Postmark signs no time or id, so nothing holds a request to a window or
- * takes it once.  A bounce is read by its type.
- *
- * @throws {TypeError} If a credential is missing.
- */
-export declare function createPostmarkWebhookVerifier(
-  options: BasicWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'postmark'>>;
-
-/**
  * The options of a verifier of a webhook signed with an HMAC of its body and
  * no time: an event is taken once by its id, kept a day and an hour.
  * `toleranceMs` and `now` throw a `TypeError`.

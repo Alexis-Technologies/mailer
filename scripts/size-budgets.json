@@ -12,6 +12,7 @@
   "./webhooks/mailtrap": 5.5,
   "./webhooks/maileroo": 5.5,
   "./webhooks/lettermint": 5.5,
+  "./webhooks/postmark": 5.5,
   "./smtp": 23.5,
   "./sendmail": 12,
   "./jmap": 13.5,

@@ -5,9 +5,9 @@ const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
   createMemoryReplayStore,
-  createPostmarkWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');
 const { createMailgunWebhookVerifier } = require('../../src/webhooks/mailgun/index.js');
 
 const KEY = 'key-mailgun-signing';

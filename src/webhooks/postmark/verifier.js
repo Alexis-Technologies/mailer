@@ -22,7 +22,7 @@ const {
   resolveCredentialOptions,
   stringOf,
   stringRecordOf,
-} = require('./request.js');
+} = require('../request.js');
 
 // What a bounce of Postmark is, by its Type.
 const BOUNCES = new Map([

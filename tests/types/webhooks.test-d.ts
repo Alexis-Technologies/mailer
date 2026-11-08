@@ -7,7 +7,6 @@ import {
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createMemoryReplayStore,
-  createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
@@ -31,13 +30,6 @@ const shared: ReplayStore = {
   release: async () => {},
 };
 expectError<ReplayStore>({ add: () => true });
-
-const postmark = createPostmarkWebhookVerifier({ username: 'u', password: 'p' });
-expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
-  (await postmark.verify({ body: '' })).events,
-);
-expectError(createPostmarkWebhookVerifier({ username: 'u' }));
-expectError(createPostmarkWebhookVerifier({ username: 'u', password: 'p', toleranceMs: 1 }));
 
 const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: null });
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
@@ -66,11 +58,3 @@ const azure = createAzureWebhookVerifier({
 expectType<string | undefined>((await azure.verify({ body: '' })).validation?.validationCode);
 expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));
 expectError(createAzureWebhookVerifier({}));
-createPostmarkWebhookVerifier({
-  username: 'u',
-  password: 'p',
-  onVerify: (report) => {
-    expectType<'taken' | 'refused' | 'error'>(report.status);
-    expectType<number>(report.durationMs);
-  },
-});

@@ -73,6 +73,10 @@
       "types": "./src/webhooks/lettermint/index.d.ts",
       "default": "./src/webhooks/lettermint/index.js"
     },
+    "./webhooks/postmark": {
+      "types": "./src/webhooks/postmark/index.d.ts",
+      "default": "./src/webhooks/postmark/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

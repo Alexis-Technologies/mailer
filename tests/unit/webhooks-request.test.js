@@ -48,7 +48,9 @@ test('Webhooks: credentials of another length take the time of the comparison', 
   };
   fresh();
   t.after(fresh);
-  const { createPostmarkWebhookVerifier: postmark } = require('../../src/webhooks/index.js');
+  const {
+    createPostmarkWebhookVerifier: postmark,
+  } = require('../../src/webhooks/postmark/index.js');
   const verifier = postmark({ username: 'user', password: 'a long password of the hook' });
   const short = `Basic ${Buffer.from('user:x').toString('base64')}`;
   const body = JSON.stringify({ RecordType: 'Delivery', MessageID: 'm', Recipient: 'b@e.com' });
@@ -113,10 +115,10 @@ const {
   createAzureWebhookVerifier,
   createBrevoWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');
 const { createMailerooWebhookVerifier } = require('../../src/webhooks/maileroo/index.js');
 const { createMailtrapWebhookVerifier } = require('../../src/webhooks/mailtrap/index.js');
