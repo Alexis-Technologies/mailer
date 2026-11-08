@@ -5,7 +5,7 @@
 // The providers are passed in, and @opentelemetry/api is never required.
 
 const metadata = require('../version.js');
-const { CHANNELS } = require('../internal/channel/channels.js');
+const { channelOfJob: channelOf } = require('../internal/job-channel.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
 // SpanKind.CONSUMER and the SpanStatusCode values of the OpenTelemetry API.
@@ -33,20 +33,6 @@ const spanContextOf = (traceparent) => {
     traceFlags: Number.parseInt(parts[4], 16),
     isRemote: true,
   };
-};
-
-/**
- * The channel of a job: `email` for one of version 1, or the channel its data
- * names, or its name for one sealed (a job of a channel is named by it);
- * nothing for a job of another kind, so that no value of a store becomes an
- * attribute of a metric.
- *
- * @internal
- */
-const channelOf = (job) => {
-  if (job?.data?.v === 1) return 'email';
-  const named = job?.data?.channel ?? job?.name;
-  return CHANNELS.has(named) ? named : undefined;
 };
 
 const checkOptions = (handler, options) => {
@@ -160,4 +146,4 @@ const instrumentHandler = (handler, options = {}) => {
   };
 };
 
-module.exports = { channelOf, instrumentHandler, spanContextOf };
+module.exports = { instrumentHandler, spanContextOf };

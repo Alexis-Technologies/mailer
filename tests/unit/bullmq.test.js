@@ -491,11 +491,36 @@ test('BullMQ: a job BullMQ gives up itself is told to the audit as of unknown de
     [event.state, event.correlationId, event.jobId, event.attempt, event.error.code],
     ['delivery_unknown', 'order-42', 'j1', 1, 'queue.lost'],
   );
+  assert.strictEqual('channel' in event, false, 'an email names no channel, as in 1.x');
   // What the processor threw itself is the handler's, told already.
   const { retryError } = require('../../src/bullmq/backoff.js');
   worker.emit('failed', job, retryError({ code: 'x', reason: 'y', delayMilliseconds: 1 }));
   await new Promise(setImmediate);
   assert.strictEqual(audit.events.length, 1);
+  await consumer.close();
+});
+
+test('BullMQ: a job of a channel BullMQ gives up is told with its channel, sealed or not', async () => {
+  const { createMemoryAuditSink } = require('../../src/audit/index.js');
+  const bullmq = fakeBullMQ();
+  const audit = createMemoryAuditSink();
+  const consumer = createBullMQDriver({ bullmq }).consume(async () => ({ type: 'ack' }), { audit });
+  const [worker] = bullmq.workers;
+  const lost = new Error('job stalled more than allowable limit');
+  worker.emit('failed', fakeJob({ id: 'j1', name: 'sms', data: { v: 2, channel: 'sms' } }), lost);
+  // A sealed job holds its channel in `enc`; its name is its channel.
+  worker.emit('failed', fakeJob({ id: 'j2', name: 'push', data: { v: 2, enc: 'x' } }), lost);
+  worker.emit('failed', fakeJob({ id: 'j3', name: 'pager', data: { v: 2, enc: 'x' } }), lost);
+  await new Promise(setImmediate);
+  // Before: the event of a lost SMS named no channel, and read as an email's.
+  assert.deepStrictEqual(
+    audit.events.map((event) => [event.jobId, event.channel]),
+    [
+      ['j1', 'sms'],
+      ['j2', 'push'],
+      ['j3', undefined],
+    ],
+  );
   await consumer.close();
 });
 

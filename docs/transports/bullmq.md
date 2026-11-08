@@ -49,10 +49,17 @@ const transactional = createQueue({ driver: createBullMQDriver({ bullmq, queueNa
 const bulk = createQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-bulk' }) });
 ```
 
+The same goes for the [channels](/guide/queue#the-channels): a queue of SMS, of
+push, of chats apart from email (`queueName: 'sms'`), so that a pause for a rate
+limit of one does not hold the others, and a worker of 1.x never meets their
+jobs. A job of a channel is named by it (`sms`), which Bull Board shows; an
+email job is named `mail`.
+
 A job BullMQ fails itself, which the handler never settled (stalled more than
 `maxStalledCount`), is logged as `queue.job.lost` and told to the queue's audit
 sink as `delivery_unknown` (code `queue.lost`): its run may have sent it before
-it stalled.
+it stalled. The event of a job of a channel carries its channel, read from its
+name when the job is sealed.
 
 Its jobs by state, the failed ones and a retry of one by hand are BullMQ's own
 (`queue.getJobCounts()`, `queue.getFailed()`, `job.retry()`), and a dashboard

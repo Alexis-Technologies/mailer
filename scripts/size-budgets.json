@@ -38,7 +38,7 @@
   "./tee": 3.5,
   "./audit": 2.5,
   "./queue": 26.5,
-  "./bullmq": 4.5,
+  "./bullmq": 5,
   "./mongodb": 7.5,
   "./channels": 6,
   "./router": 1.5

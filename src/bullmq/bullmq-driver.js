@@ -5,6 +5,7 @@
 // 1, as 0 in BullMQ runs before every prioritized job.
 
 const { describeThrown, warnThrown } = require('../internal/callback.js');
+const { channelOfJob } = require('../internal/job-channel.js');
 const { createLog } = require('../internal/log.js');
 const { redactRecipients } = require('../internal/redact-addresses.js');
 const { toUuid } = require('../internal/uuid.js');
@@ -122,6 +123,13 @@ const duplicateOf = async (queue, request) => {
   return answer;
 };
 
+// The channel of the event of a job of a channel; one of email names none,
+// as the events of 1.x.
+const channelFieldOf = (job) => {
+  const channel = channelOfJob(job);
+  return channel === undefined || channel === 'email' ? {} : { channel };
+};
+
 // Tells the audit of a job BullMQ gave up itself, which the handler never
 // settled: it may have been sent, by a run that stalled after its send.
 const auditLost = async (audit, job, error) => {
@@ -135,6 +143,7 @@ const auditLost = async (audit, job, error) => {
       typeof job?.data?.correlationId === 'string' ? job.data.correlationId : String(job?.id),
     jobId: String(job?.id),
     attempt,
+    ...channelFieldOf(job),
     error: {
       category: 'unknown',
       code: 'queue.lost',

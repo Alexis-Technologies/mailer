@@ -151,6 +151,9 @@ worker of 1.2 holds reads the same.
   the queue (`mailer.queue.jobs`, `lag`, `job.duration`, `redeliveries`) carry
   `mailer.channel`, `email` for an email job, the name of a sealed job of a channel, none for a
   job of no known channel.
+- **`./bullmq` tells the channel of a job it gives up:** the `delivery_unknown` event of a job
+  of a channel that stalled too often carries its `channel`, read from its name when it is
+  sealed; that of an email names none, as in 1.x.
 
 ## [1.2.1] - 2026-11-07
 

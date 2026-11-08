@@ -1,4 +1,4 @@
-// Not ported: the BullMQ driver of ./bullmq and the mail queue of ./queue on
+// Not ported: the BullMQ driver of ./bullmq and the queue of ./queue on
 // BullMQ and a real Valkey (tests/bullmq/docker-compose.yml), skipped unless
 // BULLMQ_REDIS_URL is set. Each test has a prefix of its own, removed after.
 const { test } = require('node:test');
@@ -221,5 +221,54 @@ test(
     await until(() => errors.length > 0);
     assert.match(errors[0], /Unknown backoff strategy alexify-mailer/);
     assert.ok(await driver.queue.getJob(id));
+  },
+);
+
+test(
+  'BullMQ (Valkey): the jobs of a channel run on a queue of their own, sealed, named by it',
+  { skip },
+  async (t) => {
+    const codec = {
+      encode: (text) => Buffer.from(text).toString('base64'),
+      decode: (text) => Buffer.from(text, 'base64').toString(),
+    };
+    const email = setup(t, { queueName: 'email' });
+    const sms = setup(t, { queueName: 'sms' });
+    const channelQueue = createQueue({ driver: sms.driver, audit: sms.audit, codec });
+    const key = randomUUID();
+    const mail = await email.queue.enqueue(job({ idempotencyKey: key }));
+    const otp = await channelQueue.enqueue({
+      channel: 'sms',
+      kind: 'content',
+      to: '+380671234567',
+      text: 'Your code is 1234',
+      idempotencyKey: key,
+      priority: 'high',
+    });
+    assert.notEqual(otp.id, mail.id);
+    const held = await sms.driver.queue.getJob(otp.id);
+    assert.equal(held.name, 'sms');
+    assert.equal(typeof held.data.enc, 'string');
+    assert.equal('channel' in held.data, false);
+    assert.equal(await email.driver.queue.getJob(otp.id), undefined);
+    const mailTransport = fakeTransport();
+    const smsTransport = fakeTransport(() => ({ ...sent('SM1'), state: 'accepted' }));
+    email.worker({ transport: mailTransport });
+    const consumer = channelQueue.createWorker({ transport: smsTransport });
+    t.after(() => consumer.close({ timeoutMilliseconds: 1000 }));
+    await until(async () => (await sms.driver.queue.getJob(otp.id))?.finishedOn);
+    await until(async () => (await email.driver.queue.getJob(mail.id))?.finishedOn);
+    assert.equal(smsTransport.calls.length, 1);
+    assert.equal(smsTransport.calls[0].message.to, '+380671234567');
+    assert.equal(mailTransport.calls.length, 1);
+    assert.deepEqual(
+      sms.audit.eventsOf(otp.correlationId).map((event) => [event.state, event.channel]),
+      [
+        ['queued', 'sms'],
+        ['rendered', 'sms'],
+        ['submitted', 'sms'],
+        ['accepted', 'sms'],
+      ],
+    );
   },
 );
