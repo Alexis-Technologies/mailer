@@ -348,7 +348,7 @@
           "text": "19 in 2.0, few per channel"
         },
         "failover": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./pool`, between providers of a channel"
         },
         "channelFallback": {
@@ -357,31 +357,31 @@
           "note": "A message moves on when the provider refused it, when the recipient is not on the channel, or when no receipt says it was delivered within a deadline; never after a send of unknown outcome without an idempotency key. Email is one of the channels to fall back to."
         },
         "retry": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./retry`: classified errors, `Retry-After`"
         },
         "rateLimit": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./ratelimit`, per channel and provider"
         },
         "circuitBreaker": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./breaker`, one probe when half-open"
         },
         "timeout": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`AbortSignal`"
         },
         "queue": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./queue`: outbox in MongoDB, BullMQ"
         },
         "e164": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "without libphonenumber-js"
         },
         "segments": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "GSM-7 / UCS-2, before sending"
         },
         "media": {
@@ -398,22 +398,22 @@
           "text": "from inbound timestamps (2.1)"
         },
         "templates": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./templates`: text by name, engines passed in"
         },
         "batch": {
           "mark": "🔜"
         },
         "scheduled": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "a delay of the queue"
         },
         "idempotency": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./idempotency`, outbox + provider’s own keys"
         },
         "receipts": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "one model, every channel"
         },
         "webhooks": {
@@ -437,20 +437,20 @@
           "text": "not planned"
         },
         "otel": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./otel`"
         },
         "hooks": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./hooks`"
         },
         "mock": {
-          "mark": "🔜",
+          "mark": "✅",
           "text": "`./mock`"
         },
         "auditLog": {
-          "mark": "🔜",
-          "text": "`./audit`, append-only; numbers erasable (2.2)"
+          "mark": "⚠️",
+          "text": "`./audit`, append-only; numbers erasable in 2.2"
         },
         "types": {
           "mark": "✅",
