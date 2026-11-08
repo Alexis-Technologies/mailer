@@ -4,10 +4,7 @@
 // application composed, and makes of the receipt what the queue does next,
 // telling the audit sink each state on the way.
 
-const { Buffer } = require('node:buffer');
-const { isAttachment } = require('../core/attachment.js');
 const { classifyReceiptError } = require('../core/receipt.js');
-const { createMessage } = require('../core/message.js');
 const { renderFields } = require('../render/renderer.js');
 const { warnThrown } = require('../internal/callback.js');
 const { messageOf } = require('../internal/decorator.js');
@@ -23,6 +20,8 @@ const { outcomeOfFailure, reasonOf } = require('./outcome.js');
 const { checkCodec, openJob } = require('./envelope.js');
 const { parseJob } = require('./parse.js');
 const { keyringOf } = require('./signing.js');
+const { bytesOf } = require('./stored.js');
+const { strategyOfData } = require('./strategies.js');
 
 const DEFAULT_BACKOFF = Object.freeze({
   baseDelayMilliseconds: 30_000,
@@ -109,13 +108,13 @@ const createHandlerConfig = (options = {}) => {
 const failureError = (category, code, message) => ({ category, code, message, retryable: false });
 
 // The fields every audit event of a run shares.
-const baseAuditOf = (job, data) => {
+const baseAuditOf = (job, data, strategy) => {
   const base = {
     source: 'worker',
     correlationId: data.correlationId,
     jobId: job.id,
     payloadHash: data.hash,
-    messageId: data.messageId,
+    ...strategy.describe(data),
     priority: data.priority,
   };
   if (data.tenantId !== undefined) base.tenantId = data.tenantId;
@@ -277,8 +276,8 @@ const templateFailureOf = (run, error) => {
 };
 
 const renderStep = async (run) => {
-  const { config, data } = run;
-  if (data.kind === 'content') return { fields: { subject: data.subject, content: data.content } };
+  const { config, data, strategy } = run;
+  if (data.kind === 'content') return { fields: strategy.contentOf(data) };
   if (config.renderer === undefined) {
     return {
       outcome: await fail(run, 'render.no_renderer', 'The worker has no renderer for a template.', {
@@ -300,37 +299,30 @@ const renderStep = async (run) => {
     if (run.signal.aborted) return { outcome: release(run, 'aborted while rendering') };
     return { outcome: await settleThrown(run, templateFailureOf(run, error), 'render.failed') };
   }
-  const subject = data.subject ?? fields.subject;
-  if (typeof subject !== 'string' || subject === '') {
-    return {
-      outcome: await fail(
-        run,
-        'render.no_subject',
-        `The template ${data.template} gave no subject, and the job has none.`,
-      ),
-    };
+  const rendered = strategy.renderedOf(data, fields);
+  if (rendered.failure !== undefined) {
+    return { outcome: await fail(run, rendered.failure.code, rendered.failure.reason) };
   }
-  return { fields: { subject, content: fields.content } };
+  return rendered;
 };
 
-const isContent = (value) =>
-  value instanceof Uint8Array ||
-  value instanceof Blob ||
-  value instanceof Promise ||
-  typeof value === 'function';
-
-const attachmentsStep = async (run) => {
-  const { config, data, signal } = run;
-  const attachments = [];
-  for (const stored of data.attachments ?? []) {
-    const { filename, contentType, inline, contentId } = stored;
-    const fields = { filename, contentType, inline, contentId };
+// The attachments of an email, or the media of a message of a channel: kept
+// in the job, resolved from their reference, or as they are (a URL).
+const partsStep = async (run) => {
+  const { config, data, signal, strategy } = run;
+  const parts = [];
+  for (const stored of strategy.partsOf(data) ?? []) {
+    const fields = strategy.partFieldsOf(stored);
     if (stored.data !== undefined) {
-      attachments.push({ ...fields, content: new Uint8Array(Buffer.from(stored.data, 'base64')) });
+      parts.push({ ...fields, content: bytesOf(stored.data) });
+      continue;
+    }
+    if (stored.ref === undefined) {
+      parts.push(fields);
       continue;
     }
     if (config.resolveAttachment === undefined) {
-      const reason = `The worker has no resolveAttachment for the attachment ${filename}.`;
+      const reason = `The worker has no resolveAttachment for ${strategy.describePart(fields)}.`;
       return {
         outcome: await fail(run, 'queue.attachment_unresolved', reason, {
           category: 'configuration',
@@ -341,49 +333,21 @@ const attachmentsStep = async (run) => {
     try {
       resolved = await config.resolveAttachment(stored.ref, {
         job: data,
-        attachment: fields,
+        [strategy.part]: fields,
         signal,
       });
     } catch (error) {
       if (signal.aborted) return { outcome: release(run, 'aborted while resolving an attachment') };
       return { outcome: await settleThrown(run, error, 'queue.attachment_failed') };
     }
-    const content = isAttachment(resolved) ? resolved.content : resolved;
-    if (!isContent(content)) {
-      const reason = `resolveAttachment gave no content for the attachment ${filename}.`;
+    const part = strategy.resolvedOf(fields, resolved);
+    if (part === undefined) {
+      const reason = `resolveAttachment gave no content for ${strategy.describePart(fields)}.`;
       return { outcome: await fail(run, 'queue.attachment_failed', reason) };
     }
-    attachments.push({ ...fields, content });
+    parts.push(part);
   }
-  return { attachments };
-};
-
-const buildMessage = (run, fields, attachments) => {
-  const { data, job } = run;
-  return createMessage({
-    from: data.from,
-    to: data.to,
-    cc: data.cc,
-    bcc: data.bcc,
-    replyTo: data.replyTo,
-    subject: fields.subject,
-    content: fields.content,
-    attachments,
-    priority: data.priority,
-    tags: data.tags,
-    headers: data.headers,
-    list: data.list,
-    // The job's id: scoped to the tenant, of a fixed length, a hash of the
-    // key (under `idSecret`, one no address can be found from).
-    idempotencyKey: job.id,
-    messageId: data.messageId,
-    date: data.date === undefined ? undefined : new Date(data.date),
-    inReplyTo: data.inReplyTo,
-    references: data.references,
-    calendar: data.calendar,
-    tracking: data.tracking,
-    metadata: data.metadata,
-  });
+  return { parts };
 };
 
 const sendStep = async (run, message) => {
@@ -490,11 +454,11 @@ const attempt = async (run) => {
   if (signal.aborted) return release(run, 'aborted before rendering');
   const rendered = await renderStep(run);
   if (rendered.outcome !== undefined) return rendered.outcome;
-  const resolved = await attachmentsStep(run);
+  const resolved = await partsStep(run);
   if (resolved.outcome !== undefined) return resolved.outcome;
   let message;
   try {
-    message = buildMessage(run, rendered.fields, resolved.attachments);
+    message = run.strategy.build(data, rendered.fields, resolved.parts, job);
   } catch (error) {
     return fail(run, 'queue.invalid_message', messageOf(error));
   }
@@ -547,8 +511,10 @@ const unreadOutcome = (config, job, error) => {
 
 const readJob = async (config, job) => {
   try {
-    const data = await openJob(job.data, config.codec);
-    return { data: parseJob(data, { signingKeys: config.signingKeys }) };
+    const data = parseJob(await openJob(job.data, config.codec), {
+      signingKeys: config.signingKeys,
+    });
+    return { data, strategy: strategyOfData(data) };
   } catch (error) {
     return { outcome: unreadOutcome(config, job, error) };
   }
@@ -578,9 +544,10 @@ const createJobHandler = (options) => {
       config,
       job,
       data: read.data,
+      strategy: read.strategy,
       signal,
       started: config.now(),
-      base: baseAuditOf(job, read.data),
+      base: baseAuditOf(job, read.data, read.strategy),
     };
     if (job.redelivered) {
       config.log.write(

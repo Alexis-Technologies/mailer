@@ -19,4 +19,11 @@ class QueueError extends Error {
   }
 }
 
-module.exports = { QueueError };
+/**
+ * The failure of the data of a job that is not one: `queue.invalid_job`.
+ *
+ * @internal
+ */
+const invalidJob = (message) => new QueueError('queue.invalid_job', `Invalid job: ${message}`);
+
+module.exports = { QueueError, invalidJob };

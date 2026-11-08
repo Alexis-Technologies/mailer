@@ -11,6 +11,7 @@ const { QueueError } = require('./errors.js');
 const { createJobHandler } = require('./handler.js');
 const { checkIdSecret, prepareJob } = require('./job.js');
 const { keyringOf } = require('./signing.js');
+const { strategyOfData } = require('./strategies.js');
 
 // A W3C traceparent, as `traceContext` gives it.
 const TRACEPARENT = /^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/;
@@ -33,7 +34,7 @@ const queuedEventOf = (data, request) => {
     jobId: request.id,
     attempt: 0,
     payloadHash: data.hash,
-    messageId: data.messageId,
+    ...strategyOfData(data).describe(data),
     priority: data.priority,
   };
   if (data.tenantId !== undefined) event.tenantId = data.tenantId;
@@ -93,7 +94,11 @@ const transactionOf = (driver, enqueueOptions) => {
 // enqueued again for another message is refused.
 const answerOf = (queue, prepared, result) => {
   const { data, request } = prepared;
-  const answer = { id: request.id, correlationId: data.correlationId, messageId: data.messageId };
+  const answer = {
+    id: request.id,
+    correlationId: data.correlationId,
+    ...strategyOfData(data).describe(data),
+  };
   if (result?.duplicate === true) {
     if (result.existingHash !== undefined && result.existingHash !== request.hash) {
       throw keyReused([request.id], []);

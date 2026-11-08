@@ -352,7 +352,7 @@ test('Queue: a job read from its store is checked, its hash among it', () => {
 });
 
 test('Queue: a job holds only the fields of its version', () => {
-  const { V1_KEYS } = require('../../src/queue/job.js');
+  const { keys: V1_KEYS } = require('../../src/queue/email-job.js').emailJob;
   const template = prepare({
     idempotencyKey: 'all',
     cc: 'c@example.com',

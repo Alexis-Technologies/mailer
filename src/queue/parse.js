@@ -2,34 +2,40 @@
 // whoever can write to it may have written, so its shape is checked, and its
 // hash, which holds the job to what was enqueued.
 
-const { QueueError } = require('./errors.js');
+const { QueueError, invalidJob: invalid } = require('./errors.js');
 const { hashJson } = require('../internal/canonical-json.js');
-const { EMAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
+const { UNHASHED } = require('./job.js');
 const { keyringOf, verifyJob } = require('./signing.js');
+const { isObject } = require('./stored.js');
+const { LATEST_VERSION, strategyOfData } = require('./strategies.js');
 
-const invalid = (message) => new QueueError('queue.invalid_job', `Invalid job: ${message}`);
-
-const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const checkAddress = (value, name) => {
-  if (!isObject(value) || typeof value.address !== 'string') {
-    throw invalid(`${name} is no address.`);
-  }
-};
-
-const checkAddresses = (value, name, required) => {
-  if (value === undefined && !required) return;
-  if (!Array.isArray(value) || (required && value.length === 0)) {
-    throw invalid(`${name} is no list of addresses.`);
-  }
-  for (const address of value) checkAddress(address, name);
-};
+// The strings of every job, and those every job needs.
+const STRINGS = [
+  'idempotencyKey',
+  'correlationId',
+  'hash',
+  'enqueuedAt',
+  'locale',
+  'tenantId',
+  'notBefore',
+  'expiresAt',
+  'mac',
+  'kid',
+  'trace',
+];
+const REQUIRED = ['correlationId', 'hash', 'enqueuedAt'];
 
 const checkStrings = (data, names) => {
   for (const name of names) {
     if (data[name] !== undefined && typeof data[name] !== 'string') {
       throw invalid(`${name} is no string.`);
     }
+  }
+};
+
+const checkRequired = (data, names) => {
+  for (const name of names) {
+    if (data[name] === undefined) throw invalid(`it has no ${name}.`);
   }
 };
 
@@ -40,28 +46,20 @@ const checkBody = (data) => {
     return;
   }
   if (data.kind !== 'content') throw invalid(`its kind is ${JSON.stringify(data.kind)}.`);
-  if (typeof data.subject !== 'string' || !isObject(data.content)) {
-    throw invalid('a content job has no subject or content.');
-  }
 };
 
-const checkAttachments = (attachments) => {
-  if (attachments === undefined) return;
-  if (!Array.isArray(attachments)) throw invalid('attachments is no list.');
-  for (const attachment of attachments) {
-    if (
-      !isObject(attachment) ||
-      typeof attachment.filename !== 'string' ||
-      typeof attachment.contentType !== 'string' ||
-      typeof attachment.contentId !== 'string' ||
-      typeof attachment.inline !== 'boolean' ||
-      (typeof attachment.data === 'string') === (typeof attachment.ref === 'string')
-    ) {
-      throw invalid(
-        'an attachment is not { filename, contentType, inline, contentId, data | ref }.',
-      );
-    }
+// The strategy of a version this worker reads; a later one waits for its
+// worker.
+const strategyOf = (data) => {
+  const strategy = strategyOfData(data);
+  if (strategy !== undefined) return strategy;
+  if (Number.isInteger(data.v) && data.v > LATEST_VERSION) {
+    throw new QueueError(
+      'queue.unsupported_version',
+      `The job is of version ${data.v}, which this worker does not read: it reads up to ${LATEST_VERSION}.`,
+    );
   }
+  throw invalid(`its version is ${JSON.stringify(data.v)}.`);
 };
 
 /**
@@ -86,19 +84,11 @@ const parseJob = (data, options = {}) => {
       'The job is sealed: open it with its codec before it is read.',
     );
   }
-  if (data.v !== EMAIL_JOB_VERSION) {
-    if (Number.isInteger(data.v) && data.v > EMAIL_JOB_VERSION) {
-      throw new QueueError(
-        'queue.unsupported_version',
-        `The job is of version ${data.v}, which this worker does not read: it reads ${EMAIL_JOB_VERSION}.`,
-      );
-    }
-    throw invalid(`its version is ${JSON.stringify(data.v)}.`);
-  }
+  const strategy = strategyOf(data);
   // A field this version does not know was written by a later one: the job
   // waits for its worker, rather than failing here for a hash of other fields.
   for (const key of Object.keys(data)) {
-    if (!V1_KEYS.has(key)) {
+    if (!strategy.keys.has(key)) {
       throw new QueueError(
         'queue.unsupported_version',
         `The job holds the field ${JSON.stringify(key)}, which this worker does not read.`,
@@ -106,18 +96,11 @@ const parseJob = (data, options = {}) => {
     }
   }
   checkBody(data);
-  checkAddress(data.from, 'from');
-  checkAddresses(data.to, 'to', true);
-  checkAddresses(data.cc, 'cc', false);
-  checkAddresses(data.bcc, 'bcc', false);
-  checkAddresses(data.replyTo, 'replyTo', false);
-  checkAttachments(data.attachments);
-  checkStrings(data, ['idempotencyKey', 'messageId', 'correlationId', 'hash', 'enqueuedAt']);
-  checkStrings(data, ['subject', 'locale', 'tenantId', 'date', 'notBefore', 'expiresAt']);
-  checkStrings(data, ['mac', 'kid', 'trace']);
-  for (const name of ['messageId', 'correlationId', 'hash', 'enqueuedAt']) {
-    if (data[name] === undefined) throw invalid(`it has no ${name}.`);
-  }
+  strategy.check(data);
+  checkStrings(data, STRINGS);
+  checkStrings(data, strategy.strings);
+  checkRequired(data, strategy.required);
+  checkRequired(data, REQUIRED);
   if (!isObject(data.metadata)) throw invalid('metadata is no object.');
   if (hashJson(data, UNHASHED) !== data.hash) {
     throw new QueueError(

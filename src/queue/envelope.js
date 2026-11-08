@@ -6,7 +6,7 @@
 // context.
 
 const { messageOf } = require('../internal/decorator.js');
-const { QueueError } = require('./errors.js');
+const { QueueError, invalidJob: invalid } = require('./errors.js');
 
 // The fields a sealed job keeps in clear, beside `enc`: an id of its message
 // among them, by which a driver that gives a job up tells the audit.
@@ -61,8 +61,6 @@ const sealJob = async (data, codec) => {
   envelope.enc = enc;
   return envelope;
 };
-
-const invalid = (message) => new QueueError('queue.invalid_job', `Invalid job: ${message}`);
 
 /**
  * Opens the data of a job read from its store: sealed data as the codec
