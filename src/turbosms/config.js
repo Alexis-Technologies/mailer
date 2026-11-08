@@ -1,7 +1,6 @@
 // Not ported: the options of the TurboSMS transport: the token of the HTTP
 // API and the senders of its SMS and its Viber messages.
 
-const { randomUUID } = require('node:crypto');
 const { checkCredential } = require('../internal/api-steps.js');
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
@@ -25,7 +24,7 @@ const createTurboSmsConfig = (config = {}) => {
     headers: config.headers ?? {},
     fetch: config.fetch,
     logger: config.logger,
-    generateId: config.generateId ?? randomUUID,
+    generateId: config.generateId,
     now: config.now ?? Date.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);

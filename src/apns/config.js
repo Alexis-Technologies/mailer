@@ -2,7 +2,6 @@
 // id of token authentication, the topic of the app, and the environment,
 // which is named, never read from NODE_ENV (AP1).
 
-const { randomUUID } = require('node:crypto');
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 const { privateKeyOf } = require('../internal/jwt.js');
 
@@ -54,7 +53,7 @@ const createApnsConfig = (config = {}) => {
     headers: config.headers ?? {},
     fetch: config.fetch,
     logger: config.logger,
-    generateId: config.generateId ?? randomUUID,
+    generateId: config.generateId,
     now: config.now ?? Date.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);

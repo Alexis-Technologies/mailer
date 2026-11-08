@@ -7,6 +7,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
 const { channelFailure } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { generateId } = require('../core/id.js');
 const { toUuid } = require('../internal/uuid.js');
 const { createRbmConfig } = require('./config.js');
 const { createRbmClient } = require('./http-client.js');
@@ -45,10 +46,11 @@ class RbmTransport extends ProviderTransport {
    * @throws The reason of the signal if it aborts.
    */
   send(message, options) {
-    const messageId =
-      message.idempotencyKey === undefined
-        ? this.config.generateId()
-        : toUuid(message.idempotencyKey);
+    // A UUID, which the API asks of a messageId: of the key, or of an id the
+    // generator of the transport gives, whatever its shape.
+    const messageId = toUuid(
+      message.idempotencyKey ?? generateId('idempotency-key', this.config.generateId),
+    );
     return sendConverted(message, options, {
       provider: PROVIDER,
       convert: (sent) => convertMessage(sent),

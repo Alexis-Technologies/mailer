@@ -6,6 +6,7 @@ const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
 const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { generateId } = require('../core/id.js');
 const { toUuid } = require('../internal/uuid.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createGoogleChatConfig } = require('./config.js');
@@ -51,10 +52,6 @@ class GoogleChatTransport extends ProviderTransport {
    * @throws The reason of the signal if it aborts.
    */
   send(message, options) {
-    const requestId =
-      message.idempotencyKey === undefined
-        ? this.config.generateId()
-        : toUuid(message.idempotencyKey);
     return sendConverted(message, options, {
       provider: PROVIDER,
       convert: (sentMessage) => {
@@ -70,12 +67,19 @@ class GoogleChatTransport extends ProviderTransport {
           );
         }
         converted.space = sentMessage.to;
+        // The request id of a message of the app, which the API answers again
+        // with the message it made under it.
+        if (!converted.toWebhook) {
+          converted.requestId = toUuid(
+            sentMessage.idempotencyKey ?? generateId('idempotency-key', this.config.generateId),
+          );
+        }
         return converted;
       },
       request: (converted, sendOptions) =>
         converted.toWebhook
           ? this.httpClient.postWebhook(converted.body, sendOptions)
-          : this.httpClient.post(converted.space, requestId, converted.body, sendOptions),
+          : this.httpClient.post(converted.space, converted.requestId, converted.body, sendOptions),
       receiptOf,
       failureOf: (error) => channelFailure(PROVIDER, PROVIDER, error),
     });

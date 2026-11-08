@@ -1044,6 +1044,11 @@ that fails without it; C for the channels):
 - C17. meta: a 5xx of the Graph API (code 1, 2 or 131000) was retried as a message Meta did
   not take, though it may have, and no key dedupes a message: it went twice. A 5xx is of
   unknown delivery, never retried, as for the other APIs of chats.
+- C18. apns, rbm, google-chat, turbosms: the `generateId` of the transport was called with no
+  kind and its value sent unchecked as an `apns-id`, a `messageId` of RBM, a `requestId` or a
+  `sequence_id`, of which APNs and RBM want a UUID and TurboSMS 40 characters at most: a
+  generator of ULIDs failed every send without a key. The id goes through `generateId` of the
+  core, by its kind, and `toUuid`.
 
 ## Repository layout
 

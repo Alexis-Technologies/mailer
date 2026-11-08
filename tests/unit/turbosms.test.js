@@ -16,7 +16,7 @@ const transport = (config = {}) =>
     sender: 'MyBrand',
     retries: 0,
     now: () => NOW,
-    generateId: () => 'sequence-1',
+    generateId: () => '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     ...config,
   });
 const sms = (fields = {}) =>
@@ -44,7 +44,7 @@ test('TurboSMS: an SMS is message/send with the token and a sequence_id', async 
   assert.strictEqual(request.headers.get('authorization'), `Bearer ${TOKEN}`);
   assert.deepStrictEqual(request.json, {
     recipients: ['380678998668'],
-    sequence_id: 'sequence-1',
+    sequence_id: '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     sms: { sender: 'MyBrand', text: 'Ваш код 1234' },
   });
   assert.deepStrictEqual(receipt, {
@@ -69,7 +69,7 @@ test('TurboSMS: a message of Viber, and a hybrid with an SMS by the payload', as
   );
   assert.deepStrictEqual(requests[0].json, {
     recipients: ['380678998668'],
-    sequence_id: 'sequence-1',
+    sequence_id: '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     viber: {
       sender: 'MyBrandViber',
       text: 'Ваш код 1234',

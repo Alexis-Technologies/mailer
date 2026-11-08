@@ -29,7 +29,7 @@ const transport = (config = {}) =>
     environment: 'production',
     retries: 0,
     now: () => clock,
-    generateId: () => 'generated-id',
+    generateId: () => '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     fetch: (url, init) => globalThis.fetch(url, init),
     ...config,
   });
@@ -55,7 +55,7 @@ test('APNs: a push is a request of /3/device with the ES256 token of the team', 
   assert.strictEqual(request.redirect, 'manual');
   assert.strictEqual(request.headers.get('apns-topic'), 'com.example.app');
   assert.strictEqual(request.headers.get('apns-push-type'), 'alert');
-  assert.strictEqual(request.headers.get('apns-id'), 'generated-id');
+  assert.strictEqual(request.headers.get('apns-id'), '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d');
   assert.strictEqual(request.headers.get('apns-priority'), null, 'the default of APNs, 10');
   assert.strictEqual(request.headers.get('content-type'), 'application/json');
   assert.deepStrictEqual(request.json, {
@@ -87,7 +87,73 @@ test('APNs: a push is a request of /3/device with the ES256 token of the team', 
   const sandbox = stubFetch(t, () => new Response(null, { status: 200 }));
   const sent = await transport({ environment: 'sandbox' }).send(push());
   assert.strictEqual(sandbox[0].url, `https://api.sandbox.push.apple.com/3/device/${DEVICE}`);
-  assert.strictEqual(sent.messageId, 'generated-id', 'the apns-id sent, which APNs keeps');
+  assert.strictEqual(
+    sent.messageId,
+    '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+    'the apns-id sent, which APNs keeps',
+  );
+});
+
+test('APNs, RBM, Google Chat and TurboSMS make a UUID of an id of any shape', async (t) => {
+  // Before (C18): they called the generateId of the transport with no kind
+  // and sent what it gave as an apns-id, a messageId of RBM or a sequence_id
+  // of TurboSMS, which must be UUIDs (or 40 characters), so a ULID failed
+  // every send without an idempotency key; and none checked it.
+  const { RbmTransport } = require('../../src/rbm/index.js');
+  const { GoogleChatTransport } = require('../../src/google-chat/index.js');
+  const { TurboSmsTransport } = require('../../src/turbosms/index.js');
+  const kinds = [];
+  const ulid = (kind) => {
+    kinds.push(kind);
+    return '01ARZ3NDEKTSV4RRFFQ69G5FAV01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  };
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  clock = NOW;
+  const requests = stubFetch(t, (request) => {
+    if (request.url.startsWith('https://oauth2.googleapis.com/')) {
+      return json({ access_token: 'ya29.x', expires_in: 3600 });
+    }
+    if (request.url.includes('turbosms')) {
+      return json({
+        response_code: 800,
+        response_status: 'OK',
+        response_result: [{ phone: '380671234567', response_code: 0, message_id: 'm' }],
+      });
+    }
+    return request.url.includes('push.apple') ? accepted() : json({ name: 'spaces/A/messages/1' });
+  });
+  await transport({ generateId: ulid }).send(push());
+  const account = {
+    type: 'service_account',
+    client_email: 'a@b.iam.gserviceaccount.com',
+    private_key: generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+      type: 'pkcs8',
+      format: 'pem',
+    }),
+  };
+  await new RbmTransport({
+    serviceAccount: account,
+    agentId: 'a',
+    generateId: ulid,
+    retries: 0,
+  }).send(createChannelMessage({ channel: 'rcs', to: '+380671234567', text: 'x' }));
+  await new GoogleChatTransport({ serviceAccount: account, generateId: ulid, retries: 0 }).send(
+    createChannelMessage({ channel: 'google-chat', to: 'spaces/A', text: 'x' }),
+  );
+  await new TurboSmsTransport({ token: 't', sender: 'S', generateId: ulid, retries: 0 }).send(
+    createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'x' }),
+  );
+  const sends = requests.filter((request) => !request.url.startsWith('https://oauth2'));
+  assert.match(sends[0].headers.get('apns-id'), UUID);
+  assert.match(new URL(sends[1].url).searchParams.get('messageId'), UUID);
+  assert.match(new URL(sends[2].url).searchParams.get('requestId'), UUID);
+  assert.match(sends[3].json.sequence_id, UUID);
+  assert.deepStrictEqual(kinds, [
+    'idempotency-key',
+    'idempotency-key',
+    'idempotency-key',
+    'idempotency-key',
+  ]);
 });
 
 test('APNs: the token is shared, and made anew only before its hour is out', async (t) => {
@@ -336,7 +402,7 @@ test('APNs: a push goes over HTTP/2 to a local server, the session closed on dis
   }
   assert.strictEqual(receipts.length, 2);
   assert.strictEqual(receipts[0].successful, true);
-  assert.strictEqual(receipts[0].messageId, 'generated-id');
+  assert.strictEqual(receipts[0].messageId, '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d');
   assert.strictEqual(seen[0].headers[':path'], `/3/device/${DEVICE}`);
   assert.strictEqual(seen[0].headers['apns-topic'], 'com.example.app');
   assert.match(seen[0].headers.authorization, /^bearer [\w-]+\.[\w-]+\.[\w-]+$/);

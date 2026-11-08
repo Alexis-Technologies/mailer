@@ -1,7 +1,6 @@
 // Not ported: the options of the RBM transport: the service account of the
 // agent, its id, and the region of the API.
 
-const { randomUUID } = require('node:crypto');
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
 
 // The hosts of the regions of the API.
@@ -44,7 +43,7 @@ const createRbmConfig = (config = {}) => {
     headers: config.headers ?? {},
     fetch: config.fetch,
     logger: config.logger,
-    generateId: config.generateId ?? randomUUID,
+    generateId: config.generateId,
     now: config.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);

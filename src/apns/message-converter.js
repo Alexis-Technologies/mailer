@@ -12,6 +12,7 @@
 const { Buffer } = require('node:buffer');
 const { InvalidMessageError } = require('../internal/channel/failure.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { generateId } = require('../core/id.js');
 const { toUuid } = require('../internal/uuid.js');
 
 const MAX_PAYLOAD = 4096;
@@ -136,8 +137,7 @@ const convertMessage = (message, config) => {
     'content-type': 'application/json',
     'apns-push-type': pushType,
     'apns-topic': config.topic,
-    'apns-id':
-      message.idempotencyKey === undefined ? config.generateId() : toUuid(message.idempotencyKey),
+    'apns-id': toUuid(message.idempotencyKey ?? generateId('idempotency-key', config.generateId)),
   };
   if (pushType === 'background' || message.priority === 'low') headers['apns-priority'] = '5';
   else if (message.priority === 'high') headers['apns-priority'] = '10';

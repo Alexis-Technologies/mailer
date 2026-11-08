@@ -5,12 +5,15 @@
 // of its recipient, fails it, and FAILED_DUPLICATE_REQUEST answers the
 // results of the same request, executed once.
 
+const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
+
 const { sendConverted } = require('../internal/api-steps.js');
 const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
 const { countSegments } = require('../internal/channel/segments.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { toUuid } = require('../internal/uuid.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createTurboSmsConfig } = require('./config.js');
 const { classifyCode, createTurboSmsClient } = require('./http-client.js');
@@ -193,7 +196,9 @@ class TurboSmsTransport extends ProviderTransport {
    * @throws The reason of the signal if it aborts.
    */
   send(message, options) {
-    const sequenceId = this.config.generateId();
+    // A UUID, 36 characters, within the 40 a sequence_id takes, whatever the
+    // generator of the transport gives.
+    const sequenceId = toUuid(generateId('idempotency-key', this.config.generateId));
     return sendConverted(message, options, {
       provider: PROVIDER,
       convert: (sent) => bodyOf(sent, this.config, sequenceId),

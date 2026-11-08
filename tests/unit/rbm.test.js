@@ -26,7 +26,7 @@ const transport = (config = {}) =>
     agentId: 'shop_agent',
     retries: 0,
     now: () => NOW,
-    generateId: () => 'generated-id',
+    generateId: () => '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     ...config,
   });
 const rcs = (fields = {}) =>
@@ -46,7 +46,7 @@ const stub = (t, answer) => {
   });
   return { sends, tokens: () => tokens };
 };
-const created = (id = 'generated-id') =>
+const created = (id = '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d') =>
   json({ name: `phones/${TO}/agentMessages/${id}`, sendTime: '2026-11-08T10:00:01Z' });
 const status = (code, name) =>
   json({ error: { code, message: `${name} message`, status: name } }, code);
@@ -57,14 +57,14 @@ test('RBM: a message is an AgentMessage under a messageId of the client', async 
   const [request] = sends;
   assert.strictEqual(
     request.url,
-    `https://rcsbusinessmessaging.googleapis.com/v1/phones/${TO}/agentMessages?messageId=generated-id&agentId=shop_agent`,
+    `https://rcsbusinessmessaging.googleapis.com/v1/phones/${TO}/agentMessages?messageId=8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d&agentId=shop_agent`,
   );
   assert.strictEqual(request.method, 'POST');
   assert.strictEqual(request.headers.get('authorization'), 'Bearer ya29.rbm-token');
   assert.deepStrictEqual(request.json, { contentMessage: { text: 'Your order shipped' } });
   assert.deepStrictEqual(receipt, {
     successful: true,
-    messageId: 'generated-id',
+    messageId: '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     provider: 'rbm',
     channel: 'rcs',
     state: 'accepted',

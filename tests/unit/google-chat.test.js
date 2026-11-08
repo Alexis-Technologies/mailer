@@ -23,7 +23,7 @@ const transport = (config = {}) =>
   new GoogleChatTransport({
     webhookUrl: WEBHOOK,
     retries: 0,
-    generateId: () => 'generated-id',
+    generateId: () => '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
     ...config,
   });
 const chat = (fields = {}) =>
@@ -134,7 +134,10 @@ test('Google Chat: a message to a space goes through the app, under its request 
   assert.match(url.searchParams.get('requestId'), /^[0-9a-f]{8}-[0-9a-f]{4}-4/);
   assert.strictEqual(posts[0].headers.get('authorization'), 'Bearer ya29.chat-token');
   await app.send(chat({ to: 'spaces/AAAA' }));
-  assert.strictEqual(new URL(posts[2].url).searchParams.get('requestId'), 'generated-id');
+  assert.strictEqual(
+    new URL(posts[2].url).searchParams.get('requestId'),
+    '8f2b1c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  );
 });
 
 test('Google Chat: a refusal by its status, the webhook its credential', async (t) => {

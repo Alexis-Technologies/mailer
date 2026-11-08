@@ -1,7 +1,6 @@
 // Not ported: the options of the Google Chat transport: the URL of a webhook
 // of a space, the service account of a Chat app, or both.
 
-const { randomUUID } = require('node:crypto');
 const { checkCredential } = require('../internal/api-steps.js');
 const { checkWebhookUrl } = require('../internal/channel/webhook-url.js');
 const { checkConcurrency, checkRequestOptions, checkSecureUrl } = require('../internal/config.js');
@@ -37,7 +36,7 @@ const createGoogleChatConfig = (config = {}) => {
     headers: config.headers ?? {},
     fetch: config.fetch,
     logger: config.logger,
-    generateId: config.generateId ?? randomUUID,
+    generateId: config.generateId,
     now: config.now,
   };
   checkRequestOptions(resolved.timeout, resolved.retries);
