@@ -1028,6 +1028,9 @@ that fails without it; C for the channels):
   2^30 requests, and keeps the session open, which stayed in use: every later push failed as of
   unknown delivery, though none was sent. A stream without an id is unsent, and a session out of
   ids is retired.
+- C13. http2: a ping made while the session connected, which Node cancels, destroyed the
+  session, failing the pushes that waited on it (`pingIntervalMs` shorter than a slow
+  handshake). No ping goes while it connects, and a cancelled one ends nothing.
 
 ## Repository layout
 

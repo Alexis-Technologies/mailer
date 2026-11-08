@@ -74,9 +74,11 @@ class Session {
     this.handle.on('error', end);
     this.handle.on('frameError', () => this.handle.destroy());
     this.#pinger = setInterval(() => {
-      if (this.handle.closed || this.handle.destroyed) return;
+      // A session still connecting has no ping to answer: Node cancels it,
+      // which is no failure of the session.
+      if (this.handle.closed || this.handle.destroyed || this.handle.connecting) return;
       this.handle.ping((error) => {
-        if (error !== null) this.handle.destroy(error);
+        if (error !== null && error.code !== 'ERR_HTTP2_PING_CANCEL') this.handle.destroy(error);
       });
     }, options.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS);
     this.#pinger.unref();

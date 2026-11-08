@@ -267,6 +267,46 @@ test('HTTP/2: a session out of stream ids is left, its request never sent', asyn
   assert.strictEqual(sessions.length, 2, 'the next request opens another session');
 });
 
+test('HTTP/2: a ping cancelled while the session connects does not end it', async (t) => {
+  // Before (C13): a ping made while the session connected, which Node cancels,
+  // destroyed the session and the requests waiting on it.
+  const { EventEmitter } = require('node:events');
+  const handle = Object.assign(new EventEmitter(), {
+    closed: false,
+    destroyed: false,
+    connecting: true,
+    unref() {},
+    ref() {},
+    destroy() {
+      handle.destroyed = true;
+    },
+    close(callback) {
+      handle.closed = true;
+      callback?.();
+    },
+    ping(callback) {
+      callback(Object.assign(new Error('Ping was cancelled'), { code: 'ERR_HTTP2_PING_CANCEL' }));
+    },
+    request() {
+      return Object.assign(new EventEmitter(), { end() {}, close() {}, destroy() {} });
+    },
+  });
+  const client = createHttp2Fetch({ connect: () => handle, pingIntervalMs: 5 });
+  t.after(() => client.close());
+  client
+    .fetch('https://api.example.com/a', {
+      method: 'POST',
+      body: '1',
+      signal: AbortSignal.timeout(100),
+    })
+    .catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.strictEqual(handle.destroyed, false, 'not destroyed while connecting');
+  handle.connecting = false;
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.strictEqual(handle.destroyed, false, 'a cancelled ping ends nothing');
+});
+
 test('HTTP/2: a session that closes is made anew; a refused connection was never sent', async (t) => {
   const server = await serve(t, (stream) => {
     stream.respond({ ':status': 200 });
