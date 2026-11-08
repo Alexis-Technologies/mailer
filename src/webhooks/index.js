@@ -13,7 +13,6 @@ const { createPostmarkWebhookVerifier } = require('./postmark.js');
 const { createResendWebhookVerifier } = require('./resend.js');
 const { createScalewayWebhookVerifier } = require('./scaleway.js');
 const { createSendGridWebhookVerifier } = require('./sendgrid.js');
-const { createSesWebhookVerifier } = require('./ses.js');
 const { createSmtp2goWebhookVerifier } = require('./smtp2go.js');
 const { createSparkPostWebhookVerifier } = require('./sparkpost.js');
 
@@ -32,7 +31,6 @@ module.exports = {
   createResendWebhookVerifier,
   createScalewayWebhookVerifier,
   createSendGridWebhookVerifier,
-  createSesWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 };

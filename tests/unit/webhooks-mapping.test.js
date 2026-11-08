@@ -19,10 +19,10 @@ const {
   createResendWebhookVerifier,
   createScalewayWebhookVerifier,
   createSendGridWebhookVerifier,
-  createSesWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createSesWebhookVerifier } = require('../../src/webhooks/ses/index.js');
 const { SECRET, signSvix } = require('../helpers/webhooks/svix.js');
 const {
   TOPIC,

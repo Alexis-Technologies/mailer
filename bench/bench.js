@@ -36,8 +36,8 @@ const {
   createMailtrapWebhookVerifier,
   createResendWebhookVerifier,
   createSendGridWebhookVerifier,
-  createSesWebhookVerifier,
 } = require('../src/webhooks/index.js');
+const { createSesWebhookVerifier } = require('../src/webhooks/ses/index.js');
 const sns = require('../tests/helpers/webhooks/sns.js');
 const { CircuitBreakerTransport } = require('../src/breaker/index.js');
 const { HooksTransport } = require('../src/hooks/index.js');

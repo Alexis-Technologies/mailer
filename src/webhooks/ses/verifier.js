@@ -10,8 +10,8 @@
 // hard or soft; and a reject or a rendering failure is `rejected`, not
 // `bounced`.
 
-const { bounceKindOf, createEvent, dateOf, isRecord, stringOf } = require('./request.js');
-const { createSnsVerifier, isHttpsUrlOf } = require('./sns.js');
+const { bounceKindOf, createEvent, dateOf, isRecord, stringOf } = require('../request.js');
+const { createSnsVerifier, isHttpsUrlOf } = require('../sns.js');
 
 // SNS retries a delivery with the time it was published, for up to an hour
 // by default.

@@ -121,9 +121,9 @@ const {
   createResendWebhookVerifier,
   createScalewayWebhookVerifier,
   createSendGridWebhookVerifier,
-  createSesWebhookVerifier,
   createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createSesWebhookVerifier } = require('../../src/webhooks/ses/index.js');
 const { SECRET, signSvix } = require('../helpers/webhooks/svix.js');
 const sns = require('../helpers/webhooks/sns.js');
 

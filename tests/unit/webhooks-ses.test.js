@@ -4,9 +4,9 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   createMemoryReplayStore,
-  createSesWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createSesWebhookVerifier } = require('../../src/webhooks/ses/index.js');
 const {
   CERT_URL,
   TOPIC,
