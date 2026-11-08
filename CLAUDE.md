@@ -1001,6 +1001,9 @@ that fails without it; C for the channels):
   refused, whose error printed the value, a credential. `fetchWithAuth` marks what fails
   before the request unsent, a refused header field without its value, and `requestWithRetry`
   keeps the mark on the error of a timeout.
+- C5. aws-sms: a provider of credentials was awaited without the signal of the attempt, so one
+  that never answered held a send past its timeout and its caller's abort. It is awaited until
+  the signal aborts (`untilAborted` of `internal/until-aborted.js`, which the token cache shares).
 
 ## Repository layout
 

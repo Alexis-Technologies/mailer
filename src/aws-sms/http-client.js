@@ -4,6 +4,7 @@
 // categories of its errors by their type and reason: a number opted out is
 // `opted-out`, a destination not verified in the sandbox `configuration`.
 
+const { untilAborted } = require('../internal/until-aborted.js');
 const { createApiClient } = require('../internal/api-client.js');
 const { createSigV4Signer } = require('../internal/sigv4.js');
 
@@ -71,8 +72,11 @@ const createAwsSmsClient = (config) => {
     id: 'aws-sms',
     label: 'AWS SMS',
     authorize: async (headers, request) => {
+      // A provider of credentials that hangs ends with the attempt.
       const credentials =
-        typeof config.credentials === 'function' ? await config.credentials() : config.credentials;
+        typeof config.credentials === 'function'
+          ? await untilAborted(Promise.resolve().then(config.credentials), request.signal)
+          : config.credentials;
       const signed = sign(
         request.url,
         { method: request.method, headers, body: request.body },

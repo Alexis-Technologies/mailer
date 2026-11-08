@@ -178,6 +178,34 @@ test('AWS SMS: what the API would refuse fails before any request', async (t) =>
   assert.strictEqual(requests.length, 0);
 });
 
+test('AWS SMS: a provider of credentials that hangs or fails sends nothing, of no unknown delivery', async (t) => {
+  // Before (C5): the credentials were awaited without the signal of the
+  // attempt, so one that never answered held the send past its timeout and
+  // the caller's abort; and one that threw left the receipt of unknown
+  // delivery, though no request was made.
+  const requests = stubFetch(t, () => json({ MessageId: 'msg-1' }));
+  const hung = transport({ credentials: () => new Promise(() => {}), timeout: 30 });
+  const started = Date.now();
+  const receipt = await hung.send(sms());
+  assert.ok(Date.now() - started < 1000, 'ended with its attempt');
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.deliveryUnknown, undefined);
+  const controller = new AbortController();
+  const aborted = transport({ credentials: () => new Promise(() => {}), timeout: 0 }).send(sms(), {
+    signal: controller.signal,
+  });
+  controller.abort(new Error('stop'));
+  await assert.rejects(aborted, /stop/);
+  const failing = await transport({
+    credentials: async () => {
+      throw new Error('Could not load credentials from any providers');
+    },
+  }).send(sms());
+  assert.strictEqual(failing.deliveryUnknown, undefined);
+  assert.match(failing.errorMessages[0], /Could not load credentials/);
+  assert.strictEqual(requests.length, 0);
+});
+
 test('AWS SMS: the options are checked when made, the secret never shown', () => {
   assert.throws(() => new AwsSmsTransport({}), /needs credentials/);
   assert.throws(() => transport({ region: 'evil.example/' }), /Invalid AWS region/);

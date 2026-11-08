@@ -3,28 +3,11 @@
 // fetched for a service account, the JWT of APNs, the token of Bot Framework.
 // A provider that refuses one tells the cache to forget it.
 
-const { abortReason } = require('./sleep.js');
+const { untilAborted } = require('./until-aborted.js');
 
 // A new token is made this long before the one held ends, so that none is
 // sent as it runs out.
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
-
-// What one caller waits for, and stops waiting for when its signal aborts,
-// while the others go on waiting for the same token.
-const waitFor = async (promise, signal) => {
-  if (signal === undefined) return promise;
-  if (signal.aborted) throw abortReason(signal);
-  let onAbort;
-  const aborted = new Promise((resolve, reject) => {
-    onAbort = () => reject(abortReason(signal));
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    return await Promise.race([promise, aborted]);
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-  }
-};
 
 /**
  * Makes a cache of one token.
@@ -66,7 +49,7 @@ const createTokenCache = (make, options = {}) => {
     async get(signal) {
       signal?.throwIfAborted();
       if (held !== undefined && now() < held.expiresAt - refreshMs) return held.token;
-      return waitFor(refresh(), signal);
+      return untilAborted(refresh(), signal);
     },
     /**
      * Forgets a token a provider refused, unless a newer one is held
