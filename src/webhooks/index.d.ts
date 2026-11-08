@@ -404,25 +404,6 @@ export declare function createScalewayWebhookVerifier(
 ): WebhookVerifier<ScalewayWebhookResult>;
 
 /**
- * The options of {@link createLettermintWebhookVerifier}.
- */
-export interface LettermintWebhookVerifierOptions extends WebhookVerifierOptions {
-  /** The signing secret of the webhook, `whsec_…`, used as it is. */
-  readonly secret: string;
-}
-
-/**
- * Makes the verifier of Lettermint's webhooks: the HMAC-SHA256 of the time
- * and body in `X-Lettermint-Signature` (`t=…,v1=…`), within five minutes, its
- * delivery id taken once.
- *
- * @throws {TypeError} If the secret is missing.
- */
-export declare function createLettermintWebhookVerifier(
-  options: LettermintWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'lettermint'>>;
-
-/**
  * Makes the verifier of SMTP2GO's webhooks, whose URL carries Basic
  * credentials, as SMTP2GO signs nothing; a body of JSON or of a form.
  *

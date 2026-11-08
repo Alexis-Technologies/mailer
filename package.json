@@ -69,6 +69,10 @@
       "types": "./src/webhooks/maileroo/index.d.ts",
       "default": "./src/webhooks/maileroo/index.js"
     },
+    "./webhooks/lettermint": {
+      "types": "./src/webhooks/lettermint/index.d.ts",
+      "default": "./src/webhooks/lettermint/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

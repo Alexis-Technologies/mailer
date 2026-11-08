@@ -21,7 +21,7 @@ const {
   stringOf,
   stringRecordOf,
   stringsOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const TYPES = new Map([
   ['message.created', 'accepted'],
