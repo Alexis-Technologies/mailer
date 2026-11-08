@@ -59,6 +59,22 @@ A job enqueued again under its key in the transaction is a duplicate, and does
 not abort it: the outbox writes with an upsert, never an insert that would
 fail on the key.
 
+The messages of the [channels](/guide/queue#the-channels) go in an outbox of
+their own, another collection, with its queue and workers; the audit and the
+keys may be shared:
+
+```js
+const messages = createQueue({
+  driver: createMongoOutbox({ collection: db.collection('message_outbox') }),
+  audit,
+  defaultCountry: 'UA',
+});
+await messages.enqueue(
+  { channel: 'sms', kind: 'content', to: user.phone, text, idempotencyKey: `otp:${login.id}` },
+  { transaction: session },
+);
+```
+
 ## How workers share it
 
 The outbox is a `QueueSource`, read by the polling driver of `./queue`:
@@ -139,7 +155,7 @@ its backups.
 ```js
 {
   _id: '1b9d…',          // the id of the job: a UUID of namespace, tenant and key
-  name: 'mail', data: { … }, hash: '…',
+  name: 'mail', data: { … }, hash: '…',   // a job of a channel is named by it: 'sms'
   priority: 'high', rank: 0, maxAttempts: 5,
   state: 'ready',        // 'active', 'completed', 'failed'
   attempts: 0, availableAt: ISODate(…), enqueuedAt: ISODate(…),

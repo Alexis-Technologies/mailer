@@ -94,7 +94,7 @@ export interface MongoOutboxJob {
   readonly result?: any;
 }
 
-/** The mail queue in a collection: a driver, its source, and what it holds. */
+/** The queue in a collection: a driver, its source, and what it holds. */
 export interface MongoOutbox extends QueueDriver {
   readonly transactional: true;
   readonly source: QueueSource;
@@ -119,7 +119,7 @@ export interface MongoOutbox extends QueueDriver {
 }
 
 /**
- * Makes a mail queue in a collection of MongoDB, the transactional outbox:
+ * Makes a queue in a collection of MongoDB, the transactional outbox:
  * a job enqueued with `{ transaction: session }` is written in that
  * transaction, its `queued` audit event too.
  *

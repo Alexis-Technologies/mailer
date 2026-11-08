@@ -1,4 +1,4 @@
-// Not ported: a mail queue in a collection of MongoDB, the transactional
+// Not ported: a queue in a collection of MongoDB, the transactional
 // outbox: a job is written in the transaction of the application's own
 // writes, so that a message is queued exactly when what it tells of is
 // committed, with no Redis.  It is a QueueSource, which the polling driver
@@ -540,7 +540,7 @@ const readersOf = (collection, source, config) => ({
 });
 
 /**
- * Makes a mail queue in a collection of MongoDB.
+ * Makes a queue in a collection of MongoDB.
  *
  * @param options `collection`, `db.collection('mail_outbox')`;
  * `changeStream` (false), to wake the workers on a change (a replica set);
