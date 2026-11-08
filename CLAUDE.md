@@ -1059,6 +1059,9 @@ that fails without it; C for the channels):
   (a webhook, a bot, a service URL of Teams not allowed) was refused as `validation`, at which
   `./pool` stops, so a transport after it that had it was never tried. It is `unsupported`, a
   refusal by this transport's limits (R10).
+- C22. twilio: 21612, a message the pair of To and From cannot carry (a sender, a country or a
+  carrier), was `unreachable`, retried in the send and again by the queue. It is
+  `configuration`.
 
 ## Repository layout
 

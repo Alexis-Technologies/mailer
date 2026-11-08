@@ -33,16 +33,16 @@ const receipt = await twilio.send(
 
 ## What goes
 
-| Message | Form |
-| --- | --- |
-| `to` | `To`, prefixed `whatsapp:` or `rcs:` for those channels |
-| `from`, or none | `From` (its channel's prefix), else the sender of the channel (`from`, `whatsappFrom`, `rcsFrom`), else `MessagingServiceSid` |
-| `text` | `Body`, 1600 characters at most |
-| `media` | `MediaUrl` of an MMS, ten URLs at most |
-| `template` | `ContentSid` (`HX…`) of a template of the Content API, the first of its `components` the `ContentVariables` |
-| `expiresAt` | `ValidityPeriod`, ten hours at most |
-| `metadata.correlationId` | in the query of `StatusCallback`, which the signature of a callback covers |
-| `payload` | the fields of the form over those (`ShortenUrls`, `SmartEncoded`, `ContentRetention`), but `To`, `From` and `Body` |
+| Message                  | Form                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `to`                     | `To`, prefixed `whatsapp:` or `rcs:` for those channels                                                                       |
+| `from`, or none          | `From` (its channel's prefix), else the sender of the channel (`from`, `whatsappFrom`, `rcsFrom`), else `MessagingServiceSid` |
+| `text`                   | `Body`, 1600 characters at most                                                                                               |
+| `media`                  | `MediaUrl` of an MMS, ten URLs at most                                                                                        |
+| `template`               | `ContentSid` (`HX…`) of a template of the Content API, the first of its `components` the `ContentVariables`                   |
+| `expiresAt`              | `ValidityPeriod`, ten hours at most                                                                                           |
+| `metadata.correlationId` | in the query of `StatusCallback`, which the signature of a callback covers                                                    |
+| `payload`                | the fields of the form over those (`ShortenUrls`, `SmartEncoded`, `ContentRetention`), but `To`, `From` and `Body`            |
 
 Buttons (a template of the Content API carries them) and media as bytes are
 refused before any request.
@@ -60,19 +60,19 @@ Twilio queues a message and tells its delivery to the status callback: a
 receipt says `state: 'accepted'`, its id the sid of the message, and its
 `segments` the `num_segments` Twilio counted.
 
-| Code | Category |
-| --- | --- |
-| 21610, the recipient sent STOP | `opted-out` |
-| 21211, 21601, 21614, 30005, 30006 | `invalid-recipient` |
-| 21612, 30003, 30008 | `unreachable`, retried |
-| 63003, a recipient not on WhatsApp | `not-on-channel` |
-| 63016, outside the window of WhatsApp | `outside-window` |
-| 30004 | `blocked` |
-| 30007, filtered by the carrier | `rejected` |
-| 20003 | `auth` |
-| 21408, 21606, 21212, 21659, 20404 | `configuration` |
-| 21602, 21617, 21620, 21623 | `validation` |
-| 20429, 14107, 30022 | `rate-limit`, retried |
+| Code                                     | Category               |
+| ---------------------------------------- | ---------------------- |
+| 21610, the recipient sent STOP           | `opted-out`            |
+| 21211, 21601, 21614, 30005, 30006        | `invalid-recipient`    |
+| 30003, 30008                             | `unreachable`, retried |
+| 63003, a recipient not on WhatsApp       | `not-on-channel`       |
+| 63016, outside the window of WhatsApp    | `outside-window`       |
+| 30004                                    | `blocked`              |
+| 30007, filtered by the carrier           | `rejected`             |
+| 20003                                    | `auth`                 |
+| 21408, 21606, 21612, 21212, 21659, 20404 | `configuration`        |
+| 21602, 21617, 21620, 21623               | `validation`           |
+| 20429, 14107, 30022                      | `rate-limit`, retried  |
 
 The Messages API takes no idempotency key: a send whose answer was lost is
 never retried, and its receipt is `deliveryUnknown`.

@@ -11,7 +11,6 @@ const CODES = new Map([
   [21614, 'invalid-recipient'],
   [30005, 'invalid-recipient'],
   [30006, 'invalid-recipient'],
-  [21612, 'unreachable'],
   [30003, 'unreachable'],
   [30008, 'unreachable'],
   [63003, 'not-on-channel'],
@@ -22,6 +21,9 @@ const CODES = new Map([
   [20404, 'configuration'],
   [21408, 'configuration'],
   [21606, 'configuration'],
+  // The pair of To and From cannot carry a message: a sender, a country or a
+  // carrier, which no retry changes.
+  [21612, 'configuration'],
   [21212, 'configuration'],
   [21659, 'configuration'],
   [63007, 'configuration'],

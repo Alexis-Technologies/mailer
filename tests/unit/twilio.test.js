@@ -117,7 +117,10 @@ test('Twilio: an error is told by its code, a STOP an opt-out', async (t) => {
     [refused(21610), 'opted-out', false],
     [refused(21211), 'invalid-recipient', false],
     [refused(21614), 'invalid-recipient', false],
-    [refused(21612), 'unreachable', true],
+    // Before (C22): 21612, a pair of To and From that cannot carry it, was a
+    // handset out of reach, retried four times and again by the queue.
+    [refused(21612), 'configuration', false],
+    [refused(30003), 'unreachable', true],
     [refused(63003), 'not-on-channel', false],
     [refused(63016), 'outside-window', false],
     [refused(21408), 'configuration', false],
