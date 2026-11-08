@@ -175,6 +175,43 @@ test('HTTP/2: a GOAWAY with an error leaves the streams the server took of unkno
   );
 });
 
+// A server of raw frames, which Node's own server would not let answer a
+// status beyond HTTP's: it answers stream 1 with `:status` `code`.
+const rawStatusServer = async (t, code) => {
+  const net = require('node:net');
+  const server = net.createServer((socket) => {
+    socket.on('error', () => {});
+    // SETTINGS, empty.
+    socket.write(Buffer.from([0, 0, 0, 4, 0, 0, 0, 0, 0]));
+    let answered = false;
+    socket.on('data', () => {
+      if (answered) return;
+      answered = true;
+      // SETTINGS ACK, then HEADERS of stream 1 (END_STREAM, END_HEADERS) whose
+      // block is ':status' of the static table, a literal value.
+      socket.write(Buffer.from([0, 0, 0, 4, 1, 0, 0, 0, 0]));
+      const block = Buffer.from([0x08, 0x03, ...Buffer.from(code)]);
+      socket.write(Buffer.concat([Buffer.from([0, 0, block.length, 1, 5, 0, 0, 0, 1]), block]));
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}`;
+};
+
+test('HTTP/2: a status beyond HTTP fails the request, not the process', async (t) => {
+  // Before (C11): new Response threw a RangeError for a status of 600 to 999
+  // in the listener of the response, which nothing caught.
+  const origin = await rawStatusServer(t, '600');
+  const client = createHttp2Fetch();
+  t.after(() => client.close());
+  await assert.rejects(
+    client.fetch(`${origin}/3/device/a`, { method: 'POST', body: '{}' }),
+    /status 600, which is none of HTTP/,
+  );
+});
+
 test('HTTP/2: a session that closes is made anew; a refused connection was never sent', async (t) => {
   const server = await serve(t, (stream) => {
     stream.respond({ ':status': 200 });

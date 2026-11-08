@@ -1021,6 +1021,9 @@ that fails without it; C for the channels):
 - C10. router: `verify()` called each transport's unwrapped, so one that threw before it
   returned a promise rejected the router with that error alone and left the others unverified,
   as bug 66 of the pool's dispose. Each goes through `verifyWrapped`.
+- C11. http2: a response of a status of 600 to 999, which HTTP/2 carries, made `new Response`
+  throw a `RangeError` in the listener of the response, which nothing caught: the process ended.
+  Such a status fails the request, of unknown delivery, as the server had it.
 
 ## Repository layout
 

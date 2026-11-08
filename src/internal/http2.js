@@ -163,6 +163,13 @@ const requestOn = (session, url, init) =>
       if (settled) return;
       settled = true;
       const status = fields[':status'];
+      // A Response takes no status beyond 200 to 599, which HTTP/2 may carry:
+      // its error, thrown in this listener, would end the process.
+      if (!(status >= 200 && status <= 599)) {
+        stream.close(NGHTTP2_CANCEL);
+        reject(new Error(`The server answered with the status ${status}, which is none of HTTP.`));
+        return;
+      }
       const hasBody = !NULL_BODY.has(status) && init.method !== 'HEAD';
       if (!hasBody) stream.resume();
       resolve(
