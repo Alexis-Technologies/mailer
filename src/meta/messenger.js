@@ -6,10 +6,12 @@
 // the correlation id as the `metadata` of the message, which its echo gives
 // back. thinwrap and visulima have neither channel.
 
+const { Buffer } = require('node:buffer');
 const { InvalidMessageError } = require('../internal/channel/failure.js');
 const { RefusalError } = require('../internal/refusal.js');
 
 const MAX_TEXT = 2000;
+const MAX_INSTAGRAM_BYTES = 1000;
 const MAX_TEMPLATE_TEXT = 640;
 const MAX_BUTTONS = 3;
 const MAX_QUICK_REPLIES = 13;
@@ -58,8 +60,17 @@ const messengerBodyOf = (message) => {
       payload: medium.url === undefined ? { attachment_id: medium.id } : { url: medium.url },
     };
   } else if (message.text !== undefined && message.text !== '') {
-    if (message.text.length > MAX_TEXT) {
-      throw invalid(`the text is more than ${MAX_TEXT} characters.`);
+    // Instagram takes 1000 bytes of UTF-8, Messenger 2000 characters.
+    if (
+      isInstagram
+        ? Buffer.byteLength(message.text) > MAX_INSTAGRAM_BYTES
+        : message.text.length > MAX_TEXT
+    ) {
+      throw invalid(
+        isInstagram
+          ? `the text is more than the ${MAX_INSTAGRAM_BYTES} bytes of Instagram.`
+          : `the text is more than ${MAX_TEXT} characters.`,
+      );
     }
     sent.text = message.text;
   }

@@ -300,6 +300,9 @@ test('Meta: what the APIs would refuse fails before any request', async (t) => {
       'unsupported',
       /quick reply/,
     ],
+    // Before (C32): Instagram was held to Messenger's 2000 characters, past
+    // the 1000 bytes it takes.
+    [instagram({ text: 'ж'.repeat(501) }), 'validation', /1000 bytes of Instagram/],
     [
       instagram({ text: undefined, data: undefined, buttons: replies(1), payload: {} }),
       'validation',
