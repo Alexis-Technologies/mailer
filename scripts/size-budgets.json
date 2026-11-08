@@ -44,7 +44,7 @@
   "./pool": 4,
   "./retry": 3.5,
   "./mock": 2,
-  "./otel": 8,
+  "./otel": 8.5,
   "./logger": 3.5,
   "./breaker": 3.5,
   "./ratelimit": 4,

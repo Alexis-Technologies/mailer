@@ -352,6 +352,33 @@ test('OTel: a failed batch keeps its first error messages and counts them all', 
   assert.strictEqual(span.attributes['email.error.count'], 25);
 });
 
+test('OTel: the errors of a failed batch are redacted of the recipient of their message', async () => {
+  // Before (C41): a batch span had no message, so an error naming a chat id
+  // or a push token was recorded raw, where the span of a send redacts it.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const { tracerProvider, meterProvider } = providers();
+  const transport = new OpenTelemetryTransport(
+    plain({}, (message) => ({
+      successful: false,
+      errorMessages: [`Telegram refused chat ${message.to}`],
+      errors: [],
+    })),
+    { tracerProvider, meterProvider },
+  );
+  await collect(
+    transport.sendMany([
+      createChannelMessage({ channel: 'telegram', to: -1001234567890, text: 'a' }),
+      createChannelMessage({ channel: 'telegram', to: -1009876543210, text: 'b' }),
+    ]),
+  );
+  const [span] = tracerProvider.getAllSpans();
+  const failed = span.events.find((event) => event.name === 'message.send_failed');
+  assert.deepStrictEqual(JSON.parse(failed.attributes['error.messages']), [
+    'Telegram refused chat [REDACTED]',
+    'Telegram refused chat [REDACTED]',
+  ]);
+});
+
 test('OTel: the retries of the wrapped transport reach the span, the metrics and onRetry', async () => {
   const busy = Object.assign(new Error('Service Unavailable'), { statusCode: 503 });
   const retrying = plain({});

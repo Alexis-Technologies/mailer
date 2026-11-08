@@ -1115,6 +1115,9 @@ that fails without it; C for the channels):
   refresh and failed with it, though the token held still served, so a token endpoint down for a
   moment failed every send. Near its end a token is made apart, the held one serving until it
   ends and kept when the refresh fails, tried again after 30 seconds.
+- C41. otel: a batch span had no message, so the errors it kept were redacted of addresses and
+  numbers with a `+` alone, where the span of a send redacts the recipient of its message (a
+  chat id, a token): each kept error is redacted of the recipient of the message it answers.
 
 ## Repository layout
 

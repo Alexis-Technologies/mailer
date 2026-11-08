@@ -317,7 +317,11 @@ class OpenTelemetryTransport {
     let head = 0;
     const observed = observeMessages(messages, (message) => {
       const size = estimateMessageSize(message);
-      pending.push({ priority: message.priority, channel: addToTotals(totals, message, size) });
+      pending.push({
+        priority: message.priority,
+        channel: addToTotals(totals, message, size),
+        to: message.to,
+      });
       metrics?.recordMessage(message, transportName, size);
     });
 
@@ -343,7 +347,13 @@ class OpenTelemetryTransport {
           successCount++;
         } else {
           failureCount++;
-          errorMessageCount = keepErrorMessages(errorMessages, errorMessageCount, receipt);
+          errorMessageCount = keepErrorMessages(
+            errorMessages,
+            errorMessageCount,
+            receipt,
+            span,
+            answered,
+          );
         }
 
         yield receipt;
@@ -530,11 +540,17 @@ const UNANSWERED = { priority: 'unknown', channel: undefined };
 const DELIVERY_UNKNOWN = { 'mailer.delivery_unknown': true };
 
 // Keeps the messages of a failed receipt while fewer than the bound are kept,
-// and counts all of them.
-const keepErrorMessages = (kept, count, receipt) => {
+// each redacted of the recipient of the message it answers, as the span of a
+// send is of its own, and counts all of them.
+const keepErrorMessages = (kept, count, receipt, span, answered) => {
   let total = count;
   for (const errorMessage of receipt.errorMessages) {
-    if (total++ < MAX_RECORDED_ERROR_MESSAGES) kept.push(errorMessage);
+    if (total++ >= MAX_RECORDED_ERROR_MESSAGES) continue;
+    kept.push(
+      span?.attributeExtractor === undefined
+        ? errorMessage
+        : span.attributeExtractor.describeError(errorMessage, { to: answered.to }),
+    );
   }
   return total;
 };
