@@ -113,10 +113,10 @@ const { createHmac } = require('node:crypto');
 const {
   WebhookVerificationError,
   createAzureWebhookVerifier,
-  createMailerSendWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createMailerSendWebhookVerifier } = require('../../src/webhooks/mailersend/index.js');
 const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');

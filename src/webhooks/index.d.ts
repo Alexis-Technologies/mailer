@@ -285,17 +285,6 @@ export interface SignedBodyWebhookVerifierOptions {
 }
 
 /**
- * Makes the verifier of MailerSend's webhooks: the HMAC-SHA256 of the body,
- * in hexadecimal in `Signature`.  The metadata is read from the
- * `X-Metadata-<key>` header fields of the email, when the event carries them.
- *
- * @throws {TypeError} If the secret is missing.
- */
-export declare function createMailerSendWebhookVerifier(
-  options: SignedBodyWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'mailersend'>>;
-
-/**
  * Makes the verifier of SparkPost's webhooks, configured with Basic
  * authentication, as SparkPost signs nothing.  The message id is that of the
  * transmission, the receipt's; the tags and metadata are the recipient's.

@@ -19,7 +19,7 @@ const {
   resolveUntimedOptions,
   stringOf,
   stringsOf,
-} = require('./request.js');
+} = require('../request.js');
 
 // MailerSend signs no time: an event id is kept a day and an hour, past the
 // retries of a delivery.
