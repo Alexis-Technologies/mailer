@@ -34,7 +34,8 @@ Every channel takes:
 | `payload` | What the channel takes as it is (a Block Kit, an Adaptive Card, an embed, the overrides of a push), as JSON. |
 | `mentions` | Who a message of a work chat may notify: `{ everyone, users, roles }`. None by default. |
 | `tags`, `priority` | As for email; `[]` and `normal` by default. |
-| `metadata`, `tenantId`, `idempotencyKey`, `scheduledAt` | As for email: `metadata.correlationId` is what a delivery event finds its message by. |
+| `metadata`, `tenantId`, `idempotencyKey` | As for email: `metadata.correlationId` is what a delivery event finds its message by. |
+| `scheduledAt` | When to send it, which [the queue](/guide/queue) waits for; a transport of a channel schedules none, so it refuses one sent to it directly (`unsupported`) rather than send it at once. |
 | `expiresAt` | When the message is no longer worth delivering: the validity period of an SMS, the TTL of a push. |
 
 and a few take one more: `template` (WhatsApp, a template it approved:

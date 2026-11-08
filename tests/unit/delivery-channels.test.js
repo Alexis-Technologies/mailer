@@ -217,6 +217,29 @@ test('Delivery of the channels: every transport rejects with the reason of an ab
   }
 });
 
+test('Delivery of the channels: a message scheduled for later is refused, not sent at once', async () => {
+  // Before (C7): every transport of a channel read no scheduledAt and sent
+  // the message at once, reported sent.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  for (const provider of channelProviders) {
+    let requests = 0;
+    const fetch = async () => {
+      requests++;
+      return provider.ok();
+    };
+    const message = provider.message();
+    const scheduled = createChannelMessage({
+      ...message,
+      scheduledAt: new Date(Date.now() + 3_600_000),
+    });
+    const receipt = await provider.create({ fetch }).send(scheduled);
+    assert.strictEqual(receipt.successful, false, provider.name);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported', provider.name);
+    assert.match(receipt.errorMessages[0], /cannot schedule/, provider.name);
+    assert.strictEqual(requests, 0, provider.name);
+  }
+});
+
 test('Delivery of the channels: a transport sends no message of another channel', async () => {
   const { createMessage } = require('../../index.js');
   for (const provider of channelProviders) {

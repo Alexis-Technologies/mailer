@@ -7,6 +7,7 @@
 const { createFailedReceipt } = require('../core/receipt.js');
 const { isCallerAbort } = require('./abort.js');
 const { providerFailure } = require('./api-client.js');
+const { refuseScheduledAt } = require('./schedule.js');
 
 /**
  * The receipts of a batch in the order of its messages: those of
@@ -45,6 +46,12 @@ const sendConverted = async (message, options, steps) => {
   const signal = options?.signal;
   signal?.throwIfAborted();
   try {
+    // No transport of a channel schedules: one scheduled for later is refused
+    // rather than sent now, as by an email transport that cannot; the queue
+    // delays it instead.
+    if (message?.channel !== undefined && message.channel !== 'email') {
+      refuseScheduledAt(message, steps.provider);
+    }
     const payload = await steps.convert(message, signal);
     signal?.throwIfAborted();
     return steps.receiptOf(await steps.request(payload, options));

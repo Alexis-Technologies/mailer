@@ -1008,6 +1008,9 @@ that fails without it; C for the channels):
   Teams could carry a user and a password, which `fetch` refuses at the first send with an error
   that prints the URL whole (a bot token in Telegram's path, the secret of a webhook), the text of
   a receipt of unknown delivery. They are refused when made, the URL not shown.
+- C7. every transport of a channel: `scheduledAt` was read by none, so a message scheduled
+  for tomorrow went at once, reported sent. `sendConverted` refuses it for a message of a
+  channel (`unsupported`), as an email transport that cannot schedule does; the queue delays it.
 
 ## Repository layout
 
