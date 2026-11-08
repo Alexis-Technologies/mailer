@@ -1018,6 +1018,9 @@ that fails without it; C for the channels):
 - C9. router: a route whose `sendMany` ended without reading its batch was given the same
   message again, without end, in microtasks that starved the event loop. A message no route took
   fails as `unsupported`, and the next is read.
+- C10. router: `verify()` called each transport's unwrapped, so one that threw before it
+  returned a promise rejected the router with that error alone and left the others unverified,
+  as bug 66 of the pool's dispose. Each goes through `verifyWrapped`.
 
 ## Repository layout
 

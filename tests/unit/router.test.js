@@ -165,6 +165,22 @@ test('Router: verify checks each transport once, and fails with each that fails'
   );
 });
 
+test('Router: a transport whose verify throws at once is one failure among the others', async () => {
+  // Before (C10): the call was not wrapped, so the router rejected with that
+  // error alone and verified none after it.
+  const refusing = route('sms');
+  refusing.verify = () => {
+    throw new Error('sms refused');
+  };
+  const chat = route('chat');
+  const router = createRouter({ sms: refusing, telegram: chat });
+  await assert.rejects(
+    router.verify(),
+    (error) => error instanceof AggregateError && error.errors[0].message === 'sms refused',
+  );
+  assert.strictEqual(chat.verified, 1);
+});
+
 test('Router: dispose disposes of each transport once, whichever fails', async () => {
   const shared = route('ses');
   const failing = route('twilio', {

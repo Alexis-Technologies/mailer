@@ -5,7 +5,7 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { CHANNELS } = require('../internal/channel/channels.js');
-const { disposeOf, refuseUnlessRaw } = require('../internal/decorator.js');
+const { disposeOf, refuseUnlessRaw, verifyWrapped } = require('../internal/decorator.js');
 const { iteratorOf } = require('../internal/iterate.js');
 const { isVerifiableTransport } = require('../core/transport.js');
 
@@ -143,7 +143,9 @@ class RouterTransport {
     for (const transport of this.#routes.values()) {
       if (seen.has(transport) || !isVerifiableTransport(transport)) continue;
       seen.add(transport);
-      verifying.push(transport.verify(options));
+      // One that throws before it returns a promise is a failure of its own,
+      // and the others are still verified.
+      verifying.push(verifyWrapped(transport, options));
     }
     const errors = [];
     for (const result of await Promise.allSettled(verifying)) {
