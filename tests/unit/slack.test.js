@@ -280,3 +280,28 @@ test('Slack: verify calls auth.test, and a refused token in a 200 fails it', asy
   await transport({ botToken: undefined }).verify();
   assert.strictEqual(none.length, 0);
 });
+
+test('Slack: a transport without what a message needs leaves it to the next of a pool', async (t) => {
+  // Before (C21): a message without to, sent to a transport of a bot alone,
+  // was refused as validation, at which ./pool stops, so the transport of
+  // the webhook after it was never tried.
+  const { PoolTransport } = require('../../src/pool/index.js');
+  const requests = stubFetch(t, () => new Response('ok', { status: 200 }));
+  const pool = new PoolTransport({
+    transports: [
+      { transport: new SlackTransport({ botToken: 'xoxb-1-2-abc', retries: 0 }), priority: 2 },
+      {
+        transport: new SlackTransport({
+          webhookUrl: 'https://hooks.slack.com/services/T0/B0/secret',
+          retries: 0,
+        }),
+        priority: 1,
+      },
+    ],
+    strategy: 'priority',
+  });
+  const receipt = await pool.send(createChannelMessage({ channel: 'slack', text: 'Deployed' }));
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].url, 'https://hooks.slack.com/services/T0/B0/secret');
+});

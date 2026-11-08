@@ -5,8 +5,9 @@
 const { createFailedReceipt } = require('../core/receipt.js');
 const { ProviderApiError } = require('../internal/api-client.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { InvalidMessageError, channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { RefusalError } = require('../internal/refusal.js');
 const { sleep } = require('../internal/sleep.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createDiscordConfig } = require('./config.js');
@@ -69,7 +70,7 @@ class DiscordTransport extends ProviderTransport {
         const converted = await convertMessage(sent, this.config, signal);
         const credential = converted.toWebhook ? this.config.webhookUrl : this.config.botToken;
         if (credential === undefined) {
-          throw new InvalidMessageError(
+          throw new RefusalError(
             converted.toWebhook
               ? 'Discord: a message without `to` goes to the webhook, and the transport has no webhookUrl.'
               : 'Discord: a message to a channel goes through a bot, and the transport has no botToken.',

@@ -11,8 +11,9 @@
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const { channelFailure } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { RefusalError } = require('../internal/refusal.js');
 const { createTeamsConfig } = require('./config.js');
 const { classifyWebhook, createTeamsClient } = require('./http-client.js');
 const { convertMessage } = require('./message-converter.js');
@@ -76,18 +77,18 @@ class TeamsTransport extends ProviderTransport {
       convert: (sentMessage) => {
         const converted = convertMessage(sentMessage);
         if (converted.toWebhook && this.config.webhookUrl === undefined) {
-          throw new InvalidMessageError(
+          throw new RefusalError(
             'Teams: a message without `to` goes to the webhook, and the transport has no webhookUrl.',
           );
         }
         if (!converted.toWebhook) {
           if (this.config.bot === undefined) {
-            throw new InvalidMessageError(
+            throw new RefusalError(
               'Teams: a message to a conversation goes through a bot, and the transport has no bot.',
             );
           }
           if (!this.httpClient.isServiceUrl(sentMessage.to.serviceUrl)) {
-            throw new InvalidMessageError(
+            throw new RefusalError(
               'Teams: the serviceUrl is none of Teams, nor of serviceUrls: the token of the bot does not go to it.',
             );
           }

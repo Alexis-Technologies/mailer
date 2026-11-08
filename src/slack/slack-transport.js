@@ -7,8 +7,9 @@
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { InvalidMessageError, channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { RefusalError } = require('../internal/refusal.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createSlackConfig } = require('./config.js');
 const { classifySlackError, createSlackClient } = require('./http-client.js');
@@ -74,7 +75,7 @@ class SlackTransport extends ProviderTransport {
         const converted = convertMessage(sentMessage);
         const credential = converted.toWebhook ? this.config.webhookUrl : this.config.botToken;
         if (credential === undefined) {
-          throw new InvalidMessageError(
+          throw new RefusalError(
             converted.toWebhook
               ? 'Slack: a message without `to` goes to the webhook, and the transport has no webhookUrl.'
               : 'Slack: a message to a channel goes through the Web API, and the transport has no botToken.',

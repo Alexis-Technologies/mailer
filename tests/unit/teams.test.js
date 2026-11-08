@@ -243,10 +243,12 @@ test('Teams: what a message of Teams cannot be fails before any request', async 
       /picture at its URL/,
     ],
     [teams({ text: 'x'.repeat(29_000) }), 'validation', /28672 bytes/],
-    [toBot(), 'validation', /has no bot/],
+    // Changed (C21): a transport that lacks what a message needs refuses it
+    // as unsupported, which ./pool fails over from.
+    [toBot(), 'unsupported', /has no bot/],
     [
       teams({ to: { serviceUrl: 'https://evil.example/', conversationId: CONVERSATION } }),
-      'validation',
+      'unsupported',
       /serviceUrl is none of Teams/,
     ],
     [createChannelMessage({ channel: 'slack', text: 'x' }), 'unsupported', /not of slack/],

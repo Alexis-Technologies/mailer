@@ -1055,6 +1055,10 @@ that fails without it; C for the channels):
 - C20. google-chat: a 5xx of the app, after which the message may have been posted, ended as a
   retryable failure, which a caller sent again under a new `requestId`. It is ambiguous:
   retried under the same `requestId`, its last failure of unknown delivery, as Discord's bot.
+- C21. slack, discord, teams, google-chat: a message the transport lacked the credential for
+  (a webhook, a bot, a service URL of Teams not allowed) was refused as `validation`, at which
+  `./pool` stops, so a transport after it that had it was never tried. It is `unsupported`, a
+  refusal by this transport's limits (R10).
 
 ## Repository layout
 

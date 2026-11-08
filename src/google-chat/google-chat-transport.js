@@ -4,8 +4,9 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const { channelFailure } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
+const { RefusalError } = require('../internal/refusal.js');
 const { generateId } = require('../core/id.js');
 const { toUuid } = require('../internal/uuid.js');
 const { verifyByGet } = require('../internal/verify.js');
@@ -57,12 +58,12 @@ class GoogleChatTransport extends ProviderTransport {
       convert: (sentMessage) => {
         const converted = convertMessage(sentMessage);
         if (converted.toWebhook && this.config.webhookUrl === undefined) {
-          throw new InvalidMessageError(
+          throw new RefusalError(
             'Google Chat: a message without `to` goes to the webhook, and the transport has no webhookUrl.',
           );
         }
         if (!converted.toWebhook && this.config.serviceAccount === undefined) {
-          throw new InvalidMessageError(
+          throw new RefusalError(
             'Google Chat: a message to a space goes through a Chat app, and the transport has no serviceAccount.',
           );
         }
