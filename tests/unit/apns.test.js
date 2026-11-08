@@ -165,7 +165,10 @@ test('APNs: the token is shared, and made anew only before its hour is out', asy
   await Promise.all([apns.send(push()), apns.send(push()), apns.send(push())]);
   clock = NOW + 49 * 60_000;
   await apns.send(push());
+  // Changed (C40): near its end a new one is made apart, the one held
+  // serving the send that asked.
   clock = NOW + 51 * 60_000;
+  await apns.send(push());
   await apns.send(push());
   const tokens = new Set();
   for (const request of requests) tokens.add(request.headers.get('authorization'));
@@ -175,7 +178,7 @@ test('APNs: the token is shared, and made anew only before its hour is out', asy
     requests[0].headers.get('authorization'),
   );
   assert.notStrictEqual(
-    requests[4].headers.get('authorization'),
+    requests[5].headers.get('authorization'),
     requests[0].headers.get('authorization'),
   );
 });

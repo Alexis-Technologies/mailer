@@ -8,6 +8,8 @@ const { untilAborted } = require('./until-aborted.js');
 // A new token is made this long before the one held ends, so that none is
 // sent as it runs out.
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
+// The pause after a refresh that failed while the token held still served.
+const RETRY_PAUSE_MS = 30 * 1000;
 
 /**
  * Makes a cache of one token.
@@ -25,6 +27,7 @@ const createTokenCache = (make, options = {}) => {
   const now = options.now ?? Date.now;
   let held;
   let pending;
+  let quietUntil = 0;
   const refresh = () => {
     pending ??= (async () => {
       try {
@@ -45,10 +48,23 @@ const createTokenCache = (make, options = {}) => {
     return pending;
   };
   return {
-    /** The token held, or a new one when it is near its end. */
+    /**
+     * The token held while it lasts, a new one made apart near its end; or a
+     * new one, waited for, when none is held or it ended.
+     */
     async get(signal) {
       signal?.throwIfAborted();
-      if (held !== undefined && now() < held.expiresAt - refreshMs) return held.token;
+      const time = now();
+      if (held !== undefined && time < held.expiresAt) {
+        // A refresh that fails leaves the token held, which still serves, and
+        // is tried again after a pause rather than at every call.
+        if (time >= held.expiresAt - refreshMs && time >= quietUntil) {
+          refresh().catch(() => {
+            quietUntil = now() + RETRY_PAUSE_MS;
+          });
+        }
+        return held.token;
+      }
       return untilAborted(refresh(), signal);
     },
     /**

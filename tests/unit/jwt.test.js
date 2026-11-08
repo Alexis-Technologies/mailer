@@ -94,14 +94,44 @@ test('Token cache: one token is made for every caller, and again near its end', 
   assert.strictEqual(made, 1);
   time += 54 * 60 * 1000;
   assert.strictEqual(await cache.get(), 't1');
-  // Five minutes before its end, a new one.
+  // Changed (C40): five minutes before its end, a new one is made apart, the
+  // one held serving until it comes.
   time += 2 * 60 * 1000;
+  assert.strictEqual(await cache.get(), 't1');
+  await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(await cache.get(), 't2');
   // A refusal of an old token keeps the new one; of the one held, forgets it.
   cache.invalidate('t1');
   assert.strictEqual(await cache.get(), 't2');
   cache.invalidate('t2');
   assert.strictEqual(await cache.get(), 't3');
+});
+
+test('Token cache: a refresh that fails near the end keeps the token held, which serves', async () => {
+  // Before (C40): in the five minutes before its end, every call waited for
+  // the refresh and failed with it, though the token held still served.
+  let time = 0;
+  let calls = 0;
+  const cache = createTokenCache(
+    async () => {
+      calls++;
+      if (calls > 1) throw new Error('token endpoint down');
+      return { token: 'held', expiresAt: time + 60 * 60 * 1000 };
+    },
+    { now: () => time },
+  );
+  assert.strictEqual(await cache.get(), 'held');
+  time += 57 * 60 * 1000;
+  assert.strictEqual(await cache.get(), 'held');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(await cache.get(), 'held', 'kept after the refresh failed');
+  assert.strictEqual(calls, 2, 'not tried again at once');
+  time += 31 * 1000;
+  await cache.get();
+  assert.strictEqual(calls, 3, 'tried again after a pause');
+  // Past its end it is no longer served: the call waits, and fails.
+  time += 3 * 60 * 1000;
+  await assert.rejects(cache.get(), /token endpoint down/);
 });
 
 test('Token cache: a caller who aborts stops waiting, the others get the token', async () => {

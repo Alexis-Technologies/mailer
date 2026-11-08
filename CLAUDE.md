@@ -1111,6 +1111,10 @@ that fails without it; C for the channels):
   (`::ffff:0:0:0/96`) and Teredo (`2001::/32`), which embed an IPv4 address, the discard prefix
   `100::/64` and the documentation ranges `2001:db8::/32` and `3fff::/20` through. They are
   refused.
+- C40. token-cache: in the five minutes before a token ended, every call waited for the
+  refresh and failed with it, though the token held still served, so a token endpoint down for a
+  moment failed every send. Near its end a token is made apart, the held one serving until it
+  ends and kept when the refresh fails, tried again after 30 seconds.
 
 ## Repository layout
 

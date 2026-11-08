@@ -68,11 +68,16 @@ test('Google auth: a token is fetched once with an assertion signed by the accou
       Buffer.from(signature, 'base64url'),
     ),
   );
-  // Held until five minutes before its end.
+  // Held until five minutes before its end, then made anew apart, the one
+  // held serving meanwhile (changed by C40).
   time += 54 * 60 * 1000;
   assert.strictEqual(await auth.token(), 'ya29.a');
   time += 2 * 60 * 1000;
-  await auth.token();
+  assert.strictEqual(await auth.token(), 'ya29.a');
+  for (let i = 0; i < 20 && server.requests.length < 2; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 5));
   assert.strictEqual(server.requests.length, 2);
   auth.invalidate('ya29.a');
   await auth.token();
