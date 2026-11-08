@@ -204,7 +204,7 @@ test('Meta: an error is told by its code and subcode, the categories of the chan
     [graphError(100), 'validation', 'meta.100', false],
     [graphError(130429, 429), 'rate-limit', 'meta.130429', true],
     [graphError(131056), 'rate-limit', 'meta.131056', true],
-    [graphError(131000, 500), 'service-unavailable', 'meta.131000', true],
+    [graphError(2, 400), 'service-unavailable', 'meta.2', true],
     [new Response('oops', { status: 418 }), 'validation', 'meta.http_418', false],
   ];
   for (const [answer, category, code, retryable] of cases) {
@@ -216,6 +216,17 @@ test('Meta: an error is told by its code and subcode, the categories of the chan
     assert.strictEqual(receipt.retryable, retryable, code);
     assert.strictEqual(receipt.channel, 'whatsapp', code);
   }
+});
+
+test('Meta: a 5xx is of unknown delivery, never sent again', async (t) => {
+  // Before (C17): a 500 of code 1 or 131000 was retried, sending again a
+  // message Meta may have taken before it answered, with no key to dedupe.
+  const requests = stubFetch(t, () => graphError(131000, 500));
+  const receipt = await transport({ retries: 3 }).send(whatsapp());
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.retryable, false);
+  assert.strictEqual(receipt.errors[0].code, 'meta.131000');
 });
 
 test('Meta: an answer without the id of its message is of unknown delivery', async (t) => {

@@ -97,6 +97,8 @@ const createMetaClient = (config) => {
     messageOf: (json) =>
       typeof json?.error?.message === 'string' ? json.error.message : undefined,
     classify: classifyMeta,
+    // A 5xx may come after Meta took the message, which no key dedupes.
+    isAmbiguousStatus: (status) => status >= 500,
   });
   const nodeUrl = (id) => `${config.baseUrl}/${config.graphVersion}/${id}`;
   return {

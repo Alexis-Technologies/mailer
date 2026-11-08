@@ -92,9 +92,10 @@ Meta tells of the delivery through its webhooks: a receipt says
 | 3, 10, 200–299, 368, an account restricted or not registered | `configuration` |
 | 100, 131008–132999 (parameters, templates) | `validation` |
 | 4, 613, 80007, 130429, 131048, 131056 | `rate-limit`, retried |
-| 1, 2, 131000, 131016, 131057 | `service-unavailable`, retried |
+| 1, 2, 131000, 131016, 131057 | `service-unavailable`, retried in a 4xx |
 
-Neither API takes an idempotency key: a send whose answer was lost is never
-retried, and its receipt is `deliveryUnknown`.
+Neither API takes an idempotency key: a send whose answer was lost, or that
+was answered with a 5xx, after which Meta may have taken it, is never retried,
+and its receipt is `deliveryUnknown`.
 
 `verify()` reads the number, the page and the account, each with its token.

@@ -1041,6 +1041,9 @@ that fails without it; C for the channels):
   unknown delivery.
 - C16. smsclub: 453, the same SMS within two minutes, the first of which went, was a definite
   `rejected`, even after a 5xx retried within one send. It is of unknown delivery, not retried.
+- C17. meta: a 5xx of the Graph API (code 1, 2 or 131000) was retried as a message Meta did
+  not take, though it may have, and no key dedupes a message: it went twice. A 5xx is of
+  unknown delivery, never retried, as for the other APIs of chats.
 
 ## Repository layout
 
