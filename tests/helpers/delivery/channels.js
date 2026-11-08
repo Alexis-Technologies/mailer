@@ -2,11 +2,14 @@
 // with a message of its channel, the answer of a send, a rate limit as it
 // tells it, and what must never reach a log: its secrets and its recipient.
 const { createChannelMessage } = require('../../../src/channels/index.js');
+const { DiscordTransport } = require('../../../src/discord/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
 
 const TELEGRAM_TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw';
 const SLACK_TOKEN = 'xoxb-1111-2222-SlackBotSecret';
+const DISCORD_TOKEN = 'MTA.DiscordBotSecret.xyz';
+const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/123/DiscordWebhookSecret';
 const SLACK_WEBHOOK = 'https://hooks.slack.com/services/T000/B000/SlackWebhookSecret';
 
 const channelProviders = [
@@ -59,6 +62,36 @@ const channelProviders = [
       new Response('rate_limited', { status: 429, headers: { 'Retry-After': String(seconds) } }),
     secrets: ['SlackWebhookSecret'],
     recipient: 'SlackWebhookSecret',
+  },
+  {
+    name: 'Discord webhook',
+    create: (extra) => new DiscordTransport({ retries: 1, ...extra, webhookUrl: DISCORD_WEBHOOK }),
+    message: () => createChannelMessage({ channel: 'discord', text: 'Deployed v1.2.3' }),
+    ok: () => Response.json({ id: '1100000000000000001' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { message: 'You are being rate limited.', retry_after: seconds, global: false },
+        { status: 429 },
+      ),
+    secrets: ['DiscordWebhookSecret'],
+    recipient: 'DiscordWebhookSecret',
+  },
+  {
+    // A send of a bot carries a nonce Discord dedupes by: a lost answer is
+    // sent again, as the same message, and only its last failure is marked.
+    name: 'Discord',
+    keyed: true,
+    create: (extra) => new DiscordTransport({ retries: 1, ...extra, botToken: DISCORD_TOKEN }),
+    message: () =>
+      createChannelMessage({ channel: 'discord', to: '1100000000000000099', text: 'Deployed' }),
+    ok: () => Response.json({ id: '1100000000000000001' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { message: 'You are being rate limited.', retry_after: seconds, global: false },
+        { status: 429 },
+      ),
+    secrets: [DISCORD_TOKEN, 'DiscordBotSecret'],
+    recipient: '1100000000000000099',
   },
 ];
 

@@ -38,6 +38,23 @@ const PROVIDERS = [
     refused: () => ({ webhookUrl: 'https://hooks.slack.com/services/T000/B000/invalid' }),
     message: (fields) => createChannelMessage({ channel: 'slack', ...fields }),
   },
+  {
+    name: 'Discord',
+    Transport: require('../../src/discord/index.js').DiscordTransport,
+    needs: ['DISCORD_BOT_TOKEN', 'DISCORD_CHANNEL_ID'],
+    config: () => ({ botToken: env.DISCORD_BOT_TOKEN }),
+    refused: () => ({ botToken: 'MTAwMDAwMDAwMDAwMDAwMDAw.invalid.invalid' }),
+    message: (fields) =>
+      createChannelMessage({ channel: 'discord', to: env.DISCORD_CHANNEL_ID, ...fields }),
+  },
+  {
+    name: 'Discord webhook',
+    Transport: require('../../src/discord/index.js').DiscordTransport,
+    needs: ['DISCORD_WEBHOOK_URL'],
+    config: () => ({ webhookUrl: env.DISCORD_WEBHOOK_URL }),
+    refused: () => ({ webhookUrl: 'https://discord.com/api/webhooks/1/invalid' }),
+    message: (fields) => createChannelMessage({ channel: 'discord', ...fields }),
+  },
 ];
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));

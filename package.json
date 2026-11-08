@@ -260,6 +260,10 @@
     "./slack": {
       "types": "./src/slack/index.d.ts",
       "default": "./src/slack/index.js"
+    },
+    "./discord": {
+      "types": "./src/discord/index.d.ts",
+      "default": "./src/discord/index.js"
     }
   },
   "directories": {

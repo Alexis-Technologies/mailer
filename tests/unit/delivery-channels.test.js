@@ -8,6 +8,9 @@ const assert = require('node:assert');
 const { inspect } = require('node:util');
 const { channelProviders } = require('../helpers/delivery/channels.js');
 
+// A provider with a key sends an ambiguous request again, under the key.
+const expectedRequests = (provider) => (provider.keyed === true ? 2 : 1);
+
 const failed = (code) =>
   new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
 
@@ -29,7 +32,7 @@ test('Delivery of the channels: a 2xx with an unreadable body is sent once, of u
       return unreadable();
     };
     const receipt = await provider.create({ fetch }).send(provider.message());
-    assert.strictEqual(requests, 1, provider.name);
+    assert.strictEqual(requests, expectedRequests(provider), provider.name);
     assert.strictEqual(receipt.successful, false, provider.name);
     assert.strictEqual(receipt.deliveryUnknown, true, provider.name);
     assert.strictEqual(receipt.retryable, false, provider.name);
@@ -52,14 +55,14 @@ test('Delivery of the channels: a lost request is not sent again without a key; 
         assert.strictEqual(receipt.deliveryUnknown, undefined, `${provider.name} ${code}`);
         assert.strictEqual(receipt.retryable, true, `${provider.name} ${code}`);
       } else {
-        assert.strictEqual(requests, 1, `${provider.name} ${code}`);
+        assert.strictEqual(requests, expectedRequests(provider), `${provider.name} ${code}`);
         assert.strictEqual(receipt.deliveryUnknown, true, `${provider.name} ${code}`);
       }
     }
   }
 });
 
-test('Delivery of the channels: a send that times out is not sent again, of unknown delivery', async () => {
+test('Delivery of the channels: a send that times out is not sent again without a key, of unknown delivery', async () => {
   for (const provider of channelProviders) {
     let requests = 0;
     const fetch = (_url, init) => {
@@ -69,7 +72,7 @@ test('Delivery of the channels: a send that times out is not sent again, of unkn
       });
     };
     const receipt = await provider.create({ fetch, timeout: 20 }).send(provider.message());
-    assert.strictEqual(requests, 1, provider.name);
+    assert.strictEqual(requests, expectedRequests(provider), provider.name);
     assert.strictEqual(receipt.deliveryUnknown, true, provider.name);
   }
 });
@@ -227,5 +230,23 @@ test('Delivery of the channels: a transport sends no message of another channel'
     assert.strictEqual(receipt.successful, false, provider.name);
     assert.strictEqual(receipt.errors[0].category, 'unsupported', provider.name);
     assert.strictEqual(requests, 0, provider.name);
+  }
+});
+
+test('Delivery of the channels: a provider with a key sends a lost request again, the same', async () => {
+  for (const provider of channelProviders) {
+    if (provider.keyed !== true) continue;
+    const bodies = [];
+    const fetch = async (_url, init) => {
+      bodies.push(
+        typeof init.body === 'string' ? init.body : JSON.stringify([...init.body.keys()]),
+      );
+      if (bodies.length === 1) throw failed('ECONNRESET');
+      return provider.ok();
+    };
+    const receipt = await provider.create({ fetch }).send(provider.message());
+    assert.strictEqual(receipt.successful, true, provider.name);
+    assert.strictEqual(bodies.length, 2, provider.name);
+    assert.strictEqual(bodies[0], bodies[1], provider.name);
   }
 });

@@ -905,6 +905,15 @@ test that fails on the source's behavior):
   posted was posted again. `./slack` treats a lost answer, a 5xx, a `fatal_error` and an
   `internal_error` as `deliveryUnknown` and retries only a 429, a `service_unavailable` and a
   connection never made.
+- T8, V10. thinwrap (`discord.connector.ts`) and visulima (`providers/chat/discord/provider.ts`):
+  no `allowed_mentions` was sent, so an `@everyone` in a text of a user pinged a whole server.
+  `./discord` sends `{ parse: [] }`, with the users and roles of `mentions`, and `@everyone`
+  only for `everyone: true`.
+- DC1. discord.js (`packages/rest/src/lib/handlers/SequentialHandler.ts`, `utils/utils.ts`): a
+  429 was not counted among the attempts, so a route that kept answering it was retried without
+  end, and a timeout was retried with no nonce. `./discord` counts a 429 as an attempt, and a
+  message of a bot carries a nonce with `enforce_nonce`, so that it is retried as the same
+  message; a webhook, which takes none, is `deliveryUnknown` after an ambiguous answer.
 
 ## Repository layout
 

@@ -82,6 +82,7 @@ const guide = [
       { text: 'Router', link: '/channels/router' },
       { text: 'Telegram', link: '/channels/telegram' },
       { text: 'Slack', link: '/channels/slack' },
+      { text: 'Discord', link: '/channels/discord' },
     ],
   },
   {

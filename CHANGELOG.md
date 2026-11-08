@@ -158,6 +158,13 @@ worker of 1.2 holds reads the same.
   body. An `ok: false` is told by its error (`not_in_channel` is `not-on-channel`, an
   archived channel `invalid-recipient`), a `fatal_error`, a 5xx or a lost answer is of unknown
   delivery and never posted again; the receipt says `sent`, its id `<channel>:<ts>`.
+- **`./discord`, the REST API of a bot and webhooks:** a message with `to` is created by the bot
+  under a nonce of its `idempotencyKey` that Discord enforces, so that it is retried safely after
+  a timeout or a 5xx; one without it goes to the webhook (`?wait=true`, `thread_id`), never sent
+  again after an ambiguous answer. No mention notifies unless the message names it
+  (`allowed_mentions` is `{ parse: [] }`); buttons are components, pictures at a URL embeds,
+  bytes files, a `low` priority a silent message. A send waits for the bucket of its route
+  (`X-RateLimit-*`), a 429 its `retry_after`; a refusal is told by its JSON code.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its
