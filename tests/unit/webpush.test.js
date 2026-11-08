@@ -257,6 +257,21 @@ test('Web Push: what a push service would refuse fails before any request', asyn
       'invalid-recipient',
       /no public key of P-256/,
     ],
+    // Before (C31): 65 bytes from 0x04 that are no point of the curve failed
+    // as unknown when ECDH refused them, and the subscription was kept.
+    [
+      push({
+        to: {
+          ...SUBSCRIPTION,
+          keys: {
+            ...SUBSCRIPTION.keys,
+            p256dh: Buffer.from([4, ...new Uint8Array(64).fill(1)]).toString('base64url'),
+          },
+        },
+      }),
+      'invalid-recipient',
+      /no public key of P-256/,
+    ],
     [
       push({ to: { ...SUBSCRIPTION, keys: { ...SUBSCRIPTION.keys, auth: 'AAAA' } } }),
       'invalid-recipient',

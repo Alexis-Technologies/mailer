@@ -1083,6 +1083,8 @@ that fails without it; C for the channels):
   of AlphaSMS's documentation, was refused before the request. It is sent as that type.
 - C30. fcm: a push of data alone of priority `high` had `apns-priority` 10, which FCM allows
   no payload of data alone to iOS (only 5). It has 5 on iOS, high elsewhere.
+- C31. webpush: a `p256dh` of 65 bytes from `0x04` that is no point of P-256 failed as
+  `unknown` when ECDH refused it, so the subscription was kept. It is `invalid-recipient`.
 
 ## Repository layout
 

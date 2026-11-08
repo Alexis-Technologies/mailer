@@ -116,7 +116,15 @@ const convertMessage = async (message, config) => {
     Urgency: URGENCY.get(message.priority) ?? 'normal',
   };
   if (topic !== undefined) headers.Topic = topic;
-  return { endpoint: endpoint.toString(), body: encryptPush(plaintext, subscription), headers };
+  let body;
+  try {
+    body = encryptPush(plaintext, subscription);
+  } catch {
+    // A p256dh of 65 bytes that is no point of the curve: a subscription to
+    // drop, as one of the wrong length.
+    throw badSubscription('the p256dh of the subscription is no public key of P-256.');
+  }
+  return { endpoint: endpoint.toString(), body, headers };
 };
 
 module.exports = { convertMessage };
