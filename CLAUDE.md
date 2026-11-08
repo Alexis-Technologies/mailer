@@ -1101,6 +1101,8 @@ that fails without it; C for the channels):
 - C36. channels (`internal/json.js`): a key `__proto__` of a payload, which `JSON.parse`
   makes an own key, was assigned to the copy, setting its prototype, so a direct send carried
   its fields and a queued one, after its JSON round trip, did not. It is refused.
+- C37. channels (`escapeDiscordMarkdown`): the dot after a number that begins a line was left,
+  so a text such as `1. a` became an ordered list in Discord; it is escaped too.
 
 ## Repository layout
 

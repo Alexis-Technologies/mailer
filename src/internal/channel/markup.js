@@ -35,6 +35,10 @@ const DISCORD_MARKDOWN = new Set([
   ')',
 ]);
 
+const LINE_START = 0;
+const LINE_NUMBER = 1;
+const LINE_OTHER = 2;
+
 const replaceEach = (text, table) => {
   let result = '';
   let from = 0;
@@ -66,19 +70,27 @@ const escapeSlackText = (text) => replaceEach(text, SLACK_TEXT);
 
 /**
  * A text for the Markdown of Discord: each character of its syntax after a
- * backslash.  Its mentions are not markup: see {@link neutralizeMentions}.
+ * backslash, and the dot of a number that begins a line, which makes an
+ * ordered list.  Its mentions are not markup: see {@link neutralizeMentions}.
  *
  * @internal
  */
 const escapeDiscordMarkdown = (text) => {
   let result = '';
   let from = 0;
+  // Where a line stands: blank so far, a number so far, or past them, as the
+  // dot after the number that begins a line makes a list.
+  let line = LINE_START;
   for (let i = 0; i < text.length; i++) {
-    if (DISCORD_MARKDOWN.has(text[i])) {
+    const char = text[i];
+    if (DISCORD_MARKDOWN.has(char) || (char === '.' && line === LINE_NUMBER)) {
       // The character itself goes with the next slice, after its backslash.
       result += `${text.slice(from, i)}\\`;
       from = i;
     }
+    if (char === '\n') line = LINE_START;
+    else if (char >= '0' && char <= '9') line = line === LINE_OTHER ? LINE_OTHER : LINE_NUMBER;
+    else if (!(line === LINE_START && (char === ' ' || char === '\t'))) line = LINE_OTHER;
   }
   return result + text.slice(from);
 };

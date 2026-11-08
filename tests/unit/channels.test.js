@@ -374,6 +374,10 @@ test('Channels: text goes into the markup of a chat as text, its mass mentions m
     '\\*\\*a\\*\\* \\_b\\_ \\[c\\]\\(d\\) \\`e\\` \\\\',
   );
   assert.strictEqual(escapeDiscordMarkdown('plain'), 'plain');
+  // Before (C37): the dot of a number that begins a line was left, and
+  // Discord made the text an ordered list.
+  assert.strictEqual(escapeDiscordMarkdown('1. pwned\n  2. list'), '1\\. pwned\n  2\\. list');
+  assert.strictEqual(escapeDiscordMarkdown('v1.2.3 and 1. b'), 'v1.2.3 and 1. b');
   assert.strictEqual(
     neutralizeMentions('@everyone @here <!channel> <!here|here> <!everyone> @heretic'),
     '@​everyone @​here &lt;!channel&gt; &lt;!here|here&gt; &lt;!everyone&gt; @heretic',
