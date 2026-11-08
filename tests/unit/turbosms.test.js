@@ -159,6 +159,34 @@ test('TurboSMS: the code of the answer, then of its recipient, fails the message
   assert.match((await transport().send(sms())).errorMessages[0], /TurboSMS: REQUIRED_AUTH/);
 });
 
+test('TurboSMS: an answer it could not write is asked again under the sequence_id', async (t) => {
+  // Before (C14): 500 FAILED_CONVERT_RESULT2JSON, a request that ran and an
+  // answer that could not be written, was a retryable failure, which a queue
+  // sent again under a new sequence_id: twice.
+  const requests = stubFetch(t, (_request, index) =>
+    index === 0
+      ? answer(500, 'FAILED_CONVERT_RESULT2JSON')
+      : answer(507, 'FAILED_DUPLICATE_REQUEST', {
+          response_code: 0,
+          message_id: 'f83f8868',
+          response_status: 'OK',
+        }),
+  );
+  const receipt = await transport({ retries: 1 }).send(sms());
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(receipt.messageId, 'f83f8868');
+  assert.strictEqual(requests[0].body, requests[1].body);
+  t.mock.restoreAll();
+  stubFetch(t, () => answer(501, 'FAILED_CONVERT_RESULT2XML'));
+  const lost = await transport({ retries: 1 }).send(sms());
+  assert.strictEqual(lost.deliveryUnknown, true);
+  t.mock.restoreAll();
+  stubFetch(t, () => answer(502, 'FAILED_PARSE_BODY'));
+  const unparsed = await transport().send(sms());
+  assert.strictEqual(unparsed.errors[0].category, 'validation');
+  assert.strictEqual(unparsed.retryable, false);
+});
+
 test('TurboSMS: an answer without its code or id is of unknown delivery', async (t) => {
   stubFetch(t, () =>
     answer(800, 'SUCCESS_MESSAGE_ACCEPTED', { response_code: 0, message_id: null }),

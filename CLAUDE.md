@@ -1031,6 +1031,11 @@ that fails without it; C for the channels):
 - C13. http2: a ping made while the session connected, which Node cancels, destroyed the
   session, failing the pushes that waited on it (`pingIntervalMs` shorter than a slow
   handshake). No ping goes while it connects, and a cancelled one ends nothing.
+- C14. turbosms: 500 FAILED_CONVERT_RESULT2JSON (and 501), a request that ran and an answer
+  that could not be written, was a retryable failure, which a queue sent again under a new
+  `sequence_id`, so twice. The answer is asked again under the same `sequence_id`, which gives
+  the results of the first, and of unknown delivery when it never comes; 502, a body TurboSMS
+  could not parse, is `validation`.
 
 ## Repository layout
 

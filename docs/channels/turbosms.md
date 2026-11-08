@@ -60,15 +60,17 @@ TurboSMS answers a 200 whose `response_code`, then that of the recipient,
 fails the message; the receipt of one that went says `state: 'accepted'`, the
 `message_id` its id.
 
-| Code                                                                                                 | Category                |
-| ---------------------------------------------------------------------------------------------------- | ----------------------- |
-| 103, 105, 301 (the token)                                                                            | `auth`                  |
-| 106 (a user blocked), 203 (no balance), 302, 400, 401, 434 (the sender), 406 (a country not enabled) | `configuration`         |
-| 305, 318 (the phone)                                                                                 | `invalid-recipient`     |
-| 404, the stoplist                                                                                    | `opted-out`             |
-| 428, 436, 437, 438 (limits)                                                                          | `rate-limit`, retried   |
-| 500 to 504                                                                                           | `server-error`, retried |
-| another of 2xx to 4xx                                                                                | `validation`            |
+| Code                                                                                                 | Category                                                                      |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 103, 105, 301 (the token)                                                                            | `auth`                                                                        |
+| 106 (a user blocked), 203 (no balance), 302, 400, 401, 434 (the sender), 406 (a country not enabled) | `configuration`                                                               |
+| 305, 318 (the phone)                                                                                 | `invalid-recipient`                                                           |
+| 404, the stoplist                                                                                    | `opted-out`                                                                   |
+| 428, 436, 437, 438 (limits)                                                                          | `rate-limit`, retried                                                         |
+| 500, 501 (a request that ran, its answer not written)                                                | asked again under its `sequence_id`; of unknown delivery when no answer comes |
+| 502 (a body it could not parse)                                                                      | `validation`                                                                  |
+| 503, 504 (the SMS or Viber not sent)                                                                 | `server-error`, retried                                                       |
+| another of 2xx to 4xx                                                                                | `validation`                                                                  |
 
 `verify()` reads the balance of the account, whose refusal is a code in a
 200 too. The delivery comes to the webhook of the account, which the webhooks

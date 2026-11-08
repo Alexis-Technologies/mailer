@@ -34,11 +34,35 @@ const CODES = new Map([
   [436, 'rate-limit'],
   [437, 'rate-limit'],
   [438, 'rate-limit'],
-  [500, 'server-error'],
-  [502, 'server-error'],
+  [502, 'validation'],
   [503, 'server-error'],
   [504, 'server-error'],
 ]);
+// FAILED_CONVERT_RESULT2JSON and 2XML: the request ran, its answer could not
+// be written. It is sent again under its sequence_id, which answers its
+// results, and of unknown delivery when it never comes.
+const UNWRITTEN = new Set([500, 501]);
+
+const parse = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+// The answer of a send; one of a request that ran and could not tell its
+// results is a failure after the request was taken.
+const readSend = (response, text) => {
+  const json = text.trim() === '' ? null : parse(text);
+  if (json === undefined) throw new Error('TurboSMS answered with no JSON.');
+  if (UNWRITTEN.has(json?.response_code)) {
+    throw new Error(
+      `TurboSMS ran the request and could not write its answer: ${json.response_status}`,
+    );
+  }
+  return { status: response.status, headers: response.headers, json };
+};
 const RETRYABLE = new Set(['rate-limit', 'server-error']);
 
 /**
@@ -76,6 +100,7 @@ const createTurboSmsClient = (config) => {
         // TurboSMS answers a sequence_id it executed with its results, and
         // FAILED_DUPLICATE_REQUEST, rather than sending again.
         hasIdempotencyKey: true,
+        read: readSend,
         signal: options?.signal,
         onRetry: options?.onRetry,
       }),
