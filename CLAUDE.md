@@ -1074,6 +1074,9 @@ that fails without it; C for the channels):
 - C26. aws-sms: `Context` was built of any metadata, while AWS takes a key of 1 to 100
   characters and a value of 1 to 1000 that neither starts nor ends with a space, so an empty
   value or a longer one failed the SMS. An entry AWS would refuse is left out of the context.
+- C27. aws-sms: `verify()` failed for a key that may only send, which the API refuses the read
+  of `DescribeConfigurationSets` with an `AccessDeniedException` in a 400, as R37 has it for
+  SES. Such a refusal verifies the key.
 
 ## Repository layout
 

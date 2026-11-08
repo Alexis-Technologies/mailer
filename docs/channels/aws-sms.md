@@ -69,4 +69,4 @@ count of the parts, so its `segments` are those `countSegments` of
 never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` describes the configuration sets of the account, which sends
-nothing.
+nothing; a key that may only send, refused that read, is verified.

@@ -61,21 +61,28 @@ class AwsSmsTransport extends ProviderTransport {
 
   /**
    * Checks the credentials and the region by describing the configuration
-   * sets of the account, which reads and sends nothing.
+   * sets of the account, which reads and sends nothing; a key refused that
+   * read, which may only send, is verified.
    *
    * @param options Optional abort signal.
    * @throws {Error} If AWS refuses the credentials.
    */
   async verify(options) {
     options?.signal?.throwIfAborted();
-    await this.httpClient.call(
-      'DescribeConfigurationSets',
-      { MaxResults: 1 },
-      {
-        signal: options?.signal,
-        isIdempotent: true,
-      },
-    );
+    try {
+      await this.httpClient.call(
+        'DescribeConfigurationSets',
+        { MaxResults: 1 },
+        {
+          signal: options?.signal,
+          isIdempotent: true,
+        },
+      );
+    } catch (error) {
+      // A key that may only send is refused the read, in a 400 of the JSON
+      // protocol: AWS knew it, so it is verified, as ./ses takes it.
+      if (error?.receiptCode !== 'aws-sms.AccessDeniedException') throw error;
+    }
   }
 }
 

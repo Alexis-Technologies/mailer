@@ -245,4 +245,9 @@ test('AWS SMS: verify describes the configuration sets, a refused key fails it',
   t.mock.restoreAll();
   stubFetch(t, () => awsError('UnrecognizedClientException', undefined, 403));
   await assert.rejects(transport().verify(), (error) => error.statusCode === 403);
+  // Before (C27): a key that may only send, refused the read with an
+  // AccessDeniedException in a 400, failed verify().
+  t.mock.restoreAll();
+  stubFetch(t, () => awsError('AccessDeniedException', undefined, 400));
+  await transport().verify();
 });
