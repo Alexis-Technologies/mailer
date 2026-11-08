@@ -285,17 +285,6 @@ export interface SignedBodyWebhookVerifierOptions {
 }
 
 /**
- * Makes the verifier of SparkPost's webhooks, configured with Basic
- * authentication, as SparkPost signs nothing.  The message id is that of the
- * transmission, the receipt's; the tags and metadata are the recipient's.
- *
- * @throws {TypeError} If a credential is missing.
- */
-export declare function createSparkPostWebhookVerifier(
-  options: BasicWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'sparkpost'>>;
-
-/**
  * The options of {@link createScalewayWebhookVerifier}.
  */
 export interface ScalewayWebhookVerifierOptions extends SnsWebhookVerifierOptions {

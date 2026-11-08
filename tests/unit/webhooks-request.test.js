@@ -392,7 +392,7 @@ test('Webhooks: a verifier of a provider that signs no id refuses a replay store
   // Before: Postmark, Brevo, Mailjet, SparkPost and SMTP2GO took a replayStore
   // and a leaseMs and never read them, so a caller believed requests were
   // taken once.
-  const { createSparkPostWebhookVerifier } = require('../../src/webhooks/index.js');
+  const { createSparkPostWebhookVerifier } = require('../../src/webhooks/sparkpost/index.js');
   const { createMailjetWebhookVerifier } = require('../../src/webhooks/mailjet/index.js');
   const makers = [
     (more) => createPostmarkWebhookVerifier({ username: 'u', password: 'p', ...more }),

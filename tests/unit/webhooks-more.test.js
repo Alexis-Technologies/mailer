@@ -5,9 +5,9 @@ const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
   createMemoryReplayStore,
-  createSparkPostWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createSparkPostWebhookVerifier } = require('../../src/webhooks/sparkpost/index.js');
 const { createMailerSendWebhookVerifier } = require('../../src/webhooks/mailersend/index.js');
 const { createMailjetWebhookVerifier } = require('../../src/webhooks/mailjet/index.js');
 const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');

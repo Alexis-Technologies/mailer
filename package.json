@@ -89,6 +89,10 @@
       "types": "./src/webhooks/mailersend/index.d.ts",
       "default": "./src/webhooks/mailersend/index.js"
     },
+    "./webhooks/sparkpost": {
+      "types": "./src/webhooks/sparkpost/index.d.ts",
+      "default": "./src/webhooks/sparkpost/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

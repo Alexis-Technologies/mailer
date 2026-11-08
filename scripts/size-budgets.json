@@ -16,6 +16,7 @@
   "./webhooks/brevo": 5.5,
   "./webhooks/mailjet": 5,
   "./webhooks/mailersend": 5.5,
+  "./webhooks/sparkpost": 5.5,
   "./smtp": 23.5,
   "./sendmail": 12,
   "./jmap": 13.5,

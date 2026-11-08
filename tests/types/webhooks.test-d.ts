@@ -1,12 +1,10 @@
-import { expectAssignable, expectError, expectType } from 'tsd';
-import type { DeliveryEvent } from '../../index.js';
+import { expectError, expectType } from 'tsd';
 import {
   WebhookVerificationError,
   createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
-  createSparkPostWebhookVerifier,
   type ReplayState,
   type ReplayStore,
   type WebhookVerificationReason,
@@ -27,11 +25,6 @@ const shared: ReplayStore = {
   release: async () => {},
 };
 expectError<ReplayStore>({ add: () => true });
-
-const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
-expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
-  (await sparkpost.verify({ body: '' })).events,
-);
 
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:p:t'],
