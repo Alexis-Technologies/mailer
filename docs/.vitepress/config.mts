@@ -95,6 +95,7 @@ const guide = [
       { text: 'Vonage', link: '/channels/vonage' },
       { text: 'Infobip', link: '/channels/infobip' },
       { text: 'Sinch', link: '/channels/sinch' },
+      { text: 'TurboSMS', link: '/channels/turbosms' },
       { text: 'RCS Business Messaging', link: '/channels/rbm' },
     ],
   },

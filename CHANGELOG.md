@@ -239,6 +239,10 @@ worker of 1.2 holds reads the same.
   the API answers again with its message, so a lost answer is sent again; `<users/all>` and a
   mention the message does not name are broken, a picture and links are a card, and `thread`
   the key of the thread.
+- **`./turbosms`, TurboSMS:** SMS and Viber to a phone number, a hybrid of Viber with an SMS by
+  `sms` in the payload; each send under a `sequence_id` TurboSMS executes once, so a lost
+  answer is sent again; the `response_code` of the 200, then of its recipient, fails the
+  message (404, the stoplist, is `opted-out`).
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

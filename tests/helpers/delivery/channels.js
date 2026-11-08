@@ -16,6 +16,7 @@ const { RbmTransport } = require('../../../src/rbm/index.js');
 const { ViberTransport } = require('../../../src/viber/index.js');
 const { TeamsTransport } = require('../../../src/teams/index.js');
 const { GoogleChatTransport } = require('../../../src/google-chat/index.js');
+const { TurboSmsTransport } = require('../../../src/turbosms/index.js');
 
 const TEAMS_WEBHOOK =
   'https://prod-00.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=TeamsWebhookSecret';
@@ -542,6 +543,31 @@ const channelProviders = [
       ),
     secrets: [FCM_ACCESS_TOKEN],
     recipient: 'SECRETSPACE',
+  },
+  {
+    // A request carries a sequence_id TurboSMS executes once: a lost answer
+    // is sent again under it.
+    name: 'TurboSMS',
+    keyed: true,
+    create: (extra) =>
+      new TurboSmsTransport({ retries: 1, ...extra, token: 'TurboSmsSecret', sender: 'MyBrand' }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json({
+        response_code: 800,
+        response_status: 'SUCCESS_MESSAGE_ACCEPTED',
+        response_result: [
+          { phone: '380671234567', response_code: 0, message_id: 'm-1', response_status: 'OK' },
+        ],
+      }),
+    rateLimited: (seconds) =>
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Retry-After': String(seconds) },
+      }),
+    secrets: ['TurboSmsSecret'],
+    recipient: '380671234567',
   },
 ];
 

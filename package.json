@@ -316,6 +316,10 @@
     "./google-chat": {
       "types": "./src/google-chat/index.d.ts",
       "default": "./src/google-chat/index.js"
+    },
+    "./turbosms": {
+      "types": "./src/turbosms/index.d.ts",
+      "default": "./src/turbosms/index.js"
     }
   },
   "directories": {

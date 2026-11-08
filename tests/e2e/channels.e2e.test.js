@@ -352,6 +352,14 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'TurboSMS',
+    Transport: require('../../src/turbosms/index.js').TurboSmsTransport,
+    needs: ['TURBOSMS_TOKEN', 'TURBOSMS_SENDER', 'TURBOSMS_TO'],
+    config: () => ({ token: env.TURBOSMS_TOKEN, sender: env.TURBOSMS_SENDER }),
+    refused: () => ({ token: 'invalid', sender: env.TURBOSMS_SENDER }),
+    message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.TURBOSMS_TO, text }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.
