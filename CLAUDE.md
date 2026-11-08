@@ -1062,6 +1062,9 @@ that fails without it; C for the channels):
 - C22. twilio: 21612, a message the pair of To and From cannot carry (a sender, a country or a
   carrier), was `unreachable`, retried in the send and again by the queue. It is
   `configuration`.
+- C23. vonage: a part of status 0 without a `message-id` was taken for a failed part and
+  classified by the status 0, a `validation` refusal of an SMS Vonage sent. It is sent, of no
+  id: the receipt is of unknown delivery.
 
 ## Repository layout
 

@@ -123,6 +123,18 @@ test('Vonage: no part is of unknown delivery, and a lost answer is not sent agai
   assert.strictEqual(requests.length, 1);
 });
 
+test('Vonage: a part sent without its id is of unknown delivery, not refused', async (t) => {
+  // Before (C23): a part of status 0 without a message-id was failed by the
+  // status 0, a validation refusal of an SMS Vonage sent.
+  stubFetch(t, () =>
+    json({ 'message-count': '1', messages: [{ to: '380671234567', status: '0' }] }),
+  );
+  const receipt = await transport().send(sms());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.errors[0].category, 'unknown');
+});
+
 test('Vonage: what an SMS cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => parts('0'));
   const cases = [

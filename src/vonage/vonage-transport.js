@@ -83,9 +83,13 @@ const receiptOf = (json) => {
   }
   let failed;
   let sent = 0;
+  let unnamed = 0;
   for (const part of parts) {
-    if (part?.status === '0' && typeof part['message-id'] === 'string') sent++;
-    else if (failed === undefined) failed = part;
+    if (part?.status === '0') {
+      sent++;
+      // A part Vonage sent, of no id the receipt could carry.
+      if (typeof part['message-id'] !== 'string') unnamed++;
+    } else if (failed === undefined) failed = part;
   }
   if (failed !== undefined) {
     const classified = classifyStatus(String(failed?.status));
@@ -96,6 +100,15 @@ const receiptOf = (json) => {
       deliveryUnknown: sent > 0,
       segments: parts.length,
       providerDetails: json,
+    });
+  }
+  if (unnamed > 0) {
+    return createFailedReceipt('Vonage sent the message and named no id of a part.', {
+      provider: PROVIDER,
+      channel: 'sms',
+      category: 'unknown',
+      deliveryUnknown: true,
+      segments: parts.length,
     });
   }
   const count = Number(json['message-count']);
