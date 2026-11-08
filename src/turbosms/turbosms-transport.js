@@ -19,7 +19,10 @@ const { createTurboSmsConfig } = require('./config.js');
 const { classifyCode, createTurboSmsClient } = require('./http-client.js');
 
 const PROVIDER = 'turbosms';
-const MAX_SMS_SEGMENTS = 10;
+// What TurboSMS takes of an SMS, ten parts: 1521 characters of GSM-7, 661 of
+// UCS-2, a little less than ten parts would hold.
+const MAX_GSM7_UNITS = 1521;
+const MAX_UCS2_UNITS = 661;
 const MAX_VIBER_TEXT = 1000;
 const MAX_CAPTION = 30;
 const MIN_TTL = 30;
@@ -40,8 +43,10 @@ const smsOf = (message, config) => {
   }
   if (message.buttons !== undefined) throw unsupported('an SMS carries no buttons.');
   if (message.text === undefined) throw invalid('an SMS needs a text.');
-  if (countSegments(message.text).segments > MAX_SMS_SEGMENTS) {
-    throw invalid(`the text is more than the ${MAX_SMS_SEGMENTS} parts of an SMS.`);
+  const { encoding, units } = countSegments(message.text);
+  const limit = encoding === 'GSM-7' ? MAX_GSM7_UNITS : MAX_UCS2_UNITS;
+  if (units > limit) {
+    throw invalid(`the text is more than the ${limit} characters of ${encoding} TurboSMS takes.`);
   }
   return { sender: message.from ?? config.sender, text: message.text };
 };

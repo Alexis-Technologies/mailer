@@ -37,7 +37,7 @@ await turbosms.send(
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `to`                                 | `recipients`, the number without `+`                                                                                                               |
 | `from`, or none                      | `sender` of the `sms` or `viber` object, else `sender` (`viberSender` for Viber)                                                                   |
-| `text` of an SMS                     | `sms.text`, ten parts at most (1521 characters of GSM-7, 661 of Cyrillic)                                                                          |
+| `text` of an SMS                     | `sms.text`, 1521 characters of GSM-7 or 661 of UCS-2 at most, as TurboSMS takes                                                                    |
 | `text` of Viber                      | `viber.text`, 1000 characters at most                                                                                                              |
 | one picture, one link button (Viber) | `viber.image_url`; `viber.caption` (30 characters) and `viber.action`                                                                              |
 | `expiresAt` (Viber)                  | `viber.ttl`, 30 seconds to a day                                                                                                                   |

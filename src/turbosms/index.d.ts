@@ -44,8 +44,8 @@ export interface TurboSmsConfig extends TransportDependencies {
 
 /**
  * A transport of SMS and Viber over the HTTP API of TurboSMS
- * (`message/send.json`), to a phone number.  An SMS goes as its text (10
- * parts at most) from its `from` or the transport's `sender`; a message of
+ * (`message/send.json`), to a phone number.  An SMS goes as its text (1521
+ * characters of GSM-7, 661 of UCS-2, at most) from its `from` or the transport's `sender`; a message of
  * Viber as its text (1000 characters), one picture by URL and one link
  * button, `expiresAt` its `ttl` (30 seconds to a day); `payload` holds the
  * fields of the request over those: `sms` on a message of Viber makes it a

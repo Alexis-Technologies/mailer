@@ -237,7 +237,10 @@ test('TurboSMS: an answer without its code or id is of unknown delivery', async 
 test('TurboSMS: what a message cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => ok());
   const cases = [
-    [sms({ text: 'ж'.repeat(671) }), 'validation', /10 parts/],
+    // Before (C28): the bound was ten parts, 1530 and 670, past what
+    // TurboSMS takes, 1521 and 661.
+    [sms({ text: 'ж'.repeat(662) }), 'validation', /661 characters of UCS-2/],
+    [sms({ text: 'a'.repeat(1522) }), 'validation', /1521 characters of GSM-7/],
     [sms({ media: [{ url: 'https://example.com/a.png' }] }), 'unsupported', /no media/],
     [viber({ text: 'x'.repeat(1001) }), 'validation', /1000 characters/],
     [viber({ to: 'not-a-phone' }), 'validation', /phone number in E.164/],

@@ -1077,6 +1077,8 @@ that fails without it; C for the channels):
 - C27. aws-sms: `verify()` failed for a key that may only send, which the API refuses the read
   of `DescribeConfigurationSets` with an `AccessDeniedException` in a 400, as R37 has it for
   SES. Such a refusal verifies the key.
+- C28. turbosms: an SMS was bounded by ten parts, 1530 characters of GSM-7 and 670 of UCS-2,
+  past the 1521 and 661 TurboSMS documents and refuses; the bound is its own.
 
 ## Repository layout
 
