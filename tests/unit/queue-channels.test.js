@@ -368,6 +368,30 @@ test('Queue channels: the media of a job are resolved by resolveAttachment, as c
   ]);
 });
 
+test('Queue channels: the audit and the reason of a failure name no recipient the provider wrote', async () => {
+  // Before (C2): the reason and the audit were redacted of the numbers with a
+  // +, so a provider that wrote the number without it put it in the store of
+  // the queue and the append-only audit.
+  const { data } = prepareJob(otp(), { now, defaultCountry: 'UA' });
+  const job = { id: 'j1', name: 'sms', data, attempt: 1, maxAttempts: 3, redelivered: false };
+  const audit = createMemoryAuditSink();
+  const transport = fakeTransport(() => ({
+    successful: false,
+    errorMessages: ['SMS Club refused 380671234567: stop list'],
+    errors: [{ category: 'rejected', code: 'smsclub.add_info', retryable: false, message: 'x' }],
+    retryable: false,
+  }));
+  const outcome = await createJobHandler({ transport, audit, now })(
+    job,
+    new AbortController().signal,
+  );
+  assert.strictEqual(outcome.type, 'fail');
+  assert.strictEqual(outcome.reason, 'SMS Club refused [REDACTED]: stop list');
+  const failed = audit.eventsOf(data.correlationId).at(-1);
+  assert.strictEqual(failed.state, 'failed');
+  assert.strictEqual(failed.error.message, 'SMS Club refused [REDACTED]: stop list');
+});
+
 test('Queue channels: a medium no resolver can give fails the job, as an attachment does', async () => {
   const { data } = prepareJob(
     {

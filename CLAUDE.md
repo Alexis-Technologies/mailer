@@ -988,6 +988,10 @@ that fails without it; C for the channels):
 - C1. smsclub: a refusal in `add_info` was its JSON, keyed by the numbers it refused, and the
   receipt kept the answer as `providerDetails`, so a receipt, a log of it and the audit held a
   number without its `+`, which redaction does not catch. The text is the reasons alone.
+- C2. logger, otel, queue: a channel's recipient was redacted as the message wrote it and as a
+  number with a `+`, while most SMS providers are sent it without one and echo it so; and the
+  reasons and the audit of the queue knew no recipient. `redactMessageRecipient` replaces the
+  digits of an E.164 recipient without their `+` too, and the queue redacts with the job's.
 
 ## Repository layout
 

@@ -202,7 +202,12 @@ const release = (run, why) => {
 const settleFailure = async (run, receipt, code) => {
   const { config, job, data } = run;
   const expiresAt = data.expiresAt === undefined ? undefined : Date.parse(data.expiresAt);
-  const decided = outcomeOfFailure(receipt, job, { ...config, expiresAt, tenantId: data.tenantId });
+  const decided = outcomeOfFailure(receipt, job, {
+    ...config,
+    expiresAt,
+    tenantId: data.tenantId,
+    message: data,
+  });
   let { outcome } = decided;
   const generic = outcome.code === 'queue.attempts_exhausted' || outcome.code === 'queue.expired';
   if (code !== undefined && !generic) outcome = { ...outcome, code };
@@ -574,7 +579,7 @@ const createJobHandler = (options) => {
     } catch (error) {
       // What escaped the steps: a bug of this worker, or a sink or logger
       // that threw where it is not guarded. Told, not only failed.
-      const reason = reasonOf(messageOf(error));
+      const reason = reasonOf(messageOf(error), run.data);
       warnThrown('The worker of the queue', error, 'MAILER_QUEUE_WORKER_THREW');
       config.log.write('error', () => ({ jobId: job.id, reason }), 'queue.worker.error');
       return { type: 'fail', code: 'queue.thrown', reason };

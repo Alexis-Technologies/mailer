@@ -5,7 +5,7 @@
 // for; and one of unknown delivery is not, as it may have been taken.
 
 const { computeBackoff, retryAfterOf } = require('../internal/backoff.js');
-const { redactRecipients } = require('../internal/redact-addresses.js');
+const { redactMessageRecipient } = require('../internal/channel/recipient.js');
 
 // The failures of the operator rather than of the message: a key revoked, a
 // domain not verified. They may pass once fixed, after a longer wait.
@@ -13,13 +13,17 @@ const OPERATOR = new Set(['auth', 'configuration']);
 const MAX_REASON = 500;
 
 /**
- * The reason of a failure, its addresses redacted and its length bounded:
- * it goes into the store of the queue and its dashboards.
+ * The reason of a failure, its addresses and numbers redacted, and the
+ * recipient of the job's message as its provider may write it, and its
+ * length bounded: it goes into the store of the queue, its dashboards and
+ * the audit.
  *
+ * @param text The text of the failure.
+ * @param message The message of the job, `{ to }` at least, if it has one.
  * @internal
  */
-const reasonOf = (text) => {
-  const redacted = redactRecipients(String(text));
+const reasonOf = (text, message) => {
+  const redacted = redactMessageRecipient(String(text), message);
   return redacted.length > MAX_REASON ? `${redacted.slice(0, MAX_REASON)}…` : redacted;
 };
 
@@ -30,12 +34,12 @@ const firstError = (receipt) => (Array.isArray(receipt.errors) ? receipt.errors[
  *
  * @internal
  */
-const auditErrorOf = (receipt) => {
+const auditErrorOf = (receipt, message) => {
   const error = firstError(receipt);
   return {
     category: error?.category ?? 'unknown',
     code: error?.code ?? 'unknown',
-    message: reasonOf(receipt.errorMessages?.join('; ') ?? error?.message ?? 'failed'),
+    message: reasonOf(receipt.errorMessages?.join('; ') ?? error?.message ?? 'failed', message),
     retryable: receipt.retryable === true,
   };
 };
@@ -75,7 +79,7 @@ const retryDelayOf = (attempt, receipt, config) => {
  * @internal
  */
 const outcomeOfFailure = (receipt, job, config) => {
-  const error = auditErrorOf(receipt);
+  const error = auditErrorOf(receipt, config.message);
   const code = error.code;
   const reason = error.message;
   const decided = config.classify?.({ receipt, job });

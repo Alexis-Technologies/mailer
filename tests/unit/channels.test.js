@@ -459,4 +459,12 @@ test('Channels: the recipient of a message is redacted as it is written, unless 
   // A chat 42 would replace the 42 of any text.
   assert.strictEqual(redactMessageRecipient('chat 42 of 420', { to: 42 }), 'chat 42 of 420');
   assert.strictEqual(redactMessageRecipient('no message +380671234567'), 'no message [REDACTED]');
+  // Before (C2): a provider that is sent the number without its + echoes it
+  // so, and the number reached the logs and spans.
+  const number = { to: '+380671234567' };
+  assert.strictEqual(
+    redactMessageRecipient('refused {"380671234567":"bad"} not 13806712345678', number),
+    'refused {"[REDACTED]":"bad"} not 13806712345678',
+  );
+  assert.strictEqual(redactMessageRecipient('code 1234567', { to: '+1234567' }), 'code 1234567');
 });
