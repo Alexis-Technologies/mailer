@@ -5,6 +5,9 @@ const { readText } = require('./body.js');
 const { requestWithRetry } = require('./http.js');
 
 const MAX_DETAIL = 200;
+// The refusals a check reads in a 2xx: an answer of the provider, given once,
+// which a retry would only ask again.
+const ANSWERS = new WeakSet();
 
 const detailOf = (text) => {
   const trimmed = text.trim();
@@ -44,11 +47,17 @@ const verifyByRequest = (request) =>
     // Every answer is read, as the check reads the body of a refusal; one it
     // does not take fails with its status, retried as that says.
     accepts: () => true,
+    isAnswer: (error) => ANSWERS.has(error),
     read: async (response) => {
       const { status } = response;
       const body = await readText(response);
       if (status >= 200 && status <= 299) {
-        request.check?.(status, body);
+        try {
+          request.check?.(status, body);
+        } catch (error) {
+          if (error !== null && typeof error === 'object') ANSWERS.add(error);
+          throw error;
+        }
         return;
       }
       if (status === 403 && request.acceptForbidden === true) return;

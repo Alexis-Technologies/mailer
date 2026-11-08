@@ -180,7 +180,7 @@ const checkBalance = (_status, text) => {
   if (json?.response_code !== 0) {
     throw Object.assign(
       new Error(`TurboSMS refused the token: ${json?.response_status ?? text.slice(0, 200)}`),
-      { statusCode: json?.response_code },
+      { statusCode: 200, code: `turbosms.${json?.response_code}` },
     );
   }
 };

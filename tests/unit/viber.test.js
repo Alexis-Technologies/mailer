@@ -195,6 +195,15 @@ test('Viber: verify reads the account, whose refusal is a status in a 200', asyn
   assert.strictEqual(requests[0].method, 'POST');
   assert.strictEqual(requests[0].headers.get('x-viber-auth-token'), TOKEN);
   t.mock.restoreAll();
-  stubFetch(t, () => refused(2, 'invalidAuthToken'));
-  await assert.rejects(transport().verify(), /Viber refused the token: invalidAuthToken/);
+  // Before (C38): the refusal, in a 200, was retried as a read, four
+  // requests over seconds, and its statusCode was Viber's status.
+  const refusals = stubFetch(t, () => refused(2, 'invalidAuthToken'));
+  await assert.rejects(
+    transport({ retries: 3 }).verify(),
+    (error) =>
+      /Viber refused the token: invalidAuthToken/.test(error.message) &&
+      error.statusCode === 200 &&
+      error.code === 'viber.2',
+  );
+  assert.strictEqual(refusals.length, 1);
 });

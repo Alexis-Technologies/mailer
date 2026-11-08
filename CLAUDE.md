@@ -1103,6 +1103,10 @@ that fails without it; C for the channels):
   its fields and a queued one, after its JSON round trip, did not. It is refused.
 - C37. channels (`escapeDiscordMarkdown`): the dot after a number that begins a line was left,
   so a text such as `1. a` became an ordered list in Discord; it is escaped too.
+- C38. verify: a refusal a provider answers in a 2xx (Viber, TurboSMS, AlphaSMS), which the
+  check throws, was retried as a read, four requests over seconds, its `statusCode` the code of
+  the provider. It is thrown at once (`isAnswer`), its HTTP status kept and the provider's code
+  apart.
 
 ## Repository layout
 

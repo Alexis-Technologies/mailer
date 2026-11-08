@@ -37,8 +37,8 @@
   "./mailersend": 8.5,
   "./sparkpost": 9,
   "./zeptomail": 8,
-  "./smtp2go": 8.5,
-  "./azure": 9.5,
+  "./smtp2go": 9,
+  "./azure": 10,
   "./scaleway": 8.5,
   "./cloudflare": 8.5,
   "./pool": 4,
@@ -74,6 +74,6 @@
   "./teams": 9.5,
   "./google-chat": 10,
   "./turbosms": 9,
-  "./alphasms": 8,
+  "./alphasms": 8.5,
   "./smsclub": 8
 }

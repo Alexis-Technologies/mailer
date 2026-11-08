@@ -142,9 +142,10 @@ const checkAccount = (_status, text) => {
     json = undefined;
   }
   if (json?.status !== 0) {
-    throw Object.assign(new Error(`Viber refused the token: ${json?.status_message ?? text}`), {
-      statusCode: json?.status,
-    });
+    throw Object.assign(
+      new Error(`Viber refused the token: ${json?.status_message ?? text.slice(0, 200)}`),
+      { statusCode: 200, code: `viber.${json?.status}` },
+    );
   }
 };
 
