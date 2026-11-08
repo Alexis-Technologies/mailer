@@ -172,6 +172,15 @@ worker of 1.2 holds reads the same.
   dropped when FCM refuses it. An error is told by the `errorCode` of its FcmError first
   (`UNREGISTERED` and a malformed token are `unregistered`); a lost answer is of unknown
   delivery, never sent again; `verify()` is a dry run.
+- **`./webpush`, Web Push on `node:crypto` alone:** a push to the subscription of a browser,
+  encrypted as one record of aes128gcm (RFC 8291, the vector of its §5 in the tests) and signed
+  with VAPID (RFC 8292, a JWT held per origin of a push service). The service worker reads JSON
+  of its title, text, picture, data and buttons (`actions`) with the fields of `payload`;
+  `payload.topic` is its `Topic`, `expiresAt` its `TTL`, the priority its `Urgency`. A push of
+  more than 3993 bytes is refused before any request, an endpoint that is not a public HTTPS
+  URL (`allowEndpoint` to replace the check) or keys not of P-256 are `invalid-recipient`, and a
+  subscription gone (404, 410) is `unregistered`. The VAPID keys are checked when the transport
+  is made.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

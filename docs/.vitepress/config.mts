@@ -84,6 +84,7 @@ const guide = [
       { text: 'Slack', link: '/channels/slack' },
       { text: 'Discord', link: '/channels/discord' },
       { text: 'Firebase Cloud Messaging', link: '/channels/fcm' },
+      { text: 'Web Push', link: '/channels/webpush' },
     ],
   },
   {

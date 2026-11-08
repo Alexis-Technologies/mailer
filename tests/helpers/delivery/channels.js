@@ -1,10 +1,11 @@
 // Not ported: the providers of the channels the delivery matrix holds, each
 // with a message of its channel, the answer of a send, a rate limit as it
 // tells it, and what must never reach a log: its secrets and its recipient.
-const { generateKeyPairSync } = require('node:crypto');
+const { createECDH, generateKeyPairSync } = require('node:crypto');
 const { createChannelMessage } = require('../../../src/channels/index.js');
 const { DiscordTransport } = require('../../../src/discord/index.js');
 const { FcmTransport } = require('../../../src/fcm/index.js');
+const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
 
@@ -23,6 +24,15 @@ const FCM_ACCOUNT = {
   client_email: 'push@mailer-test-1.iam.gserviceaccount.com',
   private_key: FCM_KEY,
 };
+const VAPID = createECDH('prime256v1');
+VAPID.generateKeys();
+const BROWSER = createECDH('prime256v1');
+BROWSER.generateKeys();
+const SUBSCRIPTION = {
+  endpoint: 'https://push.example.com/v1/SECRETSUBSCRIPTION',
+  keys: { p256dh: BROWSER.getPublicKey().toString('base64url'), auth: 'AAAAAAAAAAAAAAAAAAAAAA' },
+};
+
 // The fetch of a transport of Google whose token endpoint answers apart, so
 // that a test's fetch sees the requests of the provider alone.
 const withGoogleToken = (fetch) =>
@@ -151,6 +161,42 @@ const channelProviders = [
       ),
     secrets: [FCM_ACCESS_TOKEN, FCM_KEY.split('\n')[2]],
     recipient: 'SECRETDEVICE',
+  },
+  {
+    name: 'Web Push',
+    create: (extra = {}) =>
+      new WebPushTransport({
+        retries: 1,
+        ...extra,
+        vapid: {
+          subject: 'mailto:ops@example.com',
+          publicKey: VAPID.getPublicKey().toString('base64url'),
+          privateKey: VAPID.getPrivateKey().toString('base64url'),
+        },
+        // A public address, without a lookup of the network.
+        lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'push',
+        to: SUBSCRIPTION,
+        title: 'Shipped',
+        text: 'On its way',
+      }),
+    ok: () =>
+      new Response(null, { status: 201, headers: { Location: 'https://push.example.com/m/1' } }),
+    rateLimited: (seconds) =>
+      new Response('slow down', { status: 429, headers: { 'Retry-After': String(seconds) } }),
+    // The endpoint is the subscription's, which createChannelMessage holds
+    // to https.
+    insecure: () =>
+      createChannelMessage({
+        channel: 'push',
+        to: { ...SUBSCRIPTION, endpoint: 'http://push.example.com/v1/x' },
+        title: 'x',
+      }),
+    secrets: [VAPID.getPrivateKey().toString('base64url')],
+    recipient: 'SECRETSUBSCRIPTION',
   },
 ];
 

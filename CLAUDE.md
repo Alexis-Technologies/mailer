@@ -927,6 +927,12 @@ test that fails on the source's behavior):
 - FB1. firebase-admin (`src/utils/api-request.ts`): `messages:send` was retried after
   `ETIMEDOUT`, after which FCM may have taken it. `./fcm` treats a lost answer as
   `deliveryUnknown`, and retries a 429, a 500, a 503 and a connection never made.
+- V14. visulima (`providers/push/web-push`): a push had no bound on its size, a bad VAPID key
+  threw from `send()`, and a 404 or a 410 of a subscription gone was a failure like any other.
+  `./webpush` refuses a push over 3993 bytes before any request, checks the keys when it is
+  made, and makes a 404 or 410 `unregistered`.
+- EC1. http_ece (`ece.js`): `ECE_KEYLOG=1` printed every key, nonce and secret of an
+  encryption. Its key log is not ported, and a test sets it and sees nothing written.
 
 ## Repository layout
 

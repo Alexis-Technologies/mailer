@@ -116,6 +116,11 @@ test('Delivery of the channels: a redirect is not followed, nor retried', async 
 
 test('Delivery of the channels: a provider refuses a plain HTTP URL but to this machine', () => {
   for (const provider of channelProviders) {
+    // A provider of no base URL holds its recipient's URL to https instead.
+    if (provider.insecure !== undefined) {
+      assert.throws(provider.insecure, TypeError, provider.name);
+      continue;
+    }
     assert.throws(() => provider.create({ baseUrl: 'http://api.example.com' }), TypeError);
     assert.doesNotThrow(() => provider.create({ baseUrl: 'http://127.0.0.1:8081' }));
   }

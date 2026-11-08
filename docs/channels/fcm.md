@@ -48,7 +48,7 @@ goes.
 
 Refused before any request: a key of `data` FCM keeps for itself (`from`,
 `notification`, `message_type`, or one starting with `google.` or `gcm.`), a
-subscription of Web Push (which `./webpush` sends), buttons,
+subscription of Web Push (which [`./webpush`](/channels/webpush) sends), buttons,
 more than one picture or a picture as bytes, and a payload that sets the target.
 
 ## Receipts

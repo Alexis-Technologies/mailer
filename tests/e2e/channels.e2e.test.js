@@ -78,6 +78,40 @@ const PROVIDERS = [
         media: media?.slice(0, 1),
       }),
   },
+  {
+    name: 'Web Push',
+    Transport: require('../../src/webpush/index.js').WebPushTransport,
+    // The keys the browser subscribed with, and the JSON of its subscription.
+    needs: ['WEBPUSH_VAPID_PUBLIC_KEY', 'WEBPUSH_VAPID_PRIVATE_KEY', 'WEBPUSH_SUBSCRIPTION'],
+    config: () => ({
+      vapid: {
+        subject: 'mailto:e2e@example.com',
+        publicKey: env.WEBPUSH_VAPID_PUBLIC_KEY,
+        privateKey: env.WEBPUSH_VAPID_PRIVATE_KEY,
+      },
+    }),
+    // Another pair: the push service refuses a JWT of a key the browser did
+    // not subscribe with.
+    refused: () => {
+      const other = require('node:crypto').createECDH('prime256v1');
+      other.generateKeys();
+      return {
+        vapid: {
+          subject: 'mailto:e2e@example.com',
+          publicKey: other.getPublicKey().toString('base64url'),
+          privateKey: other.getPrivateKey().toString('base64url'),
+        },
+      };
+    },
+    message: ({ text, media }) =>
+      createChannelMessage({
+        channel: 'push',
+        to: JSON.parse(env.WEBPUSH_SUBSCRIPTION),
+        title: '@alexify/mailer',
+        text,
+        media: media?.slice(0, 1),
+      }),
+  },
 ];
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));
@@ -143,7 +177,9 @@ for (const provider of PROVIDERS) {
   });
 
   test(`E2E ${provider.name}: verify() accepts the credentials`, { skip }, async () => {
-    await new provider.Transport(provider.config()).verify();
+    const transport = new provider.Transport(provider.config());
+    if (typeof transport.verify !== 'function') return;
+    await transport.verify();
   });
 
   test(`E2E ${provider.name}: refused credentials are an auth failure`, { skip }, async () => {

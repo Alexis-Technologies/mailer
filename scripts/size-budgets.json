@@ -60,5 +60,6 @@
   "./telegram": 8.5,
   "./slack": 9,
   "./discord": 9,
-  "./fcm": 9.5
+  "./fcm": 9.5,
+  "./webpush": 9
 }
