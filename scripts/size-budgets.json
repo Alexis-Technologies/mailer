@@ -18,6 +18,7 @@
   "./webhooks/mailersend": 5.5,
   "./webhooks/sparkpost": 5.5,
   "./webhooks/smtp2go": 5.5,
+  "./webhooks/azure": 5.5,
   "./smtp": 23.5,
   "./sendmail": 12,
   "./jmap": 13.5,

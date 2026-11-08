@@ -4,11 +4,11 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
-  createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createAzureWebhookVerifier } = require('../../src/webhooks/azure/index.js');
 const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');
 const { createMailerooWebhookVerifier } = require('../../src/webhooks/maileroo/index.js');

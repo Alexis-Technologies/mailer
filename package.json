@@ -97,6 +97,10 @@
       "types": "./src/webhooks/smtp2go/index.d.ts",
       "default": "./src/webhooks/smtp2go/index.js"
     },
+    "./webhooks/azure": {
+      "types": "./src/webhooks/azure/index.d.ts",
+      "default": "./src/webhooks/azure/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

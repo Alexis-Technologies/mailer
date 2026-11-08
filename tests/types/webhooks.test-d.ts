@@ -1,7 +1,6 @@
 import { expectError, expectType } from 'tsd';
 import {
   WebhookVerificationError,
-  createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
   type ReplayState,
@@ -31,11 +30,4 @@ const scaleway = createScalewayWebhookVerifier({
   replayStore: store,
 });
 expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
-const azure = createAzureWebhookVerifier({
-  token: 't',
-  header: 'x-webhook-token',
-  replayStore: store,
-});
-expectType<string | undefined>((await azure.verify({ body: '' })).validation?.validationCode);
 expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));
-expectError(createAzureWebhookVerifier({}));

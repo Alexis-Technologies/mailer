@@ -17,7 +17,7 @@ const {
   resolveUntimedOptions,
   stringOf,
   tokenCheckOf,
-} = require('./request.js');
+} = require('../request.js');
 
 // Event Grid retries a delivery for a day: an event id is kept a day and an
 // hour.
