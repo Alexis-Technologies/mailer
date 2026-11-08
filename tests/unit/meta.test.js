@@ -304,7 +304,7 @@ test('Meta: what the APIs would refuse fails before any request', async (t) => {
     // the 1000 bytes it takes.
     [instagram({ text: 'ж'.repeat(501) }), 'validation', /1000 bytes of Instagram/],
     [
-      instagram({ text: undefined, data: undefined, buttons: replies(1), payload: {} }),
+      instagram({ text: undefined, data: undefined, buttons: replies(1), payload: { tag: 'x' } }),
       'validation',
       /needs a text/,
     ],
@@ -337,7 +337,7 @@ test('Meta: what the APIs would refuse fails before any request', async (t) => {
     ],
     [messenger({ text: 'x'.repeat(641), buttons: replies(1) }), 'validation', /more than 640/],
     [
-      messenger({ text: undefined, buttons: replies(1), payload: {} }),
+      messenger({ text: undefined, buttons: replies(1), payload: { tag: 'x' } }),
       'validation',
       /needs a text/,
     ],
@@ -355,12 +355,12 @@ test('Meta: what the APIs would refuse fails before any request', async (t) => {
       /buttons is more than 1024/,
     ],
     [
-      whatsapp({ text: undefined, buttons: replies(1), payload: {} }),
+      whatsapp({ text: undefined, buttons: replies(1), payload: { tag: 'x' } }),
       'validation',
       /buttons needs a text/,
     ],
     [
-      whatsapp({ text: undefined, payload: {} }),
+      whatsapp({ text: undefined, payload: { tag: 'x' } }),
       'validation',
       /needs a text, a medium or a template/,
     ],

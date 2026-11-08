@@ -196,7 +196,11 @@ test('Twilio: what Twilio would refuse fails before any request', async (t) => {
       /ContentSid/,
     ],
     [sms({ payload: { To: '+1' } }), 'validation', /cannot set To/],
-    [sms({ text: undefined, payload: {} }), 'validation', /needs a text, media or a template/],
+    [
+      sms({ text: undefined, payload: { tag: 'x' } }),
+      'validation',
+      /needs a text, media or a template/,
+    ],
     [
       createChannelMessage({ channel: 'rcs', to: '+380671234567', text: 'x' }),
       'validation',

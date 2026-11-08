@@ -161,7 +161,7 @@ test('Viber: what a message of Viber cannot be fails before any request', async 
       /opens a link or replies/,
     ],
     [viber({ payload: { receiver: 'other' } }), 'validation', /cannot set receiver/],
-    [viber({ text: undefined, payload: {} }), 'validation', /needs a text/],
+    [viber({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text/],
     [
       createChannelMessage({ channel: 'telegram', to: '12345', text: 'x' }),
       'unsupported',

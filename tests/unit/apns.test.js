@@ -330,7 +330,11 @@ test('APNs: what a push of APNs cannot be fails before any request', async (t) =
     [push({ payload: { headers: { 'apns-priority': 10 } } }), 'validation', /is a string/],
     [push({ data: { aps: 'x' } }), 'validation', /aps of data/],
     [push({ data: { blob: 'x'.repeat(4096) } }), 'validation', /4096 bytes/],
-    [push({ title: undefined, text: undefined, payload: {} }), 'validation', /needs a title/],
+    [
+      push({ title: undefined, text: undefined, payload: { payload: {} } }),
+      'validation',
+      /needs a title/,
+    ],
     [
       createChannelMessage({ channel: 'sms', to: '+15559876543', text: 'x' }),
       'unsupported',

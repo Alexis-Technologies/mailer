@@ -1095,6 +1095,9 @@ that fails without it; C for the channels):
   the trunk; the digits of an international number without its `+` (`380671234567` in Ukraine)
   got the code again; `0011` (Australia) and `810` (Russia, Kazakhstan, Belarus) were read as
   national digits; and +247 was no code. Each gives the number, or none, as E.164 has it.
+- C35. channels: a message whose text, title, media, payload or data was empty passed the check
+  of a message with nothing to send, and TurboSMS and SMS Club sent an empty SMS; a job of a
+  channel was accepted though its worker refused it. Only a field that says something counts.
 
 ## Repository layout
 

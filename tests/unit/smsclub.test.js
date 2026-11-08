@@ -124,7 +124,7 @@ test('SMS Club: what an SMS cannot be fails before any request', async (t) => {
       'unsupported',
       /no buttons/,
     ],
-    [sms({ text: undefined, payload: {} }), 'validation', /needs a text/],
+    [sms({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text/],
     [sms({ payload: { message: 'other' } }), 'validation', /cannot set message/],
     [
       createChannelMessage({ channel: 'viber', to: '+380989361131', text: 'x' }),

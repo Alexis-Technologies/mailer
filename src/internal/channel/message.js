@@ -322,14 +322,22 @@ const assign = (message, name, value) => {
   if (value !== undefined) message[name] = value;
 };
 
-// What the message says, so that one with nothing to send is refused.
+const hasKey = (object) => {
+  for (const key in object) {
+    if (Object.hasOwn(object, key)) return true;
+  }
+  return false;
+};
+
+// What the message says, so that one with nothing to send is refused: an
+// empty text, list of media, payload or data says nothing.
 const hasBody = (message) =>
-  message.text !== undefined ||
-  message.media !== undefined ||
-  message.payload !== undefined ||
+  (message.text !== undefined && message.text !== '') ||
+  (message.media !== undefined && message.media.length > 0) ||
+  (message.payload !== undefined && hasKey(message.payload)) ||
   message.template !== undefined ||
-  message.title !== undefined ||
-  message.data !== undefined;
+  (message.title !== undefined && message.title !== '') ||
+  (message.data !== undefined && hasKey(message.data));
 
 /**
  * Builds a message of a channel, or checks one already built (`strict`): its

@@ -311,7 +311,7 @@ test('Telegram: what Telegram would refuse fails before any request', async (t) 
     ],
     [message({ thread: 'general' }), 'validation', /topic of a forum/],
     [message({ payload: { chat_id: 1 } }), 'validation', /cannot set chat_id/],
-    [message({ text: undefined, payload: {} }), 'validation', /needs a text or media/],
+    [message({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text or media/],
   ];
   for (const [sent, category, pattern] of cases) {
     const receipt = await transport().send(sent);

@@ -211,7 +211,7 @@ test('Infobip: no id is of unknown delivery, and a lost answer is not sent again
 test('Infobip: what an SMS cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => answer(PENDING));
   const cases = [
-    [sms({ text: undefined, payload: {} }), 'validation', /needs a text/],
+    [sms({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text/],
     [sms({ media: [{ url: 'https://example.com/a.png' }] }), 'unsupported', /no media/],
     [
       sms({ buttons: [{ type: 'url', text: 'x', url: 'https://example.com/' }] }),

@@ -165,7 +165,7 @@ test('Vonage: what an SMS cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => parts('0'));
   const cases = [
     [sms({ text: 'x'.repeat(3201) }), 'validation', /more than 3200/],
-    [sms({ text: undefined, payload: {} }), 'validation', /needs a text/],
+    [sms({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text/],
     [sms({ media: [{ url: 'https://example.com/a.png' }] }), 'unsupported', /no media/],
     [
       sms({ buttons: [{ type: 'url', text: 'x', url: 'https://example.com/' }] }),

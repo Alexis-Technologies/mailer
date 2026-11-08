@@ -178,7 +178,7 @@ test('AWS SMS: what the API would refuse fails before any request', async (t) =>
   const requests = stubFetch(t, () => json({ MessageId: 'x' }));
   const cases = [
     [sms({ text: 'x'.repeat(1601) }), 'validation', /more than 1600/],
-    [sms({ text: undefined, payload: {} }), 'validation', /needs a text/],
+    [sms({ text: undefined, payload: { tag: 'x' } }), 'validation', /needs a text/],
     [sms({ media: [{ url: 'https://example.com/a.png' }] }), 'unsupported', /SendMediaMessage/],
     [
       sms({ buttons: [{ type: 'url', text: 'x', url: 'https://example.com/' }] }),

@@ -207,7 +207,8 @@ const channelJob = {
       if (input.text !== undefined) {
         throw new TypeError('A template job renders its text: it takes none.');
       }
-      probeInput.text = '';
+      // A text to come, for the check of the rest: an empty one says nothing.
+      probeInput.text = ' ';
     }
     const { kept, probes } = prepareMedia(input.media, config);
     probeInput.media = probes;

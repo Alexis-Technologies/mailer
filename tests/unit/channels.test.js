@@ -269,6 +269,24 @@ test('Channels: a copy of a message is checked again, its number in E.164 alread
   assert.ok(!isChannelMessage(null));
 });
 
+test('Channels: a message whose fields are empty has nothing to send', () => {
+  // Before (C35): an empty text, list of media, payload or data, or an empty
+  // title, made a message, which an SMS provider sent empty.
+  for (const fields of [
+    { channel: 'sms', to: '+380671234567', text: '' },
+    { channel: 'whatsapp', to: '+380671234567', media: [] },
+    { channel: 'slack', payload: {} },
+    { channel: 'push', to: { token: 'device' }, data: {} },
+    { channel: 'push', to: { token: 'device' }, title: '' },
+  ]) {
+    assert.throws(
+      () => createChannelMessage(fields),
+      /has nothing to send/,
+      JSON.stringify(fields),
+    );
+  }
+});
+
 test('Channels: a phone number in E.164 from the way people write one', () => {
   const cases = [
     ['+38 (067) 123-45-67', undefined, '+380671234567'],

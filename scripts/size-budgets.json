@@ -55,7 +55,7 @@
   "./queue": 27,
   "./bullmq": 5,
   "./mongodb": 7.5,
-  "./channels": 6,
+  "./channels": 6.5,
   "./router": 1.5,
   "./telegram": 9,
   "./slack": 9.5,
