@@ -181,6 +181,14 @@ worker of 1.2 holds reads the same.
   URL (`allowEndpoint` to replace the check) or keys not of P-256 are `invalid-recipient`, and a
   subscription gone (404, 410) is `unregistered`. The VAPID keys are checked when the transport
   is made.
+- **`./meta`, WhatsApp, Messenger and Instagram over the Graph API:** a block per channel, each
+  with its number, page or account and its token. WhatsApp sends a text, one medium, a `template`
+  it approved, or interactive buttons (three replies or one link), its correlation id as
+  `biz_opaque_callback_data`; Messenger and Instagram a text or an attachment, buttons as a
+  button template or quick replies, as a `RESPONSE` unless the payload tags it. An error is told
+  by its code and subcode: a recipient not on WhatsApp is `not-on-channel`, a message outside
+  the 24-hour window `outside-window`, a user who stopped marketing `opted-out`. The receipt
+  says `accepted`; `graphVersion` is `v23.0` by default.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

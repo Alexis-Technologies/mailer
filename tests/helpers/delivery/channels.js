@@ -5,6 +5,7 @@ const { createECDH, generateKeyPairSync } = require('node:crypto');
 const { createChannelMessage } = require('../../../src/channels/index.js');
 const { DiscordTransport } = require('../../../src/discord/index.js');
 const { FcmTransport } = require('../../../src/fcm/index.js');
+const { MetaTransport } = require('../../../src/meta/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -197,6 +198,26 @@ const channelProviders = [
       }),
     secrets: [VAPID.getPrivateKey().toString('base64url')],
     recipient: 'SECRETSUBSCRIPTION',
+  },
+  {
+    name: 'Meta',
+    create: (extra) =>
+      new MetaTransport({
+        retries: 1,
+        ...extra,
+        accessToken: 'EAAGMetaSecretToken',
+        whatsapp: { phoneNumberId: '1100000000000001' },
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'whatsapp', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () => Response.json({ messaging_product: 'whatsapp', messages: [{ id: 'wamid.HBg' }] }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { error: { message: 'Rate limit hit', code: 130429 } },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: ['EAAGMetaSecretToken'],
+    recipient: '380671234567',
   },
 ];
 

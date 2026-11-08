@@ -272,6 +272,10 @@
     "./webpush": {
       "types": "./src/webpush/index.d.ts",
       "default": "./src/webpush/index.js"
+    },
+    "./meta": {
+      "types": "./src/meta/index.d.ts",
+      "default": "./src/meta/index.js"
     }
   },
   "directories": {

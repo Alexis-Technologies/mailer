@@ -933,6 +933,10 @@ test that fails on the source's behavior):
   made, and makes a 404 or 410 `unregistered`.
 - EC1. http_ece (`ece.js`): `ECE_KEYLOG=1` printed every key, nonce and secret of an
   encryption. Its key log is not ported, and a test sets it and sees nothing written.
+- T10. thinwrap (`whatsapp-business.connector.ts`): a body of `type: 'template'` went without
+  its template, for Meta to refuse. `./meta` refuses it before any request; it also gives the
+  codes of the channels their categories (131026 `not-on-channel`, 131047 `outside-window`,
+  131050 `opted-out`) where thinwrap made them invalid requests or recipients.
 
 ## Repository layout
 

@@ -79,6 +79,38 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'WhatsApp',
+    Transport: require('../../src/meta/index.js').MetaTransport,
+    // The test number of a business, and a number it may write to.
+    needs: ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_TO'],
+    config: () => ({
+      accessToken: env.WHATSAPP_ACCESS_TOKEN,
+      whatsapp: { phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID },
+    }),
+    refused: () => ({
+      accessToken: 'EAAGinvalid',
+      whatsapp: { phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID },
+    }),
+    // Outside the window of the test number, the template every account has.
+    message: () =>
+      createChannelMessage({
+        channel: 'whatsapp',
+        to: env.WHATSAPP_TO,
+        template: { name: 'hello_world', language: 'en_US' },
+      }),
+  },
+  {
+    name: 'Messenger',
+    Transport: require('../../src/meta/index.js').MetaTransport,
+    needs: ['MESSENGER_PAGE_ID', 'MESSENGER_PAGE_TOKEN', 'MESSENGER_PSID'],
+    config: () => ({
+      messenger: { pageId: env.MESSENGER_PAGE_ID, accessToken: env.MESSENGER_PAGE_TOKEN },
+    }),
+    refused: () => ({ messenger: { pageId: env.MESSENGER_PAGE_ID, accessToken: 'EAAGinvalid' } }),
+    message: ({ text, buttons }) =>
+      createChannelMessage({ channel: 'messenger', to: env.MESSENGER_PSID, text, buttons }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.
