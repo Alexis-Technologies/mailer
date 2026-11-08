@@ -5,9 +5,9 @@ const assert = require('node:assert');
 const { generateKeyPairSync, sign } = require('node:crypto');
 const {
   createMemoryReplayStore,
-  createSendGridWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createSendGridWebhookVerifier } = require('../../src/webhooks/sendgrid/index.js');
 
 const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const PUBLIC_KEY = publicKey.export({ format: 'der', type: 'spki' }).toString('base64');

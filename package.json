@@ -53,6 +53,10 @@
       "types": "./src/webhooks/resend/index.d.ts",
       "default": "./src/webhooks/resend/index.js"
     },
+    "./webhooks/sendgrid": {
+      "types": "./src/webhooks/sendgrid/index.d.ts",
+      "default": "./src/webhooks/sendgrid/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

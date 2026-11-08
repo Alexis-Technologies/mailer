@@ -32,10 +32,8 @@ const { inlineDataUrls } = require('../src/attachments/index.js');
 const { htmlToText } = require('../src/render/index.js');
 const { fingerprintOf } = require('../src/internal/fingerprint.js');
 const { gatedSendMany } = require('../src/internal/gate.js');
-const {
-  createMailtrapWebhookVerifier,
-  createSendGridWebhookVerifier,
-} = require('../src/webhooks/index.js');
+const { createMailtrapWebhookVerifier } = require('../src/webhooks/index.js');
+const { createSendGridWebhookVerifier } = require('../src/webhooks/sendgrid/index.js');
 const { createResendWebhookVerifier } = require('../src/webhooks/resend/index.js');
 const { createSesWebhookVerifier } = require('../src/webhooks/ses/index.js');
 const sns = require('../tests/helpers/webhooks/sns.js');

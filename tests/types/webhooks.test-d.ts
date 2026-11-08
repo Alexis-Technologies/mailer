@@ -13,7 +13,6 @@ import {
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
-  createSendGridWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
   type ReplayState,
@@ -37,10 +36,6 @@ const shared: ReplayStore = {
 };
 expectError<ReplayStore>({ add: () => true });
 
-const sendgrid = createSendGridWebhookVerifier({ publicKey: 'MFkw…', replayStore: store });
-expectAssignable<readonly DeliveryEvent<'sendgrid'>[]>(
-  (await sendgrid.verify({ body: '' })).events,
-);
 createMailgunWebhookVerifier({ signingKey: 'key', replayStore: null });
 const postmark = createPostmarkWebhookVerifier({ username: 'u', password: 'p' });
 expectAssignable<readonly DeliveryEvent<'postmark'>[]>(

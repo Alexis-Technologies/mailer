@@ -24,7 +24,7 @@ const {
   resolveCommonOptions,
   stringListOf,
   stringOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const SIGNATURE = 'x-twilio-email-event-webhook-signature';
 const TIMESTAMP = 'x-twilio-email-event-webhook-timestamp';

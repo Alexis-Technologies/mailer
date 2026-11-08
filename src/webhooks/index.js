@@ -11,7 +11,6 @@ const { createMailjetWebhookVerifier } = require('./mailjet.js');
 const { createMailtrapWebhookVerifier } = require('./mailtrap.js');
 const { createPostmarkWebhookVerifier } = require('./postmark.js');
 const { createScalewayWebhookVerifier } = require('./scaleway.js');
-const { createSendGridWebhookVerifier } = require('./sendgrid.js');
 const { createSmtp2goWebhookVerifier } = require('./smtp2go.js');
 const { createSparkPostWebhookVerifier } = require('./sparkpost.js');
 
@@ -28,7 +27,6 @@ module.exports = {
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
-  createSendGridWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 };
