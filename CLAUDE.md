@@ -1011,6 +1011,10 @@ that fails without it; C for the channels):
 - C7. every transport of a channel: `scheduledAt` was read by none, so a message scheduled
   for tomorrow went at once, reported sent. `sendConverted` refuses it for a message of a
   channel (`unsupported`), as an email transport that cannot schedule does; the queue delays it.
+- C8. core: the client reference generated for a message of a channel was kept with the
+  message, so a second `send()` of it carried the first one's: `./idempotency` answered it with
+  the first receipt, sending nothing, and RBM or Discord took it for the first. `pinMessageId`
+  gives a channel's message a new reference at each call, one per send.
 
 ## Repository layout
 

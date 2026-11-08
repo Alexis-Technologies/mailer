@@ -422,7 +422,10 @@ test('Channels: retry and pool give every attempt of a message one client refere
   const message = createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Code 1234' });
   const pinned = pinMessageId(message, () => 'ref-1');
   assert.strictEqual(pinned.idempotencyKey, 'ref-1');
-  assert.strictEqual(pinMessageId(message), pinned);
+  // Changed (C8): a new reference for each send, which the decorator that
+  // pins it carries through the attempts of that send.
+  assert.notStrictEqual(pinMessageId(message).idempotencyKey, 'ref-1');
+  assert.strictEqual(pinMessageId(pinned), pinned);
   assert.strictEqual(message.idempotencyKey, undefined);
   // A key of the caller's is the reference.
   const keyed = createChannelMessage({ ...message, idempotencyKey: 'otp:42' });
@@ -440,6 +443,35 @@ test('Channels: retry and pool give every attempt of a message one client refere
   assert.strictEqual(
     transport.calls[0].message.idempotencyKey,
     transport.calls[1].message.idempotencyKey,
+  );
+});
+
+test('Channels: two sends of one message are two sends, each with a reference of its own', async () => {
+  // Before (C8): the reference generated for a message was kept with the
+  // message, so a second send of it carried the first one's: ./idempotency
+  // answered it with the first receipt and sent nothing, and RBM or Discord
+  // took it for the first message.
+  const { IdempotencyTransport } = require('../../src/idempotency/index.js');
+  const { PoolTransport } = require('../../src/pool/index.js');
+  const { RetryTransport } = require('../../src/retry/index.js');
+  const { fakeTransport } = require('../helpers/decorators/fake.js');
+  const alert = createChannelMessage({ channel: 'slack', text: 'disk full' });
+  const transport = fakeTransport();
+  const stack = new RetryTransport(new IdempotencyTransport(transport), { maxAttempts: 2 });
+  await stack.send(alert);
+  await stack.send(alert);
+  assert.strictEqual(transport.calls.length, 2);
+  assert.notStrictEqual(
+    transport.calls[0].message.idempotencyKey,
+    transport.calls[1].message.idempotencyKey,
+  );
+  const pooled = fakeTransport();
+  const pool = new PoolTransport({ transports: [{ transport: pooled }], strategy: 'priority' });
+  await pool.send(alert);
+  await pool.send(alert);
+  assert.notStrictEqual(
+    pooled.calls[0].message.idempotencyKey,
+    pooled.calls[1].message.idempotencyKey,
   );
 });
 

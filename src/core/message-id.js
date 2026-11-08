@@ -283,8 +283,10 @@ const pinnedMessages = new WeakMap();
 
 // A message of a channel has no Message-ID: what every attempt carries alike
 // is its client reference, its idempotency key, which a provider takes as the
-// `client-ref` of Vonage, the `sequence_id` of TurboSMS, the `messageId` of
-// RBM or the `nonce` of Discord, so that it deduplicates a send made again.
+// `messageId` of RBM, the `requestId` of a Chat app or the `nonce` of
+// Discord, so that it deduplicates a send made again. A new one for each
+// send: the copy a decorator passes on carries it through the attempts of
+// that send, and a send of the same message later is a send of its own.
 const pinReference = (message, generator) => {
   if (
     typeof message.channel !== 'string' ||
@@ -293,12 +295,7 @@ const pinReference = (message, generator) => {
   ) {
     return message;
   }
-  let pinned = pinnedMessages.get(message);
-  if (pinned === undefined) {
-    pinned = { ...message, idempotencyKey: generateId('idempotency-key', generator) };
-    pinnedMessages.set(message, pinned);
-  }
-  return pinned;
+  return { ...message, idempotencyKey: generateId('idempotency-key', generator) };
 };
 
 /**
@@ -314,8 +311,9 @@ const pinReference = (message, generator) => {
  * or of the client reference.
  * @returns The message itself when it has a Message-ID, either as
  * `messageId` or as a custom header, or a message of a channel with its
- * `idempotencyKey`; otherwise a copy carrying a generated one, the same copy
- * on every call for the same message.
+ * `idempotencyKey`; otherwise a copy carrying a generated one: for an email
+ * the same copy on every call for the same message, for a message of a
+ * channel a new key on every call, which the caller makes once for a send.
  * @internal
  */
 const pinMessageId = (message, generator) => {
