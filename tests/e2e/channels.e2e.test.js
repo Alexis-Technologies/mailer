@@ -273,6 +273,45 @@ const PROVIDERS = [
       createChannelMessage({ channel: 'viber', to: env.VIBER_TO, text, buttons, media }),
   },
   {
+    name: 'Teams',
+    Transport: require('../../src/teams/index.js').TeamsTransport,
+    // The URL of a webhook of Workflows that posts to a channel.
+    needs: ['TEAMS_WEBHOOK_URL'],
+    config: () => ({ webhookUrl: env.TEAMS_WEBHOOK_URL }),
+    // A workflow that does not exist: Azure refuses its signature.
+    refused: () => ({ webhookUrl: env.TEAMS_WEBHOOK_URL.replace(/sig=[^&]+/, 'sig=invalid') }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({ channel: 'teams', text, buttons, media }),
+  },
+  {
+    name: 'Teams bot',
+    Transport: require('../../src/teams/index.js').TeamsTransport,
+    // The app of a bot, and a conversation it is in (from an activity it got).
+    needs: ['TEAMS_APP_ID', 'TEAMS_CLIENT_SECRET', 'TEAMS_SERVICE_URL', 'TEAMS_CONVERSATION_ID'],
+    config: () => ({
+      bot: {
+        appId: env.TEAMS_APP_ID,
+        clientSecret: env.TEAMS_CLIENT_SECRET,
+        ...(env.TEAMS_TENANT_ID && { tenantId: env.TEAMS_TENANT_ID }),
+      },
+    }),
+    refused: () => ({
+      bot: {
+        appId: env.TEAMS_APP_ID,
+        clientSecret: 'invalid',
+        ...(env.TEAMS_TENANT_ID && { tenantId: env.TEAMS_TENANT_ID }),
+      },
+    }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({
+        channel: 'teams',
+        to: { serviceUrl: env.TEAMS_SERVICE_URL, conversationId: env.TEAMS_CONVERSATION_ID },
+        text,
+        buttons,
+        media,
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

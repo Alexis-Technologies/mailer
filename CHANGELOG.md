@@ -229,6 +229,11 @@ worker of 1.2 holds reads the same.
   bot, its buttons as a keyboard, the correlation id as `tracking_data`; the `status` of the
   200 fails the message (5 and 6, a user not on Viber or not subscribed, are `not-on-channel`),
   and the `message_token`, a 64-bit integer, keeps every digit.
+- **`./teams`, Microsoft Teams:** a message to a channel through a webhook of Workflows, as an
+  Adaptive Card (its text, a picture, its buttons as actions), whose 202 is `accepted`; or to a
+  conversation through a bot of the Bot Framework, with the token of its app (client
+  credentials) sent only to a service URL of Teams or of `serviceUrls`; a bot removed from the
+  conversation is `blocked`, and a 5xx of unknown delivery.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

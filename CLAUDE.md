@@ -945,6 +945,11 @@ test that fails on the source's behavior):
   made, and makes a 404 or 410 `unregistered`.
 - EC1. http_ece (`ece.js`): `ECE_KEYLOG=1` printed every key, nonce and secret of an
   encryption. Its key log is not ported, and a test sets it and sees nothing written.
+- T9. thinwrap (`ms-teams.connector.ts`): the 202 of a webhook of Workflows was `sent`, though
+  the flow posts the card after it answered, and may fail. `./teams` makes it `accepted`.
+- V13. visulima (`providers/chat/msteams/provider.ts`): a text went as a MessageCard of the
+  Office 365 connectors, which the webhooks of Workflows that replace them do not render.
+  `./teams` sends an Adaptive Card in the envelope of an activity, as thinwrap does.
 - T10. thinwrap (`whatsapp-business.connector.ts`): a body of `type: 'template'` went without
   its template, for Meta to refuse. `./meta` refuses it before any request; it also gives the
   codes of the channels their categories (131026 `not-on-channel`, 131047 `outside-window`,

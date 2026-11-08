@@ -308,6 +308,10 @@
     "./viber": {
       "types": "./src/viber/index.d.ts",
       "default": "./src/viber/index.js"
+    },
+    "./teams": {
+      "types": "./src/teams/index.d.ts",
+      "default": "./src/teams/index.js"
     }
   },
   "directories": {

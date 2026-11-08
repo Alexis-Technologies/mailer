@@ -70,5 +70,6 @@
   "./sinch": 8,
   "./apns": 10,
   "./rbm": 9,
-  "./viber": 8
+  "./viber": 8,
+  "./teams": 9
 }

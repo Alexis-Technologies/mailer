@@ -14,6 +14,20 @@ const { SinchTransport } = require('../../../src/sinch/index.js');
 const { ApnsTransport } = require('../../../src/apns/index.js');
 const { RbmTransport } = require('../../../src/rbm/index.js');
 const { ViberTransport } = require('../../../src/viber/index.js');
+const { TeamsTransport } = require('../../../src/teams/index.js');
+
+const TEAMS_WEBHOOK =
+  'https://prod-00.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=TeamsWebhookSecret';
+// The token endpoint of Microsoft, answered apart from the requests of a bot.
+const withBotToken = (fetch) =>
+  fetch === undefined
+    ? undefined
+    : (url, init) =>
+        String(url).startsWith('https://login.microsoftonline.com/')
+          ? Promise.resolve(
+              Response.json({ access_token: 'TeamsBotTokenSecret', expires_in: 3600 }),
+            )
+          : fetch(url, init);
 
 const APNS_KEY = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
   .privateKey.export({ type: 'pkcs8', format: 'pem' })
@@ -440,6 +454,47 @@ const channelProviders = [
       }),
     secrets: ['ViberAuthSecret'],
     recipient: 'SECRETVIBERUSER0=',
+  },
+  {
+    name: 'Teams webhook',
+    create: (extra) => new TeamsTransport({ retries: 1, ...extra, webhookUrl: TEAMS_WEBHOOK }),
+    message: () => createChannelMessage({ channel: 'teams', text: 'Deployed v1.2.3' }),
+    ok: () => new Response(null, { status: 202 }),
+    rateLimited: (seconds) =>
+      new Response('', { status: 429, headers: { 'Retry-After': String(seconds) } }),
+    // A provider of no base URL: its webhook is held to https.
+    insecure: () => new TeamsTransport({ webhookUrl: 'http://example.com/hook' }),
+    secrets: ['TeamsWebhookSecret'],
+    recipient: 'TeamsWebhookSecret',
+  },
+  {
+    name: 'Teams',
+    create: (extra = {}) =>
+      new TeamsTransport({
+        retries: 1,
+        ...extra,
+        fetch: withBotToken(extra.fetch),
+        bot: { appId: 'app-1', clientSecret: 'TeamsClientSecret' },
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'teams',
+        to: {
+          serviceUrl: 'https://smba.trafficmanager.net/emea/',
+          conversationId: '19:SECRETCONVERSATION@thread.tacv2',
+        },
+        text: 'Deployed v1.2.3',
+      }),
+    ok: () => Response.json({ id: '1:activity' }),
+    rateLimited: (seconds) =>
+      new Response('', { status: 429, headers: { 'Retry-After': String(seconds) } }),
+    insecure: () =>
+      new TeamsTransport({
+        bot: { appId: 'app-1', clientSecret: 'x' },
+        tokenUrl: 'http://login.example.com/token',
+      }),
+    secrets: ['TeamsClientSecret', 'TeamsBotTokenSecret'],
+    recipient: 'SECRETCONVERSATION',
   },
 ];
 
