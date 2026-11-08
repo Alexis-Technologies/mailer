@@ -1052,6 +1052,9 @@ that fails without it; C for the channels):
 - C19. google-chat: the `to` of a message of the app went into the path as written, so a `#`
   or a `?` moved the `requestId` out of the query (a send retried as if keyed, twice), and `../`
   aimed the token of the app at other methods. A recipient is `spaces/` and an id alone.
+- C20. google-chat: a 5xx of the app, after which the message may have been posted, ended as a
+  retryable failure, which a caller sent again under a new `requestId`. It is ambiguous:
+  retried under the same `requestId`, its last failure of unknown delivery, as Discord's bot.
 
 ## Repository layout
 

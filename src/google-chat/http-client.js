@@ -87,6 +87,9 @@ const createGoogleChatClient = (config) => {
       },
       messageOf,
       classify: classifyWith(APP_STATUSES),
+      // A 5xx may come once the message was posted: retried under the
+      // requestId, its last failure of unknown delivery.
+      isAmbiguousStatus: (status) => status >= 500,
     },
   );
   const webhook = createApiClient(config, {

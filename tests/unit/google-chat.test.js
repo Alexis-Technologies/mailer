@@ -140,6 +140,21 @@ test('Google Chat: a message to a space goes through the app, under its request 
   );
 });
 
+test('Google Chat: a 5xx of the app is sent again under its requestId, then of unknown delivery', async (t) => {
+  // Before (C20): a 5xx of the app was a retryable failure once retries were
+  // spent, which a caller sent again under a new requestId: twice.
+  const posts = stub(t, () => status(500, 'INTERNAL'));
+  const receipt = await transport({
+    webhookUrl: undefined,
+    serviceAccount: ACCOUNT,
+    retries: 1,
+  }).send(chat({ to: 'spaces/AAAA' }));
+  assert.strictEqual(posts.length, 2);
+  assert.strictEqual(posts[0].url, posts[1].url);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.retryable, false);
+});
+
 test('Google Chat: a refusal by its status, the webhook its credential', async (t) => {
   const cases = [
     [status(404, 'NOT_FOUND'), {}, 'auth'],
