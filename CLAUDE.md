@@ -968,6 +968,9 @@ test that fails on the source's behavior):
   segments were lost and a later part that failed left a success. `./vonage` reads every part:
   its segments are the `message-count`, a refused part fails the message, of unknown delivery
   when an earlier part went.
+- VB2. viber-bot (`lib/viber-client.js`): the answer was parsed as JSON, so the
+  `message_token`, a 64-bit integer (5741311803571721087), lost its last digits and matched no
+  delivery callback. `./viber` reads it from the text of the answer, as a string.
 - NV4. Novu (`packages/providers/src/lib/sms/infobip/infobip.provider.ts`): the `messageId` of
   any 200 was a success, though Infobip answers a message it refuses with a 200 and a status of
   the group REJECTED. `./infobip` fails it by the name of the status, as thinwrap does, and the

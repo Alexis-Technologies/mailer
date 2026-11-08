@@ -304,6 +304,10 @@
     "./rbm": {
       "types": "./src/rbm/index.d.ts",
       "default": "./src/rbm/index.js"
+    },
+    "./viber": {
+      "types": "./src/viber/index.d.ts",
+      "default": "./src/viber/index.js"
     }
   },
   "directories": {

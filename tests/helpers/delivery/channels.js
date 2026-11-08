@@ -13,6 +13,7 @@ const { InfobipTransport } = require('../../../src/infobip/index.js');
 const { SinchTransport } = require('../../../src/sinch/index.js');
 const { ApnsTransport } = require('../../../src/apns/index.js');
 const { RbmTransport } = require('../../../src/rbm/index.js');
+const { ViberTransport } = require('../../../src/viber/index.js');
 
 const APNS_KEY = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
   .privateKey.export({ type: 'pkcs8', format: 'pem' })
@@ -415,6 +416,30 @@ const channelProviders = [
       ),
     secrets: [FCM_ACCESS_TOKEN],
     recipient: '380671234567',
+  },
+  {
+    name: 'Viber',
+    create: (extra) =>
+      new ViberTransport({
+        retries: 1,
+        ...extra,
+        authToken: '445da6az1s345z78-ViberAuthSecret',
+        sender: { name: 'Shop' },
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'viber',
+        to: 'SECRETVIBERUSER0=',
+        text: 'Your code is 1234',
+      }),
+    ok: () => Response.json({ status: 0, status_message: 'ok', message_token: 1 }),
+    rateLimited: (seconds) =>
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Retry-After': String(seconds) },
+      }),
+    secrets: ['ViberAuthSecret'],
+    recipient: 'SECRETVIBERUSER0=',
   },
 ];
 

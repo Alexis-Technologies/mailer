@@ -69,5 +69,6 @@
   "./infobip": 8.5,
   "./sinch": 8,
   "./apns": 10,
-  "./rbm": 9
+  "./rbm": 9,
+  "./viber": 8
 }

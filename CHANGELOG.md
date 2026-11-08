@@ -225,6 +225,10 @@ worker of 1.2 holds reads the same.
   of the idempotency key, which the API takes once, so a lost answer is sent again under it; a
   user without RCS is `not-on-channel`, and the token of the service account is shared as
   `./fcm` shares its.
+- **`./viber`, the REST Bot API of Viber:** a text or a picture to a user subscribed to the
+  bot, its buttons as a keyboard, the correlation id as `tracking_data`; the `status` of the
+  200 fails the message (5 and 6, a user not on Viber or not subscribed, are `not-on-channel`),
+  and the `message_token`, a 64-bit integer, keeps every digit.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

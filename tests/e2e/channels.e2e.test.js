@@ -260,6 +260,19 @@ const PROVIDERS = [
       createChannelMessage({ channel: 'rcs', to: env.RBM_TO, text, buttons, media }),
   },
   {
+    name: 'Viber',
+    Transport: require('../../src/viber/index.js').ViberTransport,
+    // The token of a bot, and the id of a user subscribed to it.
+    needs: ['VIBER_AUTH_TOKEN', 'VIBER_TO'],
+    config: () => ({ authToken: env.VIBER_AUTH_TOKEN, sender: { name: 'mailer e2e' } }),
+    refused: () => ({
+      authToken: '445da6az1s345z78-dazcczb2542zv51a-e0vc5fva17480im9',
+      sender: { name: 'mailer e2e' },
+    }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({ channel: 'viber', to: env.VIBER_TO, text, buttons, media }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

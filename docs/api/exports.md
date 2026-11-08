@@ -68,6 +68,7 @@ model of delivery events.
 | `@alexify/mailer/sinch` | `SinchTransport` | [Sinch](/channels/sinch) |
 | `@alexify/mailer/apns` | `ApnsTransport` | [APNs](/channels/apns) |
 | `@alexify/mailer/rbm` | `RbmTransport` | [RCS Business Messaging](/channels/rbm) |
+| `@alexify/mailer/viber` | `ViberTransport` | [Viber](/channels/viber) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |
