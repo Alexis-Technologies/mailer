@@ -284,6 +284,10 @@
     "./aws-sms": {
       "types": "./src/aws-sms/index.d.ts",
       "default": "./src/aws-sms/index.js"
+    },
+    "./vonage": {
+      "types": "./src/vonage/index.d.ts",
+      "default": "./src/vonage/index.js"
     }
   },
   "directories": {

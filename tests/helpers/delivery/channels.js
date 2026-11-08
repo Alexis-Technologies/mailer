@@ -8,6 +8,7 @@ const { FcmTransport } = require('../../../src/fcm/index.js');
 const { MetaTransport } = require('../../../src/meta/index.js');
 const { TwilioTransport } = require('../../../src/twilio/index.js');
 const { AwsSmsTransport } = require('../../../src/aws-sms/index.js');
+const { VonageTransport } = require('../../../src/vonage/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -266,6 +267,31 @@ const channelProviders = [
         { status: 400, headers: { 'Retry-After': String(seconds) } },
       ),
     secrets: ['AwsSecretAccessKey'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'Vonage',
+    create: (extra) =>
+      new VonageTransport({
+        retries: 1,
+        ...extra,
+        apiKey: 'a1b2c3d4',
+        apiSecret: 'VonageApiSecret',
+        from: 'MyBrand',
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json({
+        'message-count': '1',
+        messages: [{ to: '380671234567', 'message-id': 'vonage-1', status: '0' }],
+      }),
+    rateLimited: (seconds) =>
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Retry-After': String(seconds) },
+      }),
+    secrets: ['VonageApiSecret'],
     recipient: '380671234567',
   },
 ];

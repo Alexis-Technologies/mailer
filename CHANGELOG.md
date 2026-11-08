@@ -202,6 +202,10 @@ worker of 1.2 holds reads the same.
   the `metadata` as the `Context` its events give back. An error is told by its reason (a
   number opted out is `opted-out`, a destination not verified in the sandbox `configuration`),
   then its type; the receipt says `accepted`, with the segments counted.
+- **`./vonage`, the SMS API of Vonage:** an SMS as `unicode` when it is no text of GSM-7,
+  `expiresAt` as its `ttl`, the correlation id as its `client-ref`; every part of the answer
+  is read, the receipt's segments the `message-count`, a refused part its status (7 a number
+  barred is `opted-out`), of unknown delivery when an earlier part went.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

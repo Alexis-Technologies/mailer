@@ -952,6 +952,10 @@ test that fails on the source's behavior):
 - V8. visulima (`providers/utils/sms.ts`): the recipients of an SMS were folded into one result,
   so a partial failure read as a success. A message of `./twilio` has one recipient and its
   own receipt.
+- T2. thinwrap (`vonage.connector.ts`): only `messages[0]` of an answer was read, so the
+  segments were lost and a later part that failed left a success. `./vonage` reads every part:
+  its segments are the `message-count`, a refused part fails the message, of unknown delivery
+  when an earlier part went.
 
 ## Repository layout
 

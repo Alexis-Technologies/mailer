@@ -152,6 +152,18 @@ const PROVIDERS = [
     message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.AWS_SMS_TO, text }),
   },
   {
+    name: 'Vonage',
+    Transport: require('../../src/vonage/index.js').VonageTransport,
+    needs: ['VONAGE_API_KEY', 'VONAGE_API_SECRET', 'VONAGE_FROM', 'VONAGE_TO'],
+    config: () => ({
+      apiKey: env.VONAGE_API_KEY,
+      apiSecret: env.VONAGE_API_SECRET,
+      from: env.VONAGE_FROM,
+    }),
+    refused: () => ({ apiKey: env.VONAGE_API_KEY, apiSecret: 'invalid', from: env.VONAGE_FROM }),
+    message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.VONAGE_TO, text }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.
