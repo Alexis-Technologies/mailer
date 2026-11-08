@@ -900,6 +900,11 @@ test that fails on the source's behavior):
   timeout, a 5xx and a failure to read a 200, after each of which Telegram may have sent it.
   `./telegram` retries a 429 after its `retry_after` and a connection never made alone; a
   timeout or a 5xx (`isAmbiguousStatus` of the shared client) is `deliveryUnknown`.
+- SL1. @slack/web-api (`packages/web-api/src/WebClient.ts`): every request, `chat.postMessage`
+  among them, went through `pRetry` after a network failure or a 5xx, so a message Slack had
+  posted was posted again. `./slack` treats a lost answer, a 5xx, a `fatal_error` and an
+  `internal_error` as `deliveryUnknown` and retries only a 429, a `service_unavailable` and a
+  connection never made.
 
 ## Repository layout
 

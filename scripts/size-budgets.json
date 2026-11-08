@@ -57,5 +57,6 @@
   "./mongodb": 7.5,
   "./channels": 6,
   "./router": 1.5,
-  "./telegram": 8.5
+  "./telegram": 8.5,
+  "./slack": 9
 }

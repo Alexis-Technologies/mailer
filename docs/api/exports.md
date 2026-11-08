@@ -56,6 +56,7 @@ model of delivery events.
 | `@alexify/mailer/channels` | `createChannelMessage`, `checkChannelMessage`, `isChannelMessage`, `normalizePhone`, `isE164`, `countSegments`, `escapeTelegramHtml`, `escapeSlackText`, `escapeDiscordMarkdown`, `neutralizeMentions` | [Messages of the channels](/channels/messages) |
 | `@alexify/mailer/router` | `createRouter`, `RouterTransport` | [Router](/channels/router) |
 | `@alexify/mailer/telegram` | `TelegramTransport` | [Telegram](/channels/telegram) |
+| `@alexify/mailer/slack` | `SlackTransport` | [Slack](/channels/slack) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |

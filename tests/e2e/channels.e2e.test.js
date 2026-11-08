@@ -21,6 +21,23 @@ const PROVIDERS = [
     message: (fields) =>
       createChannelMessage({ channel: 'telegram', to: env.TELEGRAM_CHAT_ID, ...fields }),
   },
+  {
+    name: 'Slack',
+    Transport: require('../../src/slack/index.js').SlackTransport,
+    needs: ['SLACK_BOT_TOKEN', 'SLACK_CHANNEL'],
+    config: () => ({ botToken: env.SLACK_BOT_TOKEN }),
+    refused: () => ({ botToken: 'xoxb-0000000000-0000000000000-invalid' }),
+    message: (fields) =>
+      createChannelMessage({ channel: 'slack', to: env.SLACK_CHANNEL, ...fields }),
+  },
+  {
+    name: 'Slack webhook',
+    Transport: require('../../src/slack/index.js').SlackTransport,
+    needs: ['SLACK_WEBHOOK_URL'],
+    config: () => ({ webhookUrl: env.SLACK_WEBHOOK_URL }),
+    refused: () => ({ webhookUrl: 'https://hooks.slack.com/services/T000/B000/invalid' }),
+    message: (fields) => createChannelMessage({ channel: 'slack', ...fields }),
+  },
 ];
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));

@@ -256,6 +256,10 @@
     "./telegram": {
       "types": "./src/telegram/index.d.ts",
       "default": "./src/telegram/index.js"
+    },
+    "./slack": {
+      "types": "./src/slack/index.d.ts",
+      "default": "./src/slack/index.js"
     }
   },
   "directories": {

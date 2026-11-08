@@ -462,10 +462,11 @@ test('Delivery: the matrix holds every HTTP provider of the exports map', () => 
   }
   // A provider of a channel is held to the matrix of the channels.
   const { channelProviders } = require('../helpers/delivery/channels.js');
-  const inMatrix = [];
-  for (const [, , create] of providers) inMatrix.push(create().id);
-  for (const provider of channelProviders) inMatrix.push(provider.create().id);
-  assert.deepStrictEqual(inMatrix.sort(), http.sort());
+  // A provider may have several rows (the Web API and the webhook of Slack).
+  const inMatrix = new Set();
+  for (const [, , create] of providers) inMatrix.add(create().id);
+  for (const provider of channelProviders) inMatrix.add(provider.create().id);
+  assert.deepStrictEqual([...inMatrix].sort(), http.sort());
 });
 
 test('Delivery: every HTTP provider refuses a plain HTTP URL but to this machine', () => {

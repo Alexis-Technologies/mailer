@@ -150,6 +150,14 @@ worker of 1.2 holds reads the same.
   delivery, never sent again, as the Bot API has no idempotency key; the receipt says `sent`,
   its id `<chat>:<message_id>`. What Telegram would refuse (a text over 4096 characters, an
   album with buttons) fails before any request.
+- **`./slack`, chat.postMessage and incoming webhooks:** a message with `to` goes through the
+  Web API with the token of a bot, one without it to the channel of the webhook, whose URL is
+  its credential and never shown in an error. Its text is mrkdwn, its mentions of a whole
+  channel, of users and of groups neutralized unless its `mentions` name them; `thread` is
+  `thread_ts`; buttons and pictures at a URL become Block Kit; `payload` the fields of the
+  body. An `ok: false` is told by its error (`not_in_channel` is `not-on-channel`, an
+  archived channel `invalid-recipient`), a `fatal_error`, a 5xx or a lost answer is of unknown
+  delivery and never posted again; the receipt says `sent`, its id `<channel>:<ts>`.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its
