@@ -22,18 +22,31 @@ const TYPES = new Map([
 const invalid = (message) => new InvalidMessageError(`AWS SMS: ${message}`);
 const unsupported = (message) => new RefusalError(`AWS SMS: ${message}`);
 
-// The context of a message, five keys at most: the correlation id first.
+// What AWS takes of a context: a key of 1 to 100 characters, a value of 1 to
+// 1000 that neither starts nor ends with a space.
+const MAX_CONTEXT_KEY = 100;
+const MAX_CONTEXT_VALUE = 1000;
+const isContextEntry = (key, value) =>
+  key.length <= MAX_CONTEXT_KEY &&
+  value.length > 0 &&
+  value.length <= MAX_CONTEXT_VALUE &&
+  value.trim().length === value.length;
+
+// The context of a message, five keys at most, the correlation id first, of
+// the entries AWS takes: one it would refuse is left out rather than fail
+// the SMS, as the metadata is not the message.
 const contextOf = (metadata) => {
   if (metadata === undefined) return undefined;
   const context = {};
   let count = 0;
-  if (metadata.correlationId !== undefined) {
-    context.correlationId = metadata.correlationId;
+  const correlationId = metadata.correlationId;
+  if (correlationId !== undefined && isContextEntry('correlationId', correlationId)) {
+    context.correlationId = correlationId;
     count++;
   }
   for (const key in metadata) {
     if (count === MAX_CONTEXT) break;
-    if (key === 'correlationId') continue;
+    if (key === 'correlationId' || !isContextEntry(key, metadata[key])) continue;
     context[key] = metadata[key];
     count++;
   }

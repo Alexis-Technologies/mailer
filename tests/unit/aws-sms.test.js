@@ -93,6 +93,28 @@ test('AWS SMS: the sender, the type and the context of a message, and a session 
   assert.strictEqual(second.TimeToLive, 259200);
 });
 
+test('AWS SMS: the context holds only what AWS takes of the metadata', async (t) => {
+  // Before (C26): an empty value, a value with a space at an end, or one of
+  // 1001 to 1024 characters went into Context, and AWS refused the SMS.
+  const requests = stubFetch(t, () => json({ MessageId: 'msg-1' }));
+  await transport().send(
+    sms({
+      metadata: {
+        correlationId: 'c-1',
+        empty: '',
+        padded: ' x ',
+        long: 'x'.repeat(1001),
+        [`k${'x'.repeat(100)}`]: 'v',
+        kept: 'yes',
+      },
+    }),
+  );
+  assert.deepStrictEqual(JSON.parse(requests[0].body).Context, {
+    correlationId: 'c-1',
+    kept: 'yes',
+  });
+});
+
 test('AWS SMS: an error is told by its reason, then its type', async (t) => {
   const cases = [
     [awsError('ConflictException', 'DESTINATION_PHONE_NUMBER_OPTED_OUT'), 'opted-out', false],

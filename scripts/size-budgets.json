@@ -64,7 +64,7 @@
   "./webpush": 9.5,
   "./meta": 9.5,
   "./twilio": 8.5,
-  "./aws-sms": 9,
+  "./aws-sms": 9.5,
   "./vonage": 8.5,
   "./infobip": 9,
   "./sinch": 8.5,

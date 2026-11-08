@@ -1071,6 +1071,9 @@ that fails without it; C for the channels):
 - C25. vonage, infobip, turbosms: a refusal kept the answer as `providerDetails`, whose parts,
   message or results name the number without its `+`, in every receipt and the receipts of
   `./pool`. The details are the status or the code of the refusal alone.
+- C26. aws-sms: `Context` was built of any metadata, while AWS takes a key of 1 to 100
+  characters and a value of 1 to 1000 that neither starts nor ends with a space, so an empty
+  value or a longer one failed the SMS. An entry AWS would refuse is left out of the context.
 
 ## Repository layout
 
