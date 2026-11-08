@@ -94,12 +94,16 @@ class Session {
 }
 
 // The failure of a stream: one the server refused, or left above the last
-// stream of its GOAWAY, never reached its handler.
+// stream of its GOAWAY, never reached its handler. It is marked in an error
+// of its own, as Node gives every stream of a session it destroys one error,
+// which the streams the server handled share.
 const streamFailure = (session, stream, error) => {
   const refused =
     stream.rstCode === NGHTTP2_REFUSED_STREAM ||
     (stream.id !== undefined && stream.id > session.lastStreamId);
-  return refused ? markUnsent(error) : error;
+  return refused
+    ? markUnsent(new Error('The server took no HTTP/2 stream of this request.', { cause: error }))
+    : error;
 };
 
 // One request on a session, as `fetch` makes it: its response once its

@@ -992,6 +992,9 @@ that fails without it; C for the channels):
   number with a `+`, while most SMS providers are sent it without one and echo it so; and the
   reasons and the audit of the queue knew no recipient. `redactMessageRecipient` replaces the
   digits of an E.164 recipient without their `+` too, and the queue redacts with the job's.
+- C3. http2: a stream above the last of a GOAWAY was marked unsent by the error Node gave it,
+  which Node gives every stream of the session it destroys, so the streams the server took were
+  marked too, and retried. A refused stream is marked in an error of its own, the cause Node's.
 
 ## Repository layout
 

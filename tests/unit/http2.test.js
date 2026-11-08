@@ -144,6 +144,37 @@ test('HTTP/2: a stream refused, or above the last of a GOAWAY, was never sent', 
   assert.ok(server.sessions.length >= 2);
 });
 
+test('HTTP/2: a GOAWAY with an error leaves the streams the server took of unknown fate', async (t) => {
+  // Before (C3): Node destroys the streams of a session with one error, and
+  // marking it unsent for the stream above the last of the GOAWAY marked the
+  // streams the server handled too, which a retry then sent again.
+  const server = await serve(t, (stream, _headers, index) => {
+    // The server goes away as the third stream comes, the second its last.
+    stream.session.on('error', () => {});
+    if (index === 2) stream.session.goaway(NGHTTP2_INTERNAL_ERROR, stream.id - 2);
+  });
+  const client = createHttp2Fetch();
+  t.after(() => client.close());
+  const pending = [];
+  for (const path of ['a', 'b', 'c']) {
+    const request = client.fetch(`${server.origin}/${path}`, { method: 'POST', body: path });
+    // Handled at once: an early one fails while the next is still to open.
+    request.catch(() => {});
+    pending.push(request);
+    // Each stream reaches the server before the next is opened.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const results = await Promise.allSettled(pending);
+  assert.deepStrictEqual(
+    results.map((result) => result.status),
+    ['rejected', 'rejected', 'rejected'],
+  );
+  assert.deepStrictEqual(
+    results.map((result) => isUnsentRequestError(result.reason)),
+    [false, false, true],
+  );
+});
+
 test('HTTP/2: a session that closes is made anew; a refused connection was never sent', async (t) => {
   const server = await serve(t, (stream) => {
     stream.respond({ ':status': 200 });
