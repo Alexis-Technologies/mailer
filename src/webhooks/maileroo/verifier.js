@@ -18,7 +18,7 @@ const {
   splitNamedTags,
   stringListOf,
   stringOf,
-} = require('./request.js');
+} = require('../request.js');
 
 // Maileroo signs no time: an event id is kept a day and an hour.
 const TYPES = new Map([

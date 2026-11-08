@@ -65,6 +65,10 @@
       "types": "./src/webhooks/mailtrap/index.d.ts",
       "default": "./src/webhooks/mailtrap/index.js"
     },
+    "./webhooks/maileroo": {
+      "types": "./src/webhooks/maileroo/index.d.ts",
+      "default": "./src/webhooks/maileroo/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

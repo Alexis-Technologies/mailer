@@ -5,7 +5,6 @@ import {
   createAzureWebhookVerifier,
   createBrevoWebhookVerifier,
   createLettermintWebhookVerifier,
-  createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createMemoryReplayStore,
@@ -60,7 +59,6 @@ const scaleway = createScalewayWebhookVerifier({
 });
 expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
 createLettermintWebhookVerifier({ secret: 'whsec_x', toleranceMs: 60_000, replayStore: null });
-createMailerooWebhookVerifier({ secret: 's', replayStore: store });
 createSmtp2goWebhookVerifier({ username: 'u', password: 'p' });
 const azure = createAzureWebhookVerifier({
   token: 't',

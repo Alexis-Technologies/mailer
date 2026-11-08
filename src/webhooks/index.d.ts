@@ -423,17 +423,6 @@ export declare function createLettermintWebhookVerifier(
 ): WebhookVerifier<WebhookResult<'lettermint'>>;
 
 /**
- * Makes the verifier of Maileroo's webhooks: the HMAC-SHA256 of the body, in
- * hexadecimal in `x-maileroo-signature`, each event taken once.  The message
- * id is the reference of the message, the receipt's.
- *
- * @throws {TypeError} If the secret is missing.
- */
-export declare function createMailerooWebhookVerifier(
-  options: SignedBodyWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'maileroo'>>;
-
-/**
  * Makes the verifier of SMTP2GO's webhooks, whose URL carries Basic
  * credentials, as SMTP2GO signs nothing; a body of JSON or of a form.
  *

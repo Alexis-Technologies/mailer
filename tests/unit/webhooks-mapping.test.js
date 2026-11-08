@@ -11,13 +11,13 @@ const {
   createBrevoWebhookVerifier,
   createLettermintWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailerooWebhookVerifier,
   createMailjetWebhookVerifier,
   createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createMailerooWebhookVerifier } = require('../../src/webhooks/maileroo/index.js');
 const { createMailtrapWebhookVerifier } = require('../../src/webhooks/mailtrap/index.js');
 const { createMailgunWebhookVerifier } = require('../../src/webhooks/mailgun/index.js');
 const { createSendGridWebhookVerifier } = require('../../src/webhooks/sendgrid/index.js');
