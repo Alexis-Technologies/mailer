@@ -321,3 +321,66 @@ test('API: authorize hears the signal of the attempt, for a token it waits for',
   caller.abort();
   assert.ok(signals[0].aborted);
 });
+
+test('API: a request that failed before it was sent is not of unknown delivery', async (t) => {
+  // Before (C4): a deadline met while the request waited for its token, a
+  // credentials provider that threw and a header field Headers refused were
+  // failures without a response, so of unknown delivery, though nothing was
+  // sent; the last printed the value of the header, a credential.
+  const requests = stubFetch(t, () => json({ ok: true }));
+  const waiting = client(
+    { timeout: 30 },
+    {
+      authorize: (_headers, { signal }) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason)),
+        ),
+    },
+  );
+  const timedOut = await waiting
+    .request({ url: 'https://api.example.com/send', body: {} })
+    .catch((error) => error);
+  assert.strictEqual(isDeliveryUnknown(timedOut), false, 'nothing was sent');
+  assert.strictEqual(providerFailure('demo', timedOut).deliveryUnknown, undefined);
+  assert.strictEqual(providerFailure('demo', timedOut).errors[0].category, 'timeout');
+  const thrown = await client(
+    {},
+    {
+      authorize: async () => {
+        throw new Error('Could not load credentials from any providers');
+      },
+    },
+  )
+    .request({ url: 'https://api.example.com/send', body: {} })
+    .catch((error) => error);
+  assert.strictEqual(isDeliveryUnknown(thrown), false);
+  assert.match(thrown.message, /Could not load credentials/);
+  const header = await client(
+    {},
+    {
+      authorize: (headers) => headers.set('Authorization', 'App secret-key\nsecond'),
+    },
+  )
+    .request({ url: 'https://api.example.com/send', body: {} })
+    .catch((error) => error);
+  assert.strictEqual(isDeliveryUnknown(header), false);
+  assert.ok(!header.message.includes('secret-key'), header.message);
+  assert.strictEqual(providerFailure('demo', header).errors[0].category, 'configuration');
+  assert.strictEqual(requests.length, 0);
+  // A deadline met while the token is awaited is retried, as nothing went.
+  let asked = 0;
+  const later = client(
+    { timeout: 30, retries: 1 },
+    {
+      authorize: (headers, { signal }) =>
+        ++asked === 1
+          ? new Promise((_resolve, reject) =>
+              signal.addEventListener('abort', () => reject(signal.reason)),
+            )
+          : headers.set('Authorization', 'Bearer key'),
+      retryDelayMs: () => 0,
+    },
+  );
+  await later.request({ url: 'https://api.example.com/send', body: {} });
+  assert.strictEqual(requests.length, 1);
+});

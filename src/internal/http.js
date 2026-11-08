@@ -5,7 +5,7 @@
 const { combineSignals } = require('../core/abort-signal.js');
 const { isCertificateFailure } = require('../core/receipt.js');
 const { markDeliveryUnknown } = require('./delivery-unknown.js');
-const { isUnsentRequestError } = require('./unsent.js');
+const { isUnsentRequestError, markUnsent } = require('./unsent.js');
 const { abortReason, isAbortError, sleep, timerMs } = require('./sleep.js');
 const { redactRecipients } = require('./redact-addresses.js');
 
@@ -143,6 +143,9 @@ const requestWithRetry = async (request) => {
     } catch (error) {
       const isTimeout = deadline.isExpired && !signal?.aborted && isAbortError(error);
       failure = isTimeout ? (request.createTimeoutError?.(error) ?? error) : error;
+      // A deadline met before the request went, as it waited for its token,
+      // leaves it unsent, though the error of the timeout replaces its own.
+      if (failure !== error && isUnsentRequestError(error)) markUnsent(failure);
     } finally {
       deadline.stop();
     }

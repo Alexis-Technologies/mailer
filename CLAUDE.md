@@ -995,6 +995,12 @@ that fails without it; C for the channels):
 - C3. http2: a stream above the last of a GOAWAY was marked unsent by the error Node gave it,
   which Node gives every stream of the session it destroys, so the streams the server took were
   marked too, and retried. A refused stream is marked in an error of its own, the cause Node's.
+- C4. api: a request that failed before it was sent was a failure without a response, so of
+  unknown delivery: a deadline met while it waited for its token (FCM, RBM, Google Chat, the
+  Teams bot), a provider of credentials that threw (AWS SMS), and a header field `Headers`
+  refused, whose error printed the value, a credential. `fetchWithAuth` marks what fails
+  before the request unsent, a refused header field without its value, and `requestWithRetry`
+  keeps the mark on the error of a timeout.
 
 ## Repository layout
 

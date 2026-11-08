@@ -14,6 +14,7 @@ const { isRetryableFailure, requestWithRetry } = require('./http.js');
 const { isCallerAbort } = require('./abort.js');
 const { certificateFailure, refusalFailure } = require('./refusal.js');
 const { createLog } = require('./log.js');
+const { isUnsentRequestError, markUnsent } = require('./unsent.js');
 
 const MAX_ERROR_TEXT = 500;
 
@@ -123,6 +124,20 @@ const readErrorText = async (response) => {
   }
 };
 
+// The failure of a request before it was sent, as it waited for its token or
+// credentials or as its header fields were made, of no unknown delivery. A
+// header field `Headers` refused prints its value, a credential perhaps, so
+// its error is one that does not.
+const unsentOf = (provider, error) =>
+  markUnsent(
+    error instanceof TypeError && !isUnsentRequestError(error)
+      ? new ProviderApiError(provider.id, `${provider.label}: a header field is no valid value.`, {
+          category: 'configuration',
+          retryable: false,
+        })
+      : error,
+  );
+
 /**
  * Makes the client of a provider's API.
  *
@@ -151,16 +166,21 @@ const createApiClient = (config, provider) => {
   const log = createLog(config.logger, { transport: provider.id });
 
   const fetchWithAuth = async (url, options, signal) => {
-    const headers = new Headers(options.headers);
-    // The signal of the attempt, which a token the request waits for hears.
-    await provider.authorize(headers, {
-      url,
-      method: options.method ?? 'GET',
-      body: options.body,
-      signal,
-    });
-    for (const name in config.headers) {
-      if (Object.hasOwn(config.headers, name)) headers.set(name, config.headers[name]);
+    let headers;
+    try {
+      headers = new Headers(options.headers);
+      // The signal of the attempt, which a token the request waits for hears.
+      await provider.authorize(headers, {
+        url,
+        method: options.method ?? 'GET',
+        body: options.body,
+        signal,
+      });
+      for (const name in config.headers) {
+        if (Object.hasOwn(config.headers, name)) headers.set(name, config.headers[name]);
+      }
+    } catch (error) {
+      throw unsentOf(provider, error);
     }
     // A redirect comes back as a response rather than being followed, so the
     // credentials in the headers never reach another origin.
