@@ -81,6 +81,10 @@
       "types": "./src/webhooks/brevo/index.d.ts",
       "default": "./src/webhooks/brevo/index.js"
     },
+    "./webhooks/mailjet": {
+      "types": "./src/webhooks/mailjet/index.d.ts",
+      "default": "./src/webhooks/mailjet/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

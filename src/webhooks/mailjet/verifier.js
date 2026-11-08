@@ -16,7 +16,7 @@ const {
   parseJsonOf,
   resolveCredentialOptions,
   stringOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const TYPES = new Map([
   ['sent', 'delivered'],

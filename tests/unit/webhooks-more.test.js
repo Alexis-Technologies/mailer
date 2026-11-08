@@ -6,10 +6,10 @@ const { createHmac } = require('node:crypto');
 const {
   createMemoryReplayStore,
   createMailerSendWebhookVerifier,
-  createMailjetWebhookVerifier,
   createSparkPostWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createMailjetWebhookVerifier } = require('../../src/webhooks/mailjet/index.js');
 const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createMailtrapWebhookVerifier } = require('../../src/webhooks/mailtrap/index.js');
 

@@ -9,11 +9,11 @@ const { createHmac, generateKeyPairSync, sign } = require('node:crypto');
 const {
   createAzureWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailjetWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createMailjetWebhookVerifier } = require('../../src/webhooks/mailjet/index.js');
 const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');

@@ -4,7 +4,6 @@ import {
   WebhookVerificationError,
   createAzureWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailjetWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
@@ -34,7 +33,6 @@ const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: n
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
   (await mailersend.verify({ body: '' })).events,
 );
-createMailjetWebhookVerifier({ username: 'u', password: 'p' });
 const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
 expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
   (await sparkpost.verify({ body: '' })).events,
