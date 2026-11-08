@@ -1,5 +1,5 @@
 // Not ported: tests of instrumentHandler of ./otel, the span and metrics of
-// each run of a job, and of the trace context a mail queue gives its jobs.
+// each run of a job, and of the trace context a queue gives its jobs.
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { instrumentHandler } = require('../../src/otel/index.js');
@@ -86,14 +86,15 @@ test('OTel handler: a run is a span linked to its producer, and counted by outco
   assert.strictEqual(span.attributes['mailer.job.outcome'], 'ack');
   assert.deepStrictEqual(span.status, { code: 1 });
   assert.ok(span.ended);
+  assert.strictEqual(span.options.attributes['mailer.channel'], 'email');
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.jobs'), [
-    { value: 1, attributes: { outcome: 'ack' } },
+    { value: 1, attributes: { outcome: 'ack', 'mailer.channel': 'email' } },
   ]);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.lag'), [
-    { value: 4000, attributes: undefined },
+    { value: 4000, attributes: { 'mailer.channel': 'email' } },
   ]);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.job.duration'), [
-    { value: 250, attributes: { outcome: 'ack' } },
+    { value: 250, attributes: { outcome: 'ack', 'mailer.channel': 'email' } },
   ]);
 });
 
@@ -111,6 +112,7 @@ test('OTel handler: a failure, a run again and a throw are told', async () => {
   assert.strictEqual(recordsOf(meterProvider, 'mailer.queue.redeliveries').length, 1);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.jobs')[0].attributes, {
     outcome: 'fail',
+    'mailer.channel': 'email',
     code: 'x.rejected',
   });
   const throwing = instrumentHandler(
@@ -163,7 +165,7 @@ test('OTel handler: only a valid traceparent is a link', () => {
   assert.strictEqual(spanContextOf(TRACEPARENT).traceFlags, 1);
 });
 
-test('OTel handler: a mail queue gives each job the producer’s trace, outside its hash and signature', async () => {
+test('OTel handler: a queue gives each job the producer’s trace, outside its hash and signature', async () => {
   let current = TRACEPARENT;
   const key = { id: 'k', secret: 'k'.repeat(32) };
   const queue = createQueue({
@@ -188,5 +190,35 @@ test('OTel handler: a mail queue gives each job the producer’s trace, outside 
   assert.throws(
     () => createQueue({ driver: createMemoryQueue(), traceContext: 1 }),
     /traceContext/,
+  );
+});
+
+test('OTel handler: a run is told by the channel of its job, sealed or not, and by no other value', async () => {
+  const tracerProvider = recordingTracer();
+  const meterProvider = new MockMeterProvider();
+  const handler = instrumentHandler(async () => ({ type: 'ack' }), {
+    tracerProvider,
+    meterProvider,
+  });
+  const signal = new AbortController().signal;
+  // Before: a run had no channel, so the jobs of SMS and of email were one count.
+  await handler(jobOf({ name: 'sms', data: { v: 2, channel: 'sms' } }), signal);
+  await handler(jobOf({ name: 'telegram', data: { v: 2, enc: 'sealed' } }), signal);
+  await handler(jobOf({ name: 'mail', data: { v: 1, enc: 'sealed' } }), signal);
+  await handler(jobOf({ name: 'pager', data: { v: 2, channel: 'pager' } }), signal);
+  await handler(jobOf({ name: 'other', data: 'text' }), signal);
+  assert.deepStrictEqual(
+    tracerProvider.spans.map((span) => span.options.attributes['mailer.channel']),
+    ['sms', 'telegram', 'email', undefined, undefined],
+  );
+  assert.deepStrictEqual(
+    recordsOf(meterProvider, 'mailer.queue.jobs').map((record) => record.attributes),
+    [
+      { outcome: 'ack', 'mailer.channel': 'sms' },
+      { outcome: 'ack', 'mailer.channel': 'telegram' },
+      { outcome: 'ack', 'mailer.channel': 'email' },
+      { outcome: 'ack' },
+      { outcome: 'ack' },
+    ],
   );
 });

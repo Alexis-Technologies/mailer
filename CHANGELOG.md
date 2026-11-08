@@ -147,6 +147,10 @@ worker of 1.2 holds reads the same.
 - **An email a worker of `./queue` builds carries the `tenantId` of its job,** as one of a
   channel does, for the decorators that read it (a rate limit per tenant, a span); no provider
   is sent it, and its fingerprint is that of 1.2.
+- **`instrumentHandler` of `./otel` names the channel of a job:** its span and each metric of
+  the queue (`mailer.queue.jobs`, `lag`, `job.duration`, `redeliveries`) carry
+  `mailer.channel`, `email` for an email job, the name of a sealed job of a channel, none for a
+  job of no known channel.
 
 ## [1.2.1] - 2026-11-07
 

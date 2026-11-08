@@ -5,6 +5,7 @@
 // The providers are passed in, and @opentelemetry/api is never required.
 
 const metadata = require('../version.js');
+const { CHANNELS } = require('../internal/channel/channels.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 
 // SpanKind.CONSUMER and the SpanStatusCode values of the OpenTelemetry API.
@@ -34,6 +35,20 @@ const spanContextOf = (traceparent) => {
   };
 };
 
+/**
+ * The channel of a job: `email` for one of version 1, or the channel its data
+ * names, or its name for one sealed (a job of a channel is named by it);
+ * nothing for a job of another kind, so that no value of a store becomes an
+ * attribute of a metric.
+ *
+ * @internal
+ */
+const channelOf = (job) => {
+  if (job?.data?.v === 1) return 'email';
+  const named = job?.data?.channel ?? job?.name;
+  return CHANNELS.has(named) ? named : undefined;
+};
+
 const checkOptions = (handler, options) => {
   if (typeof handler !== 'function') throw new TypeError('instrumentHandler needs a handler.');
   const tracing = options.tracing ?? true;
@@ -54,7 +69,7 @@ const instrumentsOf = (meterProvider) => {
   const meter = meterProvider.getMeter(metadata.name, metadata.version);
   return {
     jobs: meter.createCounter('mailer.queue.jobs', {
-      description: 'The runs of mail jobs, by outcome and code.',
+      description: 'The runs of jobs, by outcome, code and channel.',
     }),
     lag: meter.createHistogram('mailer.queue.lag', {
       unit: 'ms',
@@ -62,7 +77,7 @@ const instrumentsOf = (meterProvider) => {
     }),
     duration: meter.createHistogram('mailer.queue.job.duration', {
       unit: 'ms',
-      description: 'How long a run of a mail job took.',
+      description: 'How long a run of a job took.',
     }),
     redeliveries: meter.createCounter('mailer.queue.redeliveries', {
       description: 'The runs again of jobs whose run before did not settle.',
@@ -73,10 +88,11 @@ const instrumentsOf = (meterProvider) => {
 /**
  * Wraps a queue handler, such as `createJobHandler()`, with OpenTelemetry:
  * a span `mailer.queue.process` per run, linked to the producer's trace (the
- * `traceparent` the mail queue's `traceContext` wrote as the job's `trace`),
+ * `traceparent` the queue's `traceContext` wrote as the job's `trace`),
  * and the metrics `mailer.queue.jobs` (by `outcome` and `code`),
  * `mailer.queue.lag`, `mailer.queue.job.duration` and
- * `mailer.queue.redeliveries`.
+ * `mailer.queue.redeliveries`, each with the `mailer.channel` of the job
+ * (`email` for an email job, the name of a sealed job of a channel).
  *
  * @param handler The handler.
  * @param options `tracerProvider`, `meterProvider`; `tracing` and `metrics`
@@ -97,6 +113,8 @@ const instrumentHandler = (handler, options = {}) => {
   return async (job, signal) => {
     const started = now();
     const link = spanContextOf(job?.data?.trace);
+    const channel = channelOf(job);
+    const of = channel === undefined ? {} : { 'mailer.channel': channel };
     const span = tracer?.startSpan('mailer.queue.process', {
       kind: CONSUMER,
       attributes: {
@@ -104,11 +122,12 @@ const instrumentHandler = (handler, options = {}) => {
         'messaging.message.id': job.id,
         'mailer.job.attempt': job.attempt,
         'mailer.job.redelivered': job.redelivered === true,
+        ...of,
       },
       links: link === undefined ? [] : [{ context: link }],
     });
-    if (job.redelivered) instruments?.redeliveries.add(1);
-    if (typeof job.enqueuedAt === 'number') instruments?.lag.record(started - job.enqueuedAt);
+    if (job.redelivered) instruments?.redeliveries.add(1, of);
+    if (typeof job.enqueuedAt === 'number') instruments?.lag.record(started - job.enqueuedAt, of);
     let outcome;
     try {
       outcome =
@@ -116,12 +135,12 @@ const instrumentHandler = (handler, options = {}) => {
           ? await options.withSpan(span, () => handler(job, signal))
           : await handler(job, signal);
     } catch (error) {
-      instruments?.jobs.add(1, { outcome: 'thrown' });
+      instruments?.jobs.add(1, { outcome: 'thrown', ...of });
       span?.setStatus({ code: STATUS_ERROR, message: 'The handler threw.' });
       span?.end();
       throw error;
     }
-    const attributes = { outcome: outcome?.type ?? 'none' };
+    const attributes = { outcome: outcome?.type ?? 'none', ...of };
     if (typeof outcome?.code === 'string') attributes.code = outcome.code;
     instruments?.jobs.add(1, attributes);
     instruments?.duration.record(now() - started, attributes);
@@ -141,4 +160,4 @@ const instrumentHandler = (handler, options = {}) => {
   };
 };
 
-module.exports = { instrumentHandler, spanContextOf };
+module.exports = { channelOf, instrumentHandler, spanContextOf };

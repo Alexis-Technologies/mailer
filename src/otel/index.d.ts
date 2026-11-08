@@ -579,10 +579,11 @@ export interface InstrumentHandlerOptions {
 /**
  * Wraps a queue handler, such as `createJobHandler()` of `./queue`, with
  * OpenTelemetry: a span `mailer.queue.process` per run, linked to the trace
- * of the producer (the job's `trace`, from `traceContext` of the mail queue),
+ * of the producer (the job's `trace`, from `traceContext` of the queue),
  * and the metrics `mailer.queue.jobs` (by `outcome` and `code`),
  * `mailer.queue.lag` (ms from the enqueue to the run), `mailer.queue.job.duration`
- * and `mailer.queue.redeliveries`.
+ * and `mailer.queue.redeliveries`, the span and each metric with the
+ * `mailer.channel` of the job (`email` for an email job).
  *
  * @throws {TypeError} If a provider is missing or an option is invalid.
  */

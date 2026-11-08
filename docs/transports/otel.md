@@ -366,6 +366,11 @@ const consumer = driver.consume(handler, { concurrency: 4, audit });
 | `mailer.queue.job.duration` | ms of a run, by `outcome` and `code` |
 | `mailer.queue.redeliveries` | runs again of jobs whose run before did not settle |
 
+The span and each metric carry the `mailer.channel` of the job: `email` for an
+email job, the channel of a job of another channel, read from its name when it
+is sealed. A job of no channel this package knows has none, so that no value of
+a store becomes an attribute.
+
 The `trace` of a job is outside its hash and its signature, and stays in clear
 in a sealed job.
 
