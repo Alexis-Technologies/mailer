@@ -12,7 +12,8 @@
  * The scenarios run the library itself: composing a message with and
  * without an attachment or a DKIM signature, writing message data through
  * the SMTP dot-stuffing, and the checks that run once per message or per
- * address.
+ * address; for the channels, the segments of an SMS, the escaping of a text,
+ * the redaction of numbers, and the signatures and encryption of a push.
  */
 
 const crypto = require('node:crypto');
@@ -44,8 +45,36 @@ const { RateLimitTransport } = require('../src/ratelimit/index.js');
 const { TeeTransport } = require('../src/tee/index.js');
 const { writeMessageData } = require('../src/smtp/data-stream.js');
 const { PriorityStrategy } = require('../src/pool/strategies/priority-strategy.js');
+const {
+  countSegments,
+  createChannelMessage,
+  escapeDiscordMarkdown,
+  escapeSlackText,
+  escapeTelegramHtml,
+  neutralizeMentions,
+  normalizePhone,
+} = require('../src/channels/index.js');
+const { redactRecipients } = require('../src/internal/redact-addresses.js');
+const { signJwt } = require('../src/internal/jwt.js');
+const { createSigV4Signer } = require('../src/internal/sigv4.js');
+const { encryptPush } = require('../src/webpush/encryption.js');
 
 const BASELINE = path.join(__dirname, 'baseline.json');
+
+// The texts of the channels: ten parts of an SMS in GSM-7 and in Cyrillic,
+// one with emoji, and 4 KB of chat text full of what each markup escapes.
+const gsmText = 'Your code is 1234. Do not share it with anyone; we never ask for it. '.repeat(22);
+const cyrillicText = 'Ваш код 1234. Нікому його не повідомляйте. '.repeat(15);
+const emojiText = 'Order shipped 📦 arriving soon 🚚 '.repeat(10);
+const chatText = '<b>*_~`[link](x) @everyone <!channel> & > #5 | done_*</b> '.repeat(64);
+const logText = `Twilio refused +380671234567 and +14155550123 for ops@example.com. `.repeat(60);
+const awsSigner = createSigV4Signer('eu-west-1', 'sms-voice');
+const awsCredentials = { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' };
+const pushKey = crypto.createECDH('prime256v1');
+pushKey.generateKeys();
+const subscription = { p256dh: pushKey.getPublicKey(), auth: crypto.randomBytes(16) };
+const pushPayload = Buffer.from(JSON.stringify({ title: 'Shipped', body: 'x'.repeat(2000) }));
+const es256 = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey;
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((arg) => arg.startsWith('--')));
@@ -318,6 +347,41 @@ const main = async () => {
     ['Webhooks — verify a Mailtrap HMAC request', () => mailtrap.verify(mailtrapRequest)],
     ['Webhooks — verify an SNS RSA message, its certificate kept', () => ses.verify(snsRequest)],
     ['Attachments — inlineDataUrls of 1 MB with 20 images', () => inlineDataUrls(imageHtml), slow],
+    ['Channels — countSegments of 10 parts of GSM-7', () => countSegments(gsmText)],
+    ['Channels — countSegments of 10 parts of Cyrillic', () => countSegments(cyrillicText)],
+    ['Channels — countSegments of a text with emoji', () => countSegments(emojiText)],
+    ['Channels — normalizePhone of a national number', () => normalizePhone('067 123 45 67', 'UA')],
+    [
+      'Channels — createChannelMessage of an SMS',
+      () =>
+        createChannelMessage(
+          { channel: 'sms', to: '067 123 45 67', text: 'Your code is 1234' },
+          { defaultCountry: 'UA' },
+        ),
+    ],
+    ['Channels — escapeTelegramHtml of 4 KB', () => escapeTelegramHtml(chatText)],
+    ['Channels — escapeSlackText of 4 KB', () => escapeSlackText(chatText)],
+    ['Channels — escapeDiscordMarkdown of 4 KB', () => escapeDiscordMarkdown(chatText)],
+    ['Channels — neutralizeMentions of 4 KB', () => neutralizeMentions(chatText)],
+    ['Channels — redactRecipients of 4 KB of a log', () => redactRecipients(logText)],
+    [
+      'Channels — sign an AWS SMS request (SigV4)',
+      () =>
+        awsSigner(
+          'https://sms-voice.eu-west-1.amazonaws.com/',
+          { method: 'POST', headers: { 'Content-Type': 'application/x-amz-json-1.0' }, body: '{}' },
+          awsCredentials,
+        ),
+    ],
+    [
+      'Channels — sign an ES256 JWT (APNs, VAPID)',
+      () => signJwt({ alg: 'ES256', kid: 'KEY1234567' }, { iss: 'TEAM123456', iat: 1 }, es256),
+    ],
+    [
+      'Channels — encrypt a 2 KB Web Push (aes128gcm)',
+      () => encryptPush(pushPayload, subscription),
+      slow,
+    ],
     ['RateLimit — 10,000 sends waiting for one bucket', queued, slow],
     [
       'Gate — 100 messages through five decorators',
