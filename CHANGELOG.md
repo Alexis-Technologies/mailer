@@ -304,6 +304,21 @@ worker of 1.2 holds reads the same.
   of a channel that stalled too often carries its `channel`, read from its name when it is
   sealed; that of an email names none, as in 1.x.
 
+### Fixed
+
+What the review of 2.0 found that an email of 1.x meets too (the fixes of the code of the
+channels, which 1.x has not, are in the commits and in `CLAUDE.md`):
+
+- **A request that failed before it was sent is not of unknown delivery:** a provider whose
+  credentials or token could not be had, or a header field `Headers` refused, left a receipt of
+  unknown delivery, which a queue never retries, though nothing went; it is marked unsent, and
+  the error of a refused header field no longer prints its value, which could be a credential.
+- **A base URL with a user or a password is refused when the transport is made,** where `fetch`
+  refused it at the first send with an error that printed the URL whole.
+- **`fromUrl` and the endpoints of Web Push refuse SIIT, Teredo and the reserved IPv6 ranges**
+  (`::ffff:0:0:0/96`, `2001::/32`, `100::/64`, `2001:db8::/32`, `3fff::/20`).
+- **A refusal that `verify()` reads in a 2xx is thrown at once,** not retried as a read.
+
 ## [1.2.1] - 2026-11-07
 
 A patch of 1.2.0: bugs found while planning 2.0, each with a test that fails without its fix.
