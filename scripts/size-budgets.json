@@ -73,5 +73,6 @@
   "./viber": 8,
   "./teams": 9,
   "./google-chat": 9.5,
-  "./turbosms": 8.5
+  "./turbosms": 8.5,
+  "./alphasms": 8
 }

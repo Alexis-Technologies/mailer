@@ -17,6 +17,7 @@ const { ViberTransport } = require('../../../src/viber/index.js');
 const { TeamsTransport } = require('../../../src/teams/index.js');
 const { GoogleChatTransport } = require('../../../src/google-chat/index.js');
 const { TurboSmsTransport } = require('../../../src/turbosms/index.js');
+const { AlphaSmsTransport } = require('../../../src/alphasms/index.js');
 
 const TEAMS_WEBHOOK =
   'https://prod-00.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=TeamsWebhookSecret';
@@ -567,6 +568,25 @@ const channelProviders = [
         headers: { 'Retry-After': String(seconds) },
       }),
     secrets: ['TurboSmsSecret'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'AlphaSMS',
+    create: (extra) =>
+      new AlphaSmsTransport({ retries: 1, ...extra, apiKey: 'AlphaSmsSecret', sender: 'MyBrand' }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json({
+        success: true,
+        data: [{ success: true, data: { id: 1, msg_id: 123456789, parts: 1 } }],
+      }),
+    rateLimited: (seconds) =>
+      new Response('Too Many Requests', {
+        status: 429,
+        headers: { 'Retry-After': String(seconds) },
+      }),
+    secrets: ['AlphaSmsSecret'],
     recipient: '380671234567',
   },
 ];

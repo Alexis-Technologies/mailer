@@ -243,6 +243,9 @@ worker of 1.2 holds reads the same.
   `sms` in the payload; each send under a `sequence_id` TurboSMS executes once, so a lost
   answer is sent again; the `response_code` of the 200, then of its recipient, fails the
   message (404, the stoplist, is `opted-out`).
+- **`./alphasms`, AlphaSMS:** SMS and Viber to a phone number through its JSON API, a hybrid by
+  `type: 'viber+sms'` in the payload; the `success` of the 200, then of its item, fails the
+  message by the words of its error, and the receipt's segments are its `parts`.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

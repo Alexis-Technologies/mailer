@@ -360,6 +360,14 @@ const PROVIDERS = [
     message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.TURBOSMS_TO, text }),
   },
   {
+    name: 'AlphaSMS',
+    Transport: require('../../src/alphasms/index.js').AlphaSmsTransport,
+    needs: ['ALPHASMS_API_KEY', 'ALPHASMS_SENDER', 'ALPHASMS_TO'],
+    config: () => ({ apiKey: env.ALPHASMS_API_KEY, sender: env.ALPHASMS_SENDER }),
+    refused: () => ({ apiKey: 'invalid', sender: env.ALPHASMS_SENDER }),
+    message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.ALPHASMS_TO, text }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

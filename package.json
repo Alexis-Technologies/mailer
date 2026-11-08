@@ -320,6 +320,10 @@
     "./turbosms": {
       "types": "./src/turbosms/index.d.ts",
       "default": "./src/turbosms/index.js"
+    },
+    "./alphasms": {
+      "types": "./src/alphasms/index.d.ts",
+      "default": "./src/alphasms/index.js"
     }
   },
   "directories": {
