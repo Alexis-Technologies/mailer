@@ -62,11 +62,11 @@ export type BullMQBackoffStrategy = (
   job?: any,
 ) => number | Promise<number>;
 
-/** The backoff type of mail jobs, which the strategy of the driver reads. */
+/** The backoff type of the jobs of the queue, which the strategy of the driver reads. */
 export declare const MAILER_BACKOFF_TYPE: 'alexify-mailer';
 
 /** The options of the jobs the driver adds; it sets the others itself. */
-export interface BullMQMailJobOptions {
+export interface BullMQJobOptions {
   /** @default { age: 86400 }: by time, so that the window of duplicates does not shrink under load. */
   removeOnComplete?: boolean | number | { age?: number; count?: number };
   /** @default { age: 604800 } */
@@ -88,7 +88,7 @@ export interface BullMQMailJobOptions {
 }
 
 /** The options of the workers the driver makes. */
-export interface BullMQMailWorkerOptions {
+export interface BullMQWorkerOptions {
   lockDuration?: number;
   maxStalledCount?: number;
   stalledInterval?: number;
@@ -116,8 +116,8 @@ export interface BullMQDriverOptions<Q extends BullMQQueueLike, W extends BullMQ
   /** @default 'mail', or the name of the queue given */
   readonly queueName?: string;
   readonly prefix?: string;
-  readonly jobOptions?: BullMQMailJobOptions;
-  readonly workerOptions?: BullMQMailWorkerOptions;
+  readonly jobOptions?: BullMQJobOptions;
+  readonly workerOptions?: BullMQWorkerOptions;
   /** BullMQ's priorities, from 1, as 0 runs before them all. @default { high: 1, normal: 2, low: 3 } */
   readonly priorities?: { readonly high?: number; readonly normal?: number; readonly low?: number };
   /**
@@ -207,7 +207,7 @@ export declare function createBullMQProcessor(
 ): BullMQProcessor;
 
 /**
- * Makes the backoff strategy of a worker of mail jobs: the delay the queue
+ * Makes the backoff strategy of a worker of the jobs of the queue: the delay the queue
  * chose, and `fallback` for jobs of other custom types.
  *
  * @throws {TypeError} If `fallback` is not a function.

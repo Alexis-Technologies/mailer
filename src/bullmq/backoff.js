@@ -4,7 +4,7 @@
 // in BullMQ as it does in the queue.  The errors are told apart by name, as
 // BullMQ reads them, so the package imports nothing of it.
 
-// The backoff type of mail jobs, read by the strategy below.
+// The backoff type of the jobs of the queue, read by the strategy below.
 const MAILER_BACKOFF_TYPE = 'alexify-mailer';
 
 // The delay of each retry the processor threw.
@@ -58,7 +58,7 @@ const rateLimitError = () => {
 const isSettledError = (error) => typeof error === 'object' && error !== null && settled.has(error);
 
 /**
- * Makes the backoff strategy of a worker of mail jobs: the delay the queue
+ * Makes the backoff strategy of a worker of the jobs of the queue: the delay the queue
  * chose for a job of the type `alexify-mailer`, and `fallback` for the jobs
  * of other custom types.
  *

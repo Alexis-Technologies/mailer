@@ -63,6 +63,8 @@ worker of 1.2 holds reads the same.
   `MailWorkerOptions` is `JobHandlerOptions`, `MailEnqueueResult` is `EnqueueResult`,
   `MailQueueStats` is `QueueStats`), and the texts of its errors and warnings name a queue and
   a worker. An email job keeps its name, `mail`, and its bytes.
+- **Breaking: the option types of `./bullmq` name no mail:** `BullMQMailJobOptions` is
+  `BullMQJobOptions` and `BullMQMailWorkerOptions` `BullMQWorkerOptions`.
 
 ### Added
 
