@@ -75,6 +75,22 @@ test('Router: a message is given once though its transport stops reading', async
   assert.deepStrictEqual(ids, ['twilio:1', 'twilio:2', 'twilio:3', 'ses:4']);
 });
 
+test('Router: a message its transport never takes fails, and the next goes on', async () => {
+  // Before (C9): a route whose sendMany ended without reading was given the
+  // same message again, without end, in microtasks that starved the loop.
+  const idle = route('idle');
+  idle.sendMany = async function* () {};
+  const router = createRouter({ sms: idle, email: route('ses') });
+  const receipts = await collect(router.sendMany([sms('1'), sms('2'), email('3')]));
+  assert.strictEqual(receipts.length, 3);
+  assert.strictEqual(receipts[0].successful, false);
+  assert.strictEqual(receipts[0].errors[0].category, 'unsupported');
+  assert.strictEqual(receipts[0].channel, 'sms');
+  assert.match(receipts[0].errorMessages[0], /took no message/);
+  assert.strictEqual(receipts[1].successful, false);
+  assert.strictEqual(receipts[2].messageId, 'ses:3');
+});
+
 test('Router: a caller who leaves sendMany closes its input', async () => {
   let closed = false;
   let read = 0;

@@ -1015,6 +1015,9 @@ that fails without it; C for the channels):
   message, so a second `send()` of it carried the first one's: `./idempotency` answered it with
   the first receipt, sending nothing, and RBM or Discord took it for the first. `pinMessageId`
   gives a channel's message a new reference at each call, one per send.
+- C9. router: a route whose `sendMany` ended without reading its batch was given the same
+  message again, without end, in microtasks that starved the event loop. A message no route took
+  fails as `unsupported`, and the next is read.
 
 ## Repository layout
 

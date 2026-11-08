@@ -33,6 +33,16 @@ const checkRoutes = (routes) => {
   return map;
 };
 
+// The receipt of a message a transport never read from its batch: it ended
+// its sendMany without taking it, so it was not sent.
+const untaken = (channel) =>
+  createFailedReceipt(`The transport of ${channel} took no message of its batch.`, {
+    provider: 'router',
+    category: 'unsupported',
+    retryable: false,
+    channel,
+  });
+
 // The receipt of a message of a channel the router has no transport for:
 // another router, or a fallback, may have one.
 const unrouted = (channel) =>
@@ -51,6 +61,7 @@ const unrouted = (channel) =>
 const runOf = async function* (iterator, state, channel) {
   while (!state.head.done && channelOf(state.head.value) === channel) {
     state.taken = true;
+    state.handed++;
     yield state.head.value;
     state.head = await iterator.next();
     state.taken = false;
@@ -79,7 +90,7 @@ class RouterTransport {
 
   async *sendMany(messages, options) {
     const iterator = iteratorOf(messages);
-    const state = { head: await iterator.next(), taken: false };
+    const state = { head: await iterator.next(), taken: false, handed: 0 };
     try {
       while (!state.head.done) {
         options?.signal?.throwIfAborted();
@@ -90,8 +101,16 @@ class RouterTransport {
           state.head = await iterator.next();
           continue;
         }
+        state.handed = 0;
         for await (const receipt of transport.sendMany(runOf(iterator, state, channel), options)) {
           yield receipt;
+        }
+        // A transport that ended without taking a message would be given the
+        // same one again, for ever: it is failed and the next one read.
+        if (state.handed === 0) {
+          yield untaken(channel);
+          state.head = await iterator.next();
+          continue;
         }
         // A transport that stopped reading left the message it was given last
         // as the head: the next one is read rather than that one sent again.
