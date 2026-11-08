@@ -72,9 +72,10 @@ idempotency and decorators as an email, and fails in classes of its own (an opt-
 bot, an unregistered push token: never retried). 2.1 closes the loop: the verified webhooks of
 the channels, one suppression list for email and the channels, and a fallback from WhatsApp to
 SMS to email on the outcome of a message. 1.x is email only; no channel is released yet. The
-messages of the channels and their checks are in `@alexify/mailer/channels` already
-([messages of the channels](https://mailerat.vercel.app/channels/messages)); their transports
-come next.
+messages of the channels and their checks are in `@alexify/mailer/channels`
+([messages of the channels](https://mailerat.vercel.app/channels/messages)), and the transports
+of the nineteen providers are in the code, a subpath each (`@alexify/mailer/twilio`,
+`@alexify/mailer/telegram`…); each is released only after a live run on a real account.
 
 ## Installation
 
