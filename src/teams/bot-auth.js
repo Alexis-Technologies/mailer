@@ -8,7 +8,6 @@ const { timerMs } = require('../internal/sleep.js');
 const { createTokenCache } = require('../internal/token-cache.js');
 const { markUnsent } = require('../internal/unsent.js');
 
-const SCOPE = 'https://api.botframework.com/.default';
 const MAX_ANSWER_BYTES = 64 * 1024;
 
 const parseJson = (text) => {
@@ -54,7 +53,7 @@ const createBotAuth = (config) => {
           grant_type: 'client_credentials',
           client_id: config.bot.appId,
           client_secret: config.bot.clientSecret,
-          scope: SCOPE,
+          scope: config.scope,
         }).toString(),
         redirect: 'manual',
         // The token is shared, so no caller's signal ends its request.

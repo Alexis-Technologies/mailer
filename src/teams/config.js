@@ -23,6 +23,13 @@ const botOf = (bot) => {
   return resolved;
 };
 
+// The scope of the token of a bot: of the Bot Framework of the clouds of the
+// government of the US when the token comes from their Entra, else public.
+const scopeOf = (tokenUrl) =>
+  URL.canParse(tokenUrl) && new URL(tokenUrl).hostname.endsWith('.us')
+    ? 'https://api.botframework.us/.default'
+    : 'https://api.botframework.com/.default';
+
 // The origins of service URLs the token may go to beyond those of Teams.
 const originsOf = (urls) => {
   const origins = new Set();
@@ -52,10 +59,13 @@ const createTeamsConfig = (config = {}) => {
     throw new TypeError('TeamsTransport needs webhookUrl, bot or both.');
   }
   const tenant = bot?.tenantId ?? 'botframework.com';
+  const tokenUrl =
+    config.tokenUrl ?? `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
   const resolved = {
     webhookUrl,
     bot,
-    tokenUrl: config.tokenUrl ?? `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    tokenUrl,
+    scope: config.scope ?? scopeOf(tokenUrl),
     serviceOrigins: originsOf(config.serviceUrls),
     timeout: config.timeout ?? 30000,
     retries: config.retries ?? 3,

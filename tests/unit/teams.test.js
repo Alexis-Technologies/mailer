@@ -209,6 +209,36 @@ test('Teams: the token of the bot goes to the tenant, and is asked anew on a 401
   assert.strictEqual(refused.deliveryUnknown, undefined, 'nothing was sent');
 });
 
+test('Teams: a bot of the clouds of the US government asks for their scope', async (t) => {
+  // Before (C33): the scope was the public one whatever the tokenUrl, so a
+  // bot of GCC High or DoD, whose service URLs are allowed, never got a token.
+  const requests = stubFetch(t, (request) =>
+    request.url.includes('login.microsoftonline')
+      ? json({ access_token: 't', expires_in: 3600 })
+      : json({ id: 'a' }),
+  );
+  await transport({
+    bot: { ...BOT, tenantId: 'contoso.onmicrosoft.us' },
+    tokenUrl: 'https://login.microsoftonline.us/contoso.onmicrosoft.us/oauth2/v2.0/token',
+  }).send(
+    teams({
+      to: { serviceUrl: 'https://smba.infra.gov.teams.microsoft.us/gcch', conversationId: 'c-1' },
+    }),
+  );
+  assert.strictEqual(
+    new URLSearchParams(requests[0].body).get('scope'),
+    'https://api.botframework.us/.default',
+  );
+  t.mock.restoreAll();
+  const own = stubFetch(t, (request) =>
+    request.url.includes('login.microsoftonline')
+      ? json({ access_token: 't', expires_in: 3600 })
+      : json({ id: 'a' }),
+  );
+  await transport({ bot: BOT, scope: 'api://custom/.default' }).send(toBot());
+  assert.strictEqual(new URLSearchParams(own[0].body).get('scope'), 'api://custom/.default');
+});
+
 test('Teams: a refusal of the Connector API by its code, then its status', async (t) => {
   const cases = [
     [json({ error: { code: 'BotNotInConversationRoster', message: 'x' } }, 403), 'blocked'],

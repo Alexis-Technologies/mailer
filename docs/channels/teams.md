@@ -56,7 +56,9 @@ activity the bot got, goes through the Connector API
 (`/v3/conversations/<id>/activities`), its text alone (Markdown) when it has
 no button or picture, else the card. The token of the app is asked for with
 its client credentials (at the tenant of `bot.tenantId`, or `botframework.com`
-for a multi-tenant app), once, and shared until five minutes before its end;
+for a multi-tenant app; `login.microsoftonline.us` and the scope of
+`api.botframework.us` for GCC High and DoD, by a `tokenUrl` of `.us`), once, and
+shared until five minutes before its end;
 it goes only to a service URL of Teams (`smba.trafficmanager.net`, and the
 clouds of government) or of the origins of `serviceUrls`, so that a reference
 from elsewhere does not get it. A bot can write only to a conversation it is

@@ -26,8 +26,17 @@ export interface TeamsConfig extends TransportDependencies {
   readonly webhookUrl?: string;
   /** The app of the bot that writes to conversations. */
   readonly bot?: TeamsBotApp;
-  /** @default "https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token" */
+  /**
+   * The token endpoint of Microsoft Entra; `https://login.microsoftonline.us/…` for GCC High
+   * and DoD.
+   * @default "https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token"
+   */
   readonly tokenUrl?: string;
+  /**
+   * The scope of the token of the bot.
+   * @default "https://api.botframework.us/.default" for a tokenUrl of `.us`, else "https://api.botframework.com/.default"
+   */
+  readonly scope?: string;
   /**
    * Service URLs the token of the bot may go to beyond those of Teams
    * (`smba.trafficmanager.net` and the clouds of government), by origin.

@@ -1087,6 +1087,9 @@ that fails without it; C for the channels):
   `unknown` when ECDH refused it, so the subscription was kept. It is `invalid-recipient`.
 - C32. meta: the text of Instagram was held to the 2000 characters of Messenger, past the 1000
   bytes of UTF-8 Instagram takes; it is held to those.
+- C33. teams: the scope of the token of a bot was the public one whatever its `tokenUrl`, so a
+  bot of GCC High or DoD, whose service URLs the transport allows, never authenticated. A
+  `tokenUrl` of `.us` asks for `api.botframework.us`, and `scope` sets another.
 
 ## Repository layout
 
