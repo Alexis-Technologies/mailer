@@ -156,6 +156,17 @@ test('Infobip: a status of the group REJECTED in a 200 is a refusal by its name'
   assert.match(refused.errorMessages[0], /REJECTED_DND described/);
 });
 
+test('Infobip: a refused message names no number in its receipt', async (t) => {
+  // Before (C25): providerDetails held the answer, whose message names its
+  // destination without its +.
+  stubFetch(t, () => answer(rejected(15, 'REJECTED_DND')));
+  const receipt = await transport().send(sms());
+  assert.deepStrictEqual(receipt.errors[0].providerDetails, {
+    status: rejected(15, 'REJECTED_DND'),
+  });
+  assert.ok(!JSON.stringify(receipt).includes('15559876543'));
+});
+
 test('Infobip: an error answer is told by its status, its code kept', async (t) => {
   const cases = [
     [json({ errorCode: 'E401', description: 'Invalid login details' }, 401), 'auth', false, 'E401'],

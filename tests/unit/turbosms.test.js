@@ -206,6 +206,24 @@ test('TurboSMS: a message it created within 90 seconds is of unknown delivery', 
   }
 });
 
+test('TurboSMS: a refused recipient names no number in its receipt', async (t) => {
+  // Before (C25): providerDetails held the answer, whose results name the
+  // phone without its +.
+  stubFetch(t, () =>
+    answer(802, 'SUCCESS_MESSAGE_PARTIAL_ACCEPTED', {
+      response_code: 406,
+      message_id: null,
+      response_status: 'NOT_ALLOWED_RECIPIENT_COUNTRY',
+    }),
+  );
+  const receipt = await transport().send(sms());
+  assert.deepStrictEqual(receipt.errors[0].providerDetails, {
+    response_code: 406,
+    response_status: 'NOT_ALLOWED_RECIPIENT_COUNTRY',
+  });
+  assert.ok(!JSON.stringify(receipt).includes('380678998668'));
+});
+
 test('TurboSMS: an answer without its code or id is of unknown delivery', async (t) => {
   stubFetch(t, () =>
     answer(800, 'SUCCESS_MESSAGE_ACCEPTED', { response_code: 0, message_id: null }),

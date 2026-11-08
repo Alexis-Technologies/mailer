@@ -1068,6 +1068,9 @@ that fails without it; C for the channels):
 - C24. vonage: a correlation id of 41 to 100 characters, which the SMS API takes as its
   `client-ref`, was left out, so no delivery receipt found its message; and a `callback` over the
   100 characters of the API was taken. Both bounds are those of the API.
+- C25. vonage, infobip, turbosms: a refusal kept the answer as `providerDetails`, whose parts,
+  message or results name the number without its `+`, in every receipt and the receipts of
+  `./pool`. The details are the status or the code of the refusal alone.
 
 ## Repository layout
 

@@ -149,6 +149,18 @@ test('Vonage: a correlation id of up to 100 characters is the client-ref', async
   );
 });
 
+test('Vonage: a refused part names no number in its receipt', async (t) => {
+  // Before (C25): providerDetails held the answer, whose parts name the
+  // number without its +, which no redaction catches.
+  stubFetch(t, () => parts('6'));
+  const receipt = await transport().send(sms());
+  assert.deepStrictEqual(receipt.errors[0].providerDetails, {
+    status: '6',
+    'error-text': 'status 6',
+  });
+  assert.ok(!JSON.stringify(receipt).includes('380671234567'));
+});
+
 test('Vonage: what an SMS cannot be fails before any request', async (t) => {
   const requests = stubFetch(t, () => parts('0'));
   const cases = [

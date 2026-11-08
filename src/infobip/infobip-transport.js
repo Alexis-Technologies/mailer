@@ -84,7 +84,8 @@ const receiptOf = (json, message) => {
       provider: PROVIDER,
       channel: 'sms',
       ...classifyStatus(status),
-      providerDetails: json,
+      // The status, not the answer, whose message names its destination.
+      providerDetails: { status },
     });
   }
   if (typeof sent?.messageId !== 'string' || sent.messageId === '') {

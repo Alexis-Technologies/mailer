@@ -122,7 +122,8 @@ const receiptOf = (json, message) => {
       provider: PROVIDER,
       channel: message.channel,
       ...classifyCode(code),
-      providerDetails: json,
+      // The code, not the answer, whose results name the phone.
+      providerDetails: { response_code: code, response_status: reason },
     });
   const code = json?.response_code;
   if (typeof code !== 'number') {

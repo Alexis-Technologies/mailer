@@ -99,7 +99,8 @@ const receiptOf = (json) => {
       ...classified,
       deliveryUnknown: sent > 0,
       segments: parts.length,
-      providerDetails: json,
+      // The status of the part, not the answer, whose parts name the number.
+      providerDetails: { status: failed?.status, 'error-text': failed?.['error-text'] },
     });
   }
   if (unnamed > 0) {
