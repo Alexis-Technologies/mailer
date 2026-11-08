@@ -2,7 +2,7 @@ import { expectAssignable, expectError, expectType } from 'tsd';
 import { MongoClient, type Collection } from 'mongodb';
 import type { MessageState, QueueDriver } from '../../index.js';
 import { IdempotencyTransport, type IdempotencyStore } from '../../src/idempotency/index.js';
-import { createMailQueue } from '../../src/queue/index.js';
+import { createQueue } from '../../src/queue/index.js';
 import {
   createMongoAuditSink,
   createMongoIdempotencyStore,
@@ -50,7 +50,7 @@ const store = createMongoIdempotencyStore({
 expectAssignable<IdempotencyStore>(store);
 
 declare const transport: Transport;
-const queue = createMailQueue({ driver: outbox, audit });
+const queue = createQueue({ driver: outbox, audit });
 const session = client.startSession();
 await queue.enqueue(
   {

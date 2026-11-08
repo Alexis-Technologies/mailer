@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMemoryAuditSink } = require('../../src/audit/index.js');
 const { IdempotencyTransport } = require('../../src/idempotency/index.js');
-const { createMailQueue } = require('../../src/queue/index.js');
+const { createQueue } = require('../../src/queue/index.js');
 const {
   createMongoAuditSink,
   createMongoIdempotencyStore,
@@ -256,7 +256,7 @@ test('MongoDB: the mail queue runs on the outbox, its audit in MongoDB', async (
   const auditCollection = fakeCollection();
   const outbox = createMongoOutbox({ collection, pollIntervalMilliseconds: 5 });
   const audit = createMongoAuditSink({ collection: auditCollection });
-  const queue = createMailQueue({ driver: outbox, audit });
+  const queue = createQueue({ driver: outbox, audit });
   const session = { id: 's' };
   const { id, correlationId } = await queue.enqueue(
     {

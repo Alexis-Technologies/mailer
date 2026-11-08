@@ -186,7 +186,7 @@ export interface BullMQDriver<
  * ```js
  * const { Queue, Worker } = require('bullmq');
  * const driver = createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'localhost' } });
- * const queue = createMailQueue({ driver });
+ * const queue = createQueue({ driver });
  * ```
  * @throws {TypeError} If an option is invalid.
  */

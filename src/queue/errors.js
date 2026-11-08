@@ -6,7 +6,7 @@
  * `queue.unsupported_version`, `queue.hash_mismatch`,
  * `queue.signature_invalid`, `queue.codec_missing` or `queue.codec_failed`.
  */
-class MailQueueError extends Error {
+class QueueError extends Error {
   /**
    * @param code The code of the failure.
    * @param message What happened.
@@ -14,9 +14,9 @@ class MailQueueError extends Error {
    */
   constructor(code, message, options) {
     super(message, options);
-    this.name = 'MailQueueError';
+    this.name = 'QueueError';
     this.code = code;
   }
 }
 
-module.exports = { MailQueueError };
+module.exports = { QueueError };

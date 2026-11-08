@@ -1,24 +1,24 @@
-// Not ported: the entry of ./queue, messages sent through a queue: the mail
+// Not ported: the entry of ./queue, messages sent through a queue: the
 // queue, its handler for any driver, the job of a message, and the queue in
 // memory and the polling driver a store's outbox is made of.
 
 const { QueueLeaseLostError, createPollingDriver } = require('../internal/polling-driver.js');
-const { MailQueueError } = require('./errors.js');
-const { createMailJobHandler } = require('./handler.js');
-const { MAIL_JOB_NAME, MAIL_JOB_VERSION, prepareMailJob } = require('./job.js');
-const { createMailQueue } = require('./mail-queue.js');
+const { QueueError } = require('./errors.js');
+const { createJobHandler } = require('./handler.js');
+const { EMAIL_JOB_NAME, EMAIL_JOB_VERSION, prepareJob } = require('./job.js');
+const { createQueue } = require('./queue.js');
 const { createMemoryQueue } = require('./memory-queue.js');
-const { parseMailJob } = require('./parse.js');
+const { parseJob } = require('./parse.js');
 
 module.exports = {
-  MAIL_JOB_NAME,
-  MAIL_JOB_VERSION,
-  MailQueueError,
+  EMAIL_JOB_NAME,
+  EMAIL_JOB_VERSION,
+  QueueError,
   QueueLeaseLostError,
-  createMailJobHandler,
-  createMailQueue,
+  createJobHandler,
+  createQueue,
   createMemoryQueue,
   createPollingDriver,
-  parseMailJob,
-  prepareMailJob,
+  parseJob,
+  prepareJob,
 };

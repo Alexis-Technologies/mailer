@@ -119,7 +119,7 @@ if (!receipt.successful) console.error(receipt.errorMessages);
 | `/mime` | MIME composition and DKIM signing |
 | `/attachments`, `/render` | attachments from a path, a URL, a data URI or a stream; the content of a renderer, React Email |
 | `/templates` | templates by name over EJS, Handlebars, Pug, MJML, Liquid, Nunjucks, Eta, Mustache or React Email: locales, layouts, subjects, CSS inlined |
-| `/queue`, `/bullmq`, `/mongodb`, `/audit` | the mail queue and its worker, the BullMQ driver, the MongoDB outbox (and its audit and idempotency stores), the states of a message and their sinks |
+| `/queue`, `/bullmq`, `/mongodb`, `/audit` | the queue and its worker, the BullMQ driver, the MongoDB outbox (and its audit and idempotency stores), the states of a message and their sinks |
 | `/smtp`, `/sendmail`, `/jmap` | SMTP, sendmail and JMAP transports |
 | `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`, `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`, `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk` | HTTP providers |
 | `/webhooks` | verified webhooks of fifteen providers, read into delivery events |
@@ -137,11 +137,11 @@ what may pass:
 ```js
 const { Queue, Worker } = require('bullmq');
 const ejs = require('ejs');
-const { createMailQueue } = require('@alexify/mailer/queue');
+const { createQueue } = require('@alexify/mailer/queue');
 const { createBullMQDriver } = require('@alexify/mailer/bullmq');
 const { createEjsEngine, createFileLoader, createTemplateRenderer } = require('@alexify/mailer/templates');
 
-const queue = createMailQueue({
+const queue = createQueue({
   driver: createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'localhost' } }),
   // Whoever can write to Redis cannot make the worker send a message of theirs.
   signingKeys: [{ id: '2026-10', secret: process.env.MAIL_JOB_KEY }],

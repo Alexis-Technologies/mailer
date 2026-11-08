@@ -2,11 +2,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  MAIL_JOB_NAME,
-  MAIL_JOB_VERSION,
-  MailQueueError,
-  parseMailJob,
-  prepareMailJob,
+  EMAIL_JOB_NAME,
+  EMAIL_JOB_VERSION,
+  QueueError,
+  parseJob,
+  prepareJob,
 } = require('../../src/queue/index.js');
 
 const NOW = Date.parse('2026-10-18T09:00:00Z');
@@ -18,7 +18,7 @@ const base = {
   to: 'ada@example.com',
 };
 const prepare = (input, options) =>
-  prepareMailJob({ ...base, ...input }, { now: () => NOW, ...options });
+  prepareJob({ ...base, ...input }, { now: () => NOW, ...options });
 
 test('Queue: a template job holds its fields as JSON, its ids fixed', () => {
   const { data, request } = prepare({
@@ -35,7 +35,7 @@ test('Queue: a template job holds its fields as JSON, its ids fixed', () => {
     tracking: { opens: false },
     list: { unsubscribe: { url: 'https://example.com/u', comment: 'one click' }, oneClick: true },
   });
-  assert.strictEqual(data.v, MAIL_JOB_VERSION);
+  assert.strictEqual(data.v, EMAIL_JOB_VERSION);
   assert.strictEqual(data.kind, 'template');
   assert.deepStrictEqual(data.from, { name: 'App', address: 'app@example.com' });
   assert.deepStrictEqual(data.to, [{ address: 'ada@example.com' }]);
@@ -57,7 +57,7 @@ test('Queue: a template job holds its fields as JSON, its ids fixed', () => {
   assert.match(request.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.deepStrictEqual(
     { name: request.name, priority: request.priority, maxAttempts: request.maxAttempts },
-    { name: MAIL_JOB_NAME, priority: 'high', maxAttempts: 5 },
+    { name: EMAIL_JOB_NAME, priority: 'high', maxAttempts: 5 },
   );
   assert.strictEqual(request.unique, true);
   assert.strictEqual(request.hash, data.hash);
@@ -72,7 +72,7 @@ test('Queue: under one key the same message is the same job, its hash too', () =
     idempotencyKey: 'k1',
     attachments: [{ filename: 'a.txt', content: new Uint8Array([1]) }],
   });
-  const again = prepareMailJob(
+  const again = prepareJob(
     {
       ...base,
       idempotencyKey: 'k1',
@@ -221,8 +221,8 @@ test('Queue: a job is checked as createMessage checks a message, before it is en
   assert.throws(() => prepare({ idempotencyKey: 'a\nb' }), /idempotencyKey/);
   assert.throws(() => prepare({ template: '' }), /template must be a name/);
   assert.throws(() => prepare({ locale: 1 }), /locale/);
-  assert.throws(() => prepareMailJob(null), /A job is/);
-  assert.throws(() => prepareMailJob({ kind: 'sms' }), /A job is/);
+  assert.throws(() => prepareJob(null), /A job is/);
+  assert.throws(() => prepareJob({ kind: 'sms' }), /A job is/);
   assert.throws(() => prepare({}, { maxAttempts: 0 }), /maxAttempts must be a positive integer/);
   assert.throws(() => prepare({}, { namespace: '' }), /namespace/);
   assert.throws(
@@ -245,7 +245,7 @@ test('Queue: a job is checked as createMessage checks a message, before it is en
 });
 
 test('Queue: a content job carries its subject and content', () => {
-  const { data } = prepareMailJob({
+  const { data } = prepareJob({
     kind: 'content',
     from: 'app@example.com',
     to: 'a@example.com',
@@ -256,7 +256,7 @@ test('Queue: a content job carries its subject and content', () => {
     [data.kind, data.subject, data.content],
     ['content', 'Hi', { html: '<p>Hi</p>' }],
   );
-  const text = prepareMailJob({
+  const text = prepareJob({
     kind: 'content',
     from: 'a@example.com',
     to: 'b@example.com',
@@ -264,7 +264,7 @@ test('Queue: a content job carries its subject and content', () => {
     content: { text: 't' },
   });
   assert.deepStrictEqual(text.data.content, { text: 't' });
-  const both = prepareMailJob({
+  const both = prepareJob({
     kind: 'content',
     from: 'a@example.com',
     to: 'b@example.com',
@@ -274,7 +274,7 @@ test('Queue: a content job carries its subject and content', () => {
   assert.deepStrictEqual(both.data.content, { html: 'h', text: 't' });
   assert.throws(
     () =>
-      prepareMailJob({
+      prepareJob({
         kind: 'content',
         from: 'a@example.com',
         to: 'b@example.com',
@@ -284,7 +284,7 @@ test('Queue: a content job carries its subject and content', () => {
   );
   assert.throws(
     () =>
-      prepareMailJob({
+      prepareJob({
         kind: 'content',
         from: 'a@example.com',
         to: 'b@example.com',
@@ -295,7 +295,7 @@ test('Queue: a content job carries its subject and content', () => {
   );
   assert.throws(
     () =>
-      prepareMailJob({
+      prepareJob({
         kind: 'content',
         from: 'a@example.com',
         to: 'b@example.com',
@@ -309,7 +309,7 @@ test('Queue: a content job carries its subject and content', () => {
 test('Queue: a job read from its store is checked, its hash among it', () => {
   const { data } = prepare({ idempotencyKey: 'k' });
   const copy = JSON.parse(JSON.stringify(data));
-  assert.deepStrictEqual(parseMailJob(copy), copy);
+  assert.deepStrictEqual(parseJob(copy), copy);
   const refusals = [
     [null, 'queue.invalid_job'],
     [{ ...copy, v: 0 }, 'queue.invalid_job'],
@@ -335,20 +335,20 @@ test('Queue: a job read from its store is checked, its hash among it', () => {
   ];
   for (const [value, code] of refusals) {
     assert.throws(
-      () => parseMailJob(value),
-      (error) => error instanceof MailQueueError && error.code === code,
+      () => parseJob(value),
+      (error) => error instanceof QueueError && error.code === code,
       JSON.stringify(value)?.slice(0, 60),
     );
   }
-  const content = prepareMailJob({
+  const content = prepareJob({
     kind: 'content',
     from: 'a@example.com',
     to: 'b@example.com',
     subject: 's',
     content: { text: 't' },
   }).data;
-  assert.strictEqual(parseMailJob(content), content);
-  assert.throws(() => parseMailJob({ ...content, content: null }), /no subject or content/);
+  assert.strictEqual(parseJob(content), content);
+  assert.throws(() => parseJob({ ...content, content: null }), /no subject or content/);
 });
 
 test('Queue: a job holds only the fields of its version', () => {
@@ -376,7 +376,7 @@ test('Queue: a job holds only the fields of its version', () => {
     scheduledAt: new Date(NOW + 1000),
     expiresAt: new Date(NOW + 2000),
   }).data;
-  const content = prepareMailJob({
+  const content = prepareJob({
     kind: 'content',
     from: 'a@example.com',
     to: 'b@example.com',
@@ -391,23 +391,23 @@ test('Queue: a job holds only the fields of its version', () => {
 test('Queue: a field a later version adds makes the job wait, not fail its hash', () => {
   const { data } = prepare({ idempotencyKey: 'later' });
   assert.throws(
-    () => parseMailJob({ ...data, priorityClass: 'bulk' }),
+    () => parseJob({ ...data, priorityClass: 'bulk' }),
     (error) =>
-      error instanceof MailQueueError &&
+      error instanceof QueueError &&
       error.code === 'queue.unsupported_version' &&
       /priorityClass/.test(error.message),
   );
   // What is written over a job once it is made does not change its hash.
   const traced = { ...data, trace: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' };
-  assert.strictEqual(parseMailJob(traced), traced);
+  assert.strictEqual(parseJob(traced), traced);
   assert.throws(
-    () => parseMailJob({ ...data, trace: 1 }),
+    () => parseJob({ ...data, trace: 1 }),
     (error) => error.code === 'queue.invalid_job',
   );
 });
 
 test('Queue: deriveId makes the ids a job derives, the same for the same key', async () => {
-  const { createMailQueue, createMemoryQueue } = require('../../src/queue/index.js');
+  const { createQueue, createMemoryQueue } = require('../../src/queue/index.js');
   const seeds = [];
   // A deterministic format of the application's: a prefix and part of the hash.
   const deriveId = (kind, seed) => {
@@ -438,7 +438,7 @@ test('Queue: deriveId makes the ids a job derives, the same for the same key', a
   assert.match(unkeyed.request.id, /^job_/);
   assert.match(unkeyed.data.messageId, /^gmessageid\d+@example\.com$/);
   // The same message under its key is the same job, a duplicate.
-  const queue = createMailQueue({ driver: createMemoryQueue(), deriveId, now: () => NOW });
+  const queue = createQueue({ driver: createMemoryQueue(), deriveId, now: () => NOW });
   const input = { ...base, idempotencyKey: 'welcome:42' };
   const first = await queue.enqueue(input);
   const again = await queue.enqueue(input);

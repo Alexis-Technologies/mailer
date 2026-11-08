@@ -577,7 +577,7 @@ export interface InstrumentHandlerOptions {
 }
 
 /**
- * Wraps a queue handler, such as `createMailJobHandler()` of `./queue`, with
+ * Wraps a queue handler, such as `createJobHandler()` of `./queue`, with
  * OpenTelemetry: a span `mailer.queue.process` per run, linked to the trace
  * of the producer (the job's `trace`, from `traceContext` of the mail queue),
  * and the metrics `mailer.queue.jobs` (by `outcome` and `code`),

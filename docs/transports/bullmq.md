@@ -1,12 +1,12 @@
 # BullMQ
 
-`createBullMQDriver` is a driver of the [mail queue](/guide/queue) over
+`createBullMQDriver` is a driver of the [queue](/guide/queue) over
 [BullMQ](https://docs.bullmq.io), on Redis or Valkey. The package depends on
 neither: you pass in BullMQ's `Queue` and `Worker` classes.
 
 ```js
 const { Queue, Worker } = require('bullmq');
-const { createMailQueue } = require('@alexify/mailer/queue');
+const { createQueue } = require('@alexify/mailer/queue');
 const { createBullMQDriver } = require('@alexify/mailer/bullmq');
 
 const driver = createBullMQDriver({
@@ -14,7 +14,7 @@ const driver = createBullMQDriver({
   connection: { host: 'valkey', port: 6379 },
   prefix: 'app',
 });
-const queue = createMailQueue({ driver });
+const queue = createQueue({ driver });
 ```
 
 A process that only enqueues passes `{ Queue }`, or a queue of its own
@@ -45,8 +45,8 @@ only in BullMQ Pro (groups): give each tenant, or each stream (transactional and
 bulk), a queue and workers of its own:
 
 ```js
-const transactional = createMailQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-transactional' }) });
-const bulk = createMailQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-bulk' }) });
+const transactional = createQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-transactional' }) });
+const bulk = createQueue({ driver: createBullMQDriver({ bullmq, queueName: 'mail-bulk' }) });
 ```
 
 A job BullMQ fails itself, which the handler never settled (stalled more than
@@ -85,17 +85,17 @@ one stalled more than `maxStalledCount` times, which the handler never saw
 
 ```js
 const { Worker } = require('bullmq');
-const { createMailJobHandler } = require('@alexify/mailer/queue');
+const { createJobHandler } = require('@alexify/mailer/queue');
 const { createBullMQBackoffStrategy, createBullMQProcessor } = require('@alexify/mailer/bullmq');
 
-const processor = createBullMQProcessor(createMailJobHandler({ transport, renderer }));
+const processor = createBullMQProcessor(createJobHandler({ transport, renderer }));
 new Worker('mail', processor, {
   connection,
   settings: { backoffStrategy: createBullMQBackoffStrategy(myOtherStrategy) },
 });
 ```
 
-Without that strategy, BullMQ cannot retry a mail job: it fails with "Unknown
+Without that strategy, BullMQ cannot retry a job of the queue: it fails with "Unknown
 backoff strategy alexify-mailer".
 
 ## Notes

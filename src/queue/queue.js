@@ -1,4 +1,4 @@
-// Not ported: the mail queue: messages enqueued as jobs of a driver the
+// Not ported: the queue: messages enqueued as jobs of a driver the
 // application chooses (BullMQ, a store's outbox, memory), and workers that
 // send them through a transport.
 
@@ -6,10 +6,10 @@ const { warnThrown } = require('../internal/callback.js');
 const { createLog } = require('../internal/log.js');
 const { checkOptionalFunction } = require('../internal/options.js');
 const { toUuid } = require('../internal/uuid.js');
-const { checkCodec, sealMailJob } = require('./envelope.js');
-const { MailQueueError } = require('./errors.js');
-const { createMailJobHandler } = require('./handler.js');
-const { checkIdSecret, prepareMailJob } = require('./job.js');
+const { checkCodec, sealJob } = require('./envelope.js');
+const { QueueError } = require('./errors.js');
+const { createJobHandler } = require('./handler.js');
+const { checkIdSecret, prepareJob } = require('./job.js');
 const { keyringOf } = require('./signing.js');
 
 // A W3C traceparent, as `traceContext` gives it.
@@ -17,7 +17,7 @@ const TRACEPARENT = /^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/;
 
 const checkDriver = (driver) => {
   if (typeof driver?.enqueue !== 'function' || typeof driver?.consume !== 'function') {
-    throw new TypeError('A mail queue needs a driver, with enqueue() and consume().');
+    throw new TypeError('A queue needs a driver, with enqueue() and consume().');
   }
   return driver;
 };
@@ -46,7 +46,7 @@ const queuedEventOf = (data, request) => {
 // jobs of the call gave.
 const keyReused = (jobIds, answers) =>
   Object.assign(
-    new MailQueueError(
+    new QueueError(
       'queue.key_reused',
       jobIds.length === 1
         ? `The key of job ${jobIds[0]} was used before for another message.`
@@ -72,7 +72,7 @@ const appendQueued = async (queue, jobs, transaction) => {
     }
   } catch (error) {
     if (queue.auditStrict) throw error;
-    warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
+    warnThrown('The audit sink of the queue', error, 'MAILER_AUDIT_FAILED');
   }
 };
 
@@ -114,7 +114,7 @@ const createQueueConfig = (options) => {
   const driver = checkDriver(options.driver);
   const { audit } = options;
   if (audit !== undefined && typeof audit?.append !== 'function') {
-    throw new TypeError('The audit sink of a mail queue must have append().');
+    throw new TypeError('The audit sink of a queue must have append().');
   }
   const auditStrict = options.auditStrict ?? false;
   if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
@@ -149,19 +149,19 @@ const createQueueConfig = (options) => {
 
 // The job of a message: its trace, and its data sealed when the queue has a
 // codec; the driver stores the sealed data, the audit reads the clear.
-const prepareJob = async (queue, input) => {
-  const prepared = prepareMailJob(input, queue.jobOptions);
+const prepareEntry = async (queue, input) => {
+  const prepared = prepareJob(input, queue.jobOptions);
   // The producer's trace, which the span of the worker links to; outside the
   // hash and the signature, as it differs for the same message.
   const trace = queue.traceContext?.();
   if (typeof trace === 'string' && TRACEPARENT.test(trace)) prepared.data.trace = trace;
   if (queue.codec === undefined) return prepared;
-  const data = await sealMailJob(prepared.data, queue.codec);
+  const data = await sealJob(prepared.data, queue.codec);
   return { data: prepared.data, request: { ...prepared.request, data } };
 };
 
 /**
- * Makes a mail queue over a driver.
+ * Makes a queue of messages over a driver.
  *
  * @param options `driver`; `audit` and `auditStrict`; `namespace` ('mail'),
  * the scope of the keys; `maxAttempts` (5), `maxJobBytes` and
@@ -175,7 +175,7 @@ const prepareJob = async (queue, input) => {
  * @returns `{ driver, enqueue, enqueueMany, createWorker }`.
  * @throws {TypeError} If an option is invalid.
  */
-const createMailQueue = (options = {}) => {
+const createQueue = (options = {}) => {
   const queue = createQueueConfig(options);
   const { driver, codec } = queue;
   return {
@@ -183,7 +183,7 @@ const createMailQueue = (options = {}) => {
     async enqueue(input, enqueueOptions = {}) {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
-      const prepared = await prepareJob(queue, input);
+      const prepared = await prepareEntry(queue, input);
       if (transaction === undefined) await appendQueued(queue, [prepared], undefined);
       const answer = answerOf(
         queue,
@@ -200,7 +200,7 @@ const createMailQueue = (options = {}) => {
       enqueueOptions.signal?.throwIfAborted();
       const transaction = transactionOf(driver, enqueueOptions);
       const prepared = [];
-      for (const input of inputs) prepared.push(await prepareJob(queue, input));
+      for (const input of inputs) prepared.push(await prepareEntry(queue, input));
       if (transaction === undefined) await appendQueued(queue, prepared, undefined);
       let results;
       if (typeof driver.enqueueMany === 'function') {
@@ -231,7 +231,7 @@ const createMailQueue = (options = {}) => {
       return answers;
     },
     createWorker(workerOptions = {}) {
-      const handler = createMailJobHandler({
+      const handler = createJobHandler({
         audit: queue.audit,
         auditStrict: queue.auditStrict,
         logger: options.logger,
@@ -253,4 +253,4 @@ const createMailQueue = (options = {}) => {
   };
 };
 
-module.exports = { createMailQueue };
+module.exports = { createQueue };

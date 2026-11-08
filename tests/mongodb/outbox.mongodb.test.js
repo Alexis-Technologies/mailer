@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { MongoClient } = require('mongodb');
 const { IdempotencyTransport } = require('../../src/idempotency/index.js');
-const { createMailQueue } = require('../../src/queue/index.js');
+const { createQueue } = require('../../src/queue/index.js');
 const {
   createMongoAuditSink,
   createMongoIdempotencyStore,
@@ -58,7 +58,7 @@ const setup = async (t, options = {}) => {
   await outbox.ensureIndexes();
   await audit.ensureIndexes();
   await store.ensureIndexes();
-  const queue = createMailQueue({ driver: outbox, audit });
+  const queue = createQueue({ driver: outbox, audit });
   const worker = (workerOptions) => {
     const consumer = queue.createWorker(workerOptions);
     workers.push(consumer);

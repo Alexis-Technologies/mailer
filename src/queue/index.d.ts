@@ -26,12 +26,12 @@ import type {
 import type { Renderer } from '../render/index.js';
 
 /** The version of the data of a job this package writes and reads. */
-export declare const MAIL_JOB_VERSION: 1;
-/** The name of a mail job. */
-export declare const MAIL_JOB_NAME: 'mail';
+export declare const EMAIL_JOB_VERSION: 1;
+/** The name of an email job, as in 1.x. */
+export declare const EMAIL_JOB_NAME: 'mail';
 
 /** An attachment of a job: its bytes, kept in the job in base64, or a reference the worker resolves. */
-export type MailJobAttachmentInput = {
+export type JobAttachmentInput = {
   readonly filename: string;
   /** @default 'application/octet-stream' */
   readonly contentType?: string;
@@ -44,7 +44,7 @@ export type MailJobAttachmentInput = {
 );
 
 /** The fields of the message of a job. */
-export interface MailJobFieldsInput {
+export interface EmailJobFieldsInput {
   readonly from: Address | string;
   readonly to: Address | string | readonly (Address | string)[];
   readonly cc?: Address | string | readonly (Address | string)[];
@@ -52,7 +52,7 @@ export interface MailJobFieldsInput {
   readonly replyTo?: Address | string | readonly (Address | string)[];
   /** Over the subject of the template, when both give one. */
   readonly subject?: string;
-  readonly attachments?: readonly MailJobAttachmentInput[];
+  readonly attachments?: readonly JobAttachmentInput[];
   readonly priority?: Priority;
   readonly tags?: readonly string[];
   readonly headers?: Readonly<Record<string, string>>;
@@ -84,7 +84,7 @@ export interface MailJobFieldsInput {
 }
 
 /** A job that the worker renders from a template. */
-export interface MailTemplateJobInput extends MailJobFieldsInput {
+export interface EmailTemplateJobInput extends EmailJobFieldsInput {
   readonly kind: 'template';
   readonly template: string;
   /** JSON only: a Date as an ISO string, no Map, no class. */
@@ -93,23 +93,26 @@ export interface MailTemplateJobInput extends MailJobFieldsInput {
 }
 
 /** A job of content rendered already. */
-export interface MailContentJobInput extends MailJobFieldsInput {
+export interface EmailContentJobInput extends EmailJobFieldsInput {
   readonly kind: 'content';
   readonly subject: string;
   readonly content: MessageContent;
 }
 
+/** An email to send through the queue. */
+export type EmailJobInput = EmailTemplateJobInput | EmailContentJobInput;
+
 /** A message to send through the queue. */
-export type MailJobInput = MailTemplateJobInput | MailContentJobInput;
+export type JobInput = EmailJobInput;
 
 /** An address as a job holds it. */
-export interface MailJobAddress {
+export interface JobAddress {
   readonly name?: string;
   readonly address: string;
 }
 
 /** An attachment as a job holds it: `data` in base64, or `ref`. */
-export interface MailJobAttachment {
+export interface JobAttachment {
   readonly filename: string;
   readonly contentType: string;
   readonly inline: boolean;
@@ -118,15 +121,15 @@ export interface MailJobAttachment {
   readonly ref?: string;
 }
 
-interface MailJobDataBase {
+interface EmailJobDataBase {
   readonly v: 1;
-  readonly from: MailJobAddress;
-  readonly to: readonly MailJobAddress[];
-  readonly cc?: readonly MailJobAddress[];
-  readonly bcc?: readonly MailJobAddress[];
-  readonly replyTo?: readonly MailJobAddress[];
+  readonly from: JobAddress;
+  readonly to: readonly JobAddress[];
+  readonly cc?: readonly JobAddress[];
+  readonly bcc?: readonly JobAddress[];
+  readonly replyTo?: readonly JobAddress[];
   readonly subject?: string;
-  readonly attachments?: readonly MailJobAttachment[];
+  readonly attachments?: readonly JobAttachment[];
   readonly priority: Priority;
   readonly tags?: readonly string[];
   readonly headers?: Readonly<Record<string, string>>;
@@ -157,7 +160,7 @@ interface MailJobDataBase {
 }
 
 /** The data of a template job, as stored. */
-export interface MailTemplateJobData extends MailJobDataBase {
+export interface EmailTemplateJobData extends EmailJobDataBase {
   readonly kind: 'template';
   readonly template: string;
   readonly context: JsonObject;
@@ -165,21 +168,24 @@ export interface MailTemplateJobData extends MailJobDataBase {
 }
 
 /** The data of a content job, as stored. */
-export interface MailContentJobData extends MailJobDataBase {
+export interface EmailContentJobData extends EmailJobDataBase {
   readonly kind: 'content';
   readonly subject: string;
   readonly content: MessageContent;
 }
 
-/** The data of a mail job, as stored: JSON only. */
-export type MailJobData = MailTemplateJobData | MailContentJobData;
+/** The data of an email job, as stored: JSON only. */
+export type EmailJobData = EmailTemplateJobData | EmailContentJobData;
+
+/** The data of a job, as stored: JSON only. */
+export type JobData = EmailJobData;
 
 /**
  * A key that signs jobs: an HMAC-SHA256 key of 32 bytes at least. Of the keys
  * given, the first signs and each verifies, so a key is rotated by putting
  * the new one first and dropping the old one once its jobs are done.
  */
-export interface MailJobSigningKey {
+export interface JobSigningKey {
   /** 1 to 64 of A-Z, a-z, 0-9, `.`, `_` and `-`; written into each job it signs as `kid`. */
   readonly id: string;
   readonly secret: string | Uint8Array;
@@ -191,14 +197,14 @@ export interface MailJobSigningKey {
  * text stored as `enc`, `decode` gives the JSON back. The version, the hash,
  * the signature and the trace context stay in clear.
  */
-export interface MailJobCodec {
+export interface JobCodec {
   encode(text: string): string | Promise<string>;
   /** Throws an error with `retryable: false` when the text can never be opened, so the job fails rather than waits. */
   decode(text: string): string | Promise<string>;
 }
 
 /** The identifiers a job derives rather than draws. */
-export type MailJobDerivedIdKind = 'job-id' | 'message-id' | 'content-id';
+export type JobDerivedIdKind = 'job-id' | 'message-id' | 'content-id';
 
 /**
  * Makes an identifier a job derives of a seed, a SHA-256 in hexadecimal (an
@@ -208,10 +214,10 @@ export type MailJobDerivedIdKind = 'job-id' | 'message-id' | 'content-id';
  * characters, no `:`, not all digits; the others are the left half of a
  * Message-ID or Content-ID (dot-atom-text, at most 256 characters).
  */
-export type MailJobIdDeriver = (kind: MailJobDerivedIdKind, seed: string) => string;
+export type JobIdDeriver = (kind: JobDerivedIdKind, seed: string) => string;
 
 /** The options of the jobs of a queue. */
-export interface MailJobOptions {
+export interface JobOptions {
   /** The scope of the keys of the jobs. @default 'mail' */
   readonly namespace?: string;
   /** @default 5 */
@@ -223,7 +229,7 @@ export interface MailJobOptions {
   readonly generateId?: IdGenerator;
   readonly now?: () => number;
   /** Signs each job (`kid`, `mac`) with the first key, for workers that read only signed jobs. */
-  readonly signingKeys?: readonly MailJobSigningKey[];
+  readonly signingKeys?: readonly JobSigningKey[];
   /**
    * The secret, 32 bytes at least, under which the id of a job is derived
    * from its key (an HMAC rather than a SHA-256), so that an id cannot be
@@ -239,12 +245,12 @@ export interface MailJobOptions {
    * a job draws (its key and Message-ID without a key of yours) come from
    * `generateId`.
    */
-  readonly deriveId?: MailJobIdDeriver;
+  readonly deriveId?: JobIdDeriver;
 }
 
 /** A job of a message: its data, and the request a driver takes. */
-export interface PreparedMailJob {
-  readonly data: MailJobData;
+export interface PreparedJob {
+  readonly data: JobData;
   readonly request: QueueJobRequest;
 }
 
@@ -255,28 +261,25 @@ export interface PreparedMailJob {
  * @throws {TypeError} If a field is invalid.
  * @throws {RangeError} If the job or its attachments are too large.
  */
-export declare function prepareMailJob(
-  input: MailJobInput,
-  options?: MailJobOptions,
-): PreparedMailJob;
+export declare function prepareJob(input: JobInput, options?: JobOptions): PreparedJob;
 
 /**
  * Checks the data of a job read from its queue, opened if it was sealed.
  *
- * @throws {MailQueueError} `queue.invalid_job`; `queue.codec_missing` for a
+ * @throws {QueueError} `queue.invalid_job`; `queue.codec_missing` for a
  * sealed job; `queue.unsupported_version`
  * for a later version, or a field this version does not know; or
  * `queue.hash_mismatch`; `queue.signature_invalid` if `signingKeys` are given
  * and the job is not signed by one of them.
  * @throws {TypeError} If a signing key is invalid.
  */
-export declare function parseMailJob(
+export declare function parseJob(
   data: unknown,
-  options?: { readonly signingKeys?: readonly MailJobSigningKey[] },
-): MailJobData;
+  options?: { readonly signingKeys?: readonly JobSigningKey[] },
+): JobData;
 
-/** The code of a {@link MailQueueError}. */
-export type MailQueueErrorCode =
+/** The code of a {@link QueueError}. */
+export type QueueErrorCode =
   | 'queue.key_reused'
   | 'queue.invalid_job'
   | 'queue.unsupported_version'
@@ -286,17 +289,17 @@ export type MailQueueErrorCode =
   | 'queue.codec_failed';
 
 /** A failure of the queue, by its code. */
-export declare class MailQueueError extends Error {
-  readonly code: MailQueueErrorCode;
+export declare class QueueError extends Error {
+  readonly code: QueueErrorCode;
   /** `queue.key_reused`: the jobs whose keys were used before for other messages. */
   readonly jobIds?: readonly string[];
   /** `queue.key_reused` of `enqueueMany`: what the other jobs of the call gave. */
-  readonly answers?: readonly MailEnqueueResult[];
-  constructor(code: MailQueueErrorCode, message: string, options?: ErrorOptions);
+  readonly answers?: readonly EnqueueResult[];
+  constructor(code: QueueErrorCode, message: string, options?: ErrorOptions);
 }
 
 /** The input a worker gives its renderer for a template job. */
-export interface MailRenderInput {
+export interface JobRenderInput {
   readonly template: string;
   readonly context: JsonObject;
   readonly locale?: string;
@@ -306,10 +309,10 @@ export interface MailRenderInput {
 }
 
 /** What `classify` may decide of a failed receipt. */
-export type MailFailureDecision = 'retry' | 'fail' | 'delivery_unknown' | undefined;
+export type FailureDecision = 'retry' | 'fail' | 'delivery_unknown' | undefined;
 
 /** The backoff between attempts. */
-export interface MailBackoff {
+export interface QueueBackoff {
   /** @default 30000 */
   readonly baseDelayMilliseconds?: number;
   /** @default 3600000 */
@@ -318,31 +321,31 @@ export interface MailBackoff {
   readonly factor?: number;
 }
 
-/** The options of a worker, or of {@link createMailJobHandler}. */
-export interface MailWorkerOptions {
+/** The options of a worker, or of {@link createJobHandler}. */
+export interface JobHandlerOptions {
   /**
    * The transport, decorated as the application chooses. Its own retries are
    * best few (`retries: 1`, no `RetryTransport`): the queue retries.
    */
   readonly transport: Transport;
   /** The renderer of template jobs, such as one of `./templates`. */
-  readonly renderer?: Renderer<MailRenderInput>;
+  readonly renderer?: Renderer<JobRenderInput>;
   /** The attachment, or its content, a reference names. Called again on each attempt. */
   readonly resolveAttachment?: (
     ref: string,
     context: {
-      readonly job: MailJobData;
-      readonly attachment: Omit<MailJobAttachment, 'data' | 'ref'>;
+      readonly job: JobData;
+      readonly attachment: Omit<JobAttachment, 'data' | 'ref'>;
       readonly signal: AbortSignal;
     },
   ) => unknown;
   /** Refuses a job, for good, by throwing: a sender not allowed. */
-  readonly checkJob?: (data: MailJobData, job: QueueJob) => void | Promise<void>;
+  readonly checkJob?: (data: JobData, job: QueueJob) => void | Promise<void>;
   /** Decides of a failed receipt in the place of the rules. */
   readonly classify?: (failure: {
     readonly receipt: Receipt;
     readonly job: QueueJob;
-  }) => MailFailureDecision;
+  }) => FailureDecision;
   readonly audit?: AuditSink;
   /** A sink that fails before the send makes the job retried, rather than sent unrecorded. @default false */
   readonly auditStrict?: boolean;
@@ -350,14 +353,14 @@ export interface MailWorkerOptions {
    * Only jobs signed by one of these keys are sent; any other fails with
    * `queue.signature_invalid`. A worker of a queue takes the queue's.
    */
-  readonly signingKeys?: readonly MailJobSigningKey[];
+  readonly signingKeys?: readonly JobSigningKey[];
   /**
    * Opens sealed jobs. A sealed job this worker cannot open waits for one
    * that can (`queue.codec_missing`, `queue.codec_failed`). A worker of a
    * queue takes the queue's.
    */
-  readonly codec?: MailJobCodec;
-  readonly backoff?: MailBackoff;
+  readonly codec?: JobCodec;
+  readonly backoff?: QueueBackoff;
   /** The wait before an attempt again after an `auth` or `configuration` failure. @default 300000 */
   readonly operatorDelayMilliseconds?: number;
   /**
@@ -388,21 +391,21 @@ export interface MailWorkerOptions {
 }
 
 /**
- * Makes the handler of mail jobs, for any driver: render, attachments,
+ * Makes the handler of jobs, for any driver: render, attachments,
  * message, send, and what the queue does with the receipt.
  *
  * @throws {TypeError} If an option is invalid.
  */
-export declare function createMailJobHandler(options: MailWorkerOptions): QueueHandler;
+export declare function createJobHandler(options: JobHandlerOptions): QueueHandler;
 
-/** The options of {@link createMailQueue}. */
-export interface MailQueueOptions extends Omit<MailJobOptions, 'now'> {
+/** The options of {@link createQueue}. */
+export interface QueueOptions extends Omit<JobOptions, 'now'> {
   readonly driver: QueueDriver;
   readonly audit?: AuditSink;
   /** A sink that fails makes the enqueue fail, and the job retried before its send. @default false */
   readonly auditStrict?: boolean;
   /** Seals the fields of each job in the store; its workers open them. */
-  readonly codec?: MailJobCodec;
+  readonly codec?: JobCodec;
   /**
    * The W3C `traceparent` of the producer, which each job carries as `trace`
    * for `instrumentHandler` of `./otel` to link its span to:
@@ -414,7 +417,7 @@ export interface MailQueueOptions extends Omit<MailJobOptions, 'now'> {
 }
 
 /** What an enqueue gives. */
-export interface MailEnqueueResult {
+export interface EnqueueResult {
   /** The id of the job. */
   readonly id: string;
   readonly correlationId: string;
@@ -424,39 +427,39 @@ export interface MailEnqueueResult {
 }
 
 /** The options of a worker of a queue. */
-export interface MailQueueWorkerOptions extends Omit<MailWorkerOptions, 'audit' | 'auditStrict'> {
+export interface QueueWorkerOptions extends Omit<JobHandlerOptions, 'audit' | 'auditStrict'> {
   /** @default 1 */
   readonly concurrency?: number;
   readonly signal?: AbortSignal;
 }
 
 /** A worker of a queue. */
-export interface MailWorker extends AsyncDisposable {
+export interface QueueWorker extends AsyncDisposable {
   /** Stops taking jobs and waits for those in flight, then aborts them. */
   close(options?: QueueCloseOptions): Promise<void>;
 }
 
-/** A queue of mail. */
-export interface MailQueue<TDriver extends QueueDriver = QueueDriver> {
+/** A queue of messages. */
+export interface MessageQueue<TDriver extends QueueDriver = QueueDriver> {
   readonly driver: TDriver;
   /**
    * @throws {TypeError} If a field is invalid.
-   * @throws {MailQueueError} `queue.key_reused` if its key was used for another message.
+   * @throws {QueueError} `queue.key_reused` if its key was used for another message.
    */
-  enqueue(input: MailJobInput, options?: QueueEnqueueOptions): Promise<MailEnqueueResult>;
+  enqueue(input: JobInput, options?: QueueEnqueueOptions): Promise<EnqueueResult>;
   enqueueMany(
-    inputs: Iterable<MailJobInput>,
+    inputs: Iterable<JobInput>,
     options?: QueueEnqueueOptions,
-  ): Promise<readonly MailEnqueueResult[]>;
-  createWorker(options: MailQueueWorkerOptions): MailWorker;
+  ): Promise<readonly EnqueueResult[]>;
+  createWorker(options: QueueWorkerOptions): QueueWorker;
 }
 
 /**
- * Makes a mail queue over a driver.
+ * Makes a queue of messages over a driver.
  *
  * @example
  * ```js
- * const queue = createMailQueue({ driver: createMemoryQueue(), audit });
+ * const queue = createQueue({ driver: createMemoryQueue(), audit });
  * await queue.enqueue({
  *   kind: 'template', template: 'reset-password', context: { url },
  *   from: 'app@example.com', to: user.email, idempotencyKey: `reset:${resetRequest.id}`,
@@ -465,9 +468,9 @@ export interface MailQueue<TDriver extends QueueDriver = QueueDriver> {
  * ```
  * @throws {TypeError} If an option is invalid.
  */
-export declare function createMailQueue<TDriver extends QueueDriver>(
-  options: MailQueueOptions & { readonly driver: TDriver },
-): MailQueue<TDriver>;
+export declare function createQueue<TDriver extends QueueDriver>(
+  options: QueueOptions & { readonly driver: TDriver },
+): MessageQueue<TDriver>;
 
 /** The options of {@link createPollingDriver}. */
 export interface PollingDriverOptions {
@@ -523,8 +526,8 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
   readonly dedupeWindowSeconds?: number;
   /** The time a failed job is kept. @default 604800 */
   readonly retainFailedSeconds?: number;
-  /** See {@link MailQueueRetainData}. @default 'failed' */
-  readonly retainData?: MailQueueRetainData;
+  /** See {@link QueueRetainData}. @default 'failed' */
+  readonly retainData?: QueueRetainData;
   /**
    * `tenant`: high jobs of any tenant first, then the tenants' jobs in turn,
    * so that one tenant's backlog holds no other's mail. @default 'none'
@@ -537,10 +540,10 @@ export interface MemoryQueueOptions extends PollingDriverOptions {
  * a store keeps: `'failed'` those that failed, for a retry by hand; `'all'`;
  * or `'none'`. A job's version and hash stay, by which a duplicate is told.
  */
-export type MailQueueRetainData = 'all' | 'failed' | 'none';
+export type QueueRetainData = 'all' | 'failed' | 'none';
 
 /** What a store of jobs holds. */
-export interface MailQueueStats {
+export interface QueueStats {
   /** Due now. */
   readonly ready: number;
   /** Not due yet: scheduled, or waiting to be retried. */
@@ -568,7 +571,7 @@ export interface MemoryQueue extends QueueDriver {
   wake(): void;
   /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
   resume(scope?: { readonly tenantId?: string }): Promise<void>;
-  stats(): MailQueueStats;
+  stats(): QueueStats;
   /** The failed jobs, by id, a page of `limit` (100) after `after`. */
   failed(options?: { readonly limit?: number; readonly after?: string }): readonly MemoryQueueJob[];
   /**

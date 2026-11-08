@@ -18,12 +18,12 @@ worker     driver ──▶ render ──▶ attachments ──▶ createMessage
 
 ```js
 const { Queue, Worker } = require('bullmq');
-const { createMailQueue } = require('@alexify/mailer/queue');
+const { createQueue } = require('@alexify/mailer/queue');
 const { createBullMQDriver } = require('@alexify/mailer/bullmq');
 const { createLoggerAuditSink } = require('@alexify/mailer/audit');
 
 const driver = createBullMQDriver({ bullmq: { Queue, Worker }, connection: { host: 'valkey' } });
-const queue = createMailQueue({ driver, audit: createLoggerAuditSink(logger), logger });
+const queue = createQueue({ driver, audit: createLoggerAuditSink(logger), logger });
 
 // The producer: an HTTP handler, a cron.
 await queue.enqueue({
@@ -104,7 +104,7 @@ and `mac`); its workers send only jobs that one of the keys signed, and fail
 any other with `queue.signature_invalid`, unsent, logged at `error`:
 
 ```js
-const queue = createMailQueue({
+const queue = createQueue({
   driver,
   signingKeys: [{ id: '2026-10', secret: process.env.MAIL_JOB_KEY }], // 32 bytes at least
 });
@@ -141,7 +141,7 @@ const codec = {
     return Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString();
   },
 };
-const queue = createMailQueue({ driver, codec, signingKeys });
+const queue = createQueue({ driver, codec, signingKeys });
 ```
 
 A sealed job keeps in clear only `v`, `hash` (a duplicate is still told by
@@ -156,7 +156,7 @@ can seal can still forge, so seal with `signingKeys` too.
 
 The id of a job is a UUID of its namespace, tenant and `idempotencyKey`: the
 same message enqueued again is the same job (`duplicate: true`), and another
-message under the key is refused with `MailQueueError` `queue.key_reused`, its
+message under the key is refused with `QueueError` `queue.key_reused`, its
 `jobIds` the jobs refused. `enqueueMany` refuses them only once every other
 job of the call is enqueued and told to the audit, and gives what those gave as
 the error's `answers`.
@@ -193,7 +193,7 @@ from (an HMAC under `idSecret` for the id of the job), and it must give the same
 identifier for the same seed, which the queue checks:
 
 ```js
-const queue = createMailQueue({
+const queue = createQueue({
   driver,
   generateId: () => ulid(), // drawn: new at each call
   deriveId: (kind, seed) => (kind === 'job-id' ? `job_${seed.slice(0, 26)}` : `m${seed.slice(0, 32)}`),
@@ -348,7 +348,7 @@ code in step.
 
 | Code | Where | What |
 | --- | --- | --- |
-| `queue.invalid_job` | failure | the data of a job is not that of a mail job |
+| `queue.invalid_job` | failure | the data of a job is not that of a job of this package |
 | `queue.unsupported_version` | failure | written by a later version: given back, then failed after a week |
 | `queue.hash_mismatch` | failure | the job is not what was enqueued |
 | `queue.signature_invalid` | failure | not signed by a key of `signingKeys` |

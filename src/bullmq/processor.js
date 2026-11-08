@@ -64,7 +64,7 @@ const dropData = async (job) => {
  * Its worker needs `settings.backoffStrategy` from
  * `createBullMQBackoffStrategy()`.
  *
- * @param handler The handler, such as `createMailJobHandler()`.
+ * @param handler The handler, such as `createJobHandler()`.
  * @param options `rateLimit(ms)`, the queue's `rateLimit`, for a retry of the
  * whole queue (it needs the worker's `limiter`); `signal`; `retainData`
  * ('failed'), the finished jobs whose data is kept; `now`.

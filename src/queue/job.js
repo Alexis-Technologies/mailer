@@ -17,8 +17,8 @@ const { hashJson } = require('../internal/canonical-json.js');
 const { toJson } = require('../internal/json.js');
 const { keyringOf, signJob } = require('./signing.js');
 
-const MAIL_JOB_VERSION = 1;
-const MAIL_JOB_NAME = 'mail';
+const EMAIL_JOB_VERSION = 1;
+const EMAIL_JOB_NAME = 'mail';
 const KINDS = new Set(['template', 'content']);
 // What the hash of a job leaves out: when it was enqueued, itself, and what
 // is written over it once it is made: the HMAC and its key id, and the trace
@@ -256,7 +256,7 @@ const fieldsOf = (input, probe, attachments, messageId) => {
  * a signing key or `idSecret`.
  * @throws {RangeError} If the job or its attachments are too large.
  */
-const prepareMailJob = (input, options = {}) => {
+const prepareJob = (input, options = {}) => {
   const config = resolveConfig(options);
   if (typeof input !== 'object' || input === null || !KINDS.has(input.kind)) {
     throw new TypeError("A job is { kind: 'template', template } or { kind: 'content', content }.");
@@ -306,7 +306,7 @@ const prepareMailJob = (input, options = {}) => {
     probe.messageId ??
     generateSenderMessageId(probe.sender.address, idOf('message-id', 'message-id'));
   const now = (config.now ?? Date.now)();
-  const data = { v: MAIL_JOB_VERSION, ...body, ...fieldsOf(input, probe, attachments, messageId) };
+  const data = { v: EMAIL_JOB_VERSION, ...body, ...fieldsOf(input, probe, attachments, messageId) };
   data.idempotencyKey = idempotencyKey;
   if (tenantId !== undefined) data.tenantId = tenantId;
   data.correlationId = correlationId;
@@ -321,7 +321,7 @@ const prepareMailJob = (input, options = {}) => {
   }
   const request = {
     id: jobId,
-    name: MAIL_JOB_NAME,
+    name: EMAIL_JOB_NAME,
     data,
     hash: data.hash,
     priority: probe.priority,
@@ -335,10 +335,10 @@ const prepareMailJob = (input, options = {}) => {
 };
 
 module.exports = {
-  MAIL_JOB_NAME,
-  MAIL_JOB_VERSION,
+  EMAIL_JOB_NAME,
+  EMAIL_JOB_VERSION,
   UNHASHED,
   V1_KEYS,
   checkIdSecret,
-  prepareMailJob,
+  prepareJob,
 };

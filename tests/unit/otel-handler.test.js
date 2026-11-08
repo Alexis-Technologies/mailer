@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { instrumentHandler } = require('../../src/otel/index.js');
 const { spanContextOf } = require('../../src/otel/handler.js');
-const { createMailQueue, createMemoryQueue, parseMailJob } = require('../../src/queue/index.js');
+const { createQueue, createMemoryQueue, parseJob } = require('../../src/queue/index.js');
 const { MockMeterProvider } = require('../helpers/otel/mock-otel-providers.js');
 
 const TRACEPARENT = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
@@ -166,7 +166,7 @@ test('OTel handler: only a valid traceparent is a link', () => {
 test('OTel handler: a mail queue gives each job the producer’s trace, outside its hash and signature', async () => {
   let current = TRACEPARENT;
   const key = { id: 'k', secret: 'k'.repeat(32) };
-  const queue = createMailQueue({
+  const queue = createQueue({
     driver: createMemoryQueue(),
     signingKeys: [key],
     traceContext: () => current,
@@ -184,9 +184,9 @@ test('OTel handler: a mail queue gives each job the producer’s trace, outside 
   const [traced, untraced] = queue.driver.list();
   assert.strictEqual(traced.data.trace, TRACEPARENT);
   assert.strictEqual(untraced.data.trace, undefined);
-  assert.strictEqual(parseMailJob(traced.data, { signingKeys: [key] }).trace, TRACEPARENT);
+  assert.strictEqual(parseJob(traced.data, { signingKeys: [key] }).trace, TRACEPARENT);
   assert.throws(
-    () => createMailQueue({ driver: createMemoryQueue(), traceContext: 1 }),
+    () => createQueue({ driver: createMemoryQueue(), traceContext: 1 }),
     /traceContext/,
   );
 });

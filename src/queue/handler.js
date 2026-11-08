@@ -1,4 +1,4 @@
-// Not ported: the worker of a mail queue, as one handler any driver runs:
+// Not ported: the worker of a queue, as one handler any driver runs:
 // it reads a job, renders its template (or takes its content), resolves its
 // attachments, builds the message, sends it through the transport the
 // application composed, and makes of the receipt what the queue does next,
@@ -20,8 +20,8 @@ const { isCallerAbort } = require('../internal/sleep.js');
 const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');
 const { outcomeOfFailure, reasonOf } = require('./outcome.js');
-const { checkCodec, openMailJob } = require('./envelope.js');
-const { parseMailJob } = require('./parse.js');
+const { checkCodec, openJob } = require('./envelope.js');
+const { parseJob } = require('./parse.js');
 const { keyringOf } = require('./signing.js');
 
 const DEFAULT_BACKOFF = Object.freeze({
@@ -58,13 +58,13 @@ const checkBackoff = (given) => {
 const createHandlerConfig = (options = {}) => {
   const { transport, renderer, audit } = options;
   if (typeof transport?.send !== 'function') {
-    throw new TypeError('A mail worker needs a transport.');
+    throw new TypeError('A worker needs a transport.');
   }
   if (renderer !== undefined && typeof renderer?.render !== 'function') {
-    throw new TypeError('The renderer of a mail worker must have render().');
+    throw new TypeError('The renderer of a worker must have render().');
   }
   if (audit !== undefined && typeof audit?.append !== 'function') {
-    throw new TypeError('The audit sink of a mail worker must have append().');
+    throw new TypeError('The audit sink of a worker must have append().');
   }
   const rateLimitScope = options.rateLimitScope ?? 'job';
   if (rateLimitScope !== 'job' && rateLimitScope !== 'queue' && rateLimitScope !== 'tenant') {
@@ -152,7 +152,7 @@ const emit = async (run, state, extra = {}, attempt = run.job.attempt) => {
       () => ({ jobId: job.id, state, code: 'MAILER_AUDIT_FAILED' }),
       'queue.audit.failed',
     );
-    warnThrown('The audit sink of the mail queue', error, 'MAILER_AUDIT_FAILED');
+    warnThrown('The audit sink of the queue', error, 'MAILER_AUDIT_FAILED');
     if (!config.auditStrict || (state !== 'rendered' && state !== 'submitted')) return undefined;
     return {
       type: 'retry',
@@ -547,15 +547,15 @@ const unreadOutcome = (config, job, error) => {
 
 const readJob = async (config, job) => {
   try {
-    const data = await openMailJob(job.data, config.codec);
-    return { data: parseMailJob(data, { signingKeys: config.signingKeys }) };
+    const data = await openJob(job.data, config.codec);
+    return { data: parseJob(data, { signingKeys: config.signingKeys }) };
   } catch (error) {
     return { outcome: unreadOutcome(config, job, error) };
   }
 };
 
 /**
- * Makes the handler of mail jobs, for any queue driver.
+ * Makes the handler of jobs, for any queue driver.
  *
  * @param options `transport`; `renderer`, for template jobs; `audit`,
  * `auditStrict`; `signingKeys`, when only signed jobs are sent; `codec`,
@@ -569,7 +569,7 @@ const readJob = async (config, job) => {
  * not throw.
  * @throws {TypeError} If an option is invalid.
  */
-const createMailJobHandler = (options) => {
+const createJobHandler = (options) => {
   const config = createHandlerConfig(options);
   return async (job, signal) => {
     const read = await readJob(config, job);
@@ -605,11 +605,11 @@ const createMailJobHandler = (options) => {
       // What escaped the steps: a bug of this worker, or a sink or logger
       // that threw where it is not guarded. Told, not only failed.
       const reason = reasonOf(messageOf(error));
-      warnThrown('The mail worker', error, 'MAILER_QUEUE_WORKER_THREW');
+      warnThrown('The worker of the queue', error, 'MAILER_QUEUE_WORKER_THREW');
       config.log.write('error', () => ({ jobId: job.id, reason }), 'queue.worker.error');
       return { type: 'fail', code: 'queue.thrown', reason };
     }
   };
 };
 
-module.exports = { createMailJobHandler };
+module.exports = { createJobHandler };

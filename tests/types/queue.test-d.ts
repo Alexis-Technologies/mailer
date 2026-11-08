@@ -9,20 +9,20 @@ import type {
 } from '../../index.js';
 import { createMemoryAuditSink } from '../../src/audit/index.js';
 import {
-  MAIL_JOB_NAME,
-  MAIL_JOB_VERSION,
-  MailQueueError,
+  EMAIL_JOB_NAME,
+  EMAIL_JOB_VERSION,
+  QueueError,
   QueueLeaseLostError,
-  createMailJobHandler,
-  createMailQueue,
+  createJobHandler,
+  createQueue,
   createMemoryQueue,
   createPollingDriver,
-  parseMailJob,
-  prepareMailJob,
-  type MailEnqueueResult,
-  type MailJobData,
-  type MailQueue,
-  type MailWorker,
+  parseJob,
+  prepareJob,
+  type EnqueueResult,
+  type JobData,
+  type MessageQueue,
+  type QueueWorker,
   type MemoryQueue,
   type MemoryQueueJob,
 } from '../../src/queue/index.js';
@@ -41,13 +41,13 @@ expectType<readonly MemoryQueueJob[]>(driver.failed({ limit: 10 }));
 expectError(createMemoryQueue({ fairness: 'fifo' }));
 expectError(createMemoryQueue({ retainData: 'some' }));
 expectAssignable<QueueDriver>(driver);
-const queue = createMailQueue({
+const queue = createQueue({
   driver,
   audit: createMemoryAuditSink(),
   namespace: 'mail',
   maxAttempts: 3,
 });
-expectType<MailQueue<MemoryQueue>>(queue);
+expectType<MessageQueue<MemoryQueue>>(queue);
 const result = await queue.enqueue({
   kind: 'template',
   template: 'reset',
@@ -62,7 +62,7 @@ const result = await queue.enqueue({
   scheduledAt: new Date(),
   priority: 'high',
 });
-expectType<MailEnqueueResult>(result);
+expectType<EnqueueResult>(result);
 expectType<boolean | undefined>(result.duplicate);
 await queue.enqueue({
   kind: 'content',
@@ -103,7 +103,7 @@ const worker = queue.createWorker({
   renderer,
   concurrency: 4,
   resolveAttachment: async (ref, { job, attachment, signal }) => {
-    expectType<MailJobData>(job);
+    expectType<JobData>(job);
     expectType<string>(attachment.filename);
     expectType<AbortSignal>(signal);
     return new Uint8Array();
@@ -112,31 +112,31 @@ const worker = queue.createWorker({
   backoff: { baseDelayMilliseconds: 1000 },
   rateLimitScope: 'queue',
 });
-expectType<MailWorker>(worker);
+expectType<QueueWorker>(worker);
 await worker.close({ timeoutMilliseconds: 1000 });
 await worker[Symbol.asyncDispose]();
 expectError(queue.createWorker({ renderer }));
 
-const handler: QueueHandler = createMailJobHandler({ transport });
+const handler: QueueHandler = createJobHandler({ transport });
 declare const job: QueueJob;
 expectType<Promise<QueueOutcome>>(handler(job, new AbortController().signal));
-const prepared = prepareMailJob({
+const prepared = prepareJob({
   kind: 'content',
   from: 'a@example.com',
   to: 'b@example.com',
   subject: 's',
   content: { html: '<p/>' },
 });
-expectType<MailJobData>(prepared.data);
+expectType<JobData>(prepared.data);
 expectType<string>(prepared.request.id);
-expectType<MailJobData>(parseMailJob({}));
+expectType<JobData>(parseJob({}));
 const keys = [
   { id: 'k1', secret: 'a'.repeat(32) },
   { id: 'k0', secret: new Uint8Array(32) },
 ];
-expectType<MailJobData>(parseMailJob({}, { signingKeys: keys }));
+expectType<JobData>(parseJob({}, { signingKeys: keys }));
 expectType<string | undefined>(
-  prepareMailJob(
+  prepareJob(
     {
       kind: 'content',
       from: 'a@example.com',
@@ -147,8 +147,8 @@ expectType<string | undefined>(
     { signingKeys: keys },
   ).data.mac,
 );
-createMailQueue({ driver, signingKeys: keys, idSecret: 's'.repeat(32) });
-prepareMailJob(
+createQueue({ driver, signingKeys: keys, idSecret: 's'.repeat(32) });
+prepareJob(
   {
     kind: 'content',
     from: 'a@example.com',
@@ -158,22 +158,22 @@ prepareMailJob(
   },
   { idSecret: new Uint8Array(32) },
 );
-expectError(createMailQueue({ driver, idSecret: 42 }));
-createMailQueue({
+expectError(createQueue({ driver, idSecret: 42 }));
+createQueue({
   driver,
   deriveId: (kind, seed) => (kind === 'job-id' ? `job_${seed.slice(0, 26)}` : seed.slice(0, 32)),
 });
-expectError(createMailQueue({ driver, deriveId: (kind: number) => String(kind) }));
+expectError(createQueue({ driver, deriveId: (kind: number) => String(kind) }));
 const codec = { encode: (text: string) => text, decode: async (text: string) => text };
-createMailQueue({ driver, codec });
-createMailJobHandler({ transport, codec, maxRedeliveries: 0, redelivered: 'delivery_unknown' });
-expectError(createMailJobHandler({ transport, redelivered: 'never' }));
-expectError(createMailQueue({ driver, codec: { encode: (text: string) => text } }));
-createMailJobHandler({ transport, signingKeys: keys });
-expectError(createMailJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));
-expectType<1>(MAIL_JOB_VERSION);
-expectType<'mail'>(MAIL_JOB_NAME);
-const error = new MailQueueError('queue.key_reused', 'x');
+createQueue({ driver, codec });
+createJobHandler({ transport, codec, maxRedeliveries: 0, redelivered: 'delivery_unknown' });
+expectError(createJobHandler({ transport, redelivered: 'never' }));
+expectError(createQueue({ driver, codec: { encode: (text: string) => text } }));
+createJobHandler({ transport, signingKeys: keys });
+expectError(createJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));
+expectType<1>(EMAIL_JOB_VERSION);
+expectType<'mail'>(EMAIL_JOB_NAME);
+const error = new QueueError('queue.key_reused', 'x');
 expectType<
   | 'queue.key_reused'
   | 'queue.invalid_job'
@@ -183,7 +183,7 @@ expectType<
   | 'queue.codec_missing'
   | 'queue.codec_failed'
 >(error.code);
-expectError(new MailQueueError('nope', 'x'));
+expectError(new QueueError('nope', 'x'));
 new QueueLeaseLostError('j');
 declare const source: QueueSource;
 expectAssignable<QueueDriver>(createPollingDriver(source, { leaseMilliseconds: 1000 }));

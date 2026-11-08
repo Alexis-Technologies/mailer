@@ -71,7 +71,7 @@ const instrumentsOf = (meterProvider) => {
 };
 
 /**
- * Wraps a queue handler, such as `createMailJobHandler()`, with OpenTelemetry:
+ * Wraps a queue handler, such as `createJobHandler()`, with OpenTelemetry:
  * a span `mailer.queue.process` per run, linked to the producer's trace (the
  * `traceparent` the mail queue's `traceContext` wrote as the job's `trace`),
  * and the metrics `mailer.queue.jobs` (by `outcome` and `code`),

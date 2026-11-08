@@ -1,7 +1,7 @@
 import { expectAssignable, expectError, expectType } from 'tsd';
 import { Queue, Worker } from 'bullmq';
 import type { QueueDriver } from '../../index.js';
-import { createMailQueue } from '../../src/queue/index.js';
+import { createQueue } from '../../src/queue/index.js';
 import {
   MAILER_BACKOFF_TYPE,
   createBullMQBackoffStrategy,
@@ -30,7 +30,7 @@ declare const own: Queue;
 createBullMQDriver({ bullmq: { Queue: own } });
 expectError(createBullMQDriver({ bullmq: { Queue }, jobOptions: { attempts: 3 } }));
 expectError(createBullMQDriver({ bullmq: { Queue }, workerOptions: { concurrency: 3 } }));
-createMailQueue({ driver });
+createQueue({ driver });
 
 // A Worker of your own, with the processor and the strategy.
 const processor: BullMQProcessor = createBullMQProcessor(async () => ({ type: 'ack' }), {

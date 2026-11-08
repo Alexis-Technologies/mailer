@@ -2,12 +2,12 @@
 // whoever can write to it may have written, so its shape is checked, and its
 // hash, which holds the job to what was enqueued.
 
-const { MailQueueError } = require('./errors.js');
+const { QueueError } = require('./errors.js');
 const { hashJson } = require('../internal/canonical-json.js');
-const { MAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
+const { EMAIL_JOB_VERSION, UNHASHED, V1_KEYS } = require('./job.js');
 const { keyringOf, verifyJob } = require('./signing.js');
 
-const invalid = (message) => new MailQueueError('queue.invalid_job', `Invalid job: ${message}`);
+const invalid = (message) => new QueueError('queue.invalid_job', `Invalid job: ${message}`);
 
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -70,27 +70,27 @@ const checkAttachments = (attachments) => {
  * @param data The data of the job.
  * @param options `signingKeys`: a job must then be signed by one of them.
  * @returns The same data, checked.
- * @throws {MailQueueError} `queue.invalid_job` if it is not the data of a
- * mail job, `queue.unsupported_version` if a later version wrote it (its
+ * @throws {QueueError} `queue.invalid_job` if it is not the data of a
+ * job, `queue.unsupported_version` if a later version wrote it (its
  * version, or a field this one does not know), `queue.hash_mismatch` if it is
  * not what was enqueued, and `queue.signature_invalid` if it is not signed by
  * a key of `signingKeys`.
  * @throws {TypeError} If a signing key is invalid.
  */
-const parseMailJob = (data, options = {}) => {
+const parseJob = (data, options = {}) => {
   const keyring = keyringOf(options.signingKeys);
   if (!isObject(data)) throw invalid('its data is no object.');
   if (typeof data.enc === 'string') {
-    throw new MailQueueError(
+    throw new QueueError(
       'queue.codec_missing',
       'The job is sealed: open it with its codec before it is read.',
     );
   }
-  if (data.v !== MAIL_JOB_VERSION) {
-    if (Number.isInteger(data.v) && data.v > MAIL_JOB_VERSION) {
-      throw new MailQueueError(
+  if (data.v !== EMAIL_JOB_VERSION) {
+    if (Number.isInteger(data.v) && data.v > EMAIL_JOB_VERSION) {
+      throw new QueueError(
         'queue.unsupported_version',
-        `The job is of version ${data.v}, which this worker does not read: it reads ${MAIL_JOB_VERSION}.`,
+        `The job is of version ${data.v}, which this worker does not read: it reads ${EMAIL_JOB_VERSION}.`,
       );
     }
     throw invalid(`its version is ${JSON.stringify(data.v)}.`);
@@ -99,7 +99,7 @@ const parseMailJob = (data, options = {}) => {
   // waits for its worker, rather than failing here for a hash of other fields.
   for (const key of Object.keys(data)) {
     if (!V1_KEYS.has(key)) {
-      throw new MailQueueError(
+      throw new QueueError(
         'queue.unsupported_version',
         `The job holds the field ${JSON.stringify(key)}, which this worker does not read.`,
       );
@@ -120,7 +120,7 @@ const parseMailJob = (data, options = {}) => {
   }
   if (!isObject(data.metadata)) throw invalid('metadata is no object.');
   if (hashJson(data, UNHASHED) !== data.hash) {
-    throw new MailQueueError(
+    throw new QueueError(
       'queue.hash_mismatch',
       'The job is not what was enqueued: its hash differs.',
     );
@@ -129,4 +129,4 @@ const parseMailJob = (data, options = {}) => {
   return data;
 };
 
-module.exports = { parseMailJob };
+module.exports = { parseJob };

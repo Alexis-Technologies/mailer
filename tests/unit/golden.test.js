@@ -17,10 +17,10 @@ const {
 } = require('../../src/idempotency/index.js');
 const { fingerprintOf } = require('../../src/internal/fingerprint.js');
 const {
-  createMailJobHandler,
-  createMailQueue,
+  createJobHandler,
+  createQueue,
   createMemoryQueue,
-  prepareMailJob,
+  prepareJob,
 } = require('../../src/queue/index.js');
 const { createMemoryLoader, createTemplateRenderer } = require('../../src/templates/index.js');
 const { fakeEngine } = require('../helpers/templates/fake-engine.js');
@@ -191,7 +191,7 @@ test('Golden: createMessage gives the fields of 1.2', () => {
 });
 
 test('Golden: a job of a template under a key, a tenant and a signing key', () => {
-  const { data, request } = prepareMailJob(
+  const { data, request } = prepareJob(
     {
       kind: 'template',
       template: 'welcome',
@@ -276,7 +276,7 @@ test('Golden: a job of a template under a key, a tenant and a signing key', () =
 });
 
 test('Golden: a job of content under idSecret and a namespace', () => {
-  const { data, request } = prepareMailJob(
+  const { data, request } = prepareJob(
     {
       kind: 'content',
       subject: 'Receipt',
@@ -312,7 +312,7 @@ test('Golden: a job of content under idSecret and a namespace', () => {
 
 test('Golden: a job without a key takes its identifiers from generateId', () => {
   let count = 0;
-  const { data, request } = prepareMailJob(
+  const { data, request } = prepareJob(
     {
       kind: 'content',
       subject: 'Hi',
@@ -331,7 +331,7 @@ test('Golden: a job without a key takes its identifiers from generateId', () => 
 
 test('Golden: deriveId is given the seeds of 1.2', () => {
   const seeds = [];
-  const { data, request } = prepareMailJob(
+  const { data, request } = prepareJob(
     {
       kind: 'content',
       subject: 'Hi',
@@ -363,7 +363,7 @@ test('Golden: deriveId is given the seeds of 1.2', () => {
 test('Golden: a sealed job keeps in clear the envelope of 1.2', async () => {
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
-  const queue = createMailQueue({
+  const queue = createQueue({
     driver,
     now: clock.now,
     codec: CODEC,
@@ -415,7 +415,7 @@ test('Golden: the audit events of a job sent, and of a delivery event', async (t
     pollIntervalMilliseconds: 1000,
   });
   const audit = createMemoryAuditSink();
-  const queue = createMailQueue({ driver, audit, now: clock.now });
+  const queue = createQueue({ driver, audit, now: clock.now });
   const renderer = createTemplateRenderer({
     engine: fakeEngine(),
     loader: createMemoryLoader({
@@ -517,7 +517,7 @@ test('Golden: ./idempotency reserves under the namespace and fingerprint of 1.2'
 
 test('Golden: a job 1.2 wrote is sent with its Message-ID and Content-IDs', async () => {
   const transport = fakeTransport(() => sent('p-1'));
-  const handler = createMailJobHandler({
+  const handler = createJobHandler({
     transport,
     signingKeys: SIGNING_KEYS,
     now: () => NOW,
@@ -543,7 +543,7 @@ test('Golden: a job 1.2 wrote is sent with its Message-ID and Content-IDs', asyn
 
 test('Golden: a sealed job 1.2 wrote is opened and sent as it was', async () => {
   const transport = fakeTransport(() => sent('p-1'));
-  const handler = createMailJobHandler({
+  const handler = createJobHandler({
     transport,
     signingKeys: SIGNING_KEYS,
     codec: CODEC,
@@ -562,7 +562,7 @@ test('Golden: the message of a job 1.2 wrote, enqueued again under its key, is i
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
   await driver.enqueue({ ...JOB_V1.request, data: structuredClone(JOB_V1.data) });
-  const queue = createMailQueue({ driver, now: clock.now, signingKeys: SIGNING_KEYS });
+  const queue = createQueue({ driver, now: clock.now, signingKeys: SIGNING_KEYS });
   const answer = await queue.enqueue(receiptJob());
   assert.deepStrictEqual(answer, {
     id: JOB_V1.request.id,

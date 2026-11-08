@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { createMemoryAuditSink } = require('../../src/audit/index.js');
-const { createMailJobHandler, prepareMailJob } = require('../../src/queue/index.js');
+const { createJobHandler, prepareJob } = require('../../src/queue/index.js');
 const { hashJson } = require('../../src/internal/canonical-json.js');
 const { markDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
 const {
@@ -24,7 +24,7 @@ const templates = createTemplateRenderer({
 });
 
 const jobOf = (input = {}, run = {}) => {
-  const { data, request } = prepareMailJob(
+  const { data, request } = prepareJob(
     {
       kind: 'template',
       template: 'welcome',
@@ -68,7 +68,7 @@ const failure = (category, extra = {}) => ({
 const handlerOf = (options = {}) => {
   const audit = createMemoryAuditSink();
   const transport = options.transport ?? fakeTransport();
-  const handler = createMailJobHandler({
+  const handler = createJobHandler({
     transport,
     renderer: templates,
     audit,
@@ -544,9 +544,9 @@ test('Queue: the handler checks its options', () => {
     [{ transport, classify: 1 }, /classify/],
   ];
   for (const [options, pattern] of cases) {
-    assert.throws(() => createMailJobHandler(options), pattern);
+    assert.throws(() => createJobHandler(options), pattern);
   }
-  assert.throws(() => createMailJobHandler(), /needs a transport/);
+  assert.throws(() => createJobHandler(), /needs a transport/);
 });
 
 test('Queue: a job whose runs keep ending unsettled is given up, unsent', async () => {
@@ -687,7 +687,7 @@ test('Queue: what escapes the steps is told, and each outcome logged with its du
   const failed = records.find(([message]) => message === 'queue.job.failed');
   assert.ok(failed[1].durationMs > 0);
   const broken = await run(
-    createMailJobHandler({
+    createJobHandler({
       transport: fakeTransport(() => failure('server-error', { retryable: true })),
       renderer: templates,
       logger,

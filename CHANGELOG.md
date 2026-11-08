@@ -55,6 +55,14 @@ worker of 1.2 holds reads the same.
   redacted of its recipient as it names it. A span of email adds `mailer.channel` and
   `mailer.tenant.id`; its other attributes are those of 1.x. `OpenTelemetryTransport<P,
   TMessage>` takes the messages of the transport wrapped.
+- **Breaking: the API of `./queue` names no mail.** `createMailQueue` is `createQueue`,
+  `createMailJobHandler` `createJobHandler`, `prepareMailJob` and `parseMailJob` are
+  `prepareJob` and `parseJob`, and `MailQueueError` is `QueueError`, with the same `queue.*`
+  codes; `MAIL_JOB_NAME` and `MAIL_JOB_VERSION` are `EMAIL_JOB_NAME` and `EMAIL_JOB_VERSION`.
+  The types lose `Mail` likewise (`MailJobData` is `JobData`, `MailQueue` is `MessageQueue`,
+  `MailWorkerOptions` is `JobHandlerOptions`, `MailEnqueueResult` is `EnqueueResult`,
+  `MailQueueStats` is `QueueStats`), and the texts of its errors and warnings name a queue and
+  a worker. An email job keeps its name, `mail`, and its bytes.
 
 ### Added
 

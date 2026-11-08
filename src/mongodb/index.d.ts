@@ -13,7 +13,7 @@ import type {
   QueueSource,
 } from '../../index.js';
 import type { IdempotencyStore } from '../idempotency/index.js';
-import type { MailQueueStats, PollingDriverOptions } from '../queue/index.js';
+import type { QueueStats, PollingDriverOptions } from '../queue/index.js';
 
 /** What a write of a collection gives. */
 export interface MongoUpdateResultLike {
@@ -104,7 +104,7 @@ export interface MongoOutbox extends QueueDriver {
   /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
   resume(scope?: { readonly tenantId?: string }): Promise<void>;
   /** Its jobs by state, the lag of its workers and its pauses: for a dashboard or an alert. */
-  stats(): Promise<MailQueueStats>;
+  stats(): Promise<QueueStats>;
   /** The failed jobs, by id, a page of `limit` (100) after `after`. */
   failed(options?: {
     readonly limit?: number;
@@ -127,7 +127,7 @@ export interface MongoOutbox extends QueueDriver {
  * ```js
  * const outbox = createMongoOutbox({ collection: db.collection('mail_outbox') });
  * await outbox.ensureIndexes();
- * const queue = createMailQueue({ driver: outbox, audit });
+ * const queue = createQueue({ driver: outbox, audit });
  * await session.withTransaction(async () => {
  *   await users.updateOne({ _id }, { $set: { resetToken } }, { session });
  *   await queue.enqueue(job, { transaction: session });

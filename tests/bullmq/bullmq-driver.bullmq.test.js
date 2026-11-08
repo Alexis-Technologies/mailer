@@ -7,7 +7,7 @@ const { randomUUID } = require('node:crypto');
 const { Queue, Worker } = require('bullmq');
 const { createMemoryAuditSink } = require('../../src/audit/index.js');
 const { createBullMQDriver } = require('../../src/bullmq/index.js');
-const { createMailJobHandler, createMailQueue } = require('../../src/queue/index.js');
+const { createJobHandler, createQueue } = require('../../src/queue/index.js');
 const { fakeTransport, sent } = require('../helpers/decorators/fake.js');
 
 const url = process.env.BULLMQ_REDIS_URL;
@@ -44,7 +44,7 @@ const setup = (t, options = {}) => {
   const connection = connectionOf();
   const driver = createBullMQDriver({ bullmq: { Queue, Worker }, connection, prefix, ...options });
   const audit = createMemoryAuditSink();
-  const queue = createMailQueue({ driver, audit });
+  const queue = createQueue({ driver, audit });
   const consumers = [];
   t.after(async () => {
     for (const consumer of consumers) await consumer.close({ timeoutMilliseconds: 1000 });
@@ -201,7 +201,7 @@ test(
     const prefix = `mailer-test-${randomUUID()}`;
     const connection = connectionOf();
     const driver = createBullMQDriver({ bullmq: { Queue }, connection, prefix });
-    const queue = createMailQueue({ driver });
+    const queue = createQueue({ driver });
     const transport = fakeTransport(() => ({
       successful: false,
       errorMessages: ['busy'],
@@ -210,7 +210,7 @@ test(
     }));
     const { id } = await queue.enqueue(job());
     const errors = [];
-    const processor = driver.createProcessor(createMailJobHandler({ transport }));
+    const processor = driver.createProcessor(createJobHandler({ transport }));
     const plain = new Worker(driver.queue.name, processor, { connection, prefix });
     plain.on('error', (error) => errors.push(error.message));
     t.after(async () => {

@@ -3,12 +3,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const {
-  MailQueueError,
-  createMailJobHandler,
-  createMailQueue,
+  QueueError,
+  createJobHandler,
+  createQueue,
   createMemoryQueue,
-  parseMailJob,
-  prepareMailJob,
+  parseJob,
+  prepareJob,
 } = require('../../src/queue/index.js');
 const { hashJson } = require('../../src/internal/canonical-json.js');
 const { UNHASHED } = require('../../src/queue/job.js');
@@ -26,9 +26,9 @@ const input = {
   to: 'ada@example.com',
   idempotencyKey: 'code:1',
 };
-const prepare = (options) => prepareMailJob(input, { now: () => NOW, ...options });
+const prepare = (options) => prepareJob(input, { now: () => NOW, ...options });
 const copyOf = (data) => JSON.parse(JSON.stringify(data));
-const isCode = (code) => (error) => error instanceof MailQueueError && error.code === code;
+const isCode = (code) => (error) => error instanceof QueueError && error.code === code;
 
 // What a writer to the store can do: change the job and recompute its hash.
 const forge = (data) => {
@@ -46,16 +46,16 @@ test('Queue: a signed job carries its key id and HMAC, outside its hash', () => 
   assert.match(signed.mac, /^[0-9a-f]{64}$/);
   assert.strictEqual(signed.hash, plain.hash);
   const copy = copyOf(signed);
-  assert.strictEqual(parseMailJob(copy, { signingKeys: [KEY_A] }), copy);
+  assert.strictEqual(parseJob(copy, { signingKeys: [KEY_A] }), copy);
 });
 
 test('Queue: a job forged with its hash recomputed is refused under signing keys', () => {
   const signed = prepare({ signingKeys: [KEY_A] }).data;
   const forged = forge(signed);
   // Its SHA-256 alone does not tell it: anyone who writes to the store can make it.
-  assert.strictEqual(parseMailJob(forged).to[0].address, 'victim@example.org');
+  assert.strictEqual(parseJob(forged).to[0].address, 'victim@example.org');
   assert.throws(
-    () => parseMailJob(forged, { signingKeys: [KEY_A] }),
+    () => parseJob(forged, { signingKeys: [KEY_A] }),
     (error) => {
       assert.ok(isCode('queue.signature_invalid')(error));
       assert.match(error.message, /does not verify/);
@@ -64,12 +64,12 @@ test('Queue: a job forged with its hash recomputed is refused under signing keys
   );
   const unsigned = forge(prepare().data);
   assert.throws(
-    () => parseMailJob(unsigned, { signingKeys: [KEY_A] }),
+    () => parseJob(unsigned, { signingKeys: [KEY_A] }),
     (error) => isCode('queue.signature_invalid')(error) && /not signed/.test(error.message),
   );
   const badMac = { ...copyOf(signed), mac: 'z'.repeat(64) };
   assert.throws(
-    () => parseMailJob(badMac, { signingKeys: [KEY_A] }),
+    () => parseJob(badMac, { signingKeys: [KEY_A] }),
     isCode('queue.signature_invalid'),
   );
 });
@@ -79,11 +79,11 @@ test('Queue: signing keys rotate: the first signs, each verifies', () => {
   const rotated = copyOf(prepare({ signingKeys: [KEY_B, KEY_A] }).data);
   assert.strictEqual(rotated.kid, 'b');
   for (const data of [old, rotated]) {
-    assert.strictEqual(parseMailJob(data, { signingKeys: [KEY_B, KEY_A] }), data);
+    assert.strictEqual(parseJob(data, { signingKeys: [KEY_B, KEY_A] }), data);
   }
   // Once the old key is dropped, what it signed is refused.
   assert.throws(
-    () => parseMailJob(old, { signingKeys: [KEY_B] }),
+    () => parseJob(old, { signingKeys: [KEY_B] }),
     (error) => isCode('queue.signature_invalid')(error) && /"a"/.test(error.message),
   );
 });
@@ -99,15 +99,15 @@ test('Queue: signing keys are checked', () => {
   ];
   for (const [signingKeys, pattern] of refusals) {
     assert.throws(() => prepare({ signingKeys }), pattern);
-    assert.throws(() => createMailJobHandler({ transport: fakeTransport(), signingKeys }), pattern);
-    assert.throws(() => createMailQueue({ driver: createMemoryQueue(), signingKeys }), pattern);
+    assert.throws(() => createJobHandler({ transport: fakeTransport(), signingKeys }), pattern);
+    assert.throws(() => createQueue({ driver: createMemoryQueue(), signingKeys }), pattern);
   }
 });
 
 test('Queue: a worker with signing keys sends a signed job and fails a forged one unsent', async (t) => {
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
-  const queue = createMailQueue({ driver, now: clock.now, signingKeys: [KEY_A] });
+  const queue = createQueue({ driver, now: clock.now, signingKeys: [KEY_A] });
   const transport = fakeTransport();
   await queue.enqueue(input);
   const worker = queue.createWorker({ transport });
@@ -117,7 +117,7 @@ test('Queue: a worker with signing keys sends a signed job and fails a forged on
 
   const records = [];
   const logger = { error: (record, message) => records.push([message, record]) };
-  const handler = createMailJobHandler({ transport, signingKeys: [KEY_A], logger, now: () => NOW });
+  const handler = createJobHandler({ transport, signingKeys: [KEY_A], logger, now: () => NOW });
   const signed = prepare({ signingKeys: [KEY_A] });
   const job = {
     id: signed.request.id,
@@ -167,7 +167,7 @@ test('Queue: with a codec the store holds no address, and the worker opens the j
   const clock = manualClock(NOW);
   const driver = createMemoryQueue({ now: clock.now, sleep: clock.sleep });
   const codec = aesCodec();
-  const queue = createMailQueue({ driver, now: clock.now, codec, signingKeys: [KEY_A] });
+  const queue = createQueue({ driver, now: clock.now, codec, signingKeys: [KEY_A] });
   const transport = fakeTransport();
   const withFile = {
     ...input,
@@ -197,16 +197,16 @@ test('Queue: with a codec the store holds no address, and the worker opens the j
   const { message } = transport.calls[0];
   assert.strictEqual(message.recipients[0].address, 'ada@example.com');
   assert.strictEqual(message.messageId, enqueued.messageId);
-  assert.throws(() => parseMailJob(stored.data), isCode('queue.codec_missing'));
+  assert.throws(() => parseJob(stored.data), isCode('queue.codec_missing'));
 });
 
 test('Queue: a sealed job waits for a worker with its codec, and fails one that does not open', async () => {
   const codec = aesCodec();
-  const queue = createMailQueue({ driver: createMemoryQueue(), codec });
+  const queue = createQueue({ driver: createMemoryQueue(), codec });
   await queue.enqueue(input);
   const sealed = queue.driver.list()[0].data;
   const transport = fakeTransport();
-  const plain = createMailJobHandler({ transport, now: () => NOW });
+  const plain = createJobHandler({ transport, now: () => NOW });
   // Given back for a worker with the codec, its attempts not spent, for a week.
   const waiting = await plain(runOf(sealed, { attempt: 5 }), new AbortController().signal);
   assert.strictEqual(waiting.type, 'release');
@@ -216,11 +216,11 @@ test('Queue: a sealed job waits for a worker with its codec, and fails one that 
   );
   assert.deepStrictEqual([stale.type, stale.code], ['fail', 'queue.codec_missing']);
   // Another key: the ciphertext does not authenticate, which may be an outage of the key...
-  const other = createMailJobHandler({ transport, codec: aesCodec(Buffer.alloc(32, 1)) });
+  const other = createJobHandler({ transport, codec: aesCodec(Buffer.alloc(32, 1)) });
   const outage = await other(runOf(sealed), new AbortController().signal);
   assert.deepStrictEqual([outage.type, outage.code], ['retry', 'queue.codec_failed']);
   // ...unless the codec says it is for good.
-  const final = createMailJobHandler({
+  const final = createJobHandler({
     transport,
     codec: {
       encode: (text) => text,
@@ -236,19 +236,19 @@ test('Queue: a sealed job waits for a worker with its codec, and fails one that 
 
 test('Queue: what a codec opens is checked, and a field in clear is refused', async () => {
   const identity = { encode: (text) => text, decode: (text) => text };
-  const handler = createMailJobHandler({ transport: fakeTransport(), codec: identity });
+  const handler = createJobHandler({ transport: fakeTransport(), codec: identity });
   const outcomeOf = async (data) => (await handler(runOf(data), new AbortController().signal)).code;
   const envelope = { v: 1, hash: 'h', enqueuedAt: '2026-10-18T09:00:00.000Z' };
   assert.strictEqual(await outcomeOf({ ...envelope, enc: 'not json' }), 'queue.invalid_job');
   assert.strictEqual(await outcomeOf({ ...envelope, enc: '[1]' }), 'queue.invalid_job');
   assert.strictEqual(await outcomeOf({ ...envelope, enc: '{"hash":"x"}' }), 'queue.invalid_job');
-  const queue = createMailQueue({ driver: createMemoryQueue(), codec: identity });
+  const queue = createQueue({ driver: createMemoryQueue(), codec: identity });
   await queue.enqueue(input);
   const sealed = queue.driver.list()[0].data;
   const overridden = { ...sealed, to: [{ address: 'victim@example.org' }] };
   assert.strictEqual(await outcomeOf(overridden), 'queue.invalid_job');
   // A writer who can seal (a codec without a key) is still stopped by the signature.
-  const signedQueue = createMailQueue({
+  const signedQueue = createQueue({
     driver: createMemoryQueue(),
     codec: identity,
     signingKeys: [KEY_A],
@@ -260,7 +260,7 @@ test('Queue: what a codec opens is checked, and a field in clear is refused', as
   const forged = forge(opened);
   const { v, hash, enqueuedAt, correlationId, kid, mac, ...fields } = forged;
   const resealed = { v, hash, enqueuedAt, correlationId, kid, mac, enc: JSON.stringify(fields) };
-  const verifying = createMailJobHandler({
+  const verifying = createJobHandler({
     transport: fakeTransport(),
     codec: identity,
     signingKeys: [KEY_A],
@@ -270,12 +270,12 @@ test('Queue: what a codec opens is checked, and a field in clear is refused', as
 });
 
 test('Queue: a codec is checked, and must give a string', async () => {
-  assert.throws(() => createMailQueue({ driver: createMemoryQueue(), codec: {} }), /codec must/);
+  assert.throws(() => createQueue({ driver: createMemoryQueue(), codec: {} }), /codec must/);
   assert.throws(
-    () => createMailJobHandler({ transport: fakeTransport(), codec: { encode() {} } }),
+    () => createJobHandler({ transport: fakeTransport(), codec: { encode() {} } }),
     /codec must/,
   );
-  const queue = createMailQueue({
+  const queue = createQueue({
     driver: createMemoryQueue(),
     codec: { encode: () => 42, decode: (text) => text },
   });
@@ -288,10 +288,10 @@ test('Queue: under idSecret the id of a job cannot be found from the addresses o
   const keyed = { ...input, idempotencyKey: 'welcome:ada@example.com' };
   const guess = toUuid('mail\u0000\u0000welcome:ada@example.com');
   // Without a secret the id is a hash anyone can recompute from a guess.
-  assert.strictEqual(prepareMailJob(keyed).request.id, guess);
+  assert.strictEqual(prepareJob(keyed).request.id, guess);
   const secret = 's'.repeat(32);
-  const first = prepareMailJob(keyed, { idSecret: secret });
-  const again = prepareMailJob(keyed, { idSecret: Buffer.from(secret) });
+  const first = prepareJob(keyed, { idSecret: secret });
+  const again = prepareJob(keyed, { idSecret: Buffer.from(secret) });
   assert.notStrictEqual(first.request.id, guess);
   assert.match(
     first.request.id,
@@ -301,13 +301,13 @@ test('Queue: under idSecret the id of a job cannot be found from the addresses o
   assert.strictEqual(again.request.id, first.request.id);
   assert.strictEqual(again.data.messageId, first.data.messageId);
   assert.notStrictEqual(
-    prepareMailJob(keyed, { idSecret: 't'.repeat(32) }).request.id,
+    prepareJob(keyed, { idSecret: 't'.repeat(32) }).request.id,
     first.request.id,
   );
   for (const idSecret of ['short', 42, new Uint8Array(8)]) {
-    assert.throws(() => prepareMailJob(keyed, { idSecret }), /idSecret must hold 32 bytes/);
+    assert.throws(() => prepareJob(keyed, { idSecret }), /idSecret must hold 32 bytes/);
     assert.throws(
-      () => createMailQueue({ driver: createMemoryQueue(), idSecret }),
+      () => createQueue({ driver: createMemoryQueue(), idSecret }),
       /idSecret must hold 32 bytes/,
     );
   }

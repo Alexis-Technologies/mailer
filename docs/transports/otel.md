@@ -337,10 +337,10 @@ request that enqueued it, and the metrics of the queue.
 
 ```js
 const { context, metrics, propagation, trace } = require('@opentelemetry/api');
-const { createMailJobHandler, createMailQueue } = require('@alexify/mailer/queue');
+const { createJobHandler, createQueue } = require('@alexify/mailer/queue');
 const { instrumentHandler } = require('@alexify/mailer/otel');
 
-const queue = createMailQueue({
+const queue = createQueue({
   driver,
   // Each job carries the producer's traceparent as its `trace`.
   traceContext: () => {
@@ -350,7 +350,7 @@ const queue = createMailQueue({
   },
 });
 
-const handler = instrumentHandler(createMailJobHandler({ transport, renderer }), {
+const handler = instrumentHandler(createJobHandler({ transport, renderer }), {
   tracerProvider: trace.getTracerProvider(),
   meterProvider: metrics.getMeterProvider(),
   // The spans of an instrumented transport become children of the job's.

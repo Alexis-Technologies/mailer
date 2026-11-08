@@ -7,7 +7,7 @@ const {
   IdempotencyTransport,
   createMemoryIdempotencyStore,
 } = require('../../src/idempotency/index.js');
-const { MailQueueError, createMailQueue, createMemoryQueue } = require('../../src/queue/index.js');
+const { QueueError, createQueue, createMemoryQueue } = require('../../src/queue/index.js');
 const { createMemoryLoader, createTemplateRenderer } = require('../../src/templates/index.js');
 const { fakeEngine } = require('../helpers/templates/fake-engine.js');
 const { fakeTransport, sent } = require('../helpers/decorators/fake.js');
@@ -38,7 +38,7 @@ const setup = (options = {}) => {
     pollIntervalMilliseconds: 1000,
   });
   const audit = createMemoryAuditSink();
-  const queue = createMailQueue({ driver, audit, now: clock.now, ...options });
+  const queue = createQueue({ driver, audit, now: clock.now, ...options });
   return { clock, driver, audit, queue };
 };
 
@@ -81,7 +81,7 @@ test('Queue: the same message enqueued twice is sent once, another under its key
   assert.deepStrictEqual([again.id, again.duplicate], [first.id, true]);
   await assert.rejects(
     queue.enqueue(resetJob({ to: 'mallory@example.com' })),
-    (error) => error instanceof MailQueueError && error.code === 'queue.key_reused',
+    (error) => error instanceof QueueError && error.code === 'queue.key_reused',
   );
   assert.strictEqual(audit.events.length, 1, 'a duplicate is not queued again');
   assert.strictEqual(driver.list().length, 1);
@@ -91,9 +91,9 @@ test('Queue: the same message enqueued twice is sent once, another under its key
     enqueue: async (request) => ({ id: request.id, duplicate: undefined }),
     consume: () => ({ close: async () => {} }),
   };
-  const unknown = await createMailQueue({ driver: blind }).enqueue(resetJob());
+  const unknown = await createQueue({ driver: blind }).enqueue(resetJob());
   assert.strictEqual(unknown.duplicate, undefined);
-  const lenient = await createMailQueue({
+  const lenient = await createQueue({
     driver: { ...blind, enqueue: async (r) => ({ id: r.id, duplicate: true }) },
   }).enqueue(resetJob());
   assert.strictEqual(lenient.duplicate, true);
@@ -167,7 +167,7 @@ test('Queue: a crash during a send is not sent again blindly behind IdempotencyT
   // The worker is gone without settling; its lease runs out.
   clock.advance(61_000);
   const inner = fakeTransport();
-  const worker = createMailQueue({ driver, audit, now: clock.now }).createWorker({
+  const worker = createQueue({ driver, audit, now: clock.now }).createWorker({
     transport: new IdempotencyTransport(inner, { store }),
     renderer: templates,
   });
@@ -202,7 +202,7 @@ test('Queue: enqueueMany goes through the driver’s batch, or one by one', asyn
     },
     consume: () => ({ close: async () => {} }),
   };
-  await createMailQueue({ driver: batching }).enqueueMany([
+  await createQueue({ driver: batching }).enqueueMany([
     resetJob({ idempotencyKey: 'c' }),
     resetJob({ idempotencyKey: 'd' }),
   ]);
@@ -228,21 +228,19 @@ test('Queue: the queued event goes in the transaction of the enqueue; a strict s
     }),
     consume: () => ({ close: async () => {} }),
   };
-  const queue = createMailQueue({ driver: transactional, audit: sink });
+  const queue = createQueue({ driver: transactional, audit: sink });
   await queue.enqueue(resetJob(), { transaction: 'session-1' });
   assert.deepStrictEqual(contexts, [['queued', 'session-1']]);
   const broken = { append: () => Promise.reject(new Error('audit down')) };
   await assert.rejects(
-    createMailQueue({ driver: transactional, audit: broken, auditStrict: true }).enqueue(
-      resetJob(),
-    ),
+    createQueue({ driver: transactional, audit: broken, auditStrict: true }).enqueue(resetJob()),
     /audit down/,
   );
   const warnings = [];
   const listener = (warning) => warnings.push(warning.code);
   process.on('warning', listener);
   t.after(() => process.off('warning', listener));
-  await createMailQueue({ driver: transactional, audit: broken }).enqueue(resetJob());
+  await createQueue({ driver: transactional, audit: broken }).enqueue(resetJob());
   await new Promise(setImmediate);
   assert.ok(warnings.includes('MAILER_AUDIT_FAILED'));
 });
@@ -259,13 +257,13 @@ test('Queue: the queue logs its enqueues; it checks its options', async () => {
     ['queue.enqueued', true],
     ['queue.duplicate', true],
   ]);
-  assert.throws(() => createMailQueue(), /needs a driver/);
-  assert.throws(() => createMailQueue({ driver: {} }), /needs a driver/);
+  assert.throws(() => createQueue(), /needs a driver/);
+  assert.throws(() => createQueue({ driver: {} }), /needs a driver/);
   const driver = createMemoryQueue();
-  assert.throws(() => createMailQueue({ driver, audit: {} }), /must have append/);
-  assert.throws(() => createMailQueue({ driver, auditStrict: 1 }), /auditStrict/);
+  assert.throws(() => createQueue({ driver, audit: {} }), /must have append/);
+  assert.throws(() => createQueue({ driver, auditStrict: 1 }), /auditStrict/);
   // The options of its jobs reach them.
-  const scoped = createMailQueue({ driver, namespace: 'tenant-mail', maxAttempts: 2 });
+  const scoped = createQueue({ driver, namespace: 'tenant-mail', maxAttempts: 2 });
   const { id } = await scoped.enqueue(resetJob());
   assert.strictEqual(driver.get(id).maxAttempts, 2);
 });
@@ -279,7 +277,7 @@ test('Queue: enqueueMany refuses a key used before only once every other job is 
     resetJob({ idempotencyKey: 'last' }),
   ];
   const error = await queue.enqueueMany(batch).catch((thrown) => thrown);
-  assert.ok(error instanceof MailQueueError);
+  assert.ok(error instanceof QueueError);
   assert.strictEqual(error.code, 'queue.key_reused');
   assert.strictEqual(error.jobIds.length, 1);
   assert.deepStrictEqual(
@@ -355,7 +353,7 @@ test('Queue: enqueueMany tells the sink its batch in one write where it can', as
       requests.map((request, index) => ({ id: request.id, duplicate: index === 1 })),
     consume: () => ({ close: async () => {} }),
   };
-  await createMailQueue({
+  await createQueue({
     driver: transactional,
     audit: {
       append: () => {},
@@ -375,7 +373,7 @@ test('Queue: enqueueMany tells the sink its batch in one write where it can', as
 
 test('Queue: the clock of a queue is checked when the queue is made', () => {
   assert.throws(
-    () => createMailQueue({ driver: createMemoryQueue(), now: 1 }),
+    () => createQueue({ driver: createMemoryQueue(), now: 1 }),
     /now must be a function/,
   );
 });

@@ -6,7 +6,7 @@
 // context.
 
 const { messageOf } = require('../internal/decorator.js');
-const { MailQueueError } = require('./errors.js');
+const { QueueError } = require('./errors.js');
 
 // The fields a sealed job keeps in clear, beside `enc`: an id of its message
 // among them, by which a driver that gives a job up tells the audit.
@@ -47,7 +47,7 @@ const isSealed = (data) =>
  * @throws {TypeError} If the codec gives no string.
  * @internal
  */
-const sealMailJob = async (data, codec) => {
+const sealJob = async (data, codec) => {
   const envelope = {};
   const fields = {};
   for (const key of Object.keys(data)) {
@@ -62,7 +62,7 @@ const sealMailJob = async (data, codec) => {
   return envelope;
 };
 
-const invalid = (message) => new MailQueueError('queue.invalid_job', `Invalid job: ${message}`);
+const invalid = (message) => new QueueError('queue.invalid_job', `Invalid job: ${message}`);
 
 /**
  * Opens the data of a job read from its store: sealed data as the codec
@@ -70,16 +70,16 @@ const invalid = (message) => new MailQueueError('queue.invalid_job', `Invalid jo
  *
  * @param data The data of the job.
  * @param codec The codec, if any.
- * @returns The data in clear, to be checked by `parseMailJob`.
- * @throws {MailQueueError} `queue.codec_missing` for sealed data and no
+ * @returns The data in clear, to be checked by `parseJob`.
+ * @throws {QueueError} `queue.codec_missing` for sealed data and no
  * codec; `queue.codec_failed` if the codec throws, with its error as
  * `cause`; `queue.invalid_job` if what it gives is not the fields of a job.
  * @internal
  */
-const openMailJob = async (data, codec) => {
+const openJob = async (data, codec) => {
   if (!isSealed(data)) return data;
   if (codec === undefined) {
-    throw new MailQueueError(
+    throw new QueueError(
       'queue.codec_missing',
       'The job is sealed, and this worker has no codec to open it.',
     );
@@ -88,7 +88,7 @@ const openMailJob = async (data, codec) => {
   try {
     text = await codec.decode(data.enc);
   } catch (error) {
-    throw new MailQueueError(
+    throw new QueueError(
       'queue.codec_failed',
       `The codec could not open the job: ${messageOf(error)}`,
       { cause: error },
@@ -117,4 +117,4 @@ const openMailJob = async (data, codec) => {
   return opened;
 };
 
-module.exports = { checkCodec, openMailJob, sealMailJob };
+module.exports = { checkCodec, openJob, sealJob };

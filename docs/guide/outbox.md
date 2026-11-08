@@ -1,6 +1,6 @@
 # MongoDB outbox
 
-`@alexify/mailer/mongodb` keeps the [mail queue](/guide/queue) in a collection
+`@alexify/mailer/mongodb` keeps the [queue](/guide/queue) in a collection
 of MongoDB: the transactional outbox. A job is written in the transaction of
 your own writes, so a message is queued exactly when what it tells of is
 committed, with no Redis. The same subpath keeps the [audit](/guide/audit) and
@@ -10,7 +10,7 @@ package depends on no MongoDB driver: you pass in its collections.
 ```js
 const { randomUUID } = require('node:crypto');
 const { MongoClient } = require('mongodb');
-const { createMailQueue } = require('@alexify/mailer/queue');
+const { createQueue } = require('@alexify/mailer/queue');
 const { IdempotencyTransport } = require('@alexify/mailer/idempotency');
 const {
   createMongoAuditSink,
@@ -26,7 +26,7 @@ const audit = createMongoAuditSink({ collection: db.collection('mail_audit') });
 const store = createMongoIdempotencyStore({ collection: db.collection('mail_idempotency') });
 await Promise.all([outbox.ensureIndexes(), audit.ensureIndexes(), store.ensureIndexes()]);
 
-const queue = createMailQueue({ driver: outbox, audit });
+const queue = createQueue({ driver: outbox, audit });
 
 // The producer: the job and its audit event go in the transaction.
 const session = client.startSession();

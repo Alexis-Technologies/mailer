@@ -6,7 +6,7 @@
 
 const { Buffer } = require('node:buffer');
 const { timingSafeEqual } = require('node:crypto');
-const { MailQueueError } = require('./errors.js');
+const { QueueError } = require('./errors.js');
 const { macJson } = require('../internal/canonical-json.js');
 
 const MIN_SECRET_BYTES = 32;
@@ -75,7 +75,7 @@ const signJob = (data, keyring, leaveOut) => {
   data.mac = macJson(keyring.keys.get(keyring.signer), data, leaveOut);
 };
 
-const invalid = (message) => new MailQueueError('queue.signature_invalid', message);
+const invalid = (message) => new QueueError('queue.signature_invalid', message);
 
 /**
  * Verifies the signature of the data of a job read from its store.
@@ -83,7 +83,7 @@ const invalid = (message) => new MailQueueError('queue.signature_invalid', messa
  * @param data The data.
  * @param keyring The keyring.
  * @param leaveOut The fields the hash leaves out.
- * @throws {MailQueueError} `queue.signature_invalid` if the job is not
+ * @throws {QueueError} `queue.signature_invalid` if the job is not
  * signed, by a key the keyring holds, or its signature does not verify.
  * @internal
  */
