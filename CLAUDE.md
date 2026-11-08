@@ -982,6 +982,13 @@ test that fails on the source's behavior):
   groups UNDELIVERABLE and EXPIRED too; thinwrap's DND, an opt-out, and the sender or the
   credits of the account, a configuration, were an invalid recipient and an invalid request.
 
+**Bugs of 2.0 found in review before its release** (each in its own `fix:` commit, with a test
+that fails without it; C for the channels):
+
+- C1. smsclub: a refusal in `add_info` was its JSON, keyed by the numbers it refused, and the
+  receipt kept the answer as `providerDetails`, so a receipt, a log of it and the audit held a
+  number without its `+`, which redaction does not catch. The text is the reasons alone.
+
 ## Repository layout
 
 ```

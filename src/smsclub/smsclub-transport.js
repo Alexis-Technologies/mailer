@@ -40,6 +40,24 @@ const bodyOf = (message, config) => {
   return body;
 };
 
+const MAX_REASONS = 3;
+const MAX_REASON_LENGTH = 200;
+
+// The reasons of an `add_info`, without its keys, which are the numbers it
+// refused: a receipt, and the audit after it, never holds a recipient.
+const reasonsOf = (info) => {
+  if (typeof info === 'string') return info.slice(0, MAX_REASON_LENGTH);
+  let text = '';
+  let count = 0;
+  for (const key in info) {
+    const reason = info[key];
+    if (typeof reason !== 'string' || count === MAX_REASONS) continue;
+    text += count === 0 ? reason : `; ${reason}`;
+    count++;
+  }
+  return text === '' ? 'no reason given' : text.slice(0, MAX_REASON_LENGTH);
+};
+
 // The receipt of an answer: the id the `info` names, or a refusal its
 // `add_info` tells.
 const receiptOf = (json, message) => {
@@ -60,16 +78,12 @@ const receiptOf = (json, message) => {
     };
   }
   if (request?.add_info !== undefined) {
-    return createFailedReceipt(
-      `SMS Club refused the SMS: ${JSON.stringify(request.add_info).slice(0, 200)}`,
-      {
-        provider: PROVIDER,
-        channel: 'sms',
-        category: 'rejected',
-        code: 'smsclub.add_info',
-        providerDetails: json,
-      },
-    );
+    return createFailedReceipt(`SMS Club refused the SMS: ${reasonsOf(request.add_info)}`, {
+      provider: PROVIDER,
+      channel: 'sms',
+      category: 'rejected',
+      code: 'smsclub.add_info',
+    });
   }
   return createFailedReceipt('SMS Club answered without the id of the SMS.', {
     provider: PROVIDER,

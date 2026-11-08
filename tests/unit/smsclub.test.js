@@ -62,7 +62,7 @@ test('SMS Club: an answer without an id is a refusal or of unknown delivery', as
   );
   const refused = await transport().send(sms());
   assert.strictEqual(refused.errors[0].category, 'rejected');
-  assert.match(refused.errorMessages[0], /bad number/);
+  assert.strictEqual(refused.errorMessages[0], 'SMS Club refused the SMS: bad number');
   t.mock.restoreAll();
   stubFetch(t, () => json({}));
   assert.strictEqual((await transport().send(sms())).deliveryUnknown, true);
@@ -74,6 +74,34 @@ test('SMS Club: an answer without an id is a refusal or of unknown delivery', as
   });
   assert.strictEqual((await transport({ retries: 3 }).send(sms())).deliveryUnknown, true);
   assert.strictEqual(requests.length, 1);
+});
+
+test('SMS Club: a refusal names no number, in its text or its details', async (t) => {
+  // Before (C1): the text was the JSON of add_info, keyed by the numbers it
+  // refused, and providerDetails held the answer, so a receipt, a log of it
+  // and the audit after it held a recipient without its +, which redaction
+  // misses.
+  stubFetch(t, () =>
+    json({
+      success_request: {
+        info: {},
+        add_info: { 380989361131: 'bad number', 380671234567: 'stop list', 1: 2, a: 'x', b: 'y' },
+      },
+    }),
+  );
+  const receipt = await transport().send(sms());
+  assert.strictEqual(
+    receipt.errorMessages[0],
+    'SMS Club refused the SMS: bad number; stop list; x',
+  );
+  const text = JSON.stringify(receipt);
+  assert.ok(!text.includes('380989361131') && !text.includes('380671234567'), text);
+  t.mock.restoreAll();
+  stubFetch(t, () => json({ success_request: { info: {}, add_info: 'Номер у стоп-листі' } }));
+  assert.match((await transport().send(sms())).errorMessages[0], /стоп-листі/);
+  t.mock.restoreAll();
+  stubFetch(t, () => json({ success_request: { info: {}, add_info: {} } }));
+  assert.match((await transport().send(sms())).errorMessages[0], /no reason given/);
 });
 
 test('SMS Club: what an SMS cannot be fails before any request', async (t) => {
