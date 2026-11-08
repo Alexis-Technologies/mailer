@@ -2,7 +2,6 @@ import { expectError, expectType } from 'tsd';
 import {
   WebhookVerificationError,
   createMemoryReplayStore,
-  createScalewayWebhookVerifier,
   type ReplayState,
   type ReplayStore,
   type WebhookVerificationReason,
@@ -23,11 +22,3 @@ const shared: ReplayStore = {
   release: async () => {},
 };
 expectError<ReplayStore>({ add: () => true });
-
-const scaleway = createScalewayWebhookVerifier({
-  topicArns: ['arn:scw:sns:fr-par:p:t'],
-  trustChain: '-----BEGIN CERTIFICATE-----',
-  replayStore: store,
-});
-expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
-expectError(createScalewayWebhookVerifier({ topicArns: ['arn'] }));

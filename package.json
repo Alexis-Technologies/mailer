@@ -101,6 +101,10 @@
       "types": "./src/webhooks/azure/index.d.ts",
       "default": "./src/webhooks/azure/index.js"
     },
+    "./webhooks/scaleway": {
+      "types": "./src/webhooks/scaleway/index.d.ts",
+      "default": "./src/webhooks/scaleway/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

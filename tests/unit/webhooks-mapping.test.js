@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { createHmac, generateKeyPairSync, sign } = require('node:crypto');
-const { createScalewayWebhookVerifier } = require('../../src/webhooks/index.js');
+const { createScalewayWebhookVerifier } = require('../../src/webhooks/scaleway/index.js');
 const { createAzureWebhookVerifier } = require('../../src/webhooks/azure/index.js');
 const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createSparkPostWebhookVerifier } = require('../../src/webhooks/sparkpost/index.js');

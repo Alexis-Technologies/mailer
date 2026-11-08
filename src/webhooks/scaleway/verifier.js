@@ -10,8 +10,8 @@ const {
   headerValueOf,
   metadataFromHeaders,
   stringOf,
-} = require('./request.js');
-const { certificateError, createSnsVerifier, isHttpsUrlOf } = require('./sns.js');
+} = require('../request.js');
+const { certificateError, createSnsVerifier, isHttpsUrlOf } = require('../sns.js');
 
 const DEFAULT_TOLERANCE_MS = 60 * 60 * 1000;
 const SCALEWAY_HOST = /(^|\.)(scw\.cloud|scaleway\.com)$/;

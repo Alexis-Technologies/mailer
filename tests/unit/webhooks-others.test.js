@@ -5,9 +5,9 @@ const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
   createMemoryReplayStore,
-  createScalewayWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createScalewayWebhookVerifier } = require('../../src/webhooks/scaleway/index.js');
 const { createAzureWebhookVerifier } = require('../../src/webhooks/azure/index.js');
 const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');
