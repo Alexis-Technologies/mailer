@@ -1090,6 +1090,11 @@ that fails without it; C for the channels):
 - C33. teams: the scope of the token of a bot was the public one whatever its `tokenUrl`, so a
   bot of GCC High or DoD, whose service URLs the transport allows, never authenticated. A
   `tokenUrl` of `.us` asks for `api.botframework.us`, and `scope` sets another.
+- C34. channels (`normalizePhone`): a trunk 0 written after the calling code was kept
+  (`+44 07911…`, `+380 067…`); the 8 of a Russian number of its own (`812`, `800`) was taken for
+  the trunk; the digits of an international number without its `+` (`380671234567` in Ukraine)
+  got the code again; `0011` (Australia) and `810` (Russia, Kazakhstan, Belarus) were read as
+  national digits; and +247 was no code. Each gives the number, or none, as E.164 has it.
 
 ## Repository layout
 

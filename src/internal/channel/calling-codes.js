@@ -6,7 +6,7 @@
 // `<alpha-2><code>`, separated by spaces: one string, parsed once, rather than
 // an object of 245 keys in every bundle.
 const TABLE =
-  'AD376 AE971 AF93 AG1 AI1 AL355 AM374 AO244 AR54 AS1 AT43 AU61 AW297 AX358 AZ994 ' +
+  'AC247 AD376 AE971 AF93 AG1 AI1 AL355 AM374 AO244 AR54 AS1 AT43 AU61 AW297 AX358 AZ994 ' +
   'BA387 BB1 BD880 BE32 BF226 BG359 BH973 BI257 BJ229 BL590 BM1 BN673 BO591 BQ599 BR55 BS1 ' +
   'BT975 BW267 BY375 BZ501 CA1 CC61 CD243 CF236 CG242 CH41 CI225 CK682 CL56 CM237 CN86 CO57 ' +
   'CR506 CU53 CV238 CW599 CX61 CY357 CZ420 DE49 DJ253 DK45 DM1 DO1 DZ213 EC593 EE372 EG20 ' +
@@ -51,6 +51,28 @@ const TRUNKS = new Map([
 ]);
 const DEFAULT_TRUNK = ['0'];
 const NANP_TRUNK = ['1'];
+// The length of a national number of the countries of an 8 for a trunk,
+// which a number of their own may begin with too (812 is St Petersburg):
+// the 8 is a trunk only before a number of this length.
+const NATIONAL_LENGTHS = new Map([
+  ['RU', 10],
+  ['KZ', 10],
+  ['BY', 9],
+  ['TJ', 9],
+  ['UZ', 9],
+  ['TM', 8],
+  ['LT', 8],
+]);
+// The international prefixes beside 00: 011 of the North American Numbering
+// Plan, 0011 of Australia, 810 of Russia, Kazakhstan and Belarus.
+const PREFIXES = new Map([
+  ['AU', ['0011']],
+  ['RU', ['810']],
+  ['KZ', ['810']],
+  ['BY', ['810']],
+]);
+const NANP_PREFIXES = ['011'];
+const NO_PREFIXES = [];
 
 const COUNTRIES = new Map();
 const CODES = new Set(NON_GEOGRAPHIC);
@@ -79,6 +101,37 @@ const trunksOf = (country) =>
   TRUNKS.get(country) ?? (COUNTRIES.get(country) === '1' ? NANP_TRUNK : DEFAULT_TRUNK);
 
 /**
+ * The length of a national number of a country of an 8 for a trunk, or
+ * none for the others.
+ *
+ * @internal
+ */
+const nationalLengthOf = (country) => NATIONAL_LENGTHS.get(country);
+
+/**
+ * The international prefixes of a country beside 00, longest first.
+ *
+ * @internal
+ */
+const prefixesOf = (country) =>
+  PREFIXES.get(country) ?? (COUNTRIES.get(country) === '1' ? NANP_PREFIXES : NO_PREFIXES);
+
+// The codes of the countries whose numbers keep their leading 0 (those of no
+// trunk above): a 0 after any other code is a trunk written by mistake.
+const KEEPS_ZERO = new Set();
+for (const entry of TRUNKS) {
+  if (entry[1].length === 0) KEEPS_ZERO.add(COUNTRIES.get(entry[0]));
+}
+
+/**
+ * Whether the numbers of a calling code keep a 0 after it (Italy, Côte
+ * d'Ivoire…), where of the others it is a trunk prefix written by mistake.
+ *
+ * @internal
+ */
+const keepsZero = (code) => KEEPS_ZERO.has(code);
+
+/**
  * The calling code an international number begins with: E.164 codes are
  * prefix-free, so the first of one, two or three digits that is a code.
  *
@@ -92,4 +145,13 @@ const callingCodeIn = (digits) => {
   return undefined;
 };
 
-module.exports = { CODES, COUNTRIES, callingCodeIn, callingCodeOf, trunksOf };
+module.exports = {
+  CODES,
+  COUNTRIES,
+  callingCodeIn,
+  callingCodeOf,
+  keepsZero,
+  nationalLengthOf,
+  prefixesOf,
+  trunksOf,
+};

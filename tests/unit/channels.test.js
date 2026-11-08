@@ -285,6 +285,22 @@ test('Channels: a phone number in E.164 from the way people write one', () => {
     // Italy keeps the 0 of its numbers.
     ['06 1234 5678', 'IT', '+390612345678'],
     ['+800 1234 5678', undefined, '+80012345678'],
+    // Before (C34): a trunk 0 after the calling code was kept, an 8 of a
+    // number of its own taken for the trunk, the digits of an international
+    // number without its + given the code again, other prefixes than 00 and
+    // 011 read as a national number, and +247 refused.
+    ['+44 07911 123456', undefined, '+447911123456'],
+    ['+380 067 123 45 67', undefined, '+380671234567'],
+    ['+39 06 1234 5678', undefined, '+390612345678'],
+    ['(812) 123-45-67', 'RU', '+78121234567'],
+    ['800 555-35-35', 'RU', '+78005553535'],
+    ['8 (812) 123-45-67', 'RU', '+78121234567'],
+    ['7012345678', 'KZ', '+77012345678'],
+    ['380671234567', 'UA', '+380671234567'],
+    ['447911123456', 'GB', '+447911123456'],
+    ['0011 44 20 7946 0018', 'AU', '+442079460018'],
+    ['810 44 20 7946 0018', 'RU', '+442079460018'],
+    ['+247 6123', undefined, '+2476123'],
     ['067 123 45 67', undefined, undefined],
     ['+999 1234567', undefined, undefined],
     ['1-800-FLOWERS', 'US', undefined],

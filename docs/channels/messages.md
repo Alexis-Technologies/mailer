@@ -70,12 +70,17 @@ normalizePhone('067 123 45 67'); // undefined: national, without its country
 isE164('+380671234567'); // true
 ```
 
-An international number is taken with `+`, `00`, or `011` in North America. A
-national one needs `defaultCountry`, whose trunk prefix is dropped (`0` in most
-countries, `1` in North America, `8` in Russia, `06` in Hungary) and calling
-code put first; Italy keeps the `0` of its numbers. The length of a national
-number is not checked against the plan of its country: a provider refuses a
-number that is none, as `invalid-recipient`.
+An international number is taken with `+`, `00`, `011` in North America,
+`0011` in Australia or `810` in Russia, Kazakhstan and Belarus, a trunk `0`
+written after its calling code left out (`+44 07911…`). A national one needs
+`defaultCountry`, whose trunk prefix is dropped (`0` in most countries, `1` in
+North America, `06` in Hungary, `8` in Russia and its neighbours, only before
+a number of their length, as Russian numbers may begin with 8 too) and calling
+code put first; Italy keeps the `0` of its numbers. Digits that begin with the
+calling code of a country of a trunk `0`, without it, are the code and a number
+written without `+` (`380671234567` in Ukraine). The length of a national
+number is not checked against the plan of its country otherwise: a provider
+refuses a number that is none, as `invalid-recipient`.
 
 ## Segments of an SMS
 

@@ -52,7 +52,7 @@
   "./hooks": 8,
   "./tee": 3.5,
   "./audit": 2.5,
-  "./queue": 26.5,
+  "./queue": 27,
   "./bullmq": 5,
   "./mongodb": 7.5,
   "./channels": 6,
