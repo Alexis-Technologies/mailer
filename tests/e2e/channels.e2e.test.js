@@ -164,6 +164,26 @@ const PROVIDERS = [
     message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.VONAGE_TO, text }),
   },
   {
+    name: 'Infobip',
+    Transport: require('../../src/infobip/index.js').InfobipTransport,
+    needs: ['INFOBIP_API_KEY', 'INFOBIP_BASE_URL', 'INFOBIP_TO'],
+    config: () => ({
+      apiKey: env.INFOBIP_API_KEY,
+      baseUrl: env.INFOBIP_BASE_URL,
+      ...(env.INFOBIP_FROM && { from: env.INFOBIP_FROM }),
+    }),
+    refused: () => ({ apiKey: 'invalid', baseUrl: env.INFOBIP_BASE_URL }),
+    // The validity period too, which the unit suite cannot check against
+    // Infobip itself.
+    message: ({ text }) =>
+      createChannelMessage({
+        channel: 'sms',
+        to: env.INFOBIP_TO,
+        text,
+        expiresAt: new Date(Date.now() + 10 * 60_000),
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

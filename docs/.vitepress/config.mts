@@ -89,6 +89,7 @@ const guide = [
       { text: 'Twilio', link: '/channels/twilio' },
       { text: 'AWS SMS', link: '/channels/aws-sms' },
       { text: 'Vonage', link: '/channels/vonage' },
+      { text: 'Infobip', link: '/channels/infobip' },
     ],
   },
   {

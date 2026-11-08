@@ -206,6 +206,11 @@ worker of 1.2 holds reads the same.
   `expiresAt` as its `ttl`, the correlation id as its `client-ref`; every part of the answer
   is read, the receipt's segments the `message-count`, a refused part its status (7 a number
   barred is `opted-out`), of unknown delivery when an earlier part went.
+- **`./infobip`, the SMS API of Infobip:** `/sms/3/messages` with the `App` key, the base URL
+  the host of the account or a URL; `expiresAt` as the validity period, the correlation id as
+  `callbackData`; a status of the groups REJECTED, UNDELIVERABLE or EXPIRED in the 200 fails
+  the message by its name (`REJECTED_DND` is `opted-out`), and the receipt's segments are the
+  `messageCount` of the answer.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

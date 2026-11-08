@@ -288,6 +288,10 @@
     "./vonage": {
       "types": "./src/vonage/index.d.ts",
       "default": "./src/vonage/index.js"
+    },
+    "./infobip": {
+      "types": "./src/infobip/index.d.ts",
+      "default": "./src/infobip/index.js"
     }
   },
   "directories": {

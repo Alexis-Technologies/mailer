@@ -9,6 +9,7 @@ const { MetaTransport } = require('../../../src/meta/index.js');
 const { TwilioTransport } = require('../../../src/twilio/index.js');
 const { AwsSmsTransport } = require('../../../src/aws-sms/index.js');
 const { VonageTransport } = require('../../../src/vonage/index.js');
+const { InfobipTransport } = require('../../../src/infobip/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -292,6 +293,38 @@ const channelProviders = [
         headers: { 'Retry-After': String(seconds) },
       }),
     secrets: ['VonageApiSecret'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'Infobip',
+    create: (extra) =>
+      new InfobipTransport({
+        retries: 1,
+        baseUrl: 'xyz123.api.infobip.com',
+        ...extra,
+        apiKey: 'InfobipApiKey0123456789',
+        from: 'MyBrand',
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json({
+        bulkId: 'bulk-1',
+        messages: [
+          {
+            messageId: 'infobip-1',
+            status: { groupId: 1, groupName: 'PENDING', id: 26, name: 'PENDING_ACCEPTED' },
+            destination: '380671234567',
+            details: { messageCount: 1 },
+          },
+        ],
+      }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { errorCode: 'E429', description: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: ['InfobipApiKey0123456789'],
     recipient: '380671234567',
   },
 ];

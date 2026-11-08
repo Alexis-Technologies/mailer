@@ -65,5 +65,6 @@
   "./meta": 9,
   "./twilio": 8.5,
   "./aws-sms": 9,
-  "./vonage": 8
+  "./vonage": 8,
+  "./infobip": 8.5
 }

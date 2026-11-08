@@ -956,6 +956,11 @@ test that fails on the source's behavior):
   segments were lost and a later part that failed left a success. `./vonage` reads every part:
   its segments are the `message-count`, a refused part fails the message, of unknown delivery
   when an earlier part went.
+- NV4. Novu (`packages/providers/src/lib/sms/infobip/infobip.provider.ts`): the `messageId` of
+  any 200 was a success, though Infobip answers a message it refuses with a 200 and a status of
+  the group REJECTED. `./infobip` fails it by the name of the status, as thinwrap does, and the
+  groups UNDELIVERABLE and EXPIRED too; thinwrap's DND, an opt-out, and the sender or the
+  credits of the account, a configuration, were an invalid recipient and an invalid request.
 
 ## Repository layout
 
