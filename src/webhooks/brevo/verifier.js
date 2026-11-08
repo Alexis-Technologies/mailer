@@ -22,7 +22,7 @@ const {
   stringOf,
   stringsOf,
   tokenCheckOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const TYPES = new Map([
   ['request', 'accepted'],

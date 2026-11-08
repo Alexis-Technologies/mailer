@@ -2,7 +2,6 @@
 
 const { WebhookVerificationError, createMemoryReplayStore } = require('./request.js');
 const { createAzureWebhookVerifier } = require('./azure.js');
-const { createBrevoWebhookVerifier } = require('./brevo.js');
 const { createMailerSendWebhookVerifier } = require('./mailersend.js');
 const { createMailjetWebhookVerifier } = require('./mailjet.js');
 const { createScalewayWebhookVerifier } = require('./scaleway.js');
@@ -12,7 +11,6 @@ const { createSparkPostWebhookVerifier } = require('./sparkpost.js');
 module.exports = {
   WebhookVerificationError,
   createAzureWebhookVerifier,
-  createBrevoWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createMemoryReplayStore,

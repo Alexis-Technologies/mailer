@@ -8,13 +8,13 @@ const assert = require('node:assert');
 const { createHmac, generateKeyPairSync, sign } = require('node:crypto');
 const {
   createAzureWebhookVerifier,
-  createBrevoWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
   createSparkPostWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');
 const { createMailerooWebhookVerifier } = require('../../src/webhooks/maileroo/index.js');

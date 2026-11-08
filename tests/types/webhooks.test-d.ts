@@ -3,7 +3,6 @@ import type { DeliveryEvent } from '../../index.js';
 import {
   WebhookVerificationError,
   createAzureWebhookVerifier,
-  createBrevoWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createMemoryReplayStore,
@@ -35,13 +34,11 @@ const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: n
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
   (await mailersend.verify({ body: '' })).events,
 );
-createBrevoWebhookVerifier({ token: 't', header: 'x-webhook-token' });
 createMailjetWebhookVerifier({ username: 'u', password: 'p' });
 const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
 expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
   (await sparkpost.verify({ body: '' })).events,
 );
-expectError(createBrevoWebhookVerifier({}));
 
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:p:t'],

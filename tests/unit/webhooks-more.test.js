@@ -4,13 +4,13 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
-  createBrevoWebhookVerifier,
   createMemoryReplayStore,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
   createSparkPostWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createMailtrapWebhookVerifier } = require('../../src/webhooks/mailtrap/index.js');
 
 const rejects = async (promise, reason) => {
