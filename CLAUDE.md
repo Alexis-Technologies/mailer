@@ -1024,6 +1024,10 @@ that fails without it; C for the channels):
 - C11. http2: a response of a status of 600 to 999, which HTTP/2 carries, made `new Response`
   throw a `RangeError` in the listener of the response, which nothing caught: the process ended.
   Such a status fails the request, of unknown delivery, as the server had it.
+- C12. http2: Node fails a stream before it has an id when its session ran out of ids, after
+  2^30 requests, and keeps the session open, which stayed in use: every later push failed as of
+  unknown delivery, though none was sent. A stream without an id is unsent, and a session out of
+  ids is retired.
 
 ## Repository layout
 

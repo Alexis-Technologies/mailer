@@ -212,6 +212,61 @@ test('HTTP/2: a status beyond HTTP fails the request, not the process', async (t
   );
 });
 
+// A session of the test, made by `connect`, whose streams fail as Node fails
+// one when the ids of the session ran out: before any id.
+const exhaustedSession = () => {
+  const { EventEmitter } = require('node:events');
+  const handle = new EventEmitter();
+  Object.assign(handle, {
+    closed: false,
+    destroyed: false,
+    unref() {},
+    ref() {},
+    ping() {},
+    close(callback) {
+      handle.closed = true;
+      callback?.();
+    },
+    request() {
+      const stream = new EventEmitter();
+      Object.assign(stream, { id: undefined, rstCode: 0, end() {}, close() {}, destroy() {} });
+      setImmediate(() => {
+        stream.emit(
+          'error',
+          Object.assign(new Error('No stream ID is available'), {
+            code: 'ERR_HTTP2_OUT_OF_STREAMS',
+          }),
+        );
+        stream.emit('close');
+      });
+      return stream;
+    },
+  });
+  return handle;
+};
+
+test('HTTP/2: a session out of stream ids is left, its request never sent', async (t) => {
+  // Before (C12): Node fails the stream before it has an id and keeps the
+  // session open, which stayed in use: every later request failed as of
+  // unknown delivery, though none was sent.
+  const sessions = [];
+  const client = createHttp2Fetch({
+    connect: () => {
+      const handle = exhaustedSession();
+      sessions.push(handle);
+      return handle;
+    },
+  });
+  t.after(() => client.close());
+  const first = await client
+    .fetch('https://api.example.com/a', { method: 'POST', body: '1' })
+    .catch((error) => error);
+  assert.strictEqual(isUnsentRequestError(first), true);
+  assert.strictEqual(sessions[0].closed, true, 'the session is retired');
+  await client.fetch('https://api.example.com/b', { method: 'POST', body: '2' }).catch(() => {});
+  assert.strictEqual(sessions.length, 2, 'the next request opens another session');
+});
+
 test('HTTP/2: a session that closes is made anew; a refused connection was never sent', async (t) => {
   const server = await serve(t, (stream) => {
     stream.respond({ ':status': 200 });

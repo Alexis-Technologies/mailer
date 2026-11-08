@@ -57,6 +57,8 @@ class Session {
   #pinger;
 
   constructor(origin, options, forget) {
+    this.forget = forget;
+    this.retired = false;
     this.handle = (options.connect ?? http2.connect)(origin, options.tls ?? {});
     // Not held until a request is out on it.
     this.handle.unref();
@@ -81,7 +83,23 @@ class Session {
   }
 
   get isUsable() {
-    return !this.handle.closed && !this.handle.destroyed && this.lastStreamId === Infinity;
+    return (
+      !this.retired &&
+      !this.handle.closed &&
+      !this.handle.destroyed &&
+      this.lastStreamId === Infinity
+    );
+  }
+
+  /**
+   * Takes no more requests, those out on it let finish: a session whose ids
+   * of streams ran out, after 2^30 requests, which Node keeps open.
+   */
+  retire() {
+    if (this.retired) return;
+    this.retired = true;
+    this.forget(this);
+    if (!this.handle.closed && !this.handle.destroyed) this.handle.close();
   }
 
   hold() {
@@ -94,13 +112,17 @@ class Session {
 }
 
 // The failure of a stream: one the server refused, or left above the last
-// stream of its GOAWAY, never reached its handler. It is marked in an error
-// of its own, as Node gives every stream of a session it destroys one error,
-// which the streams the server handled share.
+// stream of its GOAWAY, or that never had an id, never reached its handler.
+// It is marked in an error of its own, as Node gives every stream of a
+// session it destroys one error, which the streams the server handled share.
 const streamFailure = (session, stream, error) => {
+  if (error?.code === 'ERR_HTTP2_OUT_OF_STREAMS') session.retire();
+  // A stream without an id never had its headers sent: the session failed,
+  // or ran out of ids, before it.
   const refused =
+    stream.id === undefined ||
     stream.rstCode === NGHTTP2_REFUSED_STREAM ||
-    (stream.id !== undefined && stream.id > session.lastStreamId);
+    stream.id > session.lastStreamId;
   return refused
     ? markUnsent(new Error('The server took no HTTP/2 stream of this request.', { cause: error }))
     : error;
