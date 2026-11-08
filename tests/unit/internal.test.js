@@ -308,6 +308,30 @@ test('Internal: an ambiguous failure of a send is not retried, unless it has a k
   assert.strictEqual(isDeliveryUnknown(readError), false);
 });
 
+test('Internal: a status the provider holds ambiguous is of unknown delivery, as a 504', async () => {
+  const reject = async (response) =>
+    Object.assign(new Error('HTTP'), { statusCode: response.status });
+  // A 5xx of Telegram may come once the message went: not sent again.
+  const held = scripted([new Response('', { status: 502 }), new Response('ok')], {
+    isIdempotent: false,
+    isRetryable: () => true,
+    reject,
+    isAmbiguousStatus: (status) => status >= 500,
+  });
+  const error = await requestWithRetry(held.request).catch((caught) => caught);
+  assert.strictEqual(held.sends(), 1);
+  assert.strictEqual(isDeliveryUnknown(error), true);
+  assert.strictEqual(error.statusCode, 502);
+  // Before: without it, a 502 was retried as a server error, and sent twice.
+  const plain = scripted([new Response('', { status: 502 }), new Response('ok')], {
+    isIdempotent: false,
+    isRetryable: () => true,
+    reject,
+  });
+  assert.strictEqual(await requestWithRetry(plain.request), 'ok');
+  assert.strictEqual(plain.sends(), 2);
+});
+
 test('Internal: onRetry hears each retry, with its attempt, wait and error, before the wait', async () => {
   const events = [];
   const failure = new TypeError('fetch failed');

@@ -77,9 +77,10 @@ const startDeadline = (timeoutMs, signal) => {
  * says to retry.
  *
  * A failure that leaves it unknown whether the provider took the request is
- * ambiguous: a failure after a 2xx, a gateway timeout (504), and a failure
- * without any response, unless its causes show that the connection was never
- * made.  Sending the request again after one could deliver the message twice,
+ * ambiguous: a failure after a 2xx, a gateway timeout (504), an answer of a
+ * status the provider gives after it may have sent (`isAmbiguousStatus`), and
+ * a failure without any response, unless its causes show that the connection
+ * was never made.  Sending the request again after one could deliver the message twice,
  * so an ambiguous failure is thrown at once, marked as of unknown delivery.
  * A request with an idempotency key (`hasIdempotencyKey`), which the provider
  * deduplicates, is retried after one instead, and its last failure is marked
@@ -101,6 +102,9 @@ const startDeadline = (timeoutMs, signal) => {
  *   the `AbortError` itself;
  * - `finalError(error, attempts)`: the error thrown once retries are spent,
  *   by default the last failure;
+ * - optional `isAmbiguousStatus(status)`, a status after which the provider
+ *   may have taken the request, as a 504 (a 5xx of Telegram, whose API answers
+ *   it once the message may have gone);
  * - optional `wrapAccepted(error, attempts)`, `isAnswer(error)` (an error that
  *   is the provider's own answer in a 2xx, such as a refusal in its body,
  *   thrown as it is rather than as of unknown delivery), `hasIdempotencyKey`,
@@ -147,7 +151,10 @@ const requestWithRetry = async (request) => {
     if (signal?.aborted) throw abortReason(signal);
     if (isAccepted && request.isAnswer?.(failure) === true) throw settle(failure);
     const isAmbiguous =
-      isAccepted || (hasResponse ? failure.statusCode === 504 : !isUnsentRequestError(failure));
+      isAccepted ||
+      (hasResponse
+        ? failure.statusCode === 504 || request.isAmbiguousStatus?.(failure.statusCode) === true
+        : !isUnsentRequestError(failure));
     if (isAmbiguous && !isRead) {
       wasAmbiguous = true;
       if (!hasKey) {

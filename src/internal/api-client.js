@@ -139,7 +139,9 @@ const readErrorText = async (response) => {
  * replace too; `reject(response, text, attempt)`, the error of another
  * answer, `text` undefined when it could not be read; `timeoutError()`;
  * `finalError(error, attempts)`; `acceptedError(error, attempts)`, a failure
- * after a 2xx; `isAnswer(error)`, a refusal in a 2xx; `accepts(status)`, an
+ * after a 2xx; `isAnswer(error)`, a refusal in a 2xx; `isAmbiguousStatus(status)`,
+ * an answer after which the request may have been taken, held as of unknown
+ * delivery as a 504 is; `accepts(status)`, an
  * answer read as a 2xx is, which a request may replace; `retryDelayMs(attempt,
  * error)`; and `sleep(milliseconds, signal)` (see `requestWithRetry`).
  * @returns `{ log, fetchWithAuth, request }`.
@@ -226,6 +228,7 @@ const createApiClient = (config, provider) => {
       finalError,
       wrapAccepted: provider.acceptedError,
       isAnswer: provider.isAnswer,
+      isAmbiguousStatus: provider.isAmbiguousStatus,
       accepts: options.accepts ?? provider.accepts,
       retryDelayMs: provider.retryDelayMs,
       sleep: provider.sleep,
