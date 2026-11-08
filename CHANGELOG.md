@@ -65,6 +65,15 @@ worker of 1.2 holds reads the same.
   a worker. An email job keeps its name, `mail`, and its bytes.
 - **Breaking: the option types of `./bullmq` name no mail:** `BullMQMailJobOptions` is
   `BullMQJobOptions` and `BullMQMailWorkerOptions` `BullMQWorkerOptions`.
+- **Breaking: each verifier of `./webhooks` is an entry of its own,** `./webhooks/<provider>`
+  named as its transport (`./webhooks/ses`, `./webhooks/resend` … `./webhooks/scaleway`), with
+  the name, options and behavior of 1.x, so that a function that verifies one provider loads the
+  request layer and that provider (5 to 7.5 KB min+gzip) rather than all fifteen (15 KB):
+  `require('@alexify/mailer/webhooks')` of a verifier becomes
+  `require('@alexify/mailer/webhooks/<provider>')`. `./webhooks` keeps
+  `createMemoryReplayStore`, `WebhookVerificationError` and the types the verifiers share
+  (`WebhookRequest`, `WebhookResult`, `WebhookVerifier`, `ReplayStore`…); each entry declares
+  the options and results of its own.
 - **Breaking: the types of a worker of `./queue` take every channel:** `transport` is any
   transport (of email, of a channel, a router), the context of `resolveAttachment` is that of
   an `attachment` of an email or of a `medium` of a channel (so an `attachment` is checked

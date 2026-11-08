@@ -24,7 +24,8 @@ Key facts:
   database are passed in
 - Root entry `@alexify/mailer`: `createMessage`, the `Transport` contract, receipts,
   attachments, calendar parts, Message-ID helpers, the `DeliveryEvent` types
-- Subpaths: `/mime` (MIME, DKIM), `/attachments`, `/render`, `/webhooks`; transports `/smtp`,
+- Subpaths: `/mime` (MIME, DKIM), `/attachments`, `/render`, `/webhooks` and a verifier per
+  provider, `/webhooks/<provider>` (`/webhooks/ses`); transports `/smtp`,
   `/sendmail`, `/jmap`, `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`,
   `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`,
   `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk`, `/mock`; decorators

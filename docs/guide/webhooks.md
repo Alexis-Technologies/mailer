@@ -2,8 +2,12 @@
 
 A provider tells what became of a message after it took it — delivered,
 bounced, complained of — through a webhook: an HTTP request to the
-application. `@alexify/mailer/webhooks` verifies those requests and reads them
-into one model of events, the same for every provider.
+application. The verifier of each provider, an entry of its own named as its
+transport (`@alexify/mailer/webhooks/ses`, `@alexify/mailer/webhooks/resend`),
+verifies those requests and reads them into one model of events, the same for
+every provider; `@alexify/mailer/webhooks` holds what they share, the store of
+the ids taken and the error of a refusal. A function that verifies one
+provider loads that one.
 
 ## Verify, then read
 
@@ -14,11 +18,8 @@ keeps the body as a buffer.
 
 ```js
 const express = require('express');
-const {
-  createMemoryReplayStore,
-  createSesWebhookVerifier,
-  WebhookVerificationError,
-} = require('@alexify/mailer/webhooks');
+const { createMemoryReplayStore, WebhookVerificationError } = require('@alexify/mailer/webhooks');
+const { createSesWebhookVerifier } = require('@alexify/mailer/webhooks/ses');
 
 // One process; several share a store of their own (see Time and replays).
 const replayStore = createMemoryReplayStore();
@@ -204,6 +205,7 @@ of the message are its `tags`, as `./ses` sends them, and its other tags its
 ## Resend
 
 ```js
+const { createResendWebhookVerifier } = require('@alexify/mailer/webhooks/resend');
 const resend = createResendWebhookVerifier({
   secret: process.env.RESEND_WEBHOOK_SECRET,
   replayStore,
@@ -221,6 +223,7 @@ its metadata, as `./resend` sends them.
 ## SendGrid
 
 ```js
+const { createSendGridWebhookVerifier } = require('@alexify/mailer/webhooks/sendgrid');
 const sendgrid = createSendGridWebhookVerifier({
   publicKey: process.env.SENDGRID_WEBHOOK_PUBLIC_KEY,
   replayStore,
@@ -241,6 +244,7 @@ adds after it.
 ## Mailgun
 
 ```js
+const { createMailgunWebhookVerifier } = require('@alexify/mailer/webhooks/mailgun');
 const mailgun = createMailgunWebhookVerifier({
   signingKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
   replayStore,
@@ -261,6 +265,7 @@ metadata, and `messageId` the id of the receipt, in angle brackets.
 ## Postmark
 
 ```js
+const { createPostmarkWebhookVerifier } = require('@alexify/mailer/webhooks/postmark');
 // The webhook URL in Postmark: https://hook:s3cret@example.com/webhooks/postmark
 const postmark = createPostmarkWebhookVerifier({ username: 'hook', password: 's3cret' });
 ```
@@ -280,6 +285,8 @@ that event having come on its own.
 ## MailerSend and Mailtrap
 
 ```js
+const { createMailerSendWebhookVerifier } = require('@alexify/mailer/webhooks/mailersend');
+const { createMailtrapWebhookVerifier } = require('@alexify/mailer/webhooks/mailtrap');
 const mailersend = createMailerSendWebhookVerifier({
   secret: process.env.MAILERSEND_WEBHOOK_SECRET,
   replayStore,
@@ -301,6 +308,7 @@ tags and its other custom variables the metadata, as `./mailtrap` sends them.
 ## Brevo
 
 ```js
+const { createBrevoWebhookVerifier } = require('@alexify/mailer/webhooks/brevo');
 const brevo = createBrevoWebhookVerifier({ token: process.env.BREVO_WEBHOOK_TOKEN });
 ```
 
@@ -313,6 +321,8 @@ address is `rejected`, a soft bounce soft, and the metadata comes back from
 ## Mailjet and SparkPost
 
 ```js
+const { createMailjetWebhookVerifier } = require('@alexify/mailer/webhooks/mailjet');
+const { createSparkPostWebhookVerifier } = require('@alexify/mailer/webhooks/sparkpost');
 // The callback URL in Mailjet: https://hook:s3cret@example.com/webhooks/mailjet
 const mailjet = createMailjetWebhookVerifier({ username: 'hook', password: 's3cret' });
 const sparkpost = createSparkPostWebhookVerifier({ username: 'hook', password: 's3cret' });
@@ -330,6 +340,8 @@ request to a window or takes it once.
 ## Lettermint and Maileroo
 
 ```js
+const { createLettermintWebhookVerifier } = require('@alexify/mailer/webhooks/lettermint');
+const { createMailerooWebhookVerifier } = require('@alexify/mailer/webhooks/maileroo');
 const lettermint = createLettermintWebhookVerifier({
   secret: process.env.LETTERMINT_WEBHOOK_SECRET,
   replayStore,
@@ -351,6 +363,7 @@ one event each.
 ## SMTP2GO
 
 ```js
+const { createSmtp2goWebhookVerifier } = require('@alexify/mailer/webhooks/smtp2go');
 // The webhook URL in SMTP2GO: https://hook:s3cret@example.com/webhooks/smtp2go
 const smtp2go = createSmtp2goWebhookVerifier({ username: 'hook', password: 's3cret' });
 ```
@@ -364,6 +377,7 @@ payload.
 ## Azure Communication Services
 
 ```js
+const { createAzureWebhookVerifier } = require('@alexify/mailer/webhooks/azure');
 const azure = createAzureWebhookVerifier({ token: process.env.EVENT_GRID_TOKEN, replayStore });
 
 app.post('/webhooks/azure', express.raw({ type: '*/*' }), async (req, res) => {
@@ -399,6 +413,7 @@ receipt's.
 ## Scaleway
 
 ```js
+const { createScalewayWebhookVerifier } = require('@alexify/mailer/webhooks/scaleway');
 const trustChain = fs.readFileSync('scaleway-sns-trust-chain.pem', 'utf8');
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:project-…:tem-events'],

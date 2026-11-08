@@ -63,7 +63,22 @@ model of delivery events.
 | `@alexify/mailer/bullmq` | `createBullMQDriver`, `createBullMQProcessor`, `createBullMQBackoffStrategy`, `MAILER_BACKOFF_TYPE` | [BullMQ](/transports/bullmq) |
 | `@alexify/mailer/mongodb` | `createMongoOutbox`, `createMongoAuditSink`, `createMongoIdempotencyStore` | [MongoDB outbox](/guide/outbox) |
 | `@alexify/mailer/audit` | `createMemoryAuditSink`, `createLoggerAuditSink`, `combineAuditSinks`, `stateOf`, `stateOfDeliveryEvent`, `auditEventOfDeliveryEvent`, `isFinalState` | [The audit](/guide/audit) |
-| `@alexify/mailer/webhooks` | `createSesWebhookVerifier`, `createResendWebhookVerifier`, `createSendGridWebhookVerifier`, `createMailgunWebhookVerifier`, `createPostmarkWebhookVerifier`, `createMailerSendWebhookVerifier`, `createMailtrapWebhookVerifier`, `createBrevoWebhookVerifier`, `createMailjetWebhookVerifier`, `createSparkPostWebhookVerifier`, `createLettermintWebhookVerifier`, `createMailerooWebhookVerifier`, `createSmtp2goWebhookVerifier`, `createAzureWebhookVerifier`, `createScalewayWebhookVerifier`, `createMemoryReplayStore`, `WebhookVerificationError` | [Webhooks](/guide/webhooks) |
+| `@alexify/mailer/webhooks` | `createMemoryReplayStore`, `WebhookVerificationError` | [Webhooks](/guide/webhooks#time-and-replays) |
+| `@alexify/mailer/webhooks/ses` | `createSesWebhookVerifier` | [Webhooks](/guide/webhooks#amazon-ses) |
+| `@alexify/mailer/webhooks/resend` | `createResendWebhookVerifier` | [Webhooks](/guide/webhooks#resend) |
+| `@alexify/mailer/webhooks/sendgrid` | `createSendGridWebhookVerifier` | [Webhooks](/guide/webhooks#sendgrid) |
+| `@alexify/mailer/webhooks/mailgun` | `createMailgunWebhookVerifier` | [Webhooks](/guide/webhooks#mailgun) |
+| `@alexify/mailer/webhooks/mailtrap` | `createMailtrapWebhookVerifier` | [Webhooks](/guide/webhooks#mailersend-and-mailtrap) |
+| `@alexify/mailer/webhooks/maileroo` | `createMailerooWebhookVerifier` | [Webhooks](/guide/webhooks#lettermint-and-maileroo) |
+| `@alexify/mailer/webhooks/lettermint` | `createLettermintWebhookVerifier` | [Webhooks](/guide/webhooks#lettermint-and-maileroo) |
+| `@alexify/mailer/webhooks/postmark` | `createPostmarkWebhookVerifier` | [Webhooks](/guide/webhooks#postmark) |
+| `@alexify/mailer/webhooks/brevo` | `createBrevoWebhookVerifier` | [Webhooks](/guide/webhooks#brevo) |
+| `@alexify/mailer/webhooks/mailjet` | `createMailjetWebhookVerifier` | [Webhooks](/guide/webhooks#mailjet-and-sparkpost) |
+| `@alexify/mailer/webhooks/mailersend` | `createMailerSendWebhookVerifier` | [Webhooks](/guide/webhooks#mailersend-and-mailtrap) |
+| `@alexify/mailer/webhooks/sparkpost` | `createSparkPostWebhookVerifier` | [Webhooks](/guide/webhooks#mailjet-and-sparkpost) |
+| `@alexify/mailer/webhooks/smtp2go` | `createSmtp2goWebhookVerifier` | [Webhooks](/guide/webhooks#smtp2go) |
+| `@alexify/mailer/webhooks/azure` | `createAzureWebhookVerifier` | [Webhooks](/guide/webhooks#azure-communication-services) |
+| `@alexify/mailer/webhooks/scaleway` | `createScalewayWebhookVerifier` | [Webhooks](/guide/webhooks#scaleway) |
 | `@alexify/mailer/smtp` | `SmtpTransport` and its error classes (`SmtpResponseError`, `SmtpAuthError`, …), `isSmtpResponseProviderDetails`, `createHttpProxyConnector` | [SMTP](/transports/smtp) |
 | `@alexify/mailer/sendmail` | `SendmailTransport` | [Sendmail](/transports/sendmail) |
 | `@alexify/mailer/ses` | `SesTransport` | [Amazon SES](/transports/ses) |

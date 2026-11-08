@@ -119,7 +119,8 @@ And the decorators, which wrap any transport:
   logged through your pino-like logger.
 
 What happens after a send comes back through the provider's webhooks:
-[`@alexify/mailer/webhooks`](/guide/webhooks) verifies them and reads their events
+the verifier of the provider, [`@alexify/mailer/webhooks/<provider>`](/guide/webhooks),
+verifies them and reads their events
 into one model of delivery events.
 
 If none of these fit your needs, you can also

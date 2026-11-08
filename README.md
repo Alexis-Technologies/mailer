@@ -122,7 +122,7 @@ if (!receipt.successful) console.error(receipt.errorMessages);
 | `/queue`, `/bullmq`, `/mongodb`, `/audit` | the queue and its worker, the BullMQ driver, the MongoDB outbox (and its audit and idempotency stores), the states of a message and their sinks |
 | `/smtp`, `/sendmail`, `/jmap` | SMTP, sendmail and JMAP transports |
 | `/ses`, `/resend`, `/sendgrid`, `/mailgun`, `/postmark`, `/brevo`, `/mailjet`, `/mailersend`, `/sparkpost`, `/mailtrap`, `/maileroo`, `/lettermint`, `/zeptomail`, `/smtp2go`, `/azure`, `/scaleway`, `/cloudflare`, `/plunk` | HTTP providers |
-| `/webhooks` | verified webhooks of fifteen providers, read into delivery events |
+| `/webhooks`, `/webhooks/<provider>` | verified webhooks of fifteen providers, an entry each, read into delivery events |
 | `/pool`, `/retry`, `/breaker`, `/ratelimit`, `/idempotency`, `/hooks`, `/tee`, `/otel`, `/logger` | decorators: failover, retries, circuit breaking, rate limits, idempotency, hooks, mirroring, OpenTelemetry, logging |
 | `/mock` | an in-memory transport for tests |
 
