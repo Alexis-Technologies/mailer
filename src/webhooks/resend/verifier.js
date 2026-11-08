@@ -29,7 +29,7 @@ const {
   splitNamedTags,
   stringListOf,
   stringOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const TYPES = new Map([

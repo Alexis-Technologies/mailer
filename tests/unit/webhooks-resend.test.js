@@ -4,9 +4,9 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   createMemoryReplayStore,
-  createResendWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createResendWebhookVerifier } = require('../../src/webhooks/resend/index.js');
 const { SECRET, signSvix } = require('../helpers/webhooks/svix.js');
 
 const NOW = 1_800_000_000_000;

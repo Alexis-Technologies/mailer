@@ -34,9 +34,9 @@ const { fingerprintOf } = require('../src/internal/fingerprint.js');
 const { gatedSendMany } = require('../src/internal/gate.js');
 const {
   createMailtrapWebhookVerifier,
-  createResendWebhookVerifier,
   createSendGridWebhookVerifier,
 } = require('../src/webhooks/index.js');
+const { createResendWebhookVerifier } = require('../src/webhooks/resend/index.js');
 const { createSesWebhookVerifier } = require('../src/webhooks/ses/index.js');
 const sns = require('../tests/helpers/webhooks/sns.js');
 const { CircuitBreakerTransport } = require('../src/breaker/index.js');

@@ -49,6 +49,10 @@
       "types": "./src/webhooks/ses/index.d.ts",
       "default": "./src/webhooks/ses/index.js"
     },
+    "./webhooks/resend": {
+      "types": "./src/webhooks/resend/index.d.ts",
+      "default": "./src/webhooks/resend/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

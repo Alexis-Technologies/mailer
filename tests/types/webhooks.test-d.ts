@@ -12,7 +12,6 @@ import {
   createMailtrapWebhookVerifier,
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
-  createResendWebhookVerifier,
   createScalewayWebhookVerifier,
   createSendGridWebhookVerifier,
   createSmtp2goWebhookVerifier,
@@ -38,12 +37,6 @@ const shared: ReplayStore = {
 };
 expectError<ReplayStore>({ add: () => true });
 
-const resend = createResendWebhookVerifier({
-  secret: 'whsec_abc=',
-  toleranceMs: 1000,
-  replayStore: store,
-});
-expectAssignable<readonly DeliveryEvent<'resend'>[]>((await resend.verify({ body: '' })).events);
 const sendgrid = createSendGridWebhookVerifier({ publicKey: 'MFkw…', replayStore: store });
 expectAssignable<readonly DeliveryEvent<'sendgrid'>[]>(
   (await sendgrid.verify({ body: '' })).events,
@@ -55,7 +48,6 @@ expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
 );
 expectError(createPostmarkWebhookVerifier({ username: 'u' }));
 expectError(createPostmarkWebhookVerifier({ username: 'u', password: 'p', toleranceMs: 1 }));
-expectError(createResendWebhookVerifier({}));
 
 const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: null });
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
