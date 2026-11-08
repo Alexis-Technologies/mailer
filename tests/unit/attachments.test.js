@@ -292,6 +292,13 @@ test('Attachments: isPublicUrl refuses the ranges that reach a local address or 
     'http://240.0.0.1/a',
     'http://255.255.255.254/a',
     'http://255.255.255.255/a',
+    // Before (C39): SIIT, Teredo, the discard prefix and the documentation
+    // ranges of IPv6, two of which embed an IPv4 address.
+    'http://[::ffff:0:7f00:1]/a',
+    'http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/a',
+    'http://[100::1]/a',
+    'http://[2001:db8::1]/a',
+    'http://[3fff::1]/a',
     // The documentation ranges.
     'http://192.0.2.1/a',
     'http://198.51.100.7/a',

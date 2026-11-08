@@ -1107,6 +1107,10 @@ that fails without it; C for the channels):
   check throws, was retried as a read, four requests over seconds, its `statusCode` the code of
   the provider. It is thrown at once (`isAnswer`), its HTTP status kept and the provider's code
   apart.
+- C39. public-url: the check of a URL of an attachment or a Web Push let SIIT
+  (`::ffff:0:0:0/96`) and Teredo (`2001::/32`), which embed an IPv4 address, the discard prefix
+  `100::/64` and the documentation ranges `2001:db8::/32` and `3fff::/20` through. They are
+  refused.
 
 ## Repository layout
 

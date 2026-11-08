@@ -10,9 +10,11 @@ const net = require('node:net');
 // metadata answers), the ranges of the IETF protocol assignments, benchmarking
 // and documentation, multicast and the reserved block (the broadcast address
 // among them); and in IPv6 the unspecified and loopback addresses with the
-// whole of ::/96 (IPv4-compatible, deprecated), unique local, link-local,
-// site-local (deprecated) and multicast.  An address of NAT64 or 6to4 embeds an
-// IPv4 address that a gateway on the way may reach, a private one included, so
+// whole of ::/96 (IPv4-compatible, deprecated), the discard prefix 100::/64,
+// the documentation ranges 2001:db8::/32 and 3fff::/20, unique local,
+// link-local, site-local (deprecated) and multicast.  An address of NAT64, of
+// SIIT (::ffff:0:0:0/96), of Teredo (2001::/32) or of 6to4 embeds an IPv4
+// address that a gateway on the way may reach, a private one included, so
 // their prefixes are refused whole.  BlockList matches IPv4-mapped IPv6 forms
 // against the IPv4 rules.
 const PRIVATE = new net.BlockList();
@@ -31,7 +33,12 @@ PRIVATE.addSubnet('203.0.113.0', 24, 'ipv4');
 PRIVATE.addSubnet('224.0.0.0', 4, 'ipv4');
 PRIVATE.addSubnet('240.0.0.0', 4, 'ipv4');
 PRIVATE.addSubnet('::', 96, 'ipv6');
+PRIVATE.addSubnet('::ffff:0:0:0', 96, 'ipv6');
 PRIVATE.addSubnet('64:ff9b::', 96, 'ipv6');
+PRIVATE.addSubnet('100::', 64, 'ipv6');
+PRIVATE.addSubnet('2001::', 32, 'ipv6');
+PRIVATE.addSubnet('2001:db8::', 32, 'ipv6');
+PRIVATE.addSubnet('3fff::', 20, 'ipv6');
 PRIVATE.addSubnet('64:ff9b:1::', 48, 'ipv6');
 PRIVATE.addSubnet('2002::', 16, 'ipv6');
 PRIVATE.addSubnet('fc00::', 7, 'ipv6');
