@@ -76,12 +76,13 @@ test('Graph: the modules of src/ require each other without a cycle', () => {
 });
 
 // The directories of the subpaths, from the exports map: `./smtp` lives in
-// src/smtp/. Everything else (src/*.js, src/core/) is the root entry, which
-// requires no subpath, and src/internal/ holds private modules any subpath may
-// require, which require no subpath either.
+// src/smtp/, `./webhooks/ses` in src/webhooks/ses/. Everything else
+// (src/*.js, src/core/) is the root entry, which requires no subpath, and
+// src/internal/ holds private modules any subpath may require, which require
+// no subpath either.
 const SUBPATHS = Object.keys(pkg.exports)
   .filter((subpath) => subpath !== '.')
-  .map((subpath) => pkg.exports[subpath].default.split('/')[2]);
+  .map((subpath) => path.posix.dirname(pkg.exports[subpath].default).slice('./src/'.length));
 // ./smtp renders and signs through the internal modules of ./mime, which
 // upstream exported as @upyo/mime/internal.
 const SUBPATH_EDGES = [
@@ -107,9 +108,26 @@ const SUBPATH_EDGES = [
   'mongodb/audit-sink.js -> audit/states.js',
 ];
 
-const subpathOf = (name) => {
-  const top = name.split('/')[0];
-  return SUBPATHS.includes(top) ? top : null;
+// The subpath of a module: the deepest whose directory holds it.
+const subpathOf = (name, subpaths = SUBPATHS) => {
+  let found = null;
+  for (const subpath of subpaths) {
+    if (name.startsWith(`${subpath}/`) && (found === null || subpath.length > found.length)) {
+      found = subpath;
+    }
+  }
+  return found;
+};
+
+// Whether a require goes from one subpath into another. A subpath nested in
+// another (./webhooks/ses in ./webhooks) shares the modules of its parent, as
+// the verifier of a provider shares the request layer of the webhooks; the
+// parent requires none of its children, and a child none of its siblings.
+const crosses = (from, to, subpaths = SUBPATHS) => {
+  const source = subpathOf(from, subpaths);
+  const destination = subpathOf(to, subpaths);
+  if (destination === null || destination === source) return false;
+  return source === null || !source.startsWith(`${destination}/`);
 };
 
 test('Graph: the root requires no subpath, a subpath another only where allowed', () => {
@@ -118,10 +136,18 @@ test('Graph: the root requires no subpath, a subpath another only where allowed'
     const from = relative(file);
     for (const target of edgesOf(file)) {
       const to = relative(target);
-      const source = subpathOf(from);
-      const destination = subpathOf(to);
-      if (destination !== null && destination !== source) crossings.push(`${from} -> ${to}`);
+      if (crosses(from, to)) crossings.push(`${from} -> ${to}`);
     }
   }
   assert.deepStrictEqual(crossings.sort(), [...SUBPATH_EDGES].sort());
+});
+
+test('Graph: a nested subpath may require its parent; neither the parent nor a sibling it', () => {
+  const subpaths = ['webhooks', 'webhooks/ses', 'webhooks/scaleway', 'ses'];
+  assert.strictEqual(crosses('webhooks/ses/verifier.js', 'webhooks/request.js', subpaths), false);
+  assert.strictEqual(crosses('webhooks/ses/verifier.js', 'internal/http.js', subpaths), false);
+  assert.strictEqual(crosses('webhooks/index.js', 'webhooks/ses/index.js', subpaths), true);
+  assert.strictEqual(crosses('webhooks/scaleway/a.js', 'webhooks/ses/verifier.js', subpaths), true);
+  assert.strictEqual(crosses('webhooks/ses/verifier.js', 'ses/config.js', subpaths), true);
+  assert.strictEqual(crosses('core/message.js', 'webhooks/request.js', subpaths), true);
 });
