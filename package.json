@@ -57,6 +57,10 @@
       "types": "./src/webhooks/sendgrid/index.d.ts",
       "default": "./src/webhooks/sendgrid/index.js"
     },
+    "./webhooks/mailgun": {
+      "types": "./src/webhooks/mailgun/index.d.ts",
+      "default": "./src/webhooks/mailgun/index.js"
+    },
     "./smtp": {
       "types": "./src/smtp/index.d.ts",
       "default": "./src/smtp/index.js"

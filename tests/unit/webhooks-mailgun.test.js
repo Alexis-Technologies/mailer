@@ -4,11 +4,11 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { createHmac } = require('node:crypto');
 const {
-  createMailgunWebhookVerifier,
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createMailgunWebhookVerifier } = require('../../src/webhooks/mailgun/index.js');
 
 const KEY = 'key-mailgun-signing';
 const NOW = 1_800_000_000_000;

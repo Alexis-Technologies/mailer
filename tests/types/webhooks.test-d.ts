@@ -7,7 +7,6 @@ import {
   createLettermintWebhookVerifier,
   createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailgunWebhookVerifier,
   createMailjetWebhookVerifier,
   createMailtrapWebhookVerifier,
   createMemoryReplayStore,
@@ -36,7 +35,6 @@ const shared: ReplayStore = {
 };
 expectError<ReplayStore>({ add: () => true });
 
-createMailgunWebhookVerifier({ signingKey: 'key', replayStore: null });
 const postmark = createPostmarkWebhookVerifier({ username: 'u', password: 'p' });
 expectAssignable<readonly DeliveryEvent<'postmark'>[]>(
   (await postmark.verify({ body: '' })).events,

@@ -6,7 +6,6 @@ const { createBrevoWebhookVerifier } = require('./brevo.js');
 const { createLettermintWebhookVerifier } = require('./lettermint.js');
 const { createMailerooWebhookVerifier } = require('./maileroo.js');
 const { createMailerSendWebhookVerifier } = require('./mailersend.js');
-const { createMailgunWebhookVerifier } = require('./mailgun.js');
 const { createMailjetWebhookVerifier } = require('./mailjet.js');
 const { createMailtrapWebhookVerifier } = require('./mailtrap.js');
 const { createPostmarkWebhookVerifier } = require('./postmark.js');
@@ -21,7 +20,6 @@ module.exports = {
   createLettermintWebhookVerifier,
   createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailgunWebhookVerifier,
   createMailjetWebhookVerifier,
   createMailtrapWebhookVerifier,
   createMemoryReplayStore,

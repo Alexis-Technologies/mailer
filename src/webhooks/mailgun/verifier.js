@@ -26,7 +26,7 @@ const {
   stringOf,
   stringRecordOf,
   stringsOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const TYPES = new Map([
   ['accepted', 'accepted'],

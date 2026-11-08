@@ -243,27 +243,6 @@ export interface SnsConfirmation {
 }
 
 /**
- * The options of {@link createMailgunWebhookVerifier}.
- */
-export interface MailgunWebhookVerifierOptions extends WebhookVerifierOptions {
-  /** The HTTP webhook signing key of the Mailgun domain. */
-  readonly signingKey: string;
-}
-
-/**
- * Makes the verifier of Mailgun's webhooks: the HMAC-SHA256 of the
- * timestamp and token of the body, within five minutes, the token taken
- * once.  A permanent failure is a hard bounce, a temporary one a deferred
- * soft bounce, a suppression `rejected`; the user variables are the
- * metadata.
- *
- * @throws {TypeError} If the key is missing.
- */
-export declare function createMailgunWebhookVerifier(
-  options: MailgunWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'mailgun'>>;
-
-/**
  * The options of a verifier of a webhook whose URL carries Basic credentials,
  * as its provider signs nothing (Postmark, Mailjet, SparkPost, SMTP2GO).  No
  * id is kept: committing its delivery does nothing.  With no time signed,

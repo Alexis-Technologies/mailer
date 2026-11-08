@@ -115,12 +115,12 @@ const {
   createLettermintWebhookVerifier,
   createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
-  createMailgunWebhookVerifier,
   createMailtrapWebhookVerifier,
   createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
   createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createMailgunWebhookVerifier } = require('../../src/webhooks/mailgun/index.js');
 const { createSendGridWebhookVerifier } = require('../../src/webhooks/sendgrid/index.js');
 const { createResendWebhookVerifier } = require('../../src/webhooks/resend/index.js');
 const { createSesWebhookVerifier } = require('../../src/webhooks/ses/index.js');
