@@ -62,5 +62,6 @@
   "./discord": 9,
   "./fcm": 9.5,
   "./webpush": 9,
-  "./meta": 9
+  "./meta": 9,
+  "./twilio": 8.5
 }

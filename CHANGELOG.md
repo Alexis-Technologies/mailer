@@ -189,6 +189,13 @@ worker of 1.2 holds reads the same.
   by its code and subcode: a recipient not on WhatsApp is `not-on-channel`, a message outside
   the 24-hour window `outside-window`, a user who stopped marketing `opted-out`. The receipt
   says `accepted`; `graphVersion` is `v23.0` by default.
+- **`./twilio`, SMS, MMS, WhatsApp and RCS over the Messages API:** the recipient with the
+  prefix of its channel, the sender of its channel or the Messaging Service, media as the URLs
+  of an MMS, a template of the Content API by its ContentSid, `expiresAt` as `ValidityPeriod`,
+  and the correlation id in the query of `StatusCallback`; an auth token or an API key, a
+  region and an edge from Twilio's lists. An error is told by its code (`codes.js`: a STOP is
+  `opted-out`, 63016 `outside-window`, 21612 `unreachable`); the receipt says `accepted`, with
+  the `segments` Twilio counted.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

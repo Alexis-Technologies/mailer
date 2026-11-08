@@ -6,6 +6,7 @@ const { createChannelMessage } = require('../../../src/channels/index.js');
 const { DiscordTransport } = require('../../../src/discord/index.js');
 const { FcmTransport } = require('../../../src/fcm/index.js');
 const { MetaTransport } = require('../../../src/meta/index.js');
+const { TwilioTransport } = require('../../../src/twilio/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -217,6 +218,34 @@ const channelProviders = [
         { status: 429, headers: { 'Retry-After': String(seconds) } },
       ),
     secrets: ['EAAGMetaSecretToken'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'Twilio',
+    create: (extra) =>
+      new TwilioTransport({
+        retries: 1,
+        ...extra,
+        accountSid: 'AC00000000000000000000000000000000',
+        authToken: 'TwilioAuthSecret',
+        from: '+15005550006',
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json(
+        { sid: `SM${'a'.repeat(32)}`, status: 'queued', num_segments: '1' },
+        { status: 201 },
+      ),
+    rateLimited: (seconds) =>
+      Response.json(
+        { code: 20429, message: 'Too Many Requests', status: 429 },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: [
+      'TwilioAuthSecret',
+      Buffer.from('AC00000000000000000000000000000000:TwilioAuthSecret').toString('base64'),
+    ],
     recipient: '380671234567',
   },
 ];

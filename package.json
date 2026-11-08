@@ -276,6 +276,10 @@
     "./meta": {
       "types": "./src/meta/index.d.ts",
       "default": "./src/meta/index.js"
+    },
+    "./twilio": {
+      "types": "./src/twilio/index.d.ts",
+      "default": "./src/twilio/index.js"
     }
   },
   "directories": {

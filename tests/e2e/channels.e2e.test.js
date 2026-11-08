@@ -111,6 +111,28 @@ const PROVIDERS = [
       createChannelMessage({ channel: 'messenger', to: env.MESSENGER_PSID, text, buttons }),
   },
   {
+    name: 'Twilio',
+    Transport: require('../../src/twilio/index.js').TwilioTransport,
+    needs: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM', 'TWILIO_TO'],
+    config: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: env.TWILIO_AUTH_TOKEN,
+      from: env.TWILIO_FROM,
+    }),
+    refused: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: 'invalid',
+      from: env.TWILIO_FROM,
+    }),
+    message: ({ text, media }) =>
+      createChannelMessage({
+        channel: 'sms',
+        to: env.TWILIO_TO,
+        text,
+        media: media?.filter((medium) => medium.url !== undefined),
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

@@ -937,6 +937,21 @@ test that fails on the source's behavior):
   its template, for Meta to refuse. `./meta` refuses it before any request; it also gives the
   codes of the channels their categories (131026 `not-on-channel`, 131047 `outside-window`,
   131050 `opted-out`) where thinwrap made them invalid requests or recipients.
+- T1. thinwrap (`twilio.connector.ts` and seven more): an SMS the provider took was always
+  `sent`, though it was queued. `./twilio` makes it `accepted`, with the `segments` Twilio
+  counted, the delivery coming to the status callback.
+- T6. thinwrap (`twilio.connector.ts`): 21610, a STOP of the recipient, was an invalid
+  recipient, as was a region not enabled (21408). `src/twilio/codes.js` makes it `opted-out`
+  and 21408 `configuration`, a table `./webhooks/twilio` will share.
+- T11. thinwrap (`base/base.connector.ts`): a request took no signal and no timeout, and an
+  abort was an invalid request. `./twilio`, as every transport on the shared client, ends a
+  request at its deadline and rejects with the reason of the caller's signal.
+- V7. visulima (`providers/utils/http.ts`): a POST was sent again after its timeout, after
+  which Twilio may have queued the message. `./twilio` treats a lost answer as
+  `deliveryUnknown`.
+- V8. visulima (`providers/utils/sms.ts`): the recipients of an SMS were folded into one result,
+  so a partial failure read as a success. A message of `./twilio` has one recipient and its
+  own receipt.
 
 ## Repository layout
 

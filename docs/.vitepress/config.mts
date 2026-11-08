@@ -86,6 +86,7 @@ const guide = [
       { text: 'Firebase Cloud Messaging', link: '/channels/fcm' },
       { text: 'Web Push', link: '/channels/webpush' },
       { text: 'WhatsApp, Messenger, Instagram', link: '/channels/meta' },
+      { text: 'Twilio', link: '/channels/twilio' },
     ],
   },
   {
