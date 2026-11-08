@@ -68,5 +68,6 @@
   "./vonage": 8,
   "./infobip": 8.5,
   "./sinch": 8,
-  "./apns": 10
+  "./apns": 10,
+  "./rbm": 9
 }

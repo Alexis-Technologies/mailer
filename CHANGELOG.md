@@ -220,6 +220,11 @@ worker of 1.2 holds reads the same.
   shared, and made anew once when APNs says it expired; the environment named, never read from
   `NODE_ENV`; a push of data alone a background one with priority 5; a 5xx of unknown delivery,
   never retried; `Unregistered` is `unregistered`, and the `apns-id` the receipt's id.
+- **`./rbm`, Google's RCS Business Messaging:** a message of RCS from an agent, its text, one
+  medium by URL (a standalone rich card with a text), its buttons as suggestions; a messageId
+  of the idempotency key, which the API takes once, so a lost answer is sent again under it; a
+  user without RCS is `not-on-channel`, and the token of the service account is shared as
+  `./fcm` shares its.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

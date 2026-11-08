@@ -12,6 +12,7 @@ const { VonageTransport } = require('../../../src/vonage/index.js');
 const { InfobipTransport } = require('../../../src/infobip/index.js');
 const { SinchTransport } = require('../../../src/sinch/index.js');
 const { ApnsTransport } = require('../../../src/apns/index.js');
+const { RbmTransport } = require('../../../src/rbm/index.js');
 
 const APNS_KEY = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
   .privateKey.export({ type: 'pkcs8', format: 'pem' })
@@ -390,6 +391,30 @@ const channelProviders = [
       ),
     secrets: [APNS_KEY.split('\n')[1]],
     recipient: APNS_DEVICE,
+  },
+  {
+    // A message carries a messageId the API takes once: a lost answer is
+    // sent again under it.
+    name: 'RBM',
+    keyed: true,
+    create: (extra = {}) =>
+      new RbmTransport({
+        retries: 1,
+        ...extra,
+        fetch: withGoogleToken(extra.fetch),
+        serviceAccount: FCM_ACCOUNT,
+        agentId: 'shop_agent',
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'rcs', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () => Response.json({ name: 'phones/+380671234567/agentMessages/1' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: [FCM_ACCESS_TOKEN],
+    recipient: '380671234567',
   },
 ];
 

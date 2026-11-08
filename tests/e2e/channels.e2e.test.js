@@ -237,6 +237,29 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'RBM',
+    Transport: require('../../src/rbm/index.js').RbmTransport,
+    // The service account of an agent, and a device of a tester it invited.
+    needs: ['RBM_SERVICE_ACCOUNT', 'RBM_AGENT_ID', 'RBM_TO'],
+    config: () => ({
+      serviceAccount: JSON.parse(env.RBM_SERVICE_ACCOUNT),
+      agentId: env.RBM_AGENT_ID,
+      ...(env.RBM_REGION && { region: env.RBM_REGION }),
+    }),
+    // The account with a key Google never issued.
+    refused: () => ({
+      serviceAccount: {
+        ...JSON.parse(env.RBM_SERVICE_ACCOUNT),
+        private_key: require('node:crypto')
+          .generateKeyPairSync('rsa', { modulusLength: 2048 })
+          .privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      },
+      agentId: env.RBM_AGENT_ID,
+    }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({ channel: 'rcs', to: env.RBM_TO, text, buttons, media }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

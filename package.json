@@ -300,6 +300,10 @@
     "./apns": {
       "types": "./src/apns/index.d.ts",
       "default": "./src/apns/index.js"
+    },
+    "./rbm": {
+      "types": "./src/rbm/index.d.ts",
+      "default": "./src/rbm/index.js"
     }
   },
   "directories": {
