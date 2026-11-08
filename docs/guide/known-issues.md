@@ -21,3 +21,10 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
   [getting started](/guide/getting-started#bun-and-deno) shows. The providers that take an
   idempotency key, which the transport sends with every message (Resend, Lettermint, Brevo,
   Azure), see the second request as the first and do not send the message again.
+- The same holds for the transports of the channels, which take a `fetch` alike: an SMS or a
+  chat message may go twice through those whose API takes no key (Twilio, Vonage, Infobip,
+  Sinch, AWS SMS, AlphaSMS, SMS Club, Telegram, Slack, Viber, Meta, FCM, Web Push, the webhooks of
+  Discord, Teams and Google Chat). Those that send a key the provider dedupes by do not: a bot
+  of Discord (its nonce), RCS Business Messaging (its `messageId`), a Chat app of Google (its
+  `requestId`) and TurboSMS (its `sequence_id`). APNs goes over `node:http2`, not `fetch`, and
+  is not affected.

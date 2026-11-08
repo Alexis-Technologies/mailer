@@ -13,6 +13,38 @@ audit of email, under one model of messages. A major, so that there is one name 
 thing rather than one for email and one for the channels; what a store, a log of audit or a
 worker of 1.2 holds reads the same.
 
+### Upgrading from 1.x
+
+- **Import each webhook verifier from its own entry:** `require('@alexify/mailer/webhooks')`
+  of `createSesWebhookVerifier` becomes `require('@alexify/mailer/webhooks/ses')`, and so on
+  for the fifteen providers; the names, options and results are those of 1.x.
+  `createMemoryReplayStore` and `WebhookVerificationError` stay in `./webhooks`.
+- **Rename the API of `./queue`:** `createMailQueue` → `createQueue`, `createMailJobHandler` →
+  `createJobHandler`, `prepareMailJob` → `prepareJob`, `parseMailJob` → `parseJob`,
+  `MailQueueError` → `QueueError`, `MAIL_JOB_NAME` → `EMAIL_JOB_NAME`, `MAIL_JOB_VERSION` →
+  `EMAIL_JOB_VERSION`, and the types without `Mail` (`MailJobData` → `JobData`, `MailQueue` →
+  `MessageQueue`, `MailWorkerOptions` → `JobHandlerOptions`); in `./bullmq`,
+  `BullMQMailJobOptions` → `BullMQJobOptions`, `BullMQMailWorkerOptions` → `BullMQWorkerOptions`.
+  The `queue.*` codes, the options and the behavior do not change.
+- **Update dashboards and alerts:** the metrics are `mailer.message.*` (was `mailer.email.*`,
+  and `mailer.email.message.size` is `mailer.message.size`) with `mailer.channel`, the priority
+  attribute `mailer.priority` (was `email.priority`); the events of `./logger` are `message.*`
+  (was `email.*`); the logger sink of `./audit` writes `message.<state>` (was `mail.<state>`);
+  a span is named by its channel (`email send`) unless `spanPrefix` says otherwise.
+- **Cover the new members of the unions** in an exhaustive `switch`: the seven categories of the
+  channels in `ReceiptErrorCategory`, `sent`, `read`, `failed`, `expired` and `subscribed` in
+  `DeliveryEventType`, `sent`, `read` and `expired` in `MessageState`. A `DeliveryEvent` built
+  by hand sets `channel` (`'email'`).
+- **Nothing persisted changes:** an email job of 1.2 (its JSON, hash, MAC, id, Message-ID and
+  Content-IDs), the ids of audit events, the ranks of states in MongoDB and the keys of
+  `./idempotency` are the same bytes, so workers of 1.2 and 2.0 can share a queue of email
+  while they are replaced, and a key enqueued before the upgrade is a duplicate after it.
+- **Give the channels a queue of their own** (another `queueName` of BullMQ, another collection
+  of the outbox): a worker of 1.2 that meets a job of a channel releases it as
+  `unsupported_version`, and it waits there until a worker of 2.0 takes it.
+- **A message built by hand without `channel` is still email** at run time; its type now asks
+  for `channel: 'email'`, which `createMessage` sets.
+
 ### Changed
 
 - **Breaking: one model of messages for every channel.** `Message` has `channel: 'email'`,
