@@ -377,3 +377,21 @@ test('Queue: the clock of a queue is checked when the queue is made', () => {
     /now must be a function/,
   );
 });
+
+test('Queue: an email of a job carries the tenant of its job, as a message of a channel does', async (t) => {
+  const { driver, queue } = setup();
+  const transport = fakeTransport(() => sent('e1'));
+  await queue.enqueue({
+    kind: 'content',
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 'Hi',
+    content: { text: 'Hello' },
+    tenantId: 'acme',
+  });
+  const worker = queue.createWorker({ transport });
+  t.after(() => worker.close());
+  await driver.drain();
+  // Before: the tenant stayed in the job, and a rate limit per tenant saw none.
+  assert.strictEqual(transport.calls[0].message.tenantId, 'acme');
+});

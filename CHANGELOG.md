@@ -144,6 +144,9 @@ worker of 1.2 holds reads the same.
   Message-ID, `sent` follows `accepted` for a receipt that says so, and `enqueue` gives its
   `channel` in place of a `messageId`. An email job is that of 1.2 byte for byte. The channels
   are best given a queue of their own (the guide says why).
+- **An email a worker of `./queue` builds carries the `tenantId` of its job,** as one of a
+  channel does, for the decorators that read it (a rate limit per tenant, a span); no provider
+  is sent it, and its fingerprint is that of 1.2.
 
 ## [1.2.1] - 2026-11-07
 

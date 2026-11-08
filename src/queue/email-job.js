@@ -334,6 +334,8 @@ const emailJob = {
       calendar: data.calendar,
       tracking: data.tracking,
       metadata: data.metadata,
+      // Read by the decorators (a rate limit per tenant, a span), never sent.
+      tenantId: data.tenantId,
     }),
 };
 
