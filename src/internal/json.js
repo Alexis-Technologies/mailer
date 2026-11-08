@@ -45,6 +45,9 @@ const copyJson = (value, path, ancestors) => {
     }
     copy = {};
     for (const key of Object.keys(value)) {
+      // Assigned, it would set the prototype of the copy rather than a key,
+      // which a JSON round trip drops: a message would differ in the queue.
+      if (key === '__proto__') throw new TypeError(`${path} holds a key __proto__.`);
       if (value[key] !== undefined) copy[key] = copyJson(value[key], `${path}.${key}`, ancestors);
     }
   }

@@ -1098,6 +1098,9 @@ that fails without it; C for the channels):
 - C35. channels: a message whose text, title, media, payload or data was empty passed the check
   of a message with nothing to send, and TurboSMS and SMS Club sent an empty SMS; a job of a
   channel was accepted though its worker refused it. Only a field that says something counts.
+- C36. channels (`internal/json.js`): a key `__proto__` of a payload, which `JSON.parse`
+  makes an own key, was assigned to the copy, setting its prototype, so a direct send carried
+  its fields and a queued one, after its JSON round trip, did not. It is refused.
 
 ## Repository layout
 

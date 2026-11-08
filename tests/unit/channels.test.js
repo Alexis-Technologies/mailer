@@ -287,6 +287,21 @@ test('Channels: a message whose fields are empty has nothing to send', () => {
   }
 });
 
+test('Channels: a payload with a key __proto__ is refused', () => {
+  // Before (C36): the copy of the payload assigned it, setting the prototype
+  // of the copy, so a direct send carried its fields and a queued one, after
+  // its JSON round trip, did not.
+  assert.throws(
+    () =>
+      createChannelMessage({
+        channel: 'slack',
+        text: 'hi',
+        payload: JSON.parse('{"__proto__":{"username":"Payroll"},"unfurl_links":false}'),
+      }),
+    /holds a key __proto__/,
+  );
+});
+
 test('Channels: a phone number in E.164 from the way people write one', () => {
   const cases = [
     ['+38 (067) 123-45-67', undefined, '+380671234567'],
