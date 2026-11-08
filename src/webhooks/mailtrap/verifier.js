@@ -17,7 +17,7 @@ const {
   resolveUntimedOptions,
   stringOf,
   stringRecordOf,
-} = require('./request.js');
+} = require('../request.js');
 
 // Mailtrap signs no time and retries for up to a day: an event id is kept a
 // day and an hour.

@@ -8,10 +8,10 @@ const {
   createMemoryReplayStore,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
-  createMailtrapWebhookVerifier,
   createSparkPostWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createMailtrapWebhookVerifier } = require('../../src/webhooks/mailtrap/index.js');
 
 const rejects = async (promise, reason) => {
   await assert.rejects(promise, (error) => {

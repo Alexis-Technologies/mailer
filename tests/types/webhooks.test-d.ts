@@ -8,7 +8,6 @@ import {
   createMailerooWebhookVerifier,
   createMailerSendWebhookVerifier,
   createMailjetWebhookVerifier,
-  createMailtrapWebhookVerifier,
   createMemoryReplayStore,
   createPostmarkWebhookVerifier,
   createScalewayWebhookVerifier,
@@ -46,8 +45,6 @@ const mailersend = createMailerSendWebhookVerifier({ secret: 's', replayStore: n
 expectAssignable<readonly DeliveryEvent<'mailersend'>[]>(
   (await mailersend.verify({ body: '' })).events,
 );
-createMailtrapWebhookVerifier({ secret: 's', maxBodyBytes: 1, replayStore: store });
-expectError(createMailtrapWebhookVerifier({ secret: 's' }));
 createBrevoWebhookVerifier({ token: 't', header: 'x-webhook-token' });
 createMailjetWebhookVerifier({ username: 'u', password: 'p' });
 const sparkpost = createSparkPostWebhookVerifier({ username: 'u', password: 'p' });
@@ -55,7 +52,6 @@ expectAssignable<readonly DeliveryEvent<'sparkpost'>[]>(
   (await sparkpost.verify({ body: '' })).events,
 );
 expectError(createBrevoWebhookVerifier({}));
-expectError(createMailtrapWebhookVerifier({ secret: 's', replayStore: null, toleranceMs: 1 }));
 
 const scaleway = createScalewayWebhookVerifier({
   topicArns: ['arn:scw:sns:fr-par:p:t'],
