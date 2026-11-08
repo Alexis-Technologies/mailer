@@ -912,7 +912,8 @@ src/
                     which ./router reads alone, message.js, phone.js and calling-codes.js,
                     segments.js and gsm7.js, markup.js, which ./channels exports and the
                     transports of the channels require, and recipient.js, the recipient of
-                    one as a string for the decorators), and
+                    one as a string for the decorators), job-channel.js (the channel of a
+                    job without opening it, for ./bullmq and the spans of a worker), and
                     abort.js, iterate.js, warn.js, redact.js, redact-addresses.js, sleep.js,
                     log.js
 tests/
@@ -965,10 +966,11 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
   `createPollingDriver` (`src/internal/polling-driver.js`) makes a driver of, as it does the
   memory queue. The queue retries, not the transport: a worker's chain has `retries: 1` and no
   `RetryTransport`.
-- **A mail job** (`./queue`): JSON, `v: 1`, a template with its context or content rendered
-  already, its id a UUID of namespace, tenant and `idempotencyKey`, its Message-ID and
-  Content-IDs fixed (derived from the id under a key of the caller's), and a SHA-256 of all but
-  `enqueuedAt` that tells a duplicate from a key used again.
+- **A job** (`./queue`): JSON, a template with its context or content rendered already, its id
+  a UUID of namespace, tenant and `idempotencyKey` (and the channel, for a job of a channel),
+  and a SHA-256 of all but `enqueuedAt` that tells a duplicate from a key used again. An email
+  job is `v: 1` with its Message-ID and Content-IDs fixed (derived from the id under a key of
+  the caller's); a job of a channel is `v: 2` (see "One queue" below).
 - **`AuditSink`**: `append(event, { transaction })`, append-only, an event written once by its
   deterministic `id`; sinks in memory, of a logger, and combined (`./audit`), and in MongoDB
   (`./mongodb`). The crypto-shredding of recipients is next.
@@ -985,8 +987,8 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
 `./channels`, `./router` and the tables of `./audit` are in the code since its stage 2, the
 shared layer since stage 3, and the decorators take a message of a channel since stage 4, with
 the names of 2.0 (`message.*` log events, `mailer.message.*` metrics with `mailer.channel`,
-`message.<state>` audit records); the queue and the webhooks of the channels are stages 5 and
-6):
+`message.<state>` audit records), and the queue takes them since stage 5; the webhooks of the
+channels are stage 6):
 
 - **`ChannelMessage`**, built by `createChannelMessage()` of `./channels` (its modules in
   `src/internal/channel/`): `channel` (`sms`, `rcs`, `whatsapp`, `messenger`, `instagram`,
@@ -1017,12 +1019,21 @@ the names of 2.0 (`message.*` log events, `mailer.message.*` metrics with `maile
   `error?: { category, code }`. An inbound STOP is `unsubscribed`.
 - **What 2.0 keeps byte for byte** is pinned by `tests/unit/golden.test.js` on values of 1.2.1:
   the fingerprint of a message (which reads neither `channel` nor `tenantId`), the JSON, hash,
-  HMAC, id, Message-ID and Content-IDs of a mail job, the envelope of a sealed one, the ids of
+  HMAC, id, Message-ID and Content-IDs of an email job, the envelope of a sealed one, the ids of
   audit events, the ranks of 1.2 and the keys of `./idempotency`; and by the jobs 1.2.1 wrote in
   `tests/fixtures/queue/`, which are never written again. A test there that fails is a break.
-- **One queue:** one core with a strategy per kind of job; the email job stays `v: 1` byte for
-  byte, a job of a channel is `v: 2`, its `channel` sealed with the rest; the API loses `Mail`
-  (`createQueue`, `createJobHandler`, `prepareJob`, `parseJob`, `QueueError`).
+- **One queue:** one core (`job.js`, `parse.js`, `handler.js`, `queue.js`) with a strategy per
+  kind of job (`email-job.js`, `channel-job.js`, picked by `strategies.js`); the API has no
+  `Mail` (`createQueue`, `createJobHandler`, `prepareJob`, `parseJob`, `QueueError`,
+  `JobData`). The email job stays `v: 1` byte for byte, named `mail`. A job of a channel is
+  `v: 2`, checked by `createChannelMessage` when enqueued (E.164 by the queue's
+  `defaultCountry`), its id seeded `ns\0tenant\0key\0channel`, named by its channel (which
+  `channelOfJob` reads of a sealed one), its `channel` sealed with the rest and never in
+  `ENVELOPE`, so that a worker of 1.2 releases it as `unsupported_version`; its template
+  renders `text` (the subject is a push's title), WhatsApp's template is `providerTemplate`,
+  media are URLs, ids, bytes or refs `resolveAttachment` resolves, and a receipt with
+  `state: 'sent'` adds the audit state `sent`. The channels take a queue of their own (another
+  `queueName`, another collection of the outbox), a rule of the docs, not of the code.
 
 ## Roadmap
 
