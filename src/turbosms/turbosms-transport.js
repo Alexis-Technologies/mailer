@@ -22,6 +22,7 @@ const MAX_CAPTION = 30;
 const MIN_TTL = 30;
 const MAX_TTL = 86400;
 const DUPLICATE_REQUEST = 507;
+const DUPLICATE_MESSAGE = 427;
 const ACCEPTED = new Set([800, 801, 802, 803, DUPLICATE_REQUEST]);
 const OWN_FIELDS = new Set(['recipients', 'sequence_id']);
 // A number in E.164: an SMS was normalized so; Viber is held to it here.
@@ -100,6 +101,17 @@ const bodyOf = (message, config, sequenceId) => {
   return body;
 };
 
+// The same message created within 90 seconds, NOT_ALLOWED_MESSAGE_DUPLICATE:
+// it went then, so this one is of unknown delivery rather than refused.
+const duplicate = (message) =>
+  createFailedReceipt('TurboSMS created this message within 90 seconds, so not again.', {
+    provider: PROVIDER,
+    channel: message.channel,
+    category: 'unknown',
+    deliveryUnknown: true,
+    code: 'turbosms.427',
+  });
+
 // The receipt of an answer: its code, then the code of its recipient.
 const receiptOf = (json, message) => {
   const fail = (code, reason) =>
@@ -121,9 +133,12 @@ const receiptOf = (json, message) => {
   const [recipient] = Array.isArray(json.response_result) ? json.response_result : [];
   if (!ACCEPTED.has(code)) {
     // A request refused whole, unless the code is its recipient's.
-    if (recipient?.response_code === undefined) return fail(code, json.response_status);
+    if (recipient?.response_code === undefined) {
+      return code === DUPLICATE_MESSAGE ? duplicate(message) : fail(code, json.response_status);
+    }
   }
   if (recipient !== undefined && recipient.response_code !== 0) {
+    if (recipient.response_code === DUPLICATE_MESSAGE) return duplicate(message);
     return fail(recipient.response_code, recipient.response_status);
   }
   if (typeof recipient?.message_id !== 'string' || recipient.message_id === '') {

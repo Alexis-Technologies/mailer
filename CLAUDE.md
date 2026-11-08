@@ -1036,6 +1036,9 @@ that fails without it; C for the channels):
   `sequence_id`, so twice. The answer is asked again under the same `sequence_id`, which gives
   the results of the first, and of unknown delivery when it never comes; 502, a body TurboSMS
   could not parse, is `validation`.
+- C15. turbosms: 427 NOT_ALLOWED_MESSAGE_DUPLICATE, the same message created within 90
+  seconds, which went then, was a permanent `validation` refusal of a message sent. It is of
+  unknown delivery.
 
 ## Repository layout
 

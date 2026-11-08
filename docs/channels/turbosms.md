@@ -66,6 +66,7 @@ fails the message; the receipt of one that went says `state: 'accepted'`, the
 | 106 (a user blocked), 203 (no balance), 302, 400, 401, 434 (the sender), 406 (a country not enabled) | `configuration`                                                               |
 | 305, 318 (the phone)                                                                                 | `invalid-recipient`                                                           |
 | 404, the stoplist                                                                                    | `opted-out`                                                                   |
+| 427, the same message created within 90 seconds                                                      | of unknown delivery: it went then                                             |
 | 428, 436, 437, 438 (limits)                                                                          | `rate-limit`, retried                                                         |
 | 500, 501 (a request that ran, its answer not written)                                                | asked again under its `sequence_id`; of unknown delivery when no answer comes |
 | 502 (a body it could not parse)                                                                      | `validation`                                                                  |

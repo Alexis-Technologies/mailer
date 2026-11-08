@@ -187,6 +187,25 @@ test('TurboSMS: an answer it could not write is asked again under the sequence_i
   assert.strictEqual(unparsed.retryable, false);
 });
 
+test('TurboSMS: a message it created within 90 seconds is of unknown delivery', async (t) => {
+  // Before (C15): 427 NOT_ALLOWED_MESSAGE_DUPLICATE, a message that went
+  // already, was a permanent refusal.
+  for (const response of [
+    answer(0, 'x', {
+      response_code: 427,
+      message_id: null,
+      response_status: 'NOT_ALLOWED_MESSAGE_DUPLICATE',
+    }),
+    answer(427, 'NOT_ALLOWED_MESSAGE_DUPLICATE'),
+  ]) {
+    t.mock.restoreAll();
+    stubFetch(t, () => response.clone());
+    const receipt = await transport().send(sms());
+    assert.strictEqual(receipt.deliveryUnknown, true);
+    assert.strictEqual(receipt.errors[0].code, 'turbosms.427');
+  }
+});
+
 test('TurboSMS: an answer without its code or id is of unknown delivery', async (t) => {
   stubFetch(t, () =>
     answer(800, 'SUCCESS_MESSAGE_ACCEPTED', { response_code: 0, message_id: null }),
