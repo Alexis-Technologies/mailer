@@ -1049,6 +1049,9 @@ that fails without it; C for the channels):
   `sequence_id`, of which APNs and RBM want a UUID and TurboSMS 40 characters at most: a
   generator of ULIDs failed every send without a key. The id goes through `generateId` of the
   core, by its kind, and `toUuid`.
+- C19. google-chat: the `to` of a message of the app went into the path as written, so a `#`
+  or a `?` moved the `requestId` out of the query (a send retried as if keyed, twice), and `../`
+  aimed the token of the app at other methods. A recipient is `spaces/` and an id alone.
 
 ## Repository layout
 

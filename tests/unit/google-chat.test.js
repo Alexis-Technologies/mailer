@@ -185,6 +185,12 @@ test('Google Chat: what a message of Chat cannot be fails before any request', a
     ],
     [chat({ text: 'x'.repeat(32_001) }), 'validation', /32000 bytes/],
     [chat({ to: 'spaces/AAAA' }), 'validation', /has no serviceAccount/],
+    // Before (C19): the space went into the path as written, so a # or a ?
+    // moved the requestId out of the query, and ../ the token to another
+    // method of the API.
+    [chat({ to: 'spaces/AAA#' }), 'validation', /a space: spaces\/ and its id/],
+    [chat({ to: 'spaces/AAA/messages?x=' }), 'validation', /a space/],
+    [chat({ to: 'spaces/AAA/../../v1/users' }), 'validation', /a space/],
     [createChannelMessage({ channel: 'slack', text: 'x' }), 'unsupported', /not of slack/],
   ];
   for (const [message, category, pattern] of cases) {

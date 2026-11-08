@@ -13,6 +13,7 @@ const { RefusalError } = require('../internal/refusal.js');
 
 const MAX_BYTES = 32_000;
 const USER_MENTION = /<users\/([^>\s]{1,128})>/g;
+const SPACE = /^spaces\/[A-Za-z0-9_-]{1,128}$/;
 
 const invalid = (message) => new InvalidMessageError(`Google Chat: ${message}`);
 const unsupported = (message) => new RefusalError(`Google Chat: ${message}`);
@@ -73,6 +74,11 @@ const convertMessage = (message) => {
     throw unsupported(
       `the transport sends messages of Google Chat, not of ${message.channel ?? 'email'}.`,
     );
+  }
+  // The space goes into the path of the request the token of the app goes
+  // with: an id of a space alone, never a path, a query or a fragment.
+  if (message.to !== undefined && !SPACE.test(message.to)) {
+    throw invalid('the recipient of a Chat app is a space: spaces/ and its id.');
   }
   const body = {};
   if (message.text !== undefined) body.text = textOf(message.text, message.mentions);
