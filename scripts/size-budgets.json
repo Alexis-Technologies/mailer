@@ -66,5 +66,6 @@
   "./twilio": 8.5,
   "./aws-sms": 9,
   "./vonage": 8,
-  "./infobip": 8.5
+  "./infobip": 8.5,
+  "./sinch": 8
 }

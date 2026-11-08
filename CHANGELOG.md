@@ -211,6 +211,10 @@ worker of 1.2 holds reads the same.
   `callbackData`; a status of the groups REJECTED, UNDELIVERABLE or EXPIRED in the 200 fails
   the message by its name (`REJECTED_DND` is `opted-out`), and the receipt's segments are the
   `messageCount` of the answer.
+- **`./sinch`, the SMS API of Sinch:** a batch of one recipient a message, on the host of its
+  region (`us`, `eu`, `au`, `br`, `ca`) with the token of the service plan; `expiresAt` as
+  `expire_at`, the correlation id as `client_reference`, and reports per recipient to a
+  `callbackUrl` of the transport's.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

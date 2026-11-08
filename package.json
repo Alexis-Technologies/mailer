@@ -292,6 +292,10 @@
     "./infobip": {
       "types": "./src/infobip/index.d.ts",
       "default": "./src/infobip/index.js"
+    },
+    "./sinch": {
+      "types": "./src/sinch/index.d.ts",
+      "default": "./src/sinch/index.js"
     }
   },
   "directories": {

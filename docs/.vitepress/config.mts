@@ -90,6 +90,7 @@ const guide = [
       { text: 'AWS SMS', link: '/channels/aws-sms' },
       { text: 'Vonage', link: '/channels/vonage' },
       { text: 'Infobip', link: '/channels/infobip' },
+      { text: 'Sinch', link: '/channels/sinch' },
     ],
   },
   {

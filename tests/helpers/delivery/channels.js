@@ -10,6 +10,7 @@ const { TwilioTransport } = require('../../../src/twilio/index.js');
 const { AwsSmsTransport } = require('../../../src/aws-sms/index.js');
 const { VonageTransport } = require('../../../src/vonage/index.js');
 const { InfobipTransport } = require('../../../src/infobip/index.js');
+const { SinchTransport } = require('../../../src/sinch/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -325,6 +326,31 @@ const channelProviders = [
         { status: 429, headers: { 'Retry-After': String(seconds) } },
       ),
     secrets: ['InfobipApiKey0123456789'],
+    recipient: '380671234567',
+  },
+  {
+    name: 'Sinch',
+    create: (extra) =>
+      new SinchTransport({
+        retries: 1,
+        ...extra,
+        servicePlanId: 'plan-1',
+        apiToken: 'SinchApiToken0123456789',
+        from: 'MyBrand',
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () =>
+      Response.json(
+        { id: 'sinch-1', to: ['380671234567'], from: 'MyBrand', body: 'Your code is 1234' },
+        { status: 201 },
+      ),
+    rateLimited: (seconds) =>
+      Response.json(
+        { code: 'too_many_requests', text: 'Too many requests' },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: ['SinchApiToken0123456789'],
     recipient: '380671234567',
   },
 ];

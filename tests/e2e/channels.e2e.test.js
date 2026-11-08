@@ -184,6 +184,29 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'Sinch',
+    Transport: require('../../src/sinch/index.js').SinchTransport,
+    needs: ['SINCH_SERVICE_PLAN_ID', 'SINCH_API_TOKEN', 'SINCH_TO'],
+    config: () => ({
+      servicePlanId: env.SINCH_SERVICE_PLAN_ID,
+      apiToken: env.SINCH_API_TOKEN,
+      ...(env.SINCH_REGION && { region: env.SINCH_REGION }),
+      ...(env.SINCH_FROM && { from: env.SINCH_FROM }),
+    }),
+    refused: () => ({
+      servicePlanId: env.SINCH_SERVICE_PLAN_ID,
+      apiToken: 'invalid',
+      ...(env.SINCH_REGION && { region: env.SINCH_REGION }),
+    }),
+    message: ({ text }) =>
+      createChannelMessage({
+        channel: 'sms',
+        to: env.SINCH_TO,
+        text,
+        expiresAt: new Date(Date.now() + 10 * 60_000),
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.
