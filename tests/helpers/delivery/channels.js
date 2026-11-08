@@ -7,6 +7,7 @@ const { DiscordTransport } = require('../../../src/discord/index.js');
 const { FcmTransport } = require('../../../src/fcm/index.js');
 const { MetaTransport } = require('../../../src/meta/index.js');
 const { TwilioTransport } = require('../../../src/twilio/index.js');
+const { AwsSmsTransport } = require('../../../src/aws-sms/index.js');
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -246,6 +247,25 @@ const channelProviders = [
       'TwilioAuthSecret',
       Buffer.from('AC00000000000000000000000000000000:TwilioAuthSecret').toString('base64'),
     ],
+    recipient: '380671234567',
+  },
+  {
+    name: 'AWS SMS',
+    create: (extra) =>
+      new AwsSmsTransport({
+        retries: 1,
+        ...extra,
+        credentials: { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'AwsSecretAccessKey' },
+      }),
+    message: () =>
+      createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' }),
+    ok: () => Response.json({ MessageId: 'aws-message-1' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { __type: 'ThrottlingException', Message: 'Rate exceeded' },
+        { status: 400, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: ['AwsSecretAccessKey'],
     recipient: '380671234567',
   },
 ];

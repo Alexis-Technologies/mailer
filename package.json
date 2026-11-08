@@ -280,6 +280,10 @@
     "./twilio": {
       "types": "./src/twilio/index.d.ts",
       "default": "./src/twilio/index.js"
+    },
+    "./aws-sms": {
+      "types": "./src/aws-sms/index.d.ts",
+      "default": "./src/aws-sms/index.js"
     }
   },
   "directories": {

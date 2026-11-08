@@ -196,6 +196,12 @@ worker of 1.2 holds reads the same.
   region and an edge from Twilio's lists. An error is told by its code (`codes.js`: a STOP is
   `opted-out`, 63016 `outside-window`, 21612 `unreachable`); the receipt says `accepted`, with
   the `segments` Twilio counted.
+- **`./aws-sms`, AWS End User Messaging SMS:** `SendTextMessage` signed with SigV4 at each
+  attempt, with credentials or a function that gives them (those of a role); the origination
+  identity, the type by the priority, `expiresAt` as `TimeToLive`, the configuration set, and
+  the `metadata` as the `Context` its events give back. An error is told by its reason (a
+  number opted out is `opted-out`, a destination not verified in the sandbox `configuration`),
+  then its type; the receipt says `accepted`, with the segments counted.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

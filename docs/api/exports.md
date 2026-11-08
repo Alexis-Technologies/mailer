@@ -62,6 +62,7 @@ model of delivery events.
 | `@alexify/mailer/webpush` | `WebPushTransport` | [Web Push](/channels/webpush) |
 | `@alexify/mailer/meta` | `MetaTransport` | [WhatsApp, Messenger, Instagram](/channels/meta) |
 | `@alexify/mailer/twilio` | `TwilioTransport` | [Twilio](/channels/twilio) |
+| `@alexify/mailer/aws-sms` | `AwsSmsTransport` | [AWS SMS](/channels/aws-sms) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |

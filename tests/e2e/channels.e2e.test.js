@@ -133,6 +133,25 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'AWS SMS',
+    Transport: require('../../src/aws-sms/index.js').AwsSmsTransport,
+    // A number the sandbox verified, and the credentials of the account.
+    needs: ['AWS_SMS_ACCESS_KEY_ID', 'AWS_SMS_SECRET_ACCESS_KEY', 'AWS_SMS_REGION', 'AWS_SMS_TO'],
+    config: () => ({
+      credentials: {
+        accessKeyId: env.AWS_SMS_ACCESS_KEY_ID,
+        secretAccessKey: env.AWS_SMS_SECRET_ACCESS_KEY,
+      },
+      region: env.AWS_SMS_REGION,
+      ...(env.AWS_SMS_FROM && { originationIdentity: env.AWS_SMS_FROM }),
+    }),
+    refused: () => ({
+      credentials: { accessKeyId: env.AWS_SMS_ACCESS_KEY_ID, secretAccessKey: 'invalid' },
+      region: env.AWS_SMS_REGION,
+    }),
+    message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.AWS_SMS_TO, text }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

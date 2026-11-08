@@ -87,6 +87,7 @@ const guide = [
       { text: 'Web Push', link: '/channels/webpush' },
       { text: 'WhatsApp, Messenger, Instagram', link: '/channels/meta' },
       { text: 'Twilio', link: '/channels/twilio' },
+      { text: 'AWS SMS', link: '/channels/aws-sms' },
     ],
   },
   {
