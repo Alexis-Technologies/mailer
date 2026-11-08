@@ -4,7 +4,6 @@ import {
   createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
-  createSmtp2goWebhookVerifier,
   type ReplayState,
   type ReplayStore,
   type WebhookVerificationReason,
@@ -32,7 +31,6 @@ const scaleway = createScalewayWebhookVerifier({
   replayStore: store,
 });
 expectType<string | undefined>((await scaleway.verify({ body: '' })).confirmation?.token);
-createSmtp2goWebhookVerifier({ username: 'u', password: 'p' });
 const azure = createAzureWebhookVerifier({
   token: 't',
   header: 'x-webhook-token',

@@ -9,8 +9,8 @@ const { createHmac, generateKeyPairSync, sign } = require('node:crypto');
 const {
   createAzureWebhookVerifier,
   createScalewayWebhookVerifier,
-  createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createSparkPostWebhookVerifier } = require('../../src/webhooks/sparkpost/index.js');
 const { createMailerSendWebhookVerifier } = require('../../src/webhooks/mailersend/index.js');
 const { createMailjetWebhookVerifier } = require('../../src/webhooks/mailjet/index.js');

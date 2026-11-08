@@ -3,12 +3,10 @@
 const { WebhookVerificationError, createMemoryReplayStore } = require('./request.js');
 const { createAzureWebhookVerifier } = require('./azure.js');
 const { createScalewayWebhookVerifier } = require('./scaleway.js');
-const { createSmtp2goWebhookVerifier } = require('./smtp2go.js');
 
 module.exports = {
   WebhookVerificationError,
   createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
-  createSmtp2goWebhookVerifier,
 };

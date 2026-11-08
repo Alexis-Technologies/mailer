@@ -325,16 +325,6 @@ export declare function createScalewayWebhookVerifier(
 ): WebhookVerifier<ScalewayWebhookResult>;
 
 /**
- * Makes the verifier of SMTP2GO's webhooks, whose URL carries Basic
- * credentials, as SMTP2GO signs nothing; a body of JSON or of a form.
- *
- * @throws {TypeError} If a credential is missing.
- */
-export declare function createSmtp2goWebhookVerifier(
-  options: BasicWebhookVerifierOptions,
-): WebhookVerifier<WebhookResult<'smtp2go'>>;
-
-/**
  * The options of {@link createAzureWebhookVerifier}.
  */
 export interface AzureWebhookVerifierOptions {

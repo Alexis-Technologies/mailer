@@ -16,7 +16,7 @@ const {
   observed,
   resolveCredentialOptions,
   stringOf,
-} = require('./request.js');
+} = require('../request.js');
 
 const TYPES = new Map([
   ['processed', 'accepted'],

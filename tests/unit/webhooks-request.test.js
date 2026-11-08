@@ -114,8 +114,8 @@ const {
   WebhookVerificationError,
   createAzureWebhookVerifier,
   createScalewayWebhookVerifier,
-  createSmtp2goWebhookVerifier,
 } = require('../../src/webhooks/index.js');
+const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createMailerSendWebhookVerifier } = require('../../src/webhooks/mailersend/index.js');
 const { createBrevoWebhookVerifier } = require('../../src/webhooks/brevo/index.js');
 const { createPostmarkWebhookVerifier } = require('../../src/webhooks/postmark/index.js');

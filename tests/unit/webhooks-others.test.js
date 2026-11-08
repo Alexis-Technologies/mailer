@@ -7,9 +7,9 @@ const {
   createAzureWebhookVerifier,
   createMemoryReplayStore,
   createScalewayWebhookVerifier,
-  createSmtp2goWebhookVerifier,
   WebhookVerificationError,
 } = require('../../src/webhooks/index.js');
+const { createSmtp2goWebhookVerifier } = require('../../src/webhooks/smtp2go/index.js');
 const { createLettermintWebhookVerifier } = require('../../src/webhooks/lettermint/index.js');
 const { createMailerooWebhookVerifier } = require('../../src/webhooks/maileroo/index.js');
 const { certificate, certificateFetch, scaleway, signSns } = require('../helpers/webhooks/sns.js');
