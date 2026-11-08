@@ -44,8 +44,8 @@ export interface SmsClubConfig extends TransportDependencies {
  *
  * The receipt says `state: 'accepted'`, the id of the SMS (the key of the
  * `info` of the answer) its id.  A refusal is told by its status: 400
- * `validation`, 401 `auth`, 429 `rate-limit`, 453 (the same SMS within two
- * minutes) `rejected`.
+ * `validation`, 401 `auth`, 429 `rate-limit`; 453, the same SMS within two
+ * minutes, is of unknown delivery.
  *
  * @example
  * ```js

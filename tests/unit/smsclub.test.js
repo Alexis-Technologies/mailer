@@ -42,7 +42,6 @@ test('SMS Club: a refusal is told by its status', async (t) => {
     [400, 'validation', false],
     [401, 'auth', false],
     [429, 'rate-limit', true],
-    [453, 'rejected', false],
   ];
   for (const [status, category, retryable] of cases) {
     t.mock.restoreAll();
@@ -54,6 +53,18 @@ test('SMS Club: a refusal is told by its status', async (t) => {
     assert.strictEqual(receipt.retryable, retryable, String(status));
     assert.strictEqual(receipt.errors[0].code, `smsclub.http_${status}`, String(status));
   }
+});
+
+test('SMS Club: the same SMS within two minutes is of unknown delivery, not sent again', async (t) => {
+  // Before (C16): 453 was a definite refusal, though the SMS it says was sent
+  // twice went the first time, as after a 5xx retried within one send.
+  const requests = stubFetch(t, (_request, index) =>
+    index === 0 ? json({}, 500) : json({ error: 'duplicate' }, 453),
+  );
+  const receipt = await transport({ retries: 3 }).send(sms());
+  assert.strictEqual(requests.length, 2);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.retryable, false);
 });
 
 test('SMS Club: an answer without an id is a refusal or of unknown delivery', async (t) => {

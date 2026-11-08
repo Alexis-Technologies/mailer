@@ -1039,6 +1039,8 @@ that fails without it; C for the channels):
 - C15. turbosms: 427 NOT_ALLOWED_MESSAGE_DUPLICATE, the same message created within 90
   seconds, which went then, was a permanent `validation` refusal of a message sent. It is of
   unknown delivery.
+- C16. smsclub: 453, the same SMS within two minutes, the first of which went, was a definite
+  `rejected`, even after a 5xx retried within one send. It is of unknown delivery, not retried.
 
 ## Repository layout
 

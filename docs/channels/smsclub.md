@@ -40,13 +40,13 @@ the `info` of the answer, and its segments those
 [`countSegments`](/channels/messages) counts. A refusal is told by its
 status:
 
-| Status                               | Category                |
-| ------------------------------------ | ----------------------- |
-| 400, a request it did not validate   | `validation`            |
-| 401, the token                       | `auth`                  |
-| 429, over 9 requests a second        | `rate-limit`, retried   |
-| 453, the same SMS within two minutes | `rejected`              |
-| 5xx                                  | `server-error`, retried |
+| Status                               | Category                            |
+| ------------------------------------ | ----------------------------------- |
+| 400, a request it did not validate   | `validation`                        |
+| 401, the token                       | `auth`                              |
+| 429, over 9 requests a second        | `rate-limit`, retried               |
+| 453, the same SMS within two minutes | of unknown delivery: the first went |
+| 5xx                                  | `server-error`, retried             |
 
 An answer with no id but an `add_info` is a refusal. The API takes no
 idempotency key: a send whose answer was lost is never retried, and its
