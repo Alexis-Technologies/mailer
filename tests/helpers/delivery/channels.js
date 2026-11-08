@@ -11,6 +11,12 @@ const { AwsSmsTransport } = require('../../../src/aws-sms/index.js');
 const { VonageTransport } = require('../../../src/vonage/index.js');
 const { InfobipTransport } = require('../../../src/infobip/index.js');
 const { SinchTransport } = require('../../../src/sinch/index.js');
+const { ApnsTransport } = require('../../../src/apns/index.js');
+
+const APNS_KEY = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+  .privateKey.export({ type: 'pkcs8', format: 'pem' })
+  .toString();
+const APNS_DEVICE = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
 const { WebPushTransport } = require('../../../src/webpush/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
@@ -352,6 +358,38 @@ const channelProviders = [
       ),
     secrets: ['SinchApiToken0123456789'],
     recipient: '380671234567',
+  },
+  {
+    name: 'APNs',
+    create: (extra) =>
+      new ApnsTransport({
+        retries: 1,
+        ...extra,
+        teamId: 'TEAM123456',
+        keyId: 'KEY1234567',
+        privateKey: APNS_KEY,
+        topic: 'com.example.app',
+        environment: 'sandbox',
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'push',
+        to: { token: APNS_DEVICE },
+        title: 'Your code',
+        text: '1234',
+      }),
+    ok: () =>
+      new Response(null, {
+        status: 200,
+        headers: { 'apns-id': '8a4c5b2e-1f3d-4c6e-9a7b-0d1e2f3a4b5c' },
+      }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { reason: 'TooManyRequests' },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: [APNS_KEY.split('\n')[1]],
+    recipient: APNS_DEVICE,
   },
 ];
 

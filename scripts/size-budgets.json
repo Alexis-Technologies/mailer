@@ -67,5 +67,6 @@
   "./aws-sms": 9,
   "./vonage": 8,
   "./infobip": 8.5,
-  "./sinch": 8
+  "./sinch": 8,
+  "./apns": 10
 }

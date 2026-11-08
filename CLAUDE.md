@@ -914,13 +914,25 @@ test that fails on the source's behavior):
   end, and a timeout was retried with no nonce. `./discord` counts a 429 as an attempt, and a
   message of a bot carries a nonce with `enforce_nonce`, so that it is retried as the same
   message; a webhook, which takes none, is `deliveryUnknown` after an ambiguous answer.
-- T3. thinwrap (`fcm.connector.ts`): without a cache of the application's, a token of the
-  service account was made for every send. `./fcm` holds one in `internal/google-auth.js`,
-  asked for once however many sends wait, and drops it when FCM answers a 401.
+- T3. thinwrap (`fcm.connector.ts`, `apns.connector.ts`): without a cache of the
+  application's, a token of the service account was made for every send, and so was the JWT of
+  APNs, which answers a token changed within 20 minutes `TooManyProviderTokenUpdates`. `./fcm`
+  holds one in `internal/google-auth.js`, asked for once however many sends wait, and drops it
+  when FCM answers a 401; `./apns` signs one for 55 minutes (`internal/token-cache.js`).
 - T5. thinwrap (`fcm.connector.ts`): an error was read by its status alone, so an unregistered
   token and a project not found were both an invalid recipient. `./fcm` reads the `errorCode`
   of the FcmError first (`UNREGISTERED`, and a field violation of `message.token`, are
   `unregistered`).
+- T4. thinwrap (`apns.connector.ts`): a token APNs answered `ExpiredProviderToken` was left to
+  the application to evict, so every send failed until it did. `./apns` drops it, unless it is
+  younger than the 20 minutes between two tokens, and the send is retried with a new one.
+- AP1. node-apn (`lib/client.js`, `lib/config.js`): a 500 and a 503 were retried, after which
+  APNs may have taken the push, and the environment was production when `NODE_ENV` said so.
+  `./apns` makes a 5xx `deliveryUnknown` without a retry, and `environment` is required.
+- V15. visulima (`providers/push/apns`): the session had no timeout, no handling of a GOAWAY and
+  kept the process alive, and a refusal was its reason as text. `./apns` goes through
+  `internal/http2.js` (a deadline per request, a new session after a GOAWAY, unref'd while
+  idle), and every reason has its category (`Unregistered` `unregistered`).
 - V16. visulima (`providers/push/fcm/provider.ts`): the TTL went to the `android` block alone,
   so an iOS or a web push outlived it. `./fcm` writes `expiresAt` and the priority to
   `android`, `apns` and `webpush`.

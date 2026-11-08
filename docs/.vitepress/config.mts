@@ -85,6 +85,7 @@ const guide = [
       { text: 'Discord', link: '/channels/discord' },
       { text: 'Firebase Cloud Messaging', link: '/channels/fcm' },
       { text: 'Web Push', link: '/channels/webpush' },
+      { text: 'APNs', link: '/channels/apns' },
       { text: 'WhatsApp, Messenger, Instagram', link: '/channels/meta' },
       { text: 'Twilio', link: '/channels/twilio' },
       { text: 'AWS SMS', link: '/channels/aws-sms' },

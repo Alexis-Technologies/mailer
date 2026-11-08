@@ -207,6 +207,36 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'APNs',
+    Transport: require('../../src/apns/index.js').ApnsTransport,
+    // The key of the team (its .p8), the bundle id, and the token of a device
+    // of the environment (sandbox for a build of Xcode).
+    needs: ['APNS_TEAM_ID', 'APNS_KEY_ID', 'APNS_PRIVATE_KEY', 'APNS_TOPIC', 'APNS_DEVICE_TOKEN'],
+    config: () => ({
+      teamId: env.APNS_TEAM_ID,
+      keyId: env.APNS_KEY_ID,
+      privateKey: env.APNS_PRIVATE_KEY,
+      topic: env.APNS_TOPIC,
+      environment: env.APNS_ENVIRONMENT ?? 'sandbox',
+    }),
+    // The team and the key with a key Apple never issued.
+    refused: () => ({
+      teamId: env.APNS_TEAM_ID,
+      keyId: env.APNS_KEY_ID,
+      privateKey: require('node:crypto').generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+        .privateKey,
+      topic: env.APNS_TOPIC,
+      environment: env.APNS_ENVIRONMENT ?? 'sandbox',
+    }),
+    message: ({ text }) =>
+      createChannelMessage({
+        channel: 'push',
+        to: { token: env.APNS_DEVICE_TOKEN },
+        title: '@alexify/mailer',
+        text,
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

@@ -66,6 +66,7 @@ model of delivery events.
 | `@alexify/mailer/vonage` | `VonageTransport` | [Vonage](/channels/vonage) |
 | `@alexify/mailer/infobip` | `InfobipTransport` | [Infobip](/channels/infobip) |
 | `@alexify/mailer/sinch` | `SinchTransport` | [Sinch](/channels/sinch) |
+| `@alexify/mailer/apns` | `ApnsTransport` | [APNs](/channels/apns) |
 | `@alexify/mailer/mime` | `composeMessage`, `MimeAttachmentReplayError` | [MIME](/messages/mime) |
 | `@alexify/mailer/attachments` | `fromPath`, `fromUrl`, `fromDataUri`, `fromStream`, `inlineDataUrls`, `isPublicUrl` | [Attachments](/messages/attachments#files-urls-data-uris-and-streams) |
 | `@alexify/mailer/render` | `renderContent`, `renderFields`, `createReactEmailRenderer`, `htmlToText` | [Rendering templates](/messages/render) |

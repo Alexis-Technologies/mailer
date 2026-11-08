@@ -296,6 +296,10 @@
     "./sinch": {
       "types": "./src/sinch/index.d.ts",
       "default": "./src/sinch/index.js"
+    },
+    "./apns": {
+      "types": "./src/apns/index.d.ts",
+      "default": "./src/apns/index.js"
     }
   },
   "directories": {

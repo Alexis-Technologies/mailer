@@ -215,6 +215,11 @@ worker of 1.2 holds reads the same.
   region (`us`, `eu`, `au`, `br`, `ca`) with the token of the service plan; `expiresAt` as
   `expire_at`, the correlation id as `client_reference`, and reports per recipient to a
   `callbackUrl` of the transport's.
+- **`./apns`, the Apple Push Notification service:** pushes over one HTTP/2 session of its
+  origin (`internal/http2.js`), with the ES256 token of the team signed once for 55 minutes and
+  shared, and made anew once when APNs says it expired; the environment named, never read from
+  `NODE_ENV`; a push of data alone a background one with priority 5; a 5xx of unknown delivery,
+  never retried; `Unregistered` is `unregistered`, and the `apns-id` the receipt's id.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its
