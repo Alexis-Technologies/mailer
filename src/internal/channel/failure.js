@@ -6,7 +6,7 @@
 // it.
 
 const { createFailedReceipt } = require('../../core/receipt.js');
-const { providerFailure } = require('../api-client.js');
+const { ProviderApiError, providerFailure } = require('../api-client.js');
 
 /**
  * The refusal of a converter of a message the provider's API would refuse
@@ -32,6 +32,17 @@ const channelFailure = (provider, channel, error) => {
       channel,
       category: 'validation',
       retryable: false,
+    });
+  }
+  // A failure that names its category before any answer of the provider,
+  // such as a token of Google refused (internal/google-auth.js).
+  if (!(error instanceof ProviderApiError) && typeof error?.category === 'string') {
+    return createFailedReceipt(error.message, {
+      provider,
+      channel,
+      category: error.category,
+      retryable: error.retryable === true,
+      statusCode: error.statusCode,
     });
   }
   return { ...providerFailure(provider, error), channel };

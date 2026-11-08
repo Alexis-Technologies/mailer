@@ -165,6 +165,13 @@ worker of 1.2 holds reads the same.
   (`allowed_mentions` is `{ parse: [] }`); buttons are components, pictures at a URL embeds,
   bytes files, a `low` priority a silent message. A send waits for the bucket of its route
   (`X-RateLimit-*`), a 429 its `retry_after`; a refusal is told by its JSON code.
+- **`./fcm`, Firebase Cloud Messaging HTTP v1:** a push to a token or a topic, its title and
+  text as the notification, one picture, its data (FCM's own keys refused before any request),
+  and its priority and `expiresAt` on Android, APNs and Web Push alike; `payload` merges over
+  the message key by key. The token of the service account is asked for once and shared, and
+  dropped when FCM refuses it. An error is told by the `errorCode` of its FcmError first
+  (`UNREGISTERED` and a malformed token are `unregistered`); a lost answer is of unknown
+  delivery, never sent again; `verify()` is a dry run.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

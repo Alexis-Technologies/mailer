@@ -914,6 +914,19 @@ test that fails on the source's behavior):
   end, and a timeout was retried with no nonce. `./discord` counts a 429 as an attempt, and a
   message of a bot carries a nonce with `enforce_nonce`, so that it is retried as the same
   message; a webhook, which takes none, is `deliveryUnknown` after an ambiguous answer.
+- T3. thinwrap (`fcm.connector.ts`): without a cache of the application's, a token of the
+  service account was made for every send. `./fcm` holds one in `internal/google-auth.js`,
+  asked for once however many sends wait, and drops it when FCM answers a 401.
+- T5. thinwrap (`fcm.connector.ts`): an error was read by its status alone, so an unregistered
+  token and a project not found were both an invalid recipient. `./fcm` reads the `errorCode`
+  of the FcmError first (`UNREGISTERED`, and a field violation of `message.token`, are
+  `unregistered`).
+- V16. visulima (`providers/push/fcm/provider.ts`): the TTL went to the `android` block alone,
+  so an iOS or a web push outlived it. `./fcm` writes `expiresAt` and the priority to
+  `android`, `apns` and `webpush`.
+- FB1. firebase-admin (`src/utils/api-request.ts`): `messages:send` was retried after
+  `ETIMEDOUT`, after which FCM may have taken it. `./fcm` treats a lost answer as
+  `deliveryUnknown`, and retries a 429, a 500, a 503 and a connection never made.
 
 ## Repository layout
 

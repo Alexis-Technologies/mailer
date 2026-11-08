@@ -59,5 +59,6 @@
   "./router": 1.5,
   "./telegram": 8.5,
   "./slack": 9,
-  "./discord": 9
+  "./discord": 9,
+  "./fcm": 9.5
 }

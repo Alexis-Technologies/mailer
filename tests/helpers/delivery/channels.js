@@ -1,8 +1,10 @@
 // Not ported: the providers of the channels the delivery matrix holds, each
 // with a message of its channel, the answer of a send, a rate limit as it
 // tells it, and what must never reach a log: its secrets and its recipient.
+const { generateKeyPairSync } = require('node:crypto');
 const { createChannelMessage } = require('../../../src/channels/index.js');
 const { DiscordTransport } = require('../../../src/discord/index.js');
+const { FcmTransport } = require('../../../src/fcm/index.js');
 const { SlackTransport } = require('../../../src/slack/index.js');
 const { TelegramTransport } = require('../../../src/telegram/index.js');
 
@@ -10,6 +12,26 @@ const TELEGRAM_TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw';
 const SLACK_TOKEN = 'xoxb-1111-2222-SlackBotSecret';
 const DISCORD_TOKEN = 'MTA.DiscordBotSecret.xyz';
 const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/123/DiscordWebhookSecret';
+const FCM_ACCESS_TOKEN = 'ya29.FcmAccessSecret';
+const FCM_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+  type: 'pkcs8',
+  format: 'pem',
+});
+const FCM_ACCOUNT = {
+  type: 'service_account',
+  project_id: 'mailer-test-1',
+  client_email: 'push@mailer-test-1.iam.gserviceaccount.com',
+  private_key: FCM_KEY,
+};
+// The fetch of a transport of Google whose token endpoint answers apart, so
+// that a test's fetch sees the requests of the provider alone.
+const withGoogleToken = (fetch) =>
+  fetch === undefined
+    ? undefined
+    : (url, init) =>
+        String(url).startsWith('https://oauth2.googleapis.com/')
+          ? Promise.resolve(Response.json({ access_token: FCM_ACCESS_TOKEN, expires_in: 3600 }))
+          : fetch(url, init);
 const SLACK_WEBHOOK = 'https://hooks.slack.com/services/T000/B000/SlackWebhookSecret';
 
 const channelProviders = [
@@ -92,6 +114,43 @@ const channelProviders = [
       ),
     secrets: [DISCORD_TOKEN, 'DiscordBotSecret'],
     recipient: '1100000000000000099',
+  },
+  {
+    name: 'FCM',
+    create: (extra = {}) =>
+      new FcmTransport({
+        retries: 1,
+        ...extra,
+        fetch: withGoogleToken(extra.fetch),
+        serviceAccount: FCM_ACCOUNT,
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'push',
+        to: { token: 'fcm-device-token-SECRETDEVICE' },
+        title: 'Shipped',
+        text: 'Your order shipped',
+      }),
+    ok: () => Response.json({ name: 'projects/mailer-test-1/messages/0:1' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        {
+          error: {
+            code: 429,
+            status: 'RESOURCE_EXHAUSTED',
+            message: 'Quota exceeded',
+            details: [
+              {
+                '@type': 'type.googleapis.com/google.firebase.fcm.v1.FcmError',
+                errorCode: 'QUOTA_EXCEEDED',
+              },
+            ],
+          },
+        },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: [FCM_ACCESS_TOKEN, FCM_KEY.split('\n')[2]],
+    recipient: 'SECRETDEVICE',
   },
 ];
 

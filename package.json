@@ -264,6 +264,10 @@
     "./discord": {
       "types": "./src/discord/index.d.ts",
       "default": "./src/discord/index.js"
+    },
+    "./fcm": {
+      "types": "./src/fcm/index.d.ts",
+      "default": "./src/fcm/index.js"
     }
   },
   "directories": {

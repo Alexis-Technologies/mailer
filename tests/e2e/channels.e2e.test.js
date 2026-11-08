@@ -55,6 +55,29 @@ const PROVIDERS = [
     refused: () => ({ webhookUrl: 'https://discord.com/api/webhooks/1/invalid' }),
     message: (fields) => createChannelMessage({ channel: 'discord', ...fields }),
   },
+  {
+    name: 'FCM',
+    Transport: require('../../src/fcm/index.js').FcmTransport,
+    needs: ['FCM_SERVICE_ACCOUNT', 'FCM_TOKEN'],
+    config: () => ({ serviceAccount: JSON.parse(env.FCM_SERVICE_ACCOUNT) }),
+    // The account of the project with a key Google never issued.
+    refused: () => ({
+      serviceAccount: {
+        ...JSON.parse(env.FCM_SERVICE_ACCOUNT),
+        private_key: require('node:crypto')
+          .generateKeyPairSync('rsa', { modulusLength: 2048 })
+          .privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      },
+    }),
+    message: ({ text, media }) =>
+      createChannelMessage({
+        channel: 'push',
+        to: { token: env.FCM_TOKEN },
+        title: '@alexify/mailer',
+        text,
+        media: media?.slice(0, 1),
+      }),
+  },
 ];
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));
