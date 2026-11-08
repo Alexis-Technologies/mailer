@@ -460,8 +460,11 @@ test('Delivery: the matrix holds every HTTP provider of the exports map', () => 
     if (key === '.' || subpath === 'jmap') continue;
     if (fs.existsSync(path.join(root, 'src', subpath, 'http-client.js'))) http.push(subpath);
   }
+  // A provider of a channel is held to the matrix of the channels.
+  const { channelProviders } = require('../helpers/delivery/channels.js');
   const inMatrix = [];
   for (const [, , create] of providers) inMatrix.push(create().id);
+  for (const provider of channelProviders) inMatrix.push(provider.create().id);
   assert.deepStrictEqual(inMatrix.sort(), http.sort());
 });
 

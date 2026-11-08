@@ -886,7 +886,20 @@ botframework-connector 4.1.6. Their clones, read-only, are in
   becomes `t.mock.timers`, and `vi.mock('node:http2')` a local h2c server.
 - A source that no shipped file names when 2.0 is released leaves `LICENSE` and `SOURCES`.
 
-**Bugs of the sources fixed in the port:** none yet.
+**Bugs of the sources fixed in the port** (each in the `feat:` commit of its provider, with a
+test that fails on the source's behavior):
+
+- T7. thinwrap (`telegram.connector.ts`): every 403 of Telegram was an invalid recipient, so a
+  user who blocked the bot and one who never started it looked alike, and alike a typo.
+  `./telegram` reads the description: a bot blocked, kicked or no member is `blocked`, one
+  never started `not-on-channel`, a deactivated user `invalid-recipient`.
+- V11. visulima (`providers/chat/telegram/provider.ts`): an answer of `ok: true` without
+  `result.message_id` was a success with an empty id. `./telegram` reports it as
+  `deliveryUnknown`, as Telegram took the request.
+- TG1. node-telegram-bot-api (`src/core/transport.ts`): `sendMessage` was sent again after a
+  timeout, a 5xx and a failure to read a 200, after each of which Telegram may have sent it.
+  `./telegram` retries a 429 after its `retry_after` and a connection never made alone; a
+  timeout or a 5xx (`isAmbiguousStatus` of the shared client) is `deliveryUnknown`.
 
 ## Repository layout
 

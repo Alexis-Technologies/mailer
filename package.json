@@ -252,6 +252,10 @@
     "./router": {
       "types": "./src/router/index.d.ts",
       "default": "./src/router/index.js"
+    },
+    "./telegram": {
+      "types": "./src/telegram/index.d.ts",
+      "default": "./src/telegram/index.js"
     }
   },
   "directories": {

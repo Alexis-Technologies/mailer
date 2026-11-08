@@ -141,6 +141,15 @@ worker of 1.2 holds reads the same.
   checked again as `createChannelMessage` checks it, where every such copy was refused as
   `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and
   `Hooks<TMessage>` take the messages of the transport wrapped.
+- **`./telegram`, the Bot API of Telegram:** a text by `sendMessage`, one medium by the method
+  of its type with the text as its caption, an album of up to ten by `sendMediaGroup`, a URL or
+  a `file_id` as it is and bytes as a file of a form; buttons as an inline keyboard, `thread` a
+  topic of a forum, a `low` priority without sound, `parseMode` (`HTML`, `MarkdownV2`) and the
+  `payload` of the call. A refusal is told by its description (`blocked`, `not-on-channel`,
+  `invalid-recipient`, a 429 retried after its `retry_after`); a 5xx or a timeout is of unknown
+  delivery, never sent again, as the Bot API has no idempotency key; the receipt says `sent`,
+  its id `<chat>:<message_id>`. What Telegram would refuse (a text over 4096 characters, an
+  album with buttons) fails before any request.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

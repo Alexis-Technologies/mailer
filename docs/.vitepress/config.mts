@@ -80,6 +80,7 @@ const guide = [
     items: [
       { text: 'Messages of the channels', link: '/channels/messages' },
       { text: 'Router', link: '/channels/router' },
+      { text: 'Telegram', link: '/channels/telegram' },
     ],
   },
   {

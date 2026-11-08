@@ -56,5 +56,6 @@
   "./bullmq": 5,
   "./mongodb": 7.5,
   "./channels": 6,
-  "./router": 1.5
+  "./router": 1.5,
+  "./telegram": 8.5
 }
