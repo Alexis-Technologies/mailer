@@ -128,6 +128,19 @@ test('FCM: a topic, a picture, the priority and the expiry on each platform', as
   assert.strictEqual(sends()[1].json.message.webpush.headers.Urgency, 'low');
 });
 
+test('FCM: a push of data alone has priority 5 on iOS, though high', async (t) => {
+  // Before (C30): it had apns-priority 10, which FCM allows no payload of
+  // data alone to iOS.
+  const { sends } = stub(t, () => named());
+  await transport().send(
+    push({ title: undefined, text: undefined, data: { sync: '1' }, priority: 'high' }),
+  );
+  const { message } = sends()[0].json;
+  assert.strictEqual(message.android.priority, 'HIGH');
+  assert.strictEqual(message.apns.headers['apns-priority'], '5');
+  assert.strictEqual(message.webpush.headers.Urgency, 'high');
+});
+
 test('FCM: the payload merges over the message, key by key, but its target', async (t) => {
   const { sends } = stub(t, () => named());
   await transport().send(

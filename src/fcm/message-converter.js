@@ -44,13 +44,14 @@ const checkData = (data) => {
 
 // The priority and the expiry, as each platform takes them (V16: not on
 // Android alone).
-const platformsOf = (message, now) => {
+const platformsOf = (message, now, silent) => {
   const android = {};
   const apns = { headers: {} };
   const webpush = { headers: {} };
   if (message.priority === 'high') {
     android.priority = 'HIGH';
-    apns.headers['apns-priority'] = '10';
+    // A push of data alone takes no priority 10 on iOS, FCM says: 5.
+    apns.headers['apns-priority'] = silent ? '5' : '10';
     webpush.headers.Urgency = 'high';
   } else if (message.priority === 'low') {
     android.priority = 'NORMAL';
@@ -108,7 +109,7 @@ const convertMessage = (message, config) => {
     checkData(message.data);
     fcm.data = { ...message.data };
   }
-  const platforms = platformsOf(message, config.now ?? Date.now);
+  const platforms = platformsOf(message, config.now ?? Date.now, fcm.notification === undefined);
   for (const key in platforms) fcm[key] = platforms[key];
   let sent = fcm;
   if (message.payload !== undefined) {

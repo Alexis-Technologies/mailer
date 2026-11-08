@@ -1081,6 +1081,8 @@ that fails without it; C for the channels):
   past the 1521 and 661 TurboSMS documents and refuses; the bound is its own.
 - C29. alphasms: a text of Viber with a link button and no picture, `viber_type: 'text+link'`
   of AlphaSMS's documentation, was refused before the request. It is sent as that type.
+- C30. fcm: a push of data alone of priority `high` had `apns-priority` 10, which FCM allows
+  no payload of data alone to iOS (only 5). It has 5 on iOS, high elsewhere.
 
 ## Repository layout
 
