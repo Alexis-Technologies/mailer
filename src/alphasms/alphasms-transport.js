@@ -49,8 +49,8 @@ const smsOf = (item, message, config) => {
   }
 };
 
-// A message of Viber: a text, a picture, or a text with a picture and a
-// link button.
+// A message of Viber: a text, a picture, a text with a link button, or a
+// text with a picture and a link button.
 const viberOf = (item, message, config) => {
   const media = message.media ?? [];
   if (media.length > 1) throw unsupported('a message of Viber carries one picture.');
@@ -73,6 +73,11 @@ const viberOf = (item, message, config) => {
   } else if (button === undefined && message.text === undefined) {
     item.viber_type = 'image';
     item.viber_image = picture.url;
+  } else if (picture === undefined && message.text !== undefined) {
+    item.viber_type = 'text+link';
+    item.viber_message = message.text;
+    item.viber_link = button.url;
+    item.viber_button = button.text;
   } else if (picture !== undefined && button !== undefined && message.text !== undefined) {
     item.viber_type = 'text+image+link';
     item.viber_message = message.text;
@@ -80,7 +85,9 @@ const viberOf = (item, message, config) => {
     item.viber_link = button.url;
     item.viber_button = button.text;
   } else {
-    throw unsupported('a message of Viber is a text, a picture, or both with a link button.');
+    throw unsupported(
+      'a message of Viber is a text, a picture, or a text with a link button and a picture or not.',
+    );
   }
   if (message.expiresAt !== undefined) {
     item.viber_lifetime = lifetimeOf(message, config, VIBER_LIFETIME);

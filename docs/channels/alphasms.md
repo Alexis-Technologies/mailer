@@ -31,6 +31,7 @@ await alphasms.send(
 | SMS: `from`, `text`, `expiresAt`           | `sms_signature`, `sms_message`, `sms_lifetime` (an hour to three days)                                                            |
 | Viber: a text                              | `viber_type: 'text'`, `viber_message` (1000 characters at most)                                                                   |
 | Viber: a picture alone                     | `viber_type: 'image'`, `viber_image`                                                                                              |
+| Viber: a text and a link button            | `viber_type: 'text+link'`, `viber_link`, `viber_button`                                                                           |
 | Viber: a text, a picture and a link button | `viber_type: 'text+image+link'` with `viber_image`, `viber_link`, `viber_button`                                                  |
 | Viber: `from`, `expiresAt`                 | `viber_signature`, `viber_lifetime` (a minute to three days)                                                                      |
 | `payload`                                  | the fields of the item over those, but `id` and `phone`: `type: 'viber+sms'` with `sms_message` makes a message of Viber a hybrid |

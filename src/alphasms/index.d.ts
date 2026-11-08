@@ -55,7 +55,7 @@ export interface AlphaSmsConfig extends Omit<TransportDependencies, 'generateId'
  * (`api/json.php`), to a phone number.  An SMS goes as its text from its
  * `from` or the transport's `sender`, `expiresAt` its `sms_lifetime` (an
  * hour to three days); a message of Viber as a text (1000 characters), a
- * picture, or a text with a picture and a link button; `payload` holds the
+ * picture, a text with a link button, or a text with a picture and one; `payload` holds the
  * fields of the item over those: `type: 'viber+sms'` with `sms_message` makes
  * a message of Viber a hybrid, sent as an SMS when Viber does not deliver it.
  * The `id` of an item is a number of its idempotency key.

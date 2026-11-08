@@ -109,6 +109,19 @@ test('AlphaSMS: Viber as a text, a picture, or both with a button, and its hybri
   });
 });
 
+test('AlphaSMS: a text with a link button is of viber_type text+link', async (t) => {
+  // Before (C29): the type AlphaSMS documents for it was refused.
+  const requests = stubFetch(t, () => ok());
+  await transport().send(
+    viber({ buttons: [{ type: 'url', text: 'Track', url: 'https://example.com/t' }] }),
+  );
+  const item = requests[0].json.data[0];
+  assert.strictEqual(item.viber_type, 'text+link');
+  assert.strictEqual(item.viber_message, 'Ваш код 1234');
+  assert.strictEqual(item.viber_link, 'https://example.com/t');
+  assert.strictEqual(item.viber_button, 'Track');
+});
+
 test('AlphaSMS: the success of the answer, then of its item, by the words of its error', async (t) => {
   const cases = [
     [json({ success: false, error: 'Access denied' }), 'auth'],
@@ -161,9 +174,13 @@ test('AlphaSMS: what a message cannot be fails before any request', async (t) =>
     [viber({ text: 'x'.repeat(1001) }), 'validation', /1000 characters/],
     [viber({ to: 'not-a-phone' }), 'validation', /phone number in E.164/],
     [
-      viber({ buttons: [{ type: 'url', text: 'x', url: 'https://example.com/' }] }),
+      viber({
+        text: undefined,
+        media: [{ url: 'https://example.com/a.png' }],
+        buttons: [{ type: 'url', text: 'x', url: 'https://example.com/' }],
+      }),
       'unsupported',
-      /a text, a picture, or both/,
+      /a text with a link button/,
     ],
     [
       viber({ buttons: [{ type: 'reply', text: 'x', id: 'x' }] }),

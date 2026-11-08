@@ -1079,6 +1079,8 @@ that fails without it; C for the channels):
   SES. Such a refusal verifies the key.
 - C28. turbosms: an SMS was bounded by ten parts, 1530 characters of GSM-7 and 670 of UCS-2,
   past the 1521 and 661 TurboSMS documents and refuses; the bound is its own.
+- C29. alphasms: a text of Viber with a link button and no picture, `viber_type: 'text+link'`
+  of AlphaSMS's documentation, was refused before the request. It is sent as that type.
 
 ## Repository layout
 
