@@ -18,7 +18,8 @@ Nodemailer, emailjs or Upyo, made of two parts:
 2. **A reliability layer on top of it,** which none of the fourteen libraries in
    `docs/comparison.json` has: a persistent queue and outbox, an append-only audit log, one model
    of delivery events, suppression, idempotency and failover between providers. 1.1 has the model
-   of delivery events with the verified webhooks of fifteen providers (`./webhooks`) and the
+   of delivery events with the verified webhooks of fifteen providers (`./webhooks/<provider>`,
+   an entry each since 2.0, over what `./webhooks` shares) and the
    idempotency decorator (`./idempotency`), whose store the outbox of 1.2 implements.
    1.2 adds the queue (`./queue`, a driver-neutral contract, its worker and a memory queue;
    `./bullmq`, the BullMQ driver; `./mongodb`, the transactional outbox with its audit sink and
@@ -107,7 +108,9 @@ runtime suites on Bun and Deno. Treat that as the pre-merge gate. There is no bu
   `"./<subpath>": { "types": "./src/<subpath>/index.d.ts", "default": "./src/<subpath>/index.js" }`
   in the exports map. The export-parity, bundle and graph tests, `scripts/size.js` and
   `check:dts` (`scripts/check-dts.js`) read the exports map, so a subpath is checked as soon as
-  it is declared. A subpath's d.ts imports the shared types from `'../../index.js'`.
+  it is declared. A subpath may nest in another: `./webhooks/ses` is `src/webhooks/ses/`, whose
+  modules may require those of `src/webhooks/` (the request layer of the webhooks), never the
+  other way, nor a sibling's. A subpath's d.ts imports the shared types from `'../../index.js'`.
   `tests/unit/graph.test.js` keeps `src/` free of require cycles and lets a subpath require
   another one only along the edges it lists.
 
@@ -987,8 +990,8 @@ The contracts of the reliability layer (Phase 0), types of the root with no code
 `./channels`, `./router` and the tables of `./audit` are in the code since its stage 2, the
 shared layer since stage 3, and the decorators take a message of a channel since stage 4, with
 the names of 2.0 (`message.*` log events, `mailer.message.*` metrics with `mailer.channel`,
-`message.<state>` audit records), and the queue takes them since stage 5; the webhooks of the
-channels are stage 6):
+`message.<state>` audit records), and the queue takes them since stage 5; the verifiers are an
+entry per provider since stage 6, and the webhooks of the channels come in 2.1):
 
 - **`ChannelMessage`**, built by `createChannelMessage()` of `./channels` (its modules in
   `src/internal/channel/`): `channel` (`sms`, `rcs`, `whatsapp`, `messenger`, `instagram`,
@@ -1128,12 +1131,13 @@ record of what happened, which is the layer this package has for email.
   ported from upyo"), and the correctness suite of Phase 1 still applies to it.
 - **BullMQ is one driver, not the base:** it ties the queue to Redis/Valkey; the MongoDB outbox
   gives a queue with no new infrastructure.
-- **A shared `./webhooks` and an entry per provider (2.0).** 1.1 put its fifteen verifiers in
-  one entry (some 15 KB min+gzip), as fifteen more entries were fifteen more parts of the API
-  for less than a kilobyte each. With the channels they come to some thirty, which a function
-  that verifies one provider would pay for at its cold start, and 2.0 changes import paths
-  anyway: `./webhooks` keeps what they share (`claimDelivery`, the SNS verifier, the replay
-  stores, `WebhookVerificationError`, the types) and each verifier is `./webhooks/<provider>`,
+- **A shared `./webhooks` and an entry per provider (done in 2.0).** 1.1 put its fifteen
+  verifiers in one entry (some 15 KB min+gzip), as fifteen more entries were fifteen more parts
+  of the API for less than a kilobyte each. With the channels they come to some thirty, which a
+  function that verifies one provider would pay for at its cold start, and 2.0 changes import
+  paths anyway: `./webhooks` keeps what they share (the modules of `claimDelivery` and of the SNS
+  verifier, and in its exports the replay store, `WebhookVerificationError` and the types)
+  and each verifier is `./webhooks/<provider>` (`src/webhooks/<provider>/verifier.js`),
   named as its transport, with the names of its functions unchanged.
 - **One `./templates` entry, not one per engine.** The nine adapters weigh under a kilobyte
   each, the engines are passed in, and the core (loaders, variants, front matter, cache) is most
