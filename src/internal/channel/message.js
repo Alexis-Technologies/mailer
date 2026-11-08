@@ -125,11 +125,23 @@ const recipientOf = (channel, to, options, strict) => {
   return pushRecipientOf(to);
 };
 
+// A URL with no user or password, which fetch would refuse, its error
+// printing the URL: the service URL of Teams, which a token goes to.
+const hasNoUserinfo = (value) => {
+  const url = new URL(value);
+  return url.username === '' && url.password === '';
+};
+
 const teamsRecipientOf = (to) => {
   if (to === undefined) return undefined;
-  if (!isObject(to) || !isUrl(to.serviceUrl, HTTPS) || !isId(to.conversationId)) {
+  if (
+    !isObject(to) ||
+    !isUrl(to.serviceUrl, HTTPS) ||
+    !hasNoUserinfo(to.serviceUrl) ||
+    !isId(to.conversationId)
+  ) {
     throwTypeError(
-      'The recipient of teams is { serviceUrl, conversationId }, an https serviceUrl.',
+      'The recipient of teams is { serviceUrl, conversationId }, an https serviceUrl with no user.',
     );
   }
   return { serviceUrl: to.serviceUrl, conversationId: to.conversationId };

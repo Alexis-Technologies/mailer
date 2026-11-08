@@ -230,6 +230,36 @@ test('Internal: a provider URL is HTTPS, or plain HTTP only to a loopback host',
   }
 });
 
+test('Internal: a URL that carries a user or a password is refused, never shown', () => {
+  // Before (C6): fetch refused it at the first send with an error that
+  // printed the URL whole (a bot token in the path of Telegram, the secret of
+  // a webhook), which became the receipt's text, of unknown delivery.
+  const { checkWebhookUrl } = require('../../src/internal/channel/webhook-url.js');
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  for (const url of [
+    'https://proxy:SecretPw@bot.example.com',
+    'https://user@hooks.example.com/x',
+  ]) {
+    assert.throws(
+      () => checkSecureUrl(url, 'baseUrl'),
+      (error) => /no user or password/.test(error.message) && !error.message.includes('SecretPw'),
+    );
+    assert.throws(
+      () => checkWebhookUrl(url, 'webhookUrl'),
+      (error) => /no user or password/.test(error.message) && !error.message.includes('SecretPw'),
+    );
+    assert.throws(
+      () =>
+        createChannelMessage({
+          channel: 'teams',
+          to: { serviceUrl: url, conversationId: '19:a' },
+          text: 'x',
+        }),
+      /with no user/,
+    );
+  }
+});
+
 const { readJson, readText } = require('../../src/internal/body.js');
 
 // A body of `chunks` chunks of `size` bytes, counting how many were pulled.

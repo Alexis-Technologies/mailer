@@ -21,6 +21,12 @@ const checkWebhookUrl = (value, name) => {
   } catch {
     throw new TypeError(`\`${name}\` must be a URL; it is a credential, not shown here.`);
   }
+  // fetch refuses a URL with credentials, and its error prints the URL whole.
+  if (url.username !== '' || url.password !== '') {
+    throw new TypeError(
+      `\`${name}\` must carry no user or password; it is a credential, not shown here.`,
+    );
+  }
   if (url.protocol === 'https:') return url;
   if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return url;
   throw new TypeError(

@@ -1004,6 +1004,10 @@ that fails without it; C for the channels):
 - C5. aws-sms: a provider of credentials was awaited without the signal of the attempt, so one
   that never answered held a send past its timeout and its caller's abort. It is awaited until
   the signal aborts (`untilAborted` of `internal/until-aborted.js`, which the token cache shares).
+- C6. config, webhook-url, channels: a base URL, the URL of a webhook or the service URL of
+  Teams could carry a user and a password, which `fetch` refuses at the first send with an error
+  that prints the URL whole (a bot token in Telegram's path, the secret of a webhook), the text of
+  a receipt of unknown delivery. They are refused when made, the URL not shown.
 
 ## Repository layout
 

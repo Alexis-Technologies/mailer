@@ -39,6 +39,10 @@ const checkSecureUrl = (value, name) => {
   } catch {
     throw new TypeError(`\`${name}\` must be a URL: ${String(value)}`);
   }
+  // fetch refuses a URL with credentials, and its error prints the URL whole.
+  if (url.username !== '' || url.password !== '') {
+    throw new TypeError(`\`${name}\` must carry no user or password; it is not shown here.`);
+  }
   if (url.protocol === 'https:') return;
   if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return;
   throw new TypeError(
