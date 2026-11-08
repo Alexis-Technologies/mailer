@@ -11,6 +11,7 @@ const { MAX_KEY_LENGTH, checkKey } = require('../internal/message-checks.js');
 const { hashJson } = require('../internal/canonical-json.js');
 const { toJson } = require('../internal/json.js');
 const { deriveJobId } = require('./derive.js');
+const { CHANNEL_JOB_VERSION, checkDefaultCountry } = require('./channel-job.js');
 const { EMAIL_JOB_NAME, EMAIL_JOB_VERSION } = require('./email-job.js');
 const { keyringOf, signJob } = require('./signing.js');
 const { isText } = require('./stored.js');
@@ -85,6 +86,7 @@ const resolveConfig = (options) => {
     }
   }
   if (!isText(config.namespace, 128)) throw new TypeError('namespace must be a short string.');
+  checkDefaultCountry(config.defaultCountry);
   config.keyring = keyringOf(config.signingKeys);
   checkIdSecret(config.idSecret);
   if (config.deriveId !== undefined && typeof config.deriveId !== 'function') {
@@ -170,6 +172,7 @@ const prepareJob = (input, options = {}) => {
 };
 
 module.exports = {
+  CHANNEL_JOB_VERSION,
   EMAIL_JOB_NAME,
   EMAIL_JOB_VERSION,
   UNHASHED,

@@ -1,14 +1,17 @@
 import { expectAssignable, expectError, expectType } from 'tsd';
 import type {
+  AnyMessage,
   QueueDriver,
   QueueHandler,
   QueueJob,
   QueueOutcome,
   QueueSource,
+  SmsMessage,
   Transport,
 } from '../../index.js';
 import { createMemoryAuditSink } from '../../src/audit/index.js';
 import {
+  CHANNEL_JOB_VERSION,
   EMAIL_JOB_NAME,
   EMAIL_JOB_VERSION,
   QueueError,
@@ -19,6 +22,11 @@ import {
   createPollingDriver,
   parseJob,
   prepareJob,
+  type ChannelEnqueueResult,
+  type ChannelJobData,
+  type ChannelJobInput,
+  type EmailEnqueueResult,
+  type EmailJobData,
   type EnqueueResult,
   type JobData,
   type MessageQueue,
@@ -62,7 +70,8 @@ const result = await queue.enqueue({
   scheduledAt: new Date(),
   priority: 'high',
 });
-expectType<EnqueueResult>(result);
+expectType<EmailEnqueueResult>(result);
+expectType<string>(result.messageId);
 expectType<boolean | undefined>(result.duplicate);
 await queue.enqueue({
   kind: 'content',
@@ -102,10 +111,13 @@ const worker = queue.createWorker({
   transport,
   renderer,
   concurrency: 4,
-  resolveAttachment: async (ref, { job, attachment, signal }) => {
+  resolveAttachment: async (ref, { job, attachment, medium, signal }) => {
     expectType<JobData>(job);
-    expectType<string>(attachment.filename);
     expectType<AbortSignal>(signal);
+    // An email job is told its attachment, a job of a channel its medium.
+    if (attachment !== undefined) expectType<string>(attachment.filename);
+    if (medium !== undefined) expectType<string>(medium.contentType);
+    if (job.v === 2) return { url: `https://cdn.example.com/${ref}` };
     return new Uint8Array();
   },
   classify: ({ receipt, job }) => (receipt.successful || job.attempt > 1 ? 'fail' : undefined),
@@ -127,7 +139,7 @@ const prepared = prepareJob({
   subject: 's',
   content: { html: '<p/>' },
 });
-expectType<JobData>(prepared.data);
+expectType<EmailJobData>(prepared.data);
 expectType<string>(prepared.request.id);
 expectType<JobData>(parseJob({}));
 const keys = [
@@ -172,6 +184,7 @@ expectError(createQueue({ driver, codec: { encode: (text: string) => text } }));
 createJobHandler({ transport, signingKeys: keys });
 expectError(createJobHandler({ transport, signingKeys: [{ id: 'k', secret: 1 }] }));
 expectType<1>(EMAIL_JOB_VERSION);
+expectType<2>(CHANNEL_JOB_VERSION);
 expectType<'mail'>(EMAIL_JOB_NAME);
 const error = new QueueError('queue.key_reused', 'x');
 expectType<
@@ -187,3 +200,95 @@ expectError(new QueueError('nope', 'x'));
 new QueueLeaseLostError('j');
 declare const source: QueueSource;
 expectAssignable<QueueDriver>(createPollingDriver(source, { leaseMilliseconds: 1000 }));
+
+// A job of a channel: the fields of its message, its media kept or resolved,
+// its text rendered from a template; a mixed queue's results by kind.
+const sms = await queue.enqueue({
+  channel: 'sms',
+  kind: 'content',
+  to: '067 123 45 67',
+  text: 'Your code is 1234',
+  priority: 'high',
+  idempotencyKey: 'otp:1',
+  expiresAt: new Date(),
+});
+expectType<ChannelEnqueueResult<'sms'>>(sms);
+expectType<'sms'>(sms.channel);
+expectError(sms.messageId);
+await queue.enqueue({
+  channel: 'push',
+  kind: 'template',
+  template: 'shipped',
+  context: { order: 'A-1' },
+  to: { token: 'device' },
+  media: [
+    { url: 'https://example.com/a.png' },
+    { content: new Uint8Array(), contentType: 'image/png' },
+    { ref: 's3://b', contentType: 'image/jpeg', filename: 'b.jpg' },
+  ],
+  data: { order: 'A-1' },
+});
+await queue.enqueue({
+  channel: 'whatsapp',
+  kind: 'content',
+  to: '+380671234567',
+  providerTemplate: { name: 'otp', language: 'uk' },
+});
+// The template of a job is the renderer's; that of WhatsApp is providerTemplate.
+expectError(
+  queue.enqueue({
+    channel: 'whatsapp',
+    kind: 'content',
+    to: '+380671234567',
+    template: { name: 'otp', language: 'uk' },
+  }),
+);
+expectError(
+  queue.enqueue({
+    channel: 'sms',
+    kind: 'content',
+    to: '+1',
+    providerTemplate: { name: 'x', language: 'en' },
+  }),
+);
+// A template job renders its text; a medium of a job holds bytes or a ref.
+expectError(
+  queue.enqueue({ channel: 'sms', kind: 'template', template: 't', to: '+1', text: 'x' }),
+);
+expectError(
+  queue.enqueue({
+    channel: 'sms',
+    kind: 'content',
+    to: '+1',
+    media: [{ content: new Blob(), contentType: 'image/png' }],
+  }),
+);
+expectError(queue.enqueue({ channel: 'sms', kind: 'content', to: '+1', subject: 's' }));
+const mixed = await queue.enqueueMany([
+  {
+    kind: 'content',
+    from: 'a@example.com',
+    to: 'b@example.com',
+    subject: 's',
+    content: { text: 't' },
+  },
+  { channel: 'telegram', kind: 'content', to: 42, text: 'hi' },
+]);
+expectType<readonly EnqueueResult[]>(mixed);
+expectAssignable<ChannelJobInput<'telegram'>>({
+  channel: 'telegram',
+  kind: 'content',
+  to: 42,
+  text: 'x',
+});
+const channelJob = prepareJob(
+  { channel: 'telegram', kind: 'content', to: '@news', text: 'hi' },
+  { defaultCountry: 'UA' },
+);
+expectType<ChannelJobData>(channelJob.data);
+expectType<2>(channelJob.data.v);
+declare const router: Transport<'router', AnyMessage>;
+declare const sender: Transport<'twilio', SmsMessage>;
+createJobHandler({ transport: router });
+createJobHandler({ transport: sender });
+createQueue({ driver, defaultCountry: 'UA' });

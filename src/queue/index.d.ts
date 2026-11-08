@@ -4,8 +4,13 @@
 
 import type {
   Address,
+  AnyMessage,
   AuditSink,
   CalendarMethod,
+  Channel,
+  ChannelButton,
+  ChannelMentions,
+  ChannelMessage,
   IdGenerator,
   JsonObject,
   ListFields,
@@ -13,6 +18,7 @@ import type {
   MessageContent,
   MessageTracking,
   Priority,
+  ProviderTemplate,
   QueueDriver,
   QueueEnqueueOptions,
   QueueHandler,
@@ -23,11 +29,14 @@ import type {
   Receipt,
   Transport,
 } from '../../index.js';
+import type { ChannelMessageConstructors } from '../channels/index.js';
 import type { Renderer } from '../render/index.js';
 
-/** The version of the data of a job this package writes and reads. */
+/** The version of the data of an email job, that of 1.x. */
 export declare const EMAIL_JOB_VERSION: 1;
-/** The name of an email job, as in 1.x. */
+/** The version of the data of a job of a channel other than email. */
+export declare const CHANNEL_JOB_VERSION: 2;
+/** The name of an email job, as in 1.x; a job of another channel is named by its channel. */
 export declare const EMAIL_JOB_NAME: 'mail';
 
 /** An attachment of a job: its bytes, kept in the job in base64, or a reference the worker resolves. */
@@ -43,8 +52,10 @@ export type JobAttachmentInput = {
   | { readonly ref: string; readonly content?: undefined }
 );
 
-/** The fields of the message of a job. */
+/** The fields of the message of an email job. */
 export interface EmailJobFieldsInput {
+  /** An email, as without it. */
+  readonly channel?: 'email';
   readonly from: Address | string;
   readonly to: Address | string | readonly (Address | string)[];
   readonly cc?: Address | string | readonly (Address | string)[];
@@ -102,8 +113,75 @@ export interface EmailContentJobInput extends EmailJobFieldsInput {
 /** An email to send through the queue. */
 export type EmailJobInput = EmailTemplateJobInput | EmailContentJobInput;
 
-/** A message to send through the queue. */
-export type JobInput = EmailJobInput;
+/** The channels other than email. */
+type OtherChannel = Exclude<Channel, 'email'>;
+
+/** A medium of a job: a URL or an id, its bytes kept in the job in base64, or a reference the worker resolves. */
+export type JobMediumInput = {
+  readonly filename?: string;
+  readonly caption?: string;
+} & (
+  | { readonly url: string; readonly contentType?: `${string}/${string}` }
+  | { readonly id: string; readonly contentType?: `${string}/${string}` }
+  | { readonly content: Uint8Array; readonly contentType: `${string}/${string}` }
+  | { readonly ref: string; readonly contentType: `${string}/${string}` }
+);
+
+/** What a job of a channel takes beside the fields of its message. */
+interface ChannelJobFieldsInput {
+  readonly media?: readonly JobMediumInput[];
+  /** See {@link EmailJobFieldsInput.idempotencyKey}: an SMS and an email under one key are two jobs. */
+  readonly idempotencyKey?: string;
+  /** Not sent before then: a delay of the queue, never passed to the provider. */
+  readonly scheduledAt?: Date;
+  /** Not sent after then; passed on, as a provider may drop the message then (the TTL of a push). */
+  readonly expiresAt?: Date;
+  readonly tenantId?: string;
+  readonly correlationId?: string;
+  /** @default the queue's maxAttempts, 5 */
+  readonly maxAttempts?: number;
+}
+
+/**
+ * The fields of the message of a job of a channel, as `createChannelMessage`
+ * takes them: the template WhatsApp approved is `providerTemplate`, as
+ * `template` names a template of the renderer.
+ */
+type ChannelJobMessageInput<C extends OtherChannel> = Omit<
+  ChannelMessageConstructors[C],
+  'media' | 'template' | 'idempotencyKey' | 'scheduledAt' | 'expiresAt' | 'tenantId'
+> &
+  ChannelJobFieldsInput &
+  (C extends 'whatsapp' ? { readonly providerTemplate?: ProviderTemplate } : unknown);
+
+/**
+ * A job of a channel whose text the worker renders from a template: the
+ * text of the template, or of its HTML when it gives none; its subject is
+ * the title of a push that has none.
+ */
+export type ChannelTemplateJobInput<C extends OtherChannel = OtherChannel> = {
+  [K in C]: Omit<ChannelJobMessageInput<K>, 'text'> & {
+    readonly kind: 'template';
+    readonly template: string;
+    /** JSON only: a Date as an ISO string, no Map, no class. */
+    readonly context?: JsonObject;
+    readonly locale?: string;
+    readonly text?: undefined;
+  };
+}[C];
+
+/** A job of a channel with its text, if any, given. */
+export type ChannelContentJobInput<C extends OtherChannel = OtherChannel> = {
+  [K in C]: ChannelJobMessageInput<K> & { readonly kind: 'content' };
+}[C];
+
+/** A message of a channel other than email to send through the queue. */
+export type ChannelJobInput<C extends OtherChannel = OtherChannel> =
+  | ChannelTemplateJobInput<C>
+  | ChannelContentJobInput<C>;
+
+/** A message to send through the queue, of email or of another channel. */
+export type JobInput = EmailJobInput | ChannelJobInput;
 
 /** An address as a job holds it. */
 export interface JobAddress {
@@ -177,8 +255,58 @@ export interface EmailContentJobData extends EmailJobDataBase {
 /** The data of an email job, as stored: JSON only. */
 export type EmailJobData = EmailTemplateJobData | EmailContentJobData;
 
+/** A medium as a job holds it: a URL or an id, `data` in base64, or `ref`. */
+export type JobMedium = {
+  readonly contentType?: string;
+  readonly filename?: string;
+  readonly caption?: string;
+} & (
+  | { readonly url: string }
+  | { readonly id: string }
+  | { readonly data: string; readonly contentType: string }
+  | { readonly ref: string; readonly contentType: string }
+);
+
+/** The data of a job of a channel, as stored: JSON only. */
+export interface ChannelJobData {
+  readonly v: 2;
+  /** Sealed with the other fields by a codec, never in clear beside them. */
+  readonly channel: OtherChannel;
+  readonly kind: 'template' | 'content';
+  readonly template?: string;
+  readonly context?: JsonObject;
+  readonly locale?: string;
+  /** In E.164 for a phone, as normalized when the job was made. */
+  readonly to?: ChannelMessage['to'];
+  readonly from?: string;
+  /** The text of a job of content. */
+  readonly text?: string;
+  readonly media?: readonly JobMedium[];
+  readonly buttons?: readonly ChannelButton[];
+  readonly payload?: JsonObject;
+  readonly mentions?: ChannelMentions;
+  readonly providerTemplate?: ProviderTemplate;
+  readonly thread?: string;
+  readonly title?: string;
+  readonly data?: Readonly<Record<string, string>>;
+  readonly priority: Priority;
+  readonly tags?: readonly string[];
+  /** Always with `correlationId`, which webhooks give back. */
+  readonly metadata: Readonly<Record<string, string>>;
+  readonly idempotencyKey: string;
+  readonly tenantId?: string;
+  readonly correlationId: string;
+  readonly notBefore?: string;
+  readonly expiresAt?: string;
+  readonly enqueuedAt: string;
+  readonly hash: string;
+  readonly mac?: string;
+  readonly kid?: string;
+  readonly trace?: string;
+}
+
 /** The data of a job, as stored: JSON only. */
-export type JobData = EmailJobData;
+export type JobData = EmailJobData | ChannelJobData;
 
 /**
  * A key that signs jobs: an HMAC-SHA256 key of 32 bytes at least. Of the keys
@@ -246,11 +374,17 @@ export interface JobOptions {
    * `generateId`.
    */
   readonly deriveId?: JobIdDeriver;
+  /**
+   * The country of a phone number of a job of SMS, RCS or WhatsApp written
+   * without its calling code (`067 123 45 67` with `UA`), which the job holds
+   * in E.164.
+   */
+  readonly defaultCountry?: string;
 }
 
 /** A job of a message: its data, and the request a driver takes. */
-export interface PreparedJob {
-  readonly data: JobData;
+export interface PreparedJob<TData extends JobData = JobData> {
+  readonly data: TData;
   readonly request: QueueJobRequest;
 }
 
@@ -261,6 +395,14 @@ export interface PreparedJob {
  * @throws {TypeError} If a field is invalid.
  * @throws {RangeError} If the job or its attachments are too large.
  */
+export declare function prepareJob(
+  input: EmailJobInput,
+  options?: JobOptions,
+): PreparedJob<EmailJobData>;
+export declare function prepareJob(
+  input: ChannelJobInput,
+  options?: JobOptions,
+): PreparedJob<ChannelJobData>;
 export declare function prepareJob(input: JobInput, options?: JobOptions): PreparedJob;
 
 /**
@@ -324,20 +466,37 @@ export interface QueueBackoff {
 /** The options of a worker, or of {@link createJobHandler}. */
 export interface JobHandlerOptions {
   /**
-   * The transport, decorated as the application chooses. Its own retries are
+   * The transport, decorated as the application chooses: of email, of a
+   * channel, or a router of several (`./router`). Its own retries are
    * best few (`retries: 1`, no `RetryTransport`): the queue retries.
    */
-  readonly transport: Transport;
+  readonly transport: Transport<string, never>;
   /** The renderer of template jobs, such as one of `./templates`. */
   readonly renderer?: Renderer<JobRenderInput>;
-  /** The attachment, or its content, a reference names. Called again on each attempt. */
+  /**
+   * The attachment of an email, or its content, a reference names; or the
+   * medium of a message of a channel, its content or a URL (`{ url }`, such
+   * as one signed for a while). Called again on each attempt.
+   */
   readonly resolveAttachment?: (
     ref: string,
-    context: {
-      readonly job: JobData;
-      readonly attachment: Omit<JobAttachment, 'data' | 'ref'>;
-      readonly signal: AbortSignal;
-    },
+    context:
+      | {
+          readonly job: EmailJobData;
+          readonly attachment: Omit<JobAttachment, 'data' | 'ref'>;
+          readonly medium?: undefined;
+          readonly signal: AbortSignal;
+        }
+      | {
+          readonly job: ChannelJobData;
+          readonly attachment?: undefined;
+          readonly medium: {
+            readonly contentType: string;
+            readonly filename?: string;
+            readonly caption?: string;
+          };
+          readonly signal: AbortSignal;
+        },
   ) => unknown;
   /** Refuses a job, for good, by throwing: a sender not allowed. */
   readonly checkJob?: (data: JobData, job: QueueJob) => void | Promise<void>;
@@ -416,15 +575,28 @@ export interface QueueOptions extends Omit<JobOptions, 'now'> {
   readonly now?: () => number;
 }
 
-/** What an enqueue gives. */
-export interface EnqueueResult {
+interface EnqueueResultBase {
   /** The id of the job. */
   readonly id: string;
   readonly correlationId: string;
-  readonly messageId: string;
   /** true: a job of this key was held already, and nothing was added. */
   readonly duplicate: boolean | undefined;
 }
+
+/** What the enqueue of an email gives. */
+export interface EmailEnqueueResult extends EnqueueResultBase {
+  readonly messageId: string;
+}
+
+/** What the enqueue of a message of another channel gives. */
+export interface ChannelEnqueueResult<
+  C extends OtherChannel = OtherChannel,
+> extends EnqueueResultBase {
+  readonly channel: C;
+}
+
+/** What an enqueue gives. */
+export type EnqueueResult = EmailEnqueueResult | ChannelEnqueueResult;
 
 /** The options of a worker of a queue. */
 export interface QueueWorkerOptions extends Omit<JobHandlerOptions, 'audit' | 'auditStrict'> {
@@ -446,6 +618,11 @@ export interface MessageQueue<TDriver extends QueueDriver = QueueDriver> {
    * @throws {TypeError} If a field is invalid.
    * @throws {QueueError} `queue.key_reused` if its key was used for another message.
    */
+  enqueue(input: EmailJobInput, options?: QueueEnqueueOptions): Promise<EmailEnqueueResult>;
+  enqueue<C extends OtherChannel>(
+    input: ChannelJobInput<C> & { readonly channel: C },
+    options?: QueueEnqueueOptions,
+  ): Promise<ChannelEnqueueResult<C>>;
   enqueue(input: JobInput, options?: QueueEnqueueOptions): Promise<EnqueueResult>;
   enqueueMany(
     inputs: Iterable<JobInput>,

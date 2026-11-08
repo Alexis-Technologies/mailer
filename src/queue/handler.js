@@ -384,6 +384,8 @@ const sendStep = async (run, message) => {
       providerMessageId: receipt.messageId,
     };
     await emit(run, 'accepted', result);
+    // A channel that reports no delivery (a work chat, a push) stops at sent.
+    if (receipt.state === 'sent') await emit(run, 'sent', result);
     config.log.write(
       'info',
       () => ({
@@ -561,6 +563,7 @@ const createJobHandler = (options) => {
       () => ({
         jobId: job.id,
         attempt: job.attempt,
+        channel: read.data.channel ?? 'email',
         template: read.data.template,
         priority: read.data.priority,
       }),

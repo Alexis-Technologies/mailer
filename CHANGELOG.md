@@ -65,6 +65,11 @@ worker of 1.2 holds reads the same.
   a worker. An email job keeps its name, `mail`, and its bytes.
 - **Breaking: the option types of `./bullmq` name no mail:** `BullMQMailJobOptions` is
   `BullMQJobOptions` and `BullMQMailWorkerOptions` `BullMQWorkerOptions`.
+- **Breaking: the types of a worker of `./queue` take every channel:** `transport` is any
+  transport (of email, of a channel, a router), the context of `resolveAttachment` is that of
+  an `attachment` of an email or of a `medium` of a channel (so an `attachment` is checked
+  before it is read), and `enqueue` of an email gives an `EmailEnqueueResult`, of a channel a
+  `ChannelEnqueueResult`, `EnqueueResult` being either.
 
 ### Added
 
@@ -127,6 +132,18 @@ worker of 1.2 holds reads the same.
   checked again as `createChannelMessage` checks it, where every such copy was refused as
   `rejected`, which also stopped the failover of a pool. `HooksTransport<P, TMessage>` and
   `Hooks<TMessage>` take the messages of the transport wrapped.
+- **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
+  'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
+  its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its
+  key and its channel, named by its channel, its channel sealed with its other fields by a
+  codec, never beside them, so that a worker of 1.2 waits for it (`queue.unsupported_version`)
+  rather than failing it. A template renders its text (from its HTML when it gives none), its
+  subject the title of a push; the template WhatsApp approved is `providerTemplate`; media go
+  as a URL, an id, their bytes or a `ref` that `resolveAttachment` resolves to content or a URL;
+  `expiresAt` is passed on with the message. Its audit events carry `channel` and no
+  Message-ID, `sent` follows `accepted` for a receipt that says so, and `enqueue` gives its
+  `channel` in place of a `messageId`. An email job is that of 1.2 byte for byte. The channels
+  are best given a queue of their own (the guide says why).
 
 ## [1.2.1] - 2026-11-07
 

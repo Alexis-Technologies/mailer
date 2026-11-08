@@ -9,6 +9,7 @@ const { toUuid } = require('../internal/uuid.js');
 const { checkCodec, sealJob } = require('./envelope.js');
 const { QueueError } = require('./errors.js');
 const { createJobHandler } = require('./handler.js');
+const { checkDefaultCountry } = require('./channel-job.js');
 const { checkIdSecret, prepareJob } = require('./job.js');
 const { keyringOf } = require('./signing.js');
 const { strategyOfData } = require('./strategies.js');
@@ -108,7 +109,12 @@ const answerOf = (queue, prepared, result) => {
   }
   queue.log.write(
     'debug',
-    () => ({ jobId: request.id, priority: request.priority, template: data.template }),
+    () => ({
+      jobId: request.id,
+      channel: data.channel ?? 'email',
+      priority: request.priority,
+      template: data.template,
+    }),
     'queue.enqueued',
   );
   return { ...answer, duplicate: result?.duplicate };
@@ -125,6 +131,7 @@ const createQueueConfig = (options) => {
   if (typeof auditStrict !== 'boolean') throw new TypeError('auditStrict must be a boolean.');
   keyringOf(options.signingKeys);
   checkIdSecret(options.idSecret);
+  checkDefaultCountry(options.defaultCountry);
   const now = checkOptionalFunction(options.now, 'now') ?? Date.now;
   const jobOptions = {
     namespace: options.namespace,
@@ -135,6 +142,7 @@ const createQueueConfig = (options) => {
     signingKeys: options.signingKeys,
     idSecret: options.idSecret,
     deriveId: checkOptionalFunction(options.deriveId, 'deriveId'),
+    defaultCountry: options.defaultCountry,
     now,
   };
   for (const name of Object.keys(jobOptions)) {

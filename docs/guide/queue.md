@@ -87,12 +87,78 @@ week), on every driver. Once a job is done with, the store drops its message
 retry by hand; `'all'` keeps every one, `'none'` none. The version and the hash
 of a job stay, so an enqueue again is still told a duplicate.
 
-A job is of version 1 (`v: 1`), and its fields are those of that version. A
-worker that meets a later version, or a field it does not know, gives the job
-back for a worker that reads it (`queue.unsupported_version`) instead of
-failing it for a hash it cannot recompute: during a rolling deploy, the jobs
-the new producers write wait for the new workers. A field is never added to
-version 1; a new field is a new version.
+An email job is of version 1 (`v: 1`), as in 1.x, and its fields are those of
+that version; a job of another channel is of version 2. A worker that meets a
+later version, or a field it does not know, gives the job back for a worker
+that reads it (`queue.unsupported_version`) instead of failing it for a hash it
+cannot recompute: during a rolling deploy, the jobs the new producers write
+wait for the new workers. A field is never added to a version; a new field is
+a new version.
+
+## The channels
+
+A message of SMS, RCS, WhatsApp, Messenger, Instagram, Telegram, Viber, Slack,
+Discord, Teams, Google Chat or push goes through the same queue, its `channel`
+beside the fields of [`createChannelMessage`](/channels/messages):
+
+```js
+const queue = createQueue({ driver, audit, defaultCountry: 'UA' });
+await queue.enqueue({
+  channel: 'sms',
+  kind: 'content',
+  to: '067 123 45 67', // +380671234567 in the job
+  text: 'Your code is 1234',
+  idempotencyKey: `otp:${login.id}`,
+  priority: 'high',
+  expiresAt: new Date(Date.now() + 5 * 60_000),
+});
+await queue.enqueue({
+  channel: 'push',
+  kind: 'template',
+  template: 'order-shipped', // its subject is the title, its text the body
+  context: { order: order.number },
+  locale: user.locale,
+  to: { token: device.token },
+  data: { order: order.id },
+});
+
+const worker = queue.createWorker({
+  transport: createRouter({ email: emailTransport, sms: smsTransport, push: pushTransport }),
+  renderer: templates,
+});
+```
+
+- The job is checked as `createChannelMessage` checks the message, so a number
+  that is no phone fails the caller; `defaultCountry` of the queue reads one
+  written without its calling code, and the job holds it in E.164.
+- A template renders the text of the message (from its HTML when it gives no
+  text, so one template can serve an email and a push); its subject is the
+  `title` of a push that has none, and is not read for the other channels. A
+  template job takes no `text`.
+- The template WhatsApp approved goes as `providerTemplate`, as `template`
+  names a template of the renderer.
+- A medium goes as `{ url }`, `{ id }`, its bytes (with the attachments' bound),
+  or `{ ref, contentType }`, which `resolveAttachment(ref, { job, medium,
+  signal })` resolves to its content or to `{ url }`, such as a URL signed
+  for a while.
+- `expiresAt` is passed on with the message (the time to live of a push, the
+  validity of an SMS where the provider has one); `scheduledAt` is a delay of
+  the queue, as for email.
+- The id of the job is derived from its key and its channel: an SMS and an
+  email under one key are two jobs. Its name is its channel (`sms`), which a
+  dashboard of the driver shows; an email job is named `mail`, as in 1.x.
+- A job holds no Message-ID: `enqueue` gives `{ id, correlationId, channel,
+  duplicate }`.
+- A receipt that says `state: 'sent'`, from a channel that reports no delivery
+  (a work chat, a push), tells the audit `sent` after `accepted`.
+
+**Give the channels a queue of their own:** another `queueName` of BullMQ,
+another collection of the outbox. Nothing routes a job by its name, so a
+worker of 1.x on a shared queue gives each job of a channel back every five
+minutes for a week, too late for a code of sign-in; and a rate limit of
+Telegram that pauses its queue (`rateLimitScope: 'queue'`) should not pause
+email. A sealed job keeps its channel among the sealed fields, so a worker of
+1.x reads its version only.
 
 ## Signed jobs
 
@@ -255,8 +321,10 @@ and leave `RetryTransport` out.
 
 The worker tells the [audit sink](/guide/audit) each state: `queued` at the
 enqueue (in the transaction of an outbox), `rendered`, `submitted` just before
-the send, then `accepted`, `failed` or `delivery_unknown`, and `queued` again
-for a retry. A sink that fails is a warning (`MAILER_AUDIT_FAILED`);
+the send, then `accepted` (and `sent`, for a receipt that says so), `failed` or
+`delivery_unknown`, and `queued` again for a retry. An event of a job of a
+channel carries its `channel` and no Message-ID; one of email names no
+channel, as in 1.x. A sink that fails is a warning (`MAILER_AUDIT_FAILED`);
 `auditStrict: true` makes it retry the job before the send, so that no message
 goes unrecorded. Without a transaction, `queued` is told before the job is
 enqueued, so a strict sink that fails refuses the enqueue and nothing is
@@ -349,7 +417,7 @@ code in step.
 | Code | Where | What |
 | --- | --- | --- |
 | `queue.invalid_job` | failure | the data of a job is not that of a job of this package |
-| `queue.unsupported_version` | failure | written by a later version: given back, then failed after a week |
+| `queue.unsupported_version` | failure | written by a later version, or of a channel this worker does not send: given back, then failed after a week |
 | `queue.hash_mismatch` | failure | the job is not what was enqueued |
 | `queue.signature_invalid` | failure | not signed by a key of `signingKeys` |
 | `queue.codec_missing` | failure | sealed, and the worker has no codec: given back, then failed after a week |
@@ -360,7 +428,7 @@ code in step.
 | `queue.attempts_exhausted` | failure | a retryable failure on the last attempt |
 | `queue.redelivery_exhausted` | failure | its runs ended unsettled more than `maxRedeliveries` times |
 | `queue.redelivered` | failure | a run again after a run that may have sent it (`redelivered: 'delivery_unknown'`) |
-| `queue.attachment_unresolved` | failure | an attachment by reference, and no `resolveAttachment` |
+| `queue.attachment_unresolved` | failure | an attachment or a medium by reference, and no `resolveAttachment` |
 | `queue.attachment_failed` | failure | `resolveAttachment` threw or gave no content |
 | `queue.invalid_message` | failure | the job does not make a message |
 | `queue.invalid_receipt` | failure | the transport gave no receipt |
@@ -373,6 +441,7 @@ code in step.
 | `queue.released` | failure | a release without a token, a retry on BullMQ |
 | `render.no_renderer` | failure | a template job, and the worker has no renderer |
 | `render.no_subject` | failure | neither the template nor the job gives a subject |
+| `render.no_text` | failure | the template of a job of a channel gives no text |
 | `render.failed` | failure | the template failed to render or was not found |
 | `audit.failed` | failure | a strict sink failed before the send: retried |
 | `queue.enqueued` | log | a job enqueued |
