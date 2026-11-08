@@ -312,6 +312,10 @@
     "./teams": {
       "types": "./src/teams/index.d.ts",
       "default": "./src/teams/index.js"
+    },
+    "./google-chat": {
+      "types": "./src/google-chat/index.d.ts",
+      "default": "./src/google-chat/index.js"
     }
   },
   "directories": {

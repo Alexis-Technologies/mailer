@@ -71,5 +71,6 @@
   "./apns": 10,
   "./rbm": 9,
   "./viber": 8,
-  "./teams": 9
+  "./teams": 9,
+  "./google-chat": 9.5
 }

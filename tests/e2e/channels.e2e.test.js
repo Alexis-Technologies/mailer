@@ -312,6 +312,46 @@ const PROVIDERS = [
       }),
   },
   {
+    name: 'Google Chat',
+    Transport: require('../../src/google-chat/index.js').GoogleChatTransport,
+    // The URL of a webhook of a space.
+    needs: ['GOOGLE_CHAT_WEBHOOK_URL'],
+    config: () => ({ webhookUrl: env.GOOGLE_CHAT_WEBHOOK_URL }),
+    refused: () => ({
+      webhookUrl: env.GOOGLE_CHAT_WEBHOOK_URL.replace(/token=[^&]+/, 'token=invalid'),
+    }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({
+        channel: 'google-chat',
+        text,
+        buttons: buttons?.filter((button) => button.type === 'url'),
+        media,
+      }),
+  },
+  {
+    name: 'Google Chat app',
+    Transport: require('../../src/google-chat/index.js').GoogleChatTransport,
+    // The service account of a Chat app, and a space it was added to.
+    needs: ['GOOGLE_CHAT_SERVICE_ACCOUNT', 'GOOGLE_CHAT_SPACE'],
+    config: () => ({ serviceAccount: JSON.parse(env.GOOGLE_CHAT_SERVICE_ACCOUNT) }),
+    refused: () => ({
+      serviceAccount: {
+        ...JSON.parse(env.GOOGLE_CHAT_SERVICE_ACCOUNT),
+        private_key: require('node:crypto')
+          .generateKeyPairSync('rsa', { modulusLength: 2048 })
+          .privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      },
+    }),
+    message: ({ text, buttons, media }) =>
+      createChannelMessage({
+        channel: 'google-chat',
+        to: env.GOOGLE_CHAT_SPACE,
+        text,
+        buttons: buttons?.filter((button) => button.type === 'url'),
+        media,
+      }),
+  },
+  {
     name: 'Web Push',
     Transport: require('../../src/webpush/index.js').WebPushTransport,
     // The keys the browser subscribed with, and the JSON of its subscription.

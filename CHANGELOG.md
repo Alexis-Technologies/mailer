@@ -234,6 +234,11 @@ worker of 1.2 holds reads the same.
   conversation through a bot of the Bot Framework, with the token of its app (client
   credentials) sent only to a service URL of Teams or of `serviceUrls`; a bot removed from the
   conversation is `blocked`, and a 5xx of unknown delivery.
+- **`./google-chat`, Google Chat:** a message to the space of a webhook, or to a space of a Chat
+  app with the token of its service account and a `requestId` of the idempotency key, which
+  the API answers again with its message, so a lost answer is sent again; `<users/all>` and a
+  mention the message does not name are broken, a picture and links are a card, and `thread`
+  the key of the thread.
 - **`./queue` takes the messages of the channels:** `enqueue({ channel: 'sms', kind:
   'content', to, text })` makes a job of version 2, checked as `createChannelMessage` checks
   its message (a phone in E.164 by the `defaultCountry` of the queue), its id derived from its

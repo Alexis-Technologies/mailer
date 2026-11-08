@@ -15,6 +15,7 @@ const { ApnsTransport } = require('../../../src/apns/index.js');
 const { RbmTransport } = require('../../../src/rbm/index.js');
 const { ViberTransport } = require('../../../src/viber/index.js');
 const { TeamsTransport } = require('../../../src/teams/index.js');
+const { GoogleChatTransport } = require('../../../src/google-chat/index.js');
 
 const TEAMS_WEBHOOK =
   'https://prod-00.westeurope.logic.azure.com/workflows/abc/triggers/manual/paths/invoke?sig=TeamsWebhookSecret';
@@ -495,6 +496,52 @@ const channelProviders = [
       }),
     secrets: ['TeamsClientSecret', 'TeamsBotTokenSecret'],
     recipient: 'SECRETCONVERSATION',
+  },
+  {
+    name: 'Google Chat webhook',
+    create: (extra) =>
+      new GoogleChatTransport({
+        retries: 1,
+        ...extra,
+        webhookUrl:
+          'https://chat.googleapis.com/v1/spaces/AAAA/messages?key=ChatKey&token=ChatWebhookSecret',
+      }),
+    message: () => createChannelMessage({ channel: 'google-chat', text: 'Deployed v1.2.3' }),
+    ok: () => Response.json({ name: 'spaces/AAAA/messages/1' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: ['ChatWebhookSecret'],
+    recipient: 'ChatWebhookSecret',
+  },
+  {
+    // A message of the app carries a requestId the API answers again with
+    // its message: a lost answer is sent again under it.
+    name: 'Google Chat',
+    keyed: true,
+    create: (extra = {}) =>
+      new GoogleChatTransport({
+        retries: 1,
+        ...extra,
+        fetch: withGoogleToken(extra.fetch),
+        serviceAccount: FCM_ACCOUNT,
+      }),
+    message: () =>
+      createChannelMessage({
+        channel: 'google-chat',
+        to: 'spaces/SECRETSPACE',
+        text: 'Deployed v1.2.3',
+      }),
+    ok: () => Response.json({ name: 'spaces/SECRETSPACE/messages/1' }),
+    rateLimited: (seconds) =>
+      Response.json(
+        { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } },
+        { status: 429, headers: { 'Retry-After': String(seconds) } },
+      ),
+    secrets: [FCM_ACCESS_TOKEN],
+    recipient: 'SECRETSPACE',
   },
 ];
 
