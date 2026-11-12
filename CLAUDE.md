@@ -849,12 +849,13 @@ with a test that fails without it; R for review):
 
 From 2.0 the package takes the features of the libraries of the channels where they lead, as 1.1
 took nodemailer's, unemail's and sently's; none is a base to port file by file (§3 of
-`PLAN-channels.md`, which says what each source gives and where it goes). The eleven MIT sources
-whose code may be ported have their notices in `LICENSE` and their entries in `SOURCES` of
-`tests/unit/attribution.test.js`: @thinwrap/notifications 1.2.0, @visulima/notification 2.0.0,
-twilio-node 6.2.0, node-telegram-bot-api 2.1.0, http_ece 1.2.1, message-segment-calculator
-1.3.0, split-sms 0.1.7, @parse/node-apn 8.1.1, @slack/bolt 5.1.0, @slack/web-api 8.3.0 and
-botframework-connector 4.1.6. Their clones, read-only, are in
+`PLAN-channels.md`, which says what each source gives and where it goes). The six MIT sources
+whose code is ported have their notices in `LICENSE` and their entries in `SOURCES` of
+`tests/unit/attribution.test.js`: @thinwrap/notifications 1.2.0, node-telegram-bot-api 2.1.0,
+http_ece 1.2.1, message-segment-calculator 1.3.0, split-sms 0.1.7 and @parse/node-apn 8.1.1;
+@visulima/notification, twilio-node, @slack/bolt, @slack/web-api and botframework-connector,
+whose bugs were read but whose code no shipped file takes, left them before 2.0, and
+`attribution.test.js` fails on a source no shipped file names. Their clones, read-only, are in
 `~/Documents/open-source/messenger-alternatives/`, whose README indexes them.
 
 - **What is ported is the feature, onto the contracts of this package** (`Receipt`,

@@ -81,18 +81,6 @@ const SOURCES = [
       holder: '2026 Dmitry Polyanovsky & contributors',
     },
     {
-      name: '@visulima/notification',
-      url: 'https://github.com/visulima/visulima',
-      version: '2.0.0',
-      holder: '2026 visulima',
-    },
-    {
-      name: 'twilio-node',
-      url: 'https://github.com/twilio/twilio-node',
-      version: '6.2.0',
-      holder: '2023 Twilio, Inc.',
-    },
-    {
       name: 'node-telegram-bot-api',
       url: 'https://github.com/yagop/node-telegram-bot-api',
       version: '2.1.0',
@@ -127,24 +115,6 @@ const SOURCES = [
       holder: '2010 Andrew Naylor, Parse Platform',
       file: JS_FILE,
       types: JS_TYPES,
-    },
-    {
-      name: '@slack/bolt',
-      url: 'https://github.com/slackapi/bolt-js',
-      version: '5.1.0',
-      holder: 'Robots & Pencils, Slack Technologies, LLC',
-    },
-    {
-      name: '@slack/web-api',
-      url: 'https://github.com/slackapi/node-slack-sdk',
-      version: '8.3.0',
-      holder: 'Slack Technologies, LLC',
-    },
-    {
-      name: 'botframework-connector',
-      url: 'https://github.com/microsoft/botbuilder-js',
-      version: '4.1.6',
-      holder: 'Microsoft Corporation',
     },
   ].map(channelSource),
 ];
@@ -325,4 +295,20 @@ test('Attribution: the libraries of the channels have their headers', () => {
 test('Attribution: LICENSE carries the notice of every source', () => {
   const license = fs.readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
   for (const source of SOURCES) assert.match(license, source.license, source.name);
+});
+
+test('Attribution: every source of LICENSE is named by a shipped file', () => {
+  // Before: a source no shipped file named any more stayed in LICENSE and in
+  // SOURCES, against the rule that it leaves them when 2.0 is released.
+  const named = new Set();
+  for (const file of shippedFiles()) {
+    const header = headerOf(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    for (const { source, ported, types, also } of PATTERNS) {
+      if (header.some((line) => ported.test(line) || types.test(line) || also.test(line))) {
+        named.add(source.name);
+      }
+    }
+  }
+  const unnamed = SOURCES.filter((source) => !named.has(source.name)).map((source) => source.name);
+  assert.deepStrictEqual(unnamed, []);
 });
