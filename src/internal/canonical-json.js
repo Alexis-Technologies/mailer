@@ -36,7 +36,9 @@ const digestJson = (digest, value, leaveOut) => {
   if (leaveOut === undefined) {
     update(digest, value);
   } else {
-    const kept = {};
+    // No prototype, so that an own key `__proto__` is kept, and hashed, as a
+    // key rather than set as the prototype of the copy and left out.
+    const kept = Object.create(null);
     for (const key of Object.keys(value)) {
       if (!leaveOut.has(key)) kept[key] = value[key];
     }

@@ -318,6 +318,9 @@ channels, which 1.x has not, are in the commits and in `CLAUDE.md`):
 - **`fromUrl` and the endpoints of Web Push refuse SIIT, Teredo and the reserved IPv6 ranges**
   (`::ffff:0:0:0/96`, `2001::/32`, `100::/64`, `2001:db8::/32`, `3fff::/20`).
 - **A refusal that `verify()` reads in a 2xx is thrown at once,** not retried as a read.
+- **A sealed job carries no field outside its hash and its MAC:** a key `__proto__` in what a
+  codec opens, which made the fields under it inherited, so read by the worker though neither
+  checked, is refused, and so is data that inherits fields.
 
 ## [1.2.1] - 2026-11-07
 

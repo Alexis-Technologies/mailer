@@ -103,7 +103,12 @@ const openJob = async (data, codec) => {
   }
   const opened = {};
   for (const key of Object.keys(fields)) {
-    if (ENVELOPE.has(key) || key === 'enc') throw invalid(`its sealed fields hold ${key}.`);
+    // JSON.parse makes `__proto__` an own key, which the assignment below
+    // would make the prototype of the job: fields that neither its hash nor
+    // its MAC read, as they read its own keys.
+    if (ENVELOPE.has(key) || key === 'enc' || key === '__proto__') {
+      throw invalid(`its sealed fields hold ${key}.`);
+    }
     opened[key] = fields[key];
   }
   // A field in clear beside `enc` would stand over the sealed one.

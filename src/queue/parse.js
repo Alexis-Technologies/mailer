@@ -78,6 +78,12 @@ const strategyOf = (data) => {
 const parseJob = (data, options = {}) => {
   const keyring = keyringOf(options.signingKeys);
   if (!isObject(data)) throw invalid('its data is no object.');
+  // Fields it inherited would be read as its own, though the hash and the
+  // MAC read its own keys alone.
+  const prototype = Object.getPrototypeOf(data);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw invalid('its data inherits fields of another object.');
+  }
   if (typeof data.enc === 'string') {
     throw new QueueError(
       'queue.codec_missing',

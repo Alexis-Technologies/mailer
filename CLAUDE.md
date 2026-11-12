@@ -1118,6 +1118,12 @@ that fails without it; C for the channels):
 - C41. otel: a batch span had no message, so the errors it kept were redacted of addresses and
   numbers with a `+` alone, where the span of a send redacts the recipient of its message (a
   chat id, a token): each kept error is redacted of the recipient of the message it answers.
+- C42. queue (since 1.2): what a codec opened was copied by assignment, so a key `__proto__`
+  of the sealed fields, which `JSON.parse` makes an own key, became the prototype of the job:
+  fields such as `bcc` or `buttons` that its hash and MAC, which read its own keys, left out,
+  and its build read, from a writer who could seal but not sign. The key is refused,
+  `parseJob` refuses data that inherits fields, and the canonical JSON keeps such a key as a
+  key.
 
 ## Repository layout
 

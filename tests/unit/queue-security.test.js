@@ -269,6 +269,46 @@ test('Queue: what a codec opens is checked, and a field in clear is refused', as
   assert.strictEqual(outcome.code, 'queue.signature_invalid');
 });
 
+test('Queue: a key __proto__ of what a codec opens is refused, as it stands outside the MAC', async () => {
+  const identity = { encode: (text) => text, decode: (text) => text };
+  const queue = createQueue({ driver: createMemoryQueue(), codec: identity, signingKeys: [KEY_A] });
+  await queue.enqueue(input);
+  const sealed = queue.driver.list()[0].data;
+  // What a writer who can seal, but holds no signing key, adds: a field the
+  // prototype of the opened job would carry, which neither the hash nor the
+  // MAC reads, as they read its own keys.
+  const smuggled = `{"__proto__":{"bcc":[{"address":"spy@evil.example"}]},${sealed.enc.slice(1)}`;
+  const transport = fakeTransport();
+  const handler = createJobHandler({
+    transport,
+    codec: identity,
+    signingKeys: [KEY_A],
+    now: () => NOW,
+  });
+  const outcome = await handler(runOf({ ...sealed, enc: smuggled }), new AbortController().signal);
+  assert.deepStrictEqual([outcome.type, outcome.code], ['fail', 'queue.invalid_job']);
+  assert.strictEqual(transport.calls.length, 0);
+});
+
+test('Queue: a job whose data inherits fields is refused', () => {
+  const signed = prepare({ signingKeys: [KEY_A] }).data;
+  const inheriting = Object.setPrototypeOf(copyOf(signed), {
+    bcc: [{ address: 'spy@evil.example' }],
+  });
+  assert.throws(() => parseJob(inheriting, { signingKeys: [KEY_A] }), isCode('queue.invalid_job'));
+  // Data with no prototype, as a driver may build it, is read.
+  const bare = Object.assign(Object.create(null), copyOf(signed));
+  assert.strictEqual(parseJob(bare, { signingKeys: [KEY_A] }), bare);
+});
+
+test('Queue: a key __proto__ is hashed as any other key', () => {
+  const plain = JSON.parse('{"a":1}');
+  const smuggled = JSON.parse('{"a":1,"__proto__":{"b":2}}');
+  const leaveOut = new Set(['hash']);
+  assert.notStrictEqual(hashJson(smuggled, leaveOut), hashJson(plain, leaveOut));
+  assert.notStrictEqual(hashJson(smuggled), hashJson(plain));
+});
+
 test('Queue: a codec is checked, and must give a string', async () => {
   assert.throws(() => createQueue({ driver: createMemoryQueue(), codec: {} }), /codec must/);
   assert.throws(
