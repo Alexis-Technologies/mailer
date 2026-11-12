@@ -4,6 +4,18 @@
 // A provider that refuses one tells the cache to forget it.
 
 const { untilAborted } = require('./until-aborted.js');
+const { isUnsentRequestError, markUnsent } = require('./unsent.js');
+
+// A failure of its own for each caller that waited for one token: the cache
+// gives every caller the one error, and a mark a request puts on it (of
+// unknown delivery, after an earlier attempt of that request) is not another
+// request's. Of the same class and fields, unsent as the one it copies.
+const ownFailureOf = (error) => {
+  if (typeof error !== 'object' || error === null) return error;
+  const copy = Object.create(Object.getPrototypeOf(error));
+  Object.defineProperties(copy, Object.getOwnPropertyDescriptors(error));
+  return isUnsentRequestError(error) ? markUnsent(copy) : copy;
+};
 
 // A new token is made this long before the one held ends, so that none is
 // sent as it runs out.
@@ -65,7 +77,12 @@ const createTokenCache = (make, options = {}) => {
         }
         return held.token;
       }
-      return untilAborted(refresh(), signal);
+      try {
+        return await untilAborted(refresh(), signal);
+      } catch (error) {
+        // The reason of the caller's abort is its own already.
+        throw signal?.aborted && error === signal.reason ? error : ownFailureOf(error);
+      }
     },
     /**
      * Forgets a token a provider refused, unless a newer one is held

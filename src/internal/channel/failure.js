@@ -7,6 +7,7 @@
 
 const { createFailedReceipt } = require('../../core/receipt.js');
 const { ProviderApiError, providerFailure } = require('../api-client.js');
+const { deliveryUnknownReasonOf, isDeliveryUnknown } = require('../delivery-unknown.js');
 
 /**
  * The refusal of a converter of a message the provider's API would refuse
@@ -36,6 +37,8 @@ const channelFailure = (provider, channel, error) => {
   }
   // A failure that names its category before any answer of the provider,
   // such as a token of Google refused (internal/google-auth.js).
+  // An earlier attempt of unknown delivery leaves it so, whatever this one
+  // failed of.
   if (!(error instanceof ProviderApiError) && typeof error?.category === 'string') {
     return createFailedReceipt(error.message, {
       provider,
@@ -43,6 +46,9 @@ const channelFailure = (provider, channel, error) => {
       category: error.category,
       retryable: error.retryable === true,
       statusCode: error.statusCode,
+      deliveryUnknown: isDeliveryUnknown(error),
+      deliveryUnknownReason: deliveryUnknownReasonOf(error),
+      attempts: Number.isInteger(error.attempts) ? error.attempts : undefined,
     });
   }
   return { ...providerFailure(provider, error), channel };

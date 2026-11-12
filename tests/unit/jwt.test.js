@@ -163,3 +163,69 @@ test('Token cache: a failure fails those waiting, and the next call tries again'
   assert.strictEqual(await cache.get(), 't');
   assert.strictEqual(calls, 3);
 });
+
+test('Token cache: each caller waiting fails with an error of its own, of the same kind', async () => {
+  // Before: every caller got the one error, so a mark one request put on it
+  // (of unknown delivery, after an earlier attempt of its own) was read by
+  // another, which was never sent.
+  const { isUnsentRequestError, markUnsent } = require('../../src/internal/unsent.js');
+  const {
+    isDeliveryUnknown,
+    markDeliveryUnknown,
+  } = require('../../src/internal/delivery-unknown.js');
+  const refused = Object.assign(new RangeError('Google refused the token'), {
+    statusCode: 401,
+    category: 'auth',
+    retryable: false,
+  });
+  markUnsent(refused);
+  let release;
+  const cache = createTokenCache(
+    () =>
+      new Promise((_resolve, reject) => {
+        release = () => reject(refused);
+      }),
+  );
+  const first = cache.get().catch((error) => error);
+  const second = cache.get().catch((error) => error);
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.notStrictEqual(a, b);
+  for (const error of [a, b]) {
+    assert.ok(error instanceof RangeError);
+    assert.strictEqual(error.message, 'Google refused the token');
+    assert.strictEqual(error.statusCode, 401);
+    assert.strictEqual(error.category, 'auth');
+    assert.strictEqual(isUnsentRequestError(error), true);
+  }
+  markDeliveryUnknown(a, 'server-error');
+  assert.strictEqual(isDeliveryUnknown(b), false);
+  // The reason of a caller's abort is given as it is.
+  const hang = createTokenCache(() => new Promise(() => {}));
+  const controller = new AbortController();
+  const reason = new Error('stop');
+  const waiting = hang.get(controller.signal).catch((error) => error);
+  controller.abort(reason);
+  assert.strictEqual(await waiting, reason);
+});
+
+test('Channel failure: a token refused after an attempt of unknown delivery keeps it so', () => {
+  // Before: a failure that named its category (a token of Google refused) made
+  // a definite auth failure of a message an earlier attempt may have posted.
+  const { channelFailure } = require('../../src/internal/channel/failure.js');
+  const { markDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
+  const error = Object.assign(new Error('Google refused the token of the service account'), {
+    statusCode: 401,
+    category: 'auth',
+    retryable: false,
+    attempts: 2,
+  });
+  markDeliveryUnknown(error, 'server-error');
+  const receipt = channelFailure('google-chat', 'google-chat', error);
+  assert.strictEqual(receipt.deliveryUnknown, true);
+  assert.strictEqual(receipt.deliveryUnknownReason, 'server-error');
+  assert.strictEqual(receipt.attempts, 2);
+  assert.strictEqual(receipt.errors[0].category, 'auth');
+  assert.strictEqual(receipt.retryable, false);
+});

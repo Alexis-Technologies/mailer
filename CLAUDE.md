@@ -1172,6 +1172,12 @@ that fails without it; C for the channels):
   the SHA-256 of 1.2. The `hash` of a job, in clear beside a sealed one, is the same kind of
   oracle when its other fields can be guessed; it tells duplicates and is checked by workers,
   so it is left for a change of its own.
+- C52. channels, token-cache: a failure that names its category before any answer (a token of
+  Google or Microsoft refused) made a receipt without `deliveryUnknown`, so a keyed send whose
+  earlier attempt was ambiguous (a 5xx of a Chat app) ended as a definite `auth` failure; and
+  the cache gave every caller waiting the one error, so the mark one request put on it was
+  read by another, never sent. `channelFailure` keeps the mark, its reason and the attempts,
+  and each caller fails with an error of its own, of the same class and fields.
 
 ## Repository layout
 
