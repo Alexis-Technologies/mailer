@@ -191,6 +191,7 @@ class AlphaSmsTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => itemOf(sent, this.config),
       request: (item, sendOptions) => this.httpClient.send(item, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json, message),

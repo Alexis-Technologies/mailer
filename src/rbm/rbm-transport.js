@@ -54,6 +54,7 @@ class RbmTransport extends ProviderTransport {
     );
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => convertMessage(sent),
       request: (body, sendOptions) =>
         this.httpClient.send(message.to, messageId, body, sendOptions),

@@ -32,6 +32,7 @@ class WebPushTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => convertMessage(sent, this.config),
       request: (push, sendOptions) =>
         this.httpClient.push(push.endpoint, push.body, push.headers, sendOptions),

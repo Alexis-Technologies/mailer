@@ -33,6 +33,7 @@ class AwsSmsTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => convertMessage(sent, this.config),
       request: (body, sendOptions) => this.httpClient.call('SendTextMessage', body, sendOptions),
       receiptOf: (answer) => {

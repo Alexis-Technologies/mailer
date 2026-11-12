@@ -123,9 +123,13 @@ test('FCM: a topic, a picture, the priority and the expiry on each platform', as
     },
     webpush: { headers: { Urgency: 'high', TTL: '3600' } },
   });
-  await transport().send(push({ priority: 'low', expiresAt: new Date(NOW - 1000) }));
-  assert.deepStrictEqual(sends()[1].json.message.android, { priority: 'NORMAL', ttl: '0s' });
+  await transport().send(push({ priority: 'low', expiresAt: new Date(NOW + 1000) }));
+  assert.deepStrictEqual(sends()[1].json.message.android, { priority: 'NORMAL', ttl: '1s' });
   assert.strictEqual(sends()[1].json.message.webpush.headers.Urgency, 'low');
+  // Changed after C54: a push past its expiry is refused, not sent with a TTL of 0.
+  const expired = await transport().send(push({ expiresAt: new Date(NOW - 1000) }));
+  assert.strictEqual(expired.errors[0].category, 'validation');
+  assert.strictEqual(sends().length, 2);
 });
 
 test('FCM: a push of data alone has priority 5 on iOS, though high', async (t) => {

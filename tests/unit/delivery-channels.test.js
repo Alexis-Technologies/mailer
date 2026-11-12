@@ -264,6 +264,35 @@ test('Delivery of the channels: every transport rejects with the reason of an ab
   }
 });
 
+test('Delivery of the channels: a message past its expiresAt is refused, not sent', async () => {
+  // Before: eight of the transports read no expiresAt, and sent a code of
+  // sign-in held past its end in a queue; the others handed the provider a
+  // time to live already over.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  for (const provider of channelProviders) {
+    let requests = 0;
+    const fetch = async () => {
+      requests++;
+      return provider.ok();
+    };
+    const message = provider.message();
+    const expired = createChannelMessage({ ...message, expiresAt: new Date(Date.now() - 1000) });
+    const receipt = await provider.create({ fetch }).send(expired);
+    assert.strictEqual(receipt.successful, false, provider.name);
+    assert.strictEqual(receipt.errors[0].category, 'validation', provider.name);
+    assert.strictEqual(receipt.retryable, false, provider.name);
+    assert.match(receipt.errorMessages[0], /the message expired at/, provider.name);
+    assert.strictEqual(requests, 0, provider.name);
+    // One that has not expired goes.
+    const live = createChannelMessage({ ...message, expiresAt: new Date(Date.now() + 600_000) });
+    assert.strictEqual(
+      (await provider.create({ fetch }).send(live)).successful,
+      true,
+      provider.name,
+    );
+  }
+});
+
 test('Delivery of the channels: a message scheduled for later is refused, not sent at once', async () => {
   // Before (C7): every transport of a channel read no scheduledAt and sent
   // the message at once, reported sent.

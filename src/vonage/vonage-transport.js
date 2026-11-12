@@ -144,6 +144,7 @@ class VonageTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => formOf(sent, this.config),
       request: (form, sendOptions) => this.httpClient.send(form, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json),

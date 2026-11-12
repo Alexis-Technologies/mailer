@@ -75,6 +75,7 @@ class TeamsTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sentMessage) => {
         const converted = convertMessage(sentMessage);
         if (converted.toWebhook && this.config.webhookUrl === undefined) {

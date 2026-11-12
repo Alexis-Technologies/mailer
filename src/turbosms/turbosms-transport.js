@@ -210,6 +210,7 @@ class TurboSmsTransport extends ProviderTransport {
     const sequenceId = toUuid(generateId('idempotency-key', this.config.generateId));
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => bodyOf(sent, this.config, sequenceId),
       request: (body, sendOptions) => this.httpClient.send(body, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json, message),

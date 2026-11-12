@@ -31,6 +31,7 @@ class ApnsTransport extends ProviderTransport {
     let push;
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => {
         push = convertMessage(sent, this.config);
         return push;

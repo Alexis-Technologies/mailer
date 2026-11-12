@@ -61,6 +61,7 @@ class TwilioTransport extends ProviderTransport {
     const channel = message?.channel;
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => convertMessage(sent, this.config),
       request: (form, sendOptions) => this.httpClient.create(form, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json, channel),

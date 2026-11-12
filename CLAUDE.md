@@ -1182,6 +1182,10 @@ that fails without it; C for the channels):
   no one, so the first sign of a token endpoint that refused (a key revoked) was every send
   failing once the held token ended. It is a process warning, `MAILER_TOKEN_REFRESH_FAILED`,
   held to ten a minute.
+- C54. channels: a message past its `expiresAt` was sent, by the eight transports that read
+  none (Telegram, Slack, Discord, Teams, Google Chat, Viber, Meta, SMS Club) and with a time to
+  live already over by the others, so a code of sign-in held in a queue past its end still
+  went. `sendConverted` refuses it, by the clock of the transport, as a `validation` failure.
 
 ## Repository layout
 

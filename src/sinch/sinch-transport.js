@@ -99,6 +99,7 @@ class SinchTransport extends ProviderTransport {
   send(message, options) {
     return sendConverted(message, options, {
       provider: PROVIDER,
+      now: this.config.now,
       convert: (sent) => bodyOf(sent, this.config),
       request: (body, sendOptions) => this.httpClient.send(body, sendOptions),
       receiptOf: (answer) => receiptOf(answer.json, message),

@@ -42,6 +42,17 @@ const checkCredential = (value, name, label) => {
  *
  * @internal
  */
+// A message of a channel past its `expiresAt`, no longer worth delivering (a
+// code of sign-in held in a queue), is refused rather than sent: most of the
+// APIs of chats take no time to live, and one of an SMS would drop it later.
+const refuseExpired = (message, provider, now) => {
+  if (!(message.expiresAt instanceof Date) || message.expiresAt.getTime() > now()) return;
+  throw Object.assign(
+    new Error(`${provider}: the message expired at ${message.expiresAt.toISOString()}.`),
+    { category: 'validation', retryable: false },
+  );
+};
+
 const sendConverted = async (message, options, steps) => {
   const signal = options?.signal;
   signal?.throwIfAborted();
@@ -51,6 +62,7 @@ const sendConverted = async (message, options, steps) => {
     // delays it instead.
     if (message?.channel !== undefined && message.channel !== 'email') {
       refuseScheduledAt(message, steps.provider);
+      refuseExpired(message, steps.provider, steps.now ?? Date.now);
     }
     const payload = await steps.convert(message, signal);
     signal?.throwIfAborted();
