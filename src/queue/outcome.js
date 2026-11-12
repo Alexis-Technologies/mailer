@@ -12,6 +12,11 @@ const { redactMessageRecipient } = require('../internal/channel/recipient.js');
 const OPERATOR = new Set(['auth', 'configuration']);
 const MAX_REASON = 500;
 
+// The state of a job that expired before it was sent: `expired` for a job of
+// a channel, as a provider tells one; `failed` for an email job, whose audit
+// 1.2 wrote so.
+const expiredStateOf = (data) => (typeof data?.channel === 'string' ? 'expired' : 'failed');
+
 /**
  * The reason of a failure, its addresses and numbers redacted, and the
  * recipient of the job's message as its provider may write it, and its
@@ -102,7 +107,7 @@ const outcomeOfFailure = (receipt, job, config) => {
   if (config.expiresAt !== undefined && config.now() + delay > config.expiresAt) {
     return {
       outcome: { type: 'fail', code: 'queue.expired', reason: `${code}: ${reason}` },
-      state: 'failed',
+      state: expiredStateOf(config.message),
       error,
     };
   }
@@ -124,4 +129,4 @@ const outcomeOfFailure = (receipt, job, config) => {
   };
 };
 
-module.exports = { auditErrorOf, outcomeOfFailure, reasonOf, retryDelayOf };
+module.exports = { auditErrorOf, expiredStateOf, outcomeOfFailure, reasonOf, retryDelayOf };

@@ -16,7 +16,7 @@ const { checkNonNegativeInteger } = require('../internal/queue-options.js');
 const { isCallerAbort } = require('../internal/sleep.js');
 const { isProgrammerError, receiptOfThrown } = require('../internal/thrown.js');
 const { toUuid } = require('../internal/uuid.js');
-const { outcomeOfFailure, reasonOf } = require('./outcome.js');
+const { expiredStateOf, outcomeOfFailure, reasonOf } = require('./outcome.js');
 const { checkCodec, openJob } = require('./envelope.js');
 const { parseJob } = require('./parse.js');
 const { keyringOf } = require('./signing.js');
@@ -457,7 +457,11 @@ const attempt = async (run) => {
       return fail(run, 'queue.refused', messageOf(error));
     }
   }
-  if (isExpired(run)) return fail(run, 'queue.expired', 'The job expired before it was sent.');
+  if (isExpired(run)) {
+    return fail(run, 'queue.expired', 'The job expired before it was sent.', {
+      state: expiredStateOf(run.data),
+    });
+  }
   if (signal.aborted) return release(run, 'aborted before rendering');
   const rendered = await renderStep(run);
   if (rendered.outcome !== undefined) return rendered.outcome;

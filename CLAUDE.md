@@ -1162,6 +1162,9 @@ that fails without it; C for the channels):
   key shared a receipt, and the SMS of the second never went. The store key of a message of a
   channel ends with its tenant after a NUL, which neither a key nor a tenant holds; an email's
   and one a `key` of the application gives are as they were.
+- C50. queue: a job of a channel past its `expiresAt`, or whose retry would come after it, was
+  told `failed` to the audit, as an email job is, while an SMS a carrier gave up is `expired`.
+  A job of a channel is told `expired`; an email job keeps the `failed` of 1.2.
 
 ## Repository layout
 

@@ -251,6 +251,52 @@ test('Queue channels: a job of SMS is sent as a message of its channel, its stat
   assert.strictEqual(typeof events[1].messageHash, 'string');
 });
 
+test('Queue channels: a job of a channel that expired in its queue is told expired', async (t) => {
+  // Before: it was told failed, while an SMS a carrier gave up is expired; an
+  // email job keeps the state failed of 1.2.
+  const { clock, driver, audit, queue } = setup();
+  const transport = fakeTransport(() => ({ ...sent('SM1'), state: 'accepted' }));
+  const sms = await queue.enqueue(otp({ expiresAt: new Date(NOW + 1000) }));
+  const email = await queue.enqueue({
+    kind: 'content',
+    from: 'App <app@example.com>',
+    to: 'ada@example.com',
+    subject: 'Your code',
+    content: { text: 'Your code is 1234' },
+    idempotencyKey: 'code:1',
+    expiresAt: new Date(NOW + 1000),
+  });
+  clock.advance(2000);
+  const worker = queue.createWorker({ transport });
+  t.after(() => worker.close());
+  await driver.drain();
+  assert.strictEqual(transport.calls.length, 0);
+  assert.deepStrictEqual(
+    audit.eventsOf(sms.correlationId).map((event) => event.state),
+    ['queued', 'expired'],
+  );
+  assert.deepStrictEqual(
+    audit.eventsOf(email.correlationId).map((event) => event.state),
+    ['queued', 'failed'],
+  );
+  // So is one whose retry would come after it expires.
+  const later = setup();
+  const busy = fakeTransport(() => ({
+    successful: false,
+    errorMessages: ['busy'],
+    errors: [{ message: 'busy', category: 'server-error', retryAfterMilliseconds: 60_000 }],
+    retryable: true,
+  }));
+  const soon = await later.queue.enqueue(otp({ expiresAt: new Date(NOW + 1000) }));
+  const retrying = later.queue.createWorker({ transport: busy });
+  t.after(() => retrying.close());
+  await later.driver.drain();
+  assert.deepStrictEqual(
+    later.audit.eventsOf(soon.correlationId).map((event) => event.state),
+    ['queued', 'rendered', 'submitted', 'expired'],
+  );
+});
+
 test('Queue channels: a receipt that says sent tells the state sent after accepted', async (t) => {
   const { driver, audit, queue } = setup();
   const transport = fakeTransport(() => ({ ...sent('ts-1'), state: 'sent' }));
