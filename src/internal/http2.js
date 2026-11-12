@@ -13,7 +13,7 @@
 
 const http2 = require('node:http2');
 const { Readable } = require('node:stream');
-const { abortReason } = require('./sleep.js');
+const { abortReason } = require('./abort.js');
 const { markUnsent } = require('./unsent.js');
 
 const { NGHTTP2_CANCEL, NGHTTP2_REFUSED_STREAM } = http2.constants;
@@ -54,9 +54,12 @@ const responseHeadersOf = (fields) => {
 
 // A session of an origin, with what its requests and its pings need.
 class Session {
-  active = 0;
-  /** The last stream the server said it handles, after a GOAWAY. */
-  lastStreamId = Infinity;
+  #active = 0;
+  // The last stream the server said it handles, after a GOAWAY.
+  #lastStreamId = Infinity;
+  #retired = false;
+  #forget;
+  #handle;
   #pinger;
   #pingTimer;
   #pingTimeoutMs;
@@ -64,30 +67,29 @@ class Session {
   #origin;
 
   constructor(origin, options, forget) {
-    this.forget = forget;
-    this.retired = false;
+    this.#forget = forget;
     this.#origin = origin;
     this.#log = options.log;
     this.#pingTimeoutMs = options.pingTimeoutMs ?? DEFAULT_PING_TIMEOUT_MS;
-    this.handle = (options.connect ?? http2.connect)(origin, options.tls ?? {});
+    this.#handle = (options.connect ?? http2.connect)(origin, options.tls ?? {});
     // Not held until a request is out on it.
-    this.handle.unref();
+    this.#handle.unref();
     const end = () => {
       clearInterval(this.#pinger);
       clearTimeout(this.#pingTimer);
       forget(this);
     };
-    this.handle.on('goaway', (errorCode, lastStreamId) => {
-      this.lastStreamId = lastStreamId;
+    this.#handle.on('goaway', (errorCode, lastStreamId) => {
+      this.#lastStreamId = lastStreamId;
       this.#tell('info', 'http2.goaway', { errorCode, lastStreamId });
       forget(this);
     });
-    this.handle.on('close', end);
-    this.handle.on('error', (error) => {
+    this.#handle.on('close', end);
+    this.#handle.on('error', (error) => {
       this.#tell('warn', 'http2.session_failed', { code: error?.code });
       end();
     });
-    this.handle.on('frameError', () => this.handle.destroy());
+    this.#handle.on('frameError', () => this.#handle.destroy());
     this.#pinger = setInterval(
       () => this.ping(),
       options.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS,
@@ -95,10 +97,25 @@ class Session {
     this.#pinger.unref();
   }
 
+  /** The requests out on the session. */
+  get active() {
+    return this.#active;
+  }
+
+  /** The last stream the server said it handles, after a GOAWAY. */
+  get lastStreamId() {
+    return this.#lastStreamId;
+  }
+
+  /** The session of node:http2. */
+  get handle() {
+    return this.#handle;
+  }
+
   #tell(level, message, fields) {
     this.#log?.write(
       level,
-      () => ({ origin: this.#origin, active: this.active, ...fields }),
+      () => ({ origin: this.#origin, active: this.#active, ...fields }),
       message,
     );
   }
@@ -111,7 +128,7 @@ class Session {
    * socket up minutes later. One ping at a time.
    */
   ping() {
-    const handle = this.handle;
+    const handle = this.#handle;
     // A session still connecting has no ping to answer: Node cancels it,
     // which is no failure of the session.
     if (handle.closed || handle.destroyed || handle.connecting) return;
@@ -140,10 +157,10 @@ class Session {
 
   get isUsable() {
     return (
-      !this.retired &&
-      !this.handle.closed &&
-      !this.handle.destroyed &&
-      this.lastStreamId === Infinity
+      !this.#retired &&
+      !this.#handle.closed &&
+      !this.#handle.destroyed &&
+      this.#lastStreamId === Infinity
     );
   }
 
@@ -152,19 +169,19 @@ class Session {
    * of streams ran out, after 2^30 requests, which Node keeps open.
    */
   retire() {
-    if (this.retired) return;
-    this.retired = true;
+    if (this.#retired) return;
+    this.#retired = true;
     this.#tell('info', 'http2.session_retired', {});
-    this.forget(this);
-    if (!this.handle.closed && !this.handle.destroyed) this.handle.close();
+    this.#forget(this);
+    if (!this.#handle.closed && !this.#handle.destroyed) this.#handle.close();
   }
 
   hold() {
-    if (this.active++ === 0) this.handle.ref();
+    if (this.#active++ === 0) this.#handle.ref();
   }
 
   release() {
-    if (--this.active === 0 && !this.handle.destroyed) this.handle.unref();
+    if (--this.#active === 0 && !this.#handle.destroyed) this.#handle.unref();
   }
 }
 

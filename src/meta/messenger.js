@@ -34,6 +34,52 @@ const kindOf = (medium) => {
   return 'file';
 };
 
+// The buttons of a message, set on what it sends: quick replies under a text
+// of Instagram, which reply alone; a template of buttons of Messenger, which
+// carries the text.
+const addButtons = (message, sent, isInstagram, invalid, unsupported) => {
+  for (const button of message.buttons) {
+    if (button.text.length > MAX_TITLE) {
+      throw invalid(`the text of a button is more than ${MAX_TITLE} characters.`);
+    }
+    if (button.type === 'call') throw unsupported('a button cannot call a phone.');
+  }
+  if (isInstagram) {
+    // Instagram takes quick replies, which reply alone, under a text.
+    if (sent.text === undefined) throw invalid('a message with buttons needs a text.');
+    if (message.buttons.length > MAX_QUICK_REPLIES) {
+      throw invalid(`a message holds ${MAX_QUICK_REPLIES} quick replies at most.`);
+    }
+    const replies = [];
+    for (const button of message.buttons) {
+      if (button.type !== 'reply') throw unsupported('a button of Instagram is a quick reply.');
+      replies.push({ content_type: 'text', title: button.text, payload: button.id });
+    }
+    sent.quick_replies = replies;
+  } else {
+    if (sent.text === undefined) throw invalid('a message with buttons needs a text.');
+    if (sent.text.length > MAX_TEMPLATE_TEXT) {
+      throw invalid(`a text with buttons is more than ${MAX_TEMPLATE_TEXT} characters.`);
+    }
+    if (message.buttons.length > MAX_BUTTONS) {
+      throw invalid(`a message holds ${MAX_BUTTONS} buttons at most.`);
+    }
+    const buttons = [];
+    for (const button of message.buttons) {
+      buttons.push(
+        button.type === 'url'
+          ? { type: 'web_url', url: button.url, title: button.text }
+          : { type: 'postback', title: button.text, payload: button.id },
+      );
+    }
+    sent.attachment = {
+      type: 'template',
+      payload: { template_type: 'button', text: sent.text, buttons },
+    };
+    delete sent.text;
+  }
+};
+
 /**
  * The body of a message of Messenger or Instagram.
  *
@@ -75,46 +121,7 @@ const messengerBodyOf = (message) => {
     sent.text = message.text;
   }
   if (message.buttons !== undefined) {
-    for (const button of message.buttons) {
-      if (button.text.length > MAX_TITLE) {
-        throw invalid(`the text of a button is more than ${MAX_TITLE} characters.`);
-      }
-      if (button.type === 'call') throw unsupported('a button cannot call a phone.');
-    }
-    if (isInstagram) {
-      // Instagram takes quick replies, which reply alone, under a text.
-      if (sent.text === undefined) throw invalid('a message with buttons needs a text.');
-      if (message.buttons.length > MAX_QUICK_REPLIES) {
-        throw invalid(`a message holds ${MAX_QUICK_REPLIES} quick replies at most.`);
-      }
-      const replies = [];
-      for (const button of message.buttons) {
-        if (button.type !== 'reply') throw unsupported('a button of Instagram is a quick reply.');
-        replies.push({ content_type: 'text', title: button.text, payload: button.id });
-      }
-      sent.quick_replies = replies;
-    } else {
-      if (sent.text === undefined) throw invalid('a message with buttons needs a text.');
-      if (sent.text.length > MAX_TEMPLATE_TEXT) {
-        throw invalid(`a text with buttons is more than ${MAX_TEMPLATE_TEXT} characters.`);
-      }
-      if (message.buttons.length > MAX_BUTTONS) {
-        throw invalid(`a message holds ${MAX_BUTTONS} buttons at most.`);
-      }
-      const buttons = [];
-      for (const button of message.buttons) {
-        buttons.push(
-          button.type === 'url'
-            ? { type: 'web_url', url: button.url, title: button.text }
-            : { type: 'postback', title: button.text, payload: button.id },
-        );
-      }
-      sent.attachment = {
-        type: 'template',
-        payload: { template_type: 'button', text: sent.text, buttons },
-      };
-      delete sent.text;
-    }
+    addButtons(message, sent, isInstagram, invalid, unsupported);
   }
   const correlationId = message.metadata?.correlationId;
   if (correlationId !== undefined && correlationId.length <= MAX_METADATA) {

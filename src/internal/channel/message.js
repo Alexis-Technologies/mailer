@@ -104,7 +104,7 @@ const checkDate = (value, name) => {
 // The recipient of a message, of its channel's kind; a phone in any form
 // people write one when `defaultCountry` is given, and only in E.164 when
 // `strict`.
-const recipientOf = (channel, to, options, strict) => {
+const channelRecipientOf = (channel, to, options, strict) => {
   if (PHONE.has(channel)) {
     if (isE164(to)) return to;
     const number = strict ? undefined : normalizePhone(to, options);
@@ -364,7 +364,7 @@ const buildChannelMessage = (input, options, strict) => {
     }
   }
   const message = { channel };
-  assign(message, 'to', recipientOf(channel, input.to, options, strict));
+  assign(message, 'to', channelRecipientOf(channel, input.to, options, strict));
   assign(message, 'from', checkLine(input.from, 'from'));
   assign(message, 'text', checkText(input.text, 'text'));
   assign(message, 'media', listOf(input.media, 'media', mediumOf));
