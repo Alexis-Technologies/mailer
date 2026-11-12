@@ -52,8 +52,9 @@ const createBotAuth = (config) => {
       throw markUnsent(error);
     });
     const json = parseJson(text);
-    if (!response.ok)
+    if (!response.ok) {
       throw tokenFailure('Microsoft refused the token of the bot', response.status, json, text);
+    }
     if (typeof json?.access_token !== 'string' || !(json.expires_in > 0)) {
       throw markUnsent(new Error('Microsoft answered the token request with no access_token.'));
     }

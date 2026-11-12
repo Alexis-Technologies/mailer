@@ -191,9 +191,9 @@ class MongoOutboxSource {
   // at once.
   async #readPauses(now) {
     if (now - this.#pauses.readAt < this.#config.pauseReadMilliseconds) return this.#pauses;
+    // The pauses in force alone: those that ended wait for their expiry.
     const documents = await this.#collection
       // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
-      // The pauses in force alone: those that ended wait for their expiry.
       .find(
         { ...PAUSES, pausedUntil: { $gt: new Date(now) } },
         { projection: { pausedUntil: 1, tenantId: 1 } },

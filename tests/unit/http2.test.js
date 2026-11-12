@@ -554,8 +554,9 @@ test('HTTP/2: maxSessions opens another session while every one has a request ou
     stream.respond({ ':status': 200 });
     stream.end('ok');
   }
-  for (const response of await Promise.all(pending))
+  for (const response of await Promise.all(pending)) {
     assert.strictEqual(await readText(response), 'ok');
+  }
   // An idle session takes the next request rather than a new one.
   await readText(await client.fetch(`${server.origin}/again`));
   assert.strictEqual(server.sessions.length, 2);

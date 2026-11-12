@@ -102,13 +102,14 @@ const createGoogleAuth = (options) => {
       throw markUnsent(error);
     });
     const json = parseJson(text);
-    if (!response.ok)
+    if (!response.ok) {
       throw tokenFailure(
         'Google refused the token of the service account',
         response.status,
         json,
         text,
       );
+    }
     if (typeof json?.access_token !== 'string' || !(json.expires_in > 0)) {
       throw markUnsent(new Error('Google answered the token request with no access_token.'));
     }

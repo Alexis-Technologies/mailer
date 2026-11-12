@@ -29,8 +29,9 @@ const compareParts = (left, right) => {
 // then value, on a line of their own, not after the path.
 const canonicalQueryOf = (searchParams) => {
   const parts = [];
-  for (const entry of searchParams)
+  for (const entry of searchParams) {
     parts.push([encodeQueryPart(entry[0]), encodeQueryPart(entry[1])]);
+  }
   parts.sort(compareParts);
   let query = '';
   for (let index = 0; index < parts.length; index++) {

@@ -393,16 +393,15 @@ test('Queue: the canonical hash is that of the canonical text, however long, in 
   // The text is written into the digest by pieces of 64 KiB and long strings
   // apart; the hash is that of the whole text at once.
   const { createHash } = require('node:crypto');
-  const canonical = (value) =>
-    value === null || typeof value !== 'object'
-      ? JSON.stringify(value)
-      : Array.isArray(value)
-        ? `[${value.map(canonical).join(',')}]`
-        : `{${Object.keys(value)
-            .toSorted()
-            .filter((key) => value[key] !== undefined)
-            .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
-            .join(',')}}`;
+  const canonical = (value) => {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+    const fields = Object.keys(value)
+      .toSorted()
+      .filter((key) => value[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`);
+    return `{${fields.join(',')}}`;
+  };
   const blocks = [];
   for (let i = 0; i < 5000; i++) blocks.push({ type: 'section', text: `Ряд ${i} 📦`, n: i });
   const value = { z: 'x'.repeat(70_000), blocks, a: { b: [1, null, true, 'é'] }, u: undefined };

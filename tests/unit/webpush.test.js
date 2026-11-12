@@ -348,7 +348,6 @@ test('Web Push: a lookup of the endpoint that hangs ends with the timeout and th
 test('Web Push: a VAPID key Node wrote without its leading zeros is read as its 32 bytes', async (t) => {
   // Before: Node's getPrivateKey() writes the scalar without its leading zero
   // bytes, so one key of some 300 it makes was refused as no key of 32 bytes.
-  const { createECDH } = require('node:crypto');
   let short;
   while (short === undefined) {
     const ecdh = createECDH('prime256v1');
