@@ -1260,6 +1260,9 @@ that fails without it; C for the channels):
   `expireAt`, though the collection has its index of expiry, so the pauses of every tenant ever
   paused stayed, and every worker read them all at every interval. A pause expires an hour
   after its end, and only those in force are read.
+- C71. mongodb: an outbox the channels share told its depth and its failures as one, so the
+  backlog of one channel could not be seen. `stats({ name })` and `failed({ name })` give those
+  of one name, the channel of a job of a channel, under an index of `state` and `name`.
 
 ## Repository layout
 

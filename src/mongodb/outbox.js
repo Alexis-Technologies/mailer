@@ -87,17 +87,29 @@ const viewOf = (document) => ({
   result: document.result,
 });
 
+// The jobs of one name, the channel of a job of a channel (`mail` for an
+// email job), or of every name.
+const ofName = (filter, name) => (name === undefined ? filter : { ...filter, name });
+
+const checkName = (name) => {
+  if (name !== undefined && (typeof name !== 'string' || name === '')) {
+    throw new TypeError('name must be the name of a job, such as its channel.');
+  }
+  return name;
+};
+
 // What the outbox holds: its jobs by state, how long the oldest job due has
-// waited, and its pauses.
-const statsOf = async (collection, source, nowMs) => {
+// waited, and its pauses; of one name, the jobs of one channel of an outbox
+// the channels share.
+const statsOf = async (collection, source, nowMs, name) => {
   const now = new Date(nowMs);
   const counts = {};
   const filters = {
-    ready: { state: 'ready', availableAt: { $lte: now } },
-    delayed: { state: 'ready', availableAt: { $gt: now } },
-    active: { state: 'active' },
-    completed: { state: 'completed' },
-    failed: { state: 'failed' },
+    ready: ofName({ state: 'ready', availableAt: { $lte: now } }, name),
+    delayed: ofName({ state: 'ready', availableAt: { $gt: now } }, name),
+    active: ofName({ state: 'active' }, name),
+    completed: ofName({ state: 'completed' }, name),
+    failed: ofName({ state: 'failed' }, name),
   };
   for (const state of Object.keys(filters)) {
     counts[state] = await collection.countDocuments(filters[state]);
@@ -506,13 +518,17 @@ const readersOf = (collection, source, config) => ({
     if (document === null || document === undefined || id.startsWith(PAUSE_ID)) return undefined;
     return viewOf(document);
   },
-  stats: () => statsOf(collection, source, config.now()),
+  stats: async (statsOptions = {}) =>
+    statsOf(collection, source, config.now(), checkName(statsOptions.name)),
   async failed(failedOptions = {}) {
     const limit = checkPositiveInteger(failedOptions.limit ?? 100, 'limit');
-    const filter =
+    const name = checkName(failedOptions.name);
+    const filter = ofName(
       failedOptions.after === undefined
         ? { state: 'failed' }
-        : { state: 'failed', _id: { $gt: failedOptions.after } };
+        : { state: 'failed', _id: { $gt: failedOptions.after } },
+      name,
+    );
     const documents = await collection
       // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
       .find(filter)
@@ -588,6 +604,8 @@ const createMongoOutbox = (options = {}) => {
         { state: 1, tenantId: 1, rank: 1, availableAt: 1, enqueuedAt: 1 },
         { name: 'mailer_tenant' },
       );
+      // The jobs of one channel, for the stats and the failed jobs of one.
+      await collection.createIndex({ state: 1, name: 1 }, { name: 'mailer_name' });
       // A finished job goes at its time, a completed one and with it the
       // memory of its key after the window of duplicates, a failed one later.
       await collection.createIndex(

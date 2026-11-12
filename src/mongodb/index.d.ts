@@ -98,17 +98,22 @@ export interface MongoOutboxJob {
 export interface MongoOutbox extends QueueDriver {
   readonly transactional: true;
   readonly source: QueueSource;
-  /** Makes the indexes of the outbox: the ready jobs, the leases, the next one due, and the expiry of finished ones (`expireAt`). */
+  /** Makes the indexes of the outbox: the ready jobs, the leases, the next one due, the jobs of a name, and the expiry of finished ones (`expireAt`). */
   ensureIndexes(): Promise<void>;
   get(id: string): Promise<MongoOutboxJob | undefined>;
   /** Ends a pause of the queue, or of one tenant's jobs, before its time. */
   resume(scope?: { readonly tenantId?: string }): Promise<void>;
-  /** Its jobs by state, the lag of its workers and its pauses: for a dashboard or an alert. */
-  stats(): Promise<QueueStats>;
-  /** The failed jobs, by id, a page of `limit` (100) after `after`. */
+  /**
+   * Its jobs by state, the lag of its workers and its pauses: for a dashboard
+   * or an alert; with `name`, those of one name, the channel of a job of a
+   * channel (`mail` for an email job), on an outbox the channels share.
+   */
+  stats(options?: { readonly name?: string }): Promise<QueueStats>;
+  /** The failed jobs, by id, a page of `limit` (100) after `after`, of one `name` if given. */
   failed(options?: {
     readonly limit?: number;
     readonly after?: string;
+    readonly name?: string;
   }): Promise<readonly MongoOutboxJob[]>;
   /**
    * A failed job back to ready, its attempts anew: false when it is not a

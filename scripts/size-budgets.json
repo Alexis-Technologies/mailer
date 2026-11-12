@@ -54,7 +54,7 @@
   "./audit": 2.5,
   "./queue": 27.5,
   "./bullmq": 5,
-  "./mongodb": 7.5,
+  "./mongodb": 8,
   "./channels": 6.5,
   "./router": 1.5,
   "./telegram": 9.5,

@@ -173,7 +173,9 @@ its backups.
 waited (`oldestReadyMilliseconds`, the lag of the workers, to alert on) and its
 pauses; `outbox.failed({ limit, after })` lists the failed jobs a page at a
 time, and `outbox.retryFailed(id)` sends one again, its attempts anew, before
-`retainFailedSeconds` drops it. The data of a job is stored as it is, a token of a
+`retainFailedSeconds` drops it. On an outbox the channels share, `{ name }`
+gives either of one name, the channel of a job of a channel (`mail` for an email
+job): `outbox.stats({ name: 'sms' })`. The data of a job is stored as it is, a token of a
 reset link among it, unless the queue seals it with a
 [codec](/guide/queue#sealed-jobs): restrict who reads the collection.
 

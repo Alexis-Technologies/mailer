@@ -165,6 +165,24 @@ test('MongoDB: a pause of the queue holds every worker until it ends', async () 
   assert.strictEqual((await source.reserve(1000)).lease.job.id, 'a');
 });
 
+test('MongoDB: the stats and the failed jobs of one name, a channel of a shared outbox', async () => {
+  // Before: an outbox the channels share told its depth and its failures as
+  // one, so the backlog of one channel could not be seen.
+  const { source, outbox } = outboxOf({ start: 10_000 });
+  await source.enqueue(requestOf('s1', { name: 'sms' }));
+  await source.enqueue(requestOf('s2', { name: 'sms' }));
+  await source.enqueue(requestOf('m1', { name: 'mail' }));
+  await source.fail((await source.reserve(1000)).lease, { code: 'x.rejected', reason: 'no' });
+  const all = await outbox.stats();
+  const sms = await outbox.stats({ name: 'sms' });
+  assert.strictEqual(all.ready + all.failed, 3);
+  assert.strictEqual(sms.ready + sms.failed, 2);
+  const failed = await outbox.failed();
+  assert.strictEqual((await outbox.failed({ name: failed[0].name })).length, 1);
+  assert.strictEqual((await outbox.failed({ name: 'telegram' })).length, 0);
+  await assert.rejects(outbox.stats({ name: '' }), /name must be/);
+});
+
 test('MongoDB: a pause is dropped by the index of expiry an hour after its end', async () => {
   // Before: a pause kept no expireAt, so the pauses of every tenant ever paused
   // stayed, and every worker read them all at every interval.
@@ -196,6 +214,7 @@ test('MongoDB: the outbox makes its indexes, and wakes its workers on a change s
     [{ state: 1, leaseUntil: 1 }, { name: 'mailer_leases' }],
     [{ state: 1, availableAt: 1 }, { name: 'mailer_due' }],
     [{ state: 1, tenantId: 1, rank: 1, availableAt: 1, enqueuedAt: 1 }, { name: 'mailer_tenant' }],
+    [{ state: 1, name: 1 }, { name: 'mailer_name' }],
     [{ expireAt: 1 }, { name: 'mailer_expire', expireAfterSeconds: 0 }],
   ]);
   let woken = 0;
