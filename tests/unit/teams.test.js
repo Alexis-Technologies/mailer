@@ -313,3 +313,15 @@ test('Teams: the options are checked when made, the secrets never shown', async 
     'https://bots.example.com/teams/v3/conversations/c-1/activities',
   );
 });
+
+test('Teams: a conversation of a dot segment is refused, as it would leave the path', () => {
+  // Before: conversationId '..' sent the activity, with the token of the bot, to
+  // the path above /v3/conversations/, as encodeURIComponent leaves its dots.
+  for (const conversationId of ['.', '..']) {
+    assert.throws(
+      () => teams({ to: { serviceUrl: SERVICE, conversationId } }),
+      /The recipient of teams is \{ serviceUrl, conversationId \}/,
+    );
+  }
+  assert.ok(teams({ to: { serviceUrl: SERVICE, conversationId: 'a:1.b' } }));
+});

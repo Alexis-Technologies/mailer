@@ -1153,6 +1153,10 @@ that fails without it; C for the channels):
   whole batch. It is refused before any request as `unsupported`, as a transport of a channel
   refuses an email (`checkEmailMessage` of `internal/email-only.js`, in every converter and in
   SMTP, JMAP and sendmail), in its place in a batch.
+- C48. discord, teams: a recipient went into the path through `encodeURIComponent`, which
+  leaves `.` and `..`, so `to: '..'` sent the message, with the token of the bot, to
+  `/api/v10/messages`, as C19 had it for Google Chat. A channel or a thread of Discord is its
+  snowflake, of decimal digits, and a conversation of Teams is no dot segment.
 
 ## Repository layout
 

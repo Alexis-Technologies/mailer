@@ -322,3 +322,21 @@ test('Discord: the credentials are checked when the transport is made, and verif
     (error) => error.statusCode === 401,
   );
 });
+
+test('Discord: a channel or a thread that is no id of digits is refused, before any request', async (t) => {
+  // Before: `to: '..'` was sent to /api/v10/messages with the token of the bot,
+  // as encodeURIComponent leaves the dots of a segment of the path.
+  const requests = stubFetch(t, () => created());
+  for (const fields of [
+    { to: '..' },
+    { to: '.' },
+    { to: 'general' },
+    { thread: '../../users/@me' },
+  ]) {
+    const receipt = await transport().send(message(fields));
+    assert.strictEqual(receipt.successful, false, JSON.stringify(fields));
+    assert.strictEqual(receipt.errors[0].category, 'validation', JSON.stringify(fields));
+    assert.match(receipt.errorMessages[0], /named by its id, of decimal digits/);
+  }
+  assert.strictEqual(requests.length, 0);
+});

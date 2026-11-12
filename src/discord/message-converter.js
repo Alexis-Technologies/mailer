@@ -22,6 +22,9 @@ const MAX_CUSTOM_ID = 100;
 const MAX_NONCE = 25;
 // A message of no sound: the flag SUPPRESS_NOTIFICATIONS.
 const SUPPRESS_NOTIFICATIONS = 1 << 12;
+// A snowflake of Discord, the id of a channel or a thread: an integer of 64
+// bits in decimal. It goes into the path, which `..` would leave.
+const SNOWFLAKE = /^\d{1,20}$/;
 const OWN_FIELDS = new Set(['nonce', 'enforce_nonce']);
 
 const invalid = (message) => new InvalidMessageError(`Discord: ${message}`);
@@ -133,6 +136,11 @@ const convertMessage = async (message, config, signal) => {
     );
   }
   const toWebhook = message.to === undefined;
+  for (const id of [message.to, message.thread]) {
+    if (id !== undefined && !SNOWFLAKE.test(id)) {
+      throw invalid('a channel or a thread is named by its id, of decimal digits.');
+    }
+  }
   if (message.text !== undefined && message.text.length > MAX_CONTENT) {
     throw invalid(`the text is ${message.text.length} characters, more than ${MAX_CONTENT}.`);
   }

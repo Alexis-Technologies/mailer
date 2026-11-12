@@ -32,7 +32,7 @@ await discord.send(
 
 | Message | Body |
 | --- | --- |
-| `to` | the channel of `POST /channels/{id}/messages`; none for the webhook |
+| `to` | the channel of `POST /channels/{id}/messages`, its id of decimal digits; none for the webhook |
 | `thread` | the thread the bot posts into; `thread_id` of the webhook |
 | `text` | `content`, in Discord's Markdown |
 | `mentions` | `allowed_mentions`: none unless named |

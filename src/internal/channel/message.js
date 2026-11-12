@@ -132,13 +132,19 @@ const hasNoUserinfo = (value) => {
   return url.username === '' && url.password === '';
 };
 
+// The id of a conversation of Teams goes into the path of its activities,
+// which `encodeURIComponent` leaves `.` and `..` in, as segments that would
+// move the request, and the token of the bot, to another path.
+const DOT_SEGMENTS = new Set(['.', '..']);
+
 const teamsRecipientOf = (to) => {
   if (to === undefined) return undefined;
   if (
     !isObject(to) ||
     !isUrl(to.serviceUrl, HTTPS) ||
     !hasNoUserinfo(to.serviceUrl) ||
-    !isId(to.conversationId)
+    !isId(to.conversationId) ||
+    DOT_SEGMENTS.has(to.conversationId)
   ) {
     throwTypeError(
       'The recipient of teams is { serviceUrl, conversationId }, an https serviceUrl with no user.',
