@@ -336,6 +336,8 @@ channels, which 1.x has not, are in the commits and in `CLAUDE.md`):
 - **A sealed job carries no field outside its hash and its MAC:** a key `__proto__` in what a
   codec opens, which made the fields under it inherited, so read by the worker though neither
   checked, is refused, and so is data that inherits fields.
+- **A pause of the outbox expires an hour after its end:** the document of the pause of a
+  tenant kept no `expireAt`, so every pause ever made stayed, and every worker read them all.
 - **Under `signingKeys` an unsigned job is failed at once:** one that claimed a later version
   or held a field the worker does not know was given back as `queue.unsupported_version` for
   a week; the signature is now checked first, and fails it as `queue.signature_invalid`.

@@ -165,6 +165,16 @@ test('MongoDB: a pause of the queue holds every worker until it ends', async () 
   assert.strictEqual((await source.reserve(1000)).lease.job.id, 'a');
 });
 
+test('MongoDB: a pause is dropped by the index of expiry an hour after its end', async () => {
+  // Before: a pause kept no expireAt, so the pauses of every tenant ever paused
+  // stayed, and every worker read them all at every interval.
+  const { source, collection } = outboxOf({ start: 10_000 });
+  await source.pause(20_000, { tenantId: 'acme' });
+  await source.pause(30_000, { tenantId: 'acme' });
+  const [pause] = await collection.find({ _id: 'mailer:pause:acme' }).toArray();
+  assert.strictEqual(pause.expireAt.getTime(), 30_000 + 60 * 60 * 1000);
+});
+
 test('MongoDB: an older driver’s findOneAndUpdate, which gives { value }, is read too', async () => {
   const { source } = outboxOf({ collection: fakeCollection({ modifyResult: true }) });
   await source.enqueue(requestOf('a'));

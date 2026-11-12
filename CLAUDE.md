@@ -1256,6 +1256,10 @@ that fails without it; C for the channels):
   Google makes only for a key it takes and Microsoft only for the secret of the app. A webhook
   of Teams alone verifies nothing, as Slack's and Google Chat's; Web Push and APNs, whose
   credentials no service answers for without a push, have none.
+- C70. mongodb (since 1.2): a pause of the queue or of a tenant was a document with no
+  `expireAt`, though the collection has its index of expiry, so the pauses of every tenant ever
+  paused stayed, and every worker read them all at every interval. A pause expires an hour
+  after its end, and only those in force are read.
 
 ## Repository layout
 

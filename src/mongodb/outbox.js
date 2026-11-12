@@ -25,6 +25,9 @@ const { checkCollection, documentOf, sessionOf } = require('./collection.js');
 const PAUSE_ID = 'mailer:pause';
 const pauseIdOf = (tenantId) => (tenantId === undefined ? PAUSE_ID : `${PAUSE_ID}:${tenantId}`);
 const PAUSES = { _id: { $gte: PAUSE_ID, $lt: `${PAUSE_ID};` } };
+// A pause is dropped by the index of expiry an hour after its end, so that the
+// pauses of every tenant ever paused do not pile up in the collection.
+const PAUSE_KEPT_MS = 60 * 60 * 1000;
 // The order of the ready jobs, and of those of one rank.
 const READY_ORDER = { rank: 1, availableAt: 1, enqueuedAt: 1 };
 const RANK_ORDER = { availableAt: 1, enqueuedAt: 1 };
@@ -178,7 +181,11 @@ class MongoOutboxSource {
     if (now - this.#pauses.readAt < this.#config.pauseReadMilliseconds) return this.#pauses;
     const documents = await this.#collection
       // oxlint-disable-next-line no-restricted-properties -- a MongoDB collection, not an array
-      .find(PAUSES, { projection: { pausedUntil: 1, tenantId: 1 } })
+      // The pauses in force alone: those that ended wait for their expiry.
+      .find(
+        { ...PAUSES, pausedUntil: { $gt: new Date(now) } },
+        { projection: { pausedUntil: 1, tenantId: 1 } },
+      )
       .toArray();
     let until = 0;
     const tenants = new Map();
@@ -344,7 +351,9 @@ class MongoOutboxSource {
 
   async pause(until, scope = {}) {
     const { tenantId } = scope;
-    const update = { $max: { pausedUntil: new Date(until) } };
+    const update = {
+      $max: { pausedUntil: new Date(until), expireAt: new Date(until + PAUSE_KEPT_MS) },
+    };
     if (tenantId !== undefined) update.$set = { tenantId };
     await this.#collection.updateOne({ _id: pauseIdOf(tenantId) }, update, { upsert: true });
     if (tenantId === undefined) {
