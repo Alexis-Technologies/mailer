@@ -37,6 +37,10 @@ device is of one environment, and the other refuses it. The session is held
 by the process only while a push is out on it, so a script ends without
 disposing of the transport.
 
+One session carries every push, up to the thousand streams APNs takes on it;
+`maxSessions` (1 to 64) opens another while every one has a push out, for a
+sender of more.
+
 The session is pinged every `pingIntervalMs` (60 seconds), and at once after
 a push that got no answer before its timeout. When a ping goes unanswered for
 `pingTimeoutMs` (10 seconds), the session is ended and the next push opens

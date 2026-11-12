@@ -22,6 +22,15 @@ const checkMilliseconds = (value, name) => {
   return value;
 };
 
+// The most HTTP/2 sessions to APNs, each of up to a thousand streams.
+const checkSessions = (value) => {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 1 || value > 64) {
+    throw new TypeError('ApnsTransport: maxSessions must be a whole number of 1 to 64.');
+  }
+  return value;
+};
+
 const checkAppleId = (value, name) => {
   if (typeof value !== 'string' || !APPLE_ID.test(value)) {
     throw new TypeError(`ApnsTransport: ${name} must be the ten characters Apple gives it.`);
@@ -58,6 +67,7 @@ const createApnsConfig = (config = {}) => {
     tls: config.tls,
     pingIntervalMs: checkMilliseconds(config.pingIntervalMs, 'pingIntervalMs'),
     pingTimeoutMs: checkMilliseconds(config.pingTimeoutMs, 'pingTimeoutMs'),
+    maxSessions: checkSessions(config.maxSessions),
     timeout: config.timeout ?? 30000,
     retries: config.retries ?? 3,
     concurrency: config.concurrency ?? 10,

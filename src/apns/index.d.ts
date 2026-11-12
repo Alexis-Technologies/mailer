@@ -55,6 +55,11 @@ export interface ApnsConfig extends TransportDependencies {
    */
   readonly pingTimeoutMs?: number;
   /**
+   * The most HTTP/2 sessions to APNs, a new one opened while every one has a
+   * push out, for a sender of more than one session's streams. @default 1
+   */
+  readonly maxSessions?: number;
+  /**
    * A `fetch` that speaks HTTP/2, in place of the one of the transport over
    * `node:http2`: Node's own `fetch` speaks HTTP/1.1, which APNs refuses.
    */

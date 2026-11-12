@@ -1263,6 +1263,10 @@ that fails without it; C for the channels):
 - C71. mongodb: an outbox the channels share told its depth and its failures as one, so the
   backlog of one channel could not be seen. `stats({ name })` and `failed({ name })` give those
   of one name, the channel of a job of a channel, under an index of `state` and `name`.
+- C72. http2, apns: every push of an origin went on one session, bounded by the streams APNs
+  takes on it, where node-apn had a client of several connections. `maxSessions` (1 by
+  default, at most 64) opens another session while every one has a push out, and a push goes
+  on the one with the fewest out.
 
 ## Repository layout
 

@@ -530,3 +530,42 @@ test('HTTP/2: a request aborted while its session connects was never sent', asyn
   const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
   assert.strictEqual(isDeliveryUnknown(failure), false);
 });
+
+test('HTTP/2: maxSessions opens another session while every one has a request out', async (t) => {
+  // Before: one session of an origin carried every request, bounded by the
+  // streams the server takes on it.
+  const waiting = [];
+  // The first three wait for their answer; the later ones are answered at once.
+  const server = await serve(t, (stream, _headers, index) => {
+    if (index < 3) {
+      waiting.push(stream);
+      return;
+    }
+    stream.respond({ ':status': 200 });
+    stream.end('ok');
+  });
+  const client = createHttp2Fetch({ maxSessions: 2 });
+  t.after(() => client.close());
+  const pending = [];
+  for (let i = 0; i < 3; i++) pending.push(client.fetch(`${server.origin}/${i}`));
+  while (waiting.length < 3) await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(server.sessions.length, 2, 'no more than two');
+  for (const stream of waiting) {
+    stream.respond({ ':status': 200 });
+    stream.end('ok');
+  }
+  for (const response of await Promise.all(pending))
+    assert.strictEqual(await readText(response), 'ok');
+  // An idle session takes the next request rather than a new one.
+  await readText(await client.fetch(`${server.origin}/again`));
+  assert.strictEqual(server.sessions.length, 2);
+  // One session by default.
+  const single = createHttp2Fetch();
+  t.after(() => single.close());
+  const one = await serve(t, (stream) => {
+    stream.respond({ ':status': 200 });
+    stream.end('ok');
+  });
+  await Promise.all([single.fetch(`${one.origin}/a`), single.fetch(`${one.origin}/b`)]);
+  assert.strictEqual(one.sessions.length, 1);
+});

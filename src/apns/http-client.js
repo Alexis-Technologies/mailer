@@ -93,6 +93,7 @@ const createApnsClient = (config) => {
           tls: config.tls,
           pingIntervalMs: config.pingIntervalMs,
           pingTimeoutMs: config.pingTimeoutMs,
+          maxSessions: config.maxSessions,
           log: createLog(config.logger, { transport: 'apns' }),
         })
       : undefined;

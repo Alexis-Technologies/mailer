@@ -281,7 +281,9 @@ const requestOn = (session, url, init) =>
  * speaks HTTP/2 alone (APNs), which Node's `fetch` does not.
  *
  * @param options `tls`, the options of the TLS connection (`ca`, …);
- * `pingIntervalMs` (60 seconds); `pingTimeoutMs` (10 seconds), after which
+ * `maxSessions` (1), the sessions of one origin, a new one opened while every
+ * one has a request out; `pingIntervalMs` (60 seconds); `pingTimeoutMs` (10
+ * seconds), after which
  * an unanswered ping ends the session; `log`, of `internal/log.js`, told of
  * GOAWAYs, failed and unanswered pings and retired sessions; `connect`, in
  * place of `http2.connect`.
@@ -291,19 +293,34 @@ const requestOn = (session, url, init) =>
  * @internal
  */
 const createHttp2Fetch = (options = {}) => {
+  // The sessions of each origin, at most `maxSessions`: one by default, as
+  // APNs takes a thousand streams on one, more for a sender of more.
+  const maxSessions = options.maxSessions ?? 1;
   const sessions = new Map();
   const forget = (session) => {
-    for (const entry of sessions) {
-      if (entry[1] === session) sessions.delete(entry[0]);
-    }
+    for (const pool of sessions.values()) pool.delete(session);
   };
+  // The usable session with the fewest requests out, or a new one while the
+  // origin has fewer than its most and every one is busy.
   const sessionOf = (origin) => {
-    let session = sessions.get(origin);
-    if (session === undefined || !session.isUsable) {
-      session = new Session(origin, options, forget);
-      sessions.set(origin, session);
+    let pool = sessions.get(origin);
+    if (pool === undefined) {
+      pool = new Set();
+      sessions.set(origin, pool);
     }
-    return session;
+    let least;
+    for (const session of pool) {
+      if (!session.isUsable) {
+        pool.delete(session);
+        continue;
+      }
+      if (least === undefined || session.active < least.active) least = session;
+    }
+    if (least === undefined || (least.active > 0 && pool.size < maxSessions)) {
+      least = new Session(origin, options, forget);
+      pool.add(least);
+    }
+    return least;
   };
   return {
     fetch: async (input, init = {}) => {
@@ -313,9 +330,11 @@ const createHttp2Fetch = (options = {}) => {
     /** Closes every session, the requests out on them let finish. */
     close: async () => {
       const closing = [];
-      for (const session of sessions.values()) {
-        if (session.handle.closed || session.handle.destroyed) continue;
-        closing.push(new Promise((resolve) => session.handle.close(resolve)));
+      for (const pool of sessions.values()) {
+        for (const session of pool) {
+          if (session.handle.closed || session.handle.destroyed) continue;
+          closing.push(new Promise((resolve) => session.handle.close(resolve)));
+        }
       }
       sessions.clear();
       await Promise.all(closing);

@@ -379,6 +379,10 @@ test('APNs: the options are checked when made, the environment never from NODE_E
     }
     assert.ok(transport({ [name]: 5000 }));
   }
+  for (const value of [0, 65, 1.5, '2']) {
+    assert.throws(() => transport({ maxSessions: value }), /maxSessions must be/);
+  }
+  assert.ok(transport({ maxSessions: 4 }));
   const body = KEY.split('\n')[1];
   assert.ok(!JSON.stringify(transport()).includes(body));
 });
