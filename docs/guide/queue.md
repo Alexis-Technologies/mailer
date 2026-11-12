@@ -167,7 +167,9 @@ forged: whoever can write to Redis or MongoDB can recompute a SHA-256, and a
 worker would send their message from your domain, signed with your DKIM key.
 Give the queue `signingKeys`, and each job is signed with an HMAC-SHA256 (`kid`
 and `mac`); its workers send only jobs that one of the keys signed, and fail
-any other with `queue.signature_invalid`, unsent, logged at `error`:
+any other with `queue.signature_invalid`, unsent, logged at `error`. The
+signature is checked before anything else of the job, so an unsigned job that
+claims a later version is failed rather than given back for its worker:
 
 ```js
 const queue = createQueue({

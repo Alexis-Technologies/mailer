@@ -68,11 +68,11 @@ const strategyOf = (data) => {
  * @param data The data of the job.
  * @param options `signingKeys`: a job must then be signed by one of them.
  * @returns The same data, checked.
- * @throws {QueueError} `queue.invalid_job` if it is not the data of a
- * job, `queue.unsupported_version` if a later version wrote it (its
- * version, or a field this one does not know), `queue.hash_mismatch` if it is
- * not what was enqueued, and `queue.signature_invalid` if it is not signed by
- * a key of `signingKeys`.
+ * @throws {QueueError} `queue.signature_invalid` if it is not signed by a
+ * key of `signingKeys`, checked first; `queue.invalid_job` if it is not the
+ * data of a job, `queue.unsupported_version` if a later version wrote it (its
+ * version, or a field this one does not know), and `queue.hash_mismatch` if it
+ * is not what was enqueued.
  * @throws {TypeError} If a signing key is invalid.
  */
 const parseJob = (data, options = {}) => {
@@ -90,6 +90,11 @@ const parseJob = (data, options = {}) => {
       'The job is sealed: open it with its codec before it is read.',
     );
   }
+  // Under signing keys the signature comes first: it reads no field by its
+  // schema, so a job of a later version verifies here, while one a writer to
+  // the store made is failed before its version or a field it adds would give
+  // it back for its worker, every few minutes for a week.
+  if (keyring !== undefined) verifyJob(data, keyring, UNHASHED);
   const strategy = strategyOf(data);
   // A field this version does not know was written by a later one: the job
   // waits for its worker, rather than failing here for a hash of other fields.
@@ -114,7 +119,6 @@ const parseJob = (data, options = {}) => {
       'The job is not what was enqueued: its hash differs.',
     );
   }
-  if (keyring !== undefined) verifyJob(data, keyring, UNHASHED);
   return data;
 };
 

@@ -1124,6 +1124,12 @@ that fails without it; C for the channels):
   and its build read, from a writer who could seal but not sign. The key is refused,
   `parseJob` refuses data that inherits fields, and the canonical JSON keeps such a key as a
   key.
+- C43. queue: under `signingKeys`, the version and the fields of a job were read before its
+  signature, so an unsigned job that claimed a later version, or a channel or a field this
+  worker does not know, was given back as `unsupported_version` every five minutes for a week,
+  a warning each time, instead of failing as `signature_invalid`. The signature is verified
+  first, as it reads no field by its schema; the fields it leaves out (`UNHASHED`) are fixed,
+  so that a job of a later version still verifies and waits for its worker.
 
 ## Repository layout
 

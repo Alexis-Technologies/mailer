@@ -74,6 +74,42 @@ test('Queue: a job forged with its hash recomputed is refused under signing keys
   );
 });
 
+test('Queue: under signing keys an unsigned job is failed before its version is read', async () => {
+  const { keyringOf, signJob } = require('../../src/queue/signing.js');
+  const handler = createJobHandler({
+    transport: fakeTransport(),
+    signingKeys: [KEY_A],
+    now: () => NOW,
+  });
+  const outcomeOf = async (data) => {
+    const outcome = await handler(runOf(data), new AbortController().signal);
+    return [outcome.type, outcome.code];
+  };
+  // What a writer to the store parks as written by a later version: a version
+  // or a field this worker does not read. Unsigned, it is failed at once,
+  // rather than given back every five minutes for a week.
+  const unsigned = copyOf(prepare().data);
+  assert.deepStrictEqual(await outcomeOf({ ...unsigned, v: 99 }), [
+    'fail',
+    'queue.signature_invalid',
+  ]);
+  assert.deepStrictEqual(await outcomeOf({ ...unsigned, channel: 'fax' }), [
+    'fail',
+    'queue.signature_invalid',
+  ]);
+  // A job a later version signed still waits for its worker.
+  const later = { ...unsigned, v: 99, field: 'of a later version' };
+  later.hash = hashJson(later, UNHASHED);
+  signJob(later, keyringOf([KEY_A]), UNHASHED);
+  assert.deepStrictEqual(await outcomeOf(later), ['release', undefined]);
+});
+
+test('Queue: the fields a signature leaves out are fixed, as a worker verifies a later version', () => {
+  // A worker verifies the signature of a job before it reads its version, so
+  // a later version that left out another field would have its jobs failed.
+  assert.deepStrictEqual([...UNHASHED].toSorted(), ['enqueuedAt', 'hash', 'kid', 'mac', 'trace']);
+});
+
 test('Queue: signing keys rotate: the first signs, each verifies', () => {
   const old = copyOf(prepare({ signingKeys: [KEY_A] }).data);
   const rotated = copyOf(prepare({ signingKeys: [KEY_B, KEY_A] }).data);
