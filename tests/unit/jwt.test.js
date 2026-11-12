@@ -238,3 +238,55 @@ test('Channel failure: a token refused after an attempt of unknown delivery keep
   assert.strictEqual(receipt.errors[0].category, 'auth');
   assert.strictEqual(receipt.retryable, false);
 });
+
+test('Token cache: credentials refused are not asked again for a pause', async () => {
+  // Before: with no token held, each call asked the endpoint again at once,
+  // though it refused the credentials, which no retry mends.
+  let time = 0;
+  let calls = 0;
+  const cache = createTokenCache(
+    async () => {
+      calls++;
+      throw Object.assign(new Error('invalid_grant'), { category: 'auth', retryable: false });
+    },
+    { now: () => time },
+  );
+  await assert.rejects(cache.get(), /invalid_grant/);
+  await assert.rejects(cache.get(), /invalid_grant/);
+  assert.strictEqual(calls, 1, 'not asked again during the pause');
+  time += 31 * 1000;
+  await assert.rejects(cache.get(), /invalid_grant/);
+  assert.strictEqual(calls, 2, 'asked again after it');
+  // A failure a retry may mend is asked again at once.
+  let transient = 0;
+  const flaky = createTokenCache(async () => {
+    transient++;
+    throw new Error('ECONNRESET');
+  });
+  await assert.rejects(flaky.get());
+  await assert.rejects(flaky.get());
+  assert.strictEqual(transient, 2);
+});
+
+test('Token cache: a token shorter than the time before its end is made anew at half its life', async () => {
+  // Before: a token of four minutes, under the five of refreshMs, was made
+  // anew at every call.
+  let time = 0;
+  let calls = 0;
+  const cache = createTokenCache(
+    async () => {
+      calls++;
+      return { token: `t${calls}`, expiresAt: time + 4 * 60 * 1000 };
+    },
+    { now: () => time },
+  );
+  assert.strictEqual(await cache.get(), 't1');
+  time += 60 * 1000;
+  assert.strictEqual(await cache.get(), 't1');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(calls, 1, 'not made anew before half its life');
+  time += 90 * 1000;
+  assert.strictEqual(await cache.get(), 't1', 'the held one serves while the next is made');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(calls, 2);
+});

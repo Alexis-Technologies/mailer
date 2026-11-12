@@ -1232,6 +1232,11 @@ that fails without it; C for the channels):
   outside the deadline of the request, and `dns.lookup` takes no signal, so a resolver that
   never answered held a send past its timeout and its caller's abort. The check ends with the
   caller's signal and the timeout of the transport.
+- C65. token-cache: with no token held, a refusal of credentials, which no retry mends, was
+  asked again by the next call at once, each send a request to the endpoint; and a token that
+  lived no longer than the five minutes before its end it is made anew in was made anew at
+  every call. A refusal that says it is not retryable is given to the calls of the 30 seconds
+  after it, unasked, and a short token is made anew from the middle of its life.
 
 ## Repository layout
 

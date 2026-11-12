@@ -41,9 +41,13 @@ const createTokenCache = (make, options = {}) => {
   let held;
   let pending;
   let quietUntil = 0;
+  // A refusal that a retry does not mend (credentials refused), given to the
+  // callers of the pause after it without asking again.
+  let refused;
   const refresh = () => {
     pending ??= (async () => {
       try {
+        const asked = now();
         const made = await make();
         if (
           typeof made?.token !== 'string' ||
@@ -52,8 +56,16 @@ const createTokenCache = (make, options = {}) => {
         ) {
           throw new TypeError('A token was made without its expiry.');
         }
-        held = made;
+        // A token that lives no longer than the time before its end it is
+        // made anew in is made anew from the middle of its life, not at every
+        // call.
+        const refreshAt = made.expiresAt - Math.min(refreshMs, (made.expiresAt - asked) / 2);
+        held = { token: made.token, expiresAt: made.expiresAt, refreshAt };
+        refused = undefined;
         return made.token;
+      } catch (error) {
+        if (error?.retryable === false) refused = { error, until: now() + RETRY_PAUSE_MS };
+        throw error;
       } finally {
         pending = undefined;
       }
@@ -71,7 +83,7 @@ const createTokenCache = (make, options = {}) => {
       if (held !== undefined && time < held.expiresAt) {
         // A refresh that fails leaves the token held, which still serves, and
         // is tried again after a pause rather than at every call.
-        if (time >= held.expiresAt - refreshMs && time >= quietUntil) {
+        if (time >= held.refreshAt && time >= quietUntil) {
           refresh().catch((error) => {
             quietUntil = now() + RETRY_PAUSE_MS;
             // Told, as the sends fail once the token held ends.
@@ -84,6 +96,7 @@ const createTokenCache = (make, options = {}) => {
         }
         return held.token;
       }
+      if (refused !== undefined && time < refused.until) throw ownFailureOf(refused.error);
       try {
         return await untilAborted(refresh(), signal);
       } catch (error) {
