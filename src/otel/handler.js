@@ -7,6 +7,7 @@
 const metadata = require('../version.js');
 const { channelOfJob: channelOf } = require('../internal/job-channel.js');
 const { checkOptionalFunction } = require('../internal/options.js');
+const { codeAttribute } = require('./metrics.js');
 
 // SpanKind.CONSUMER and the SpanStatusCode values of the OpenTelemetry API.
 const CONSUMER = 4;
@@ -129,7 +130,9 @@ const instrumentHandler = (handler, options = {}) => {
     // Named as the attributes of the span, as those of a transport are
     // namespaced.
     const attributes = { 'mailer.job.outcome': outcome?.type ?? 'none', ...of };
-    if (typeof outcome?.code === 'string') attributes['mailer.job.code'] = outcome.code;
+    if (typeof outcome?.code === 'string') {
+      attributes['mailer.job.code'] = codeAttribute(outcome.code);
+    }
     instruments?.jobs.add(1, attributes);
     instruments?.duration.record(now() - started, attributes);
     if (span !== undefined) {

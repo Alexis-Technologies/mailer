@@ -738,3 +738,31 @@ test('OTel: the id of a message of a channel is recorded without the recipient i
     );
   }
 });
+
+test('OTel: a code of a provider that looks like none is counted as other', async () => {
+  // Before: the code of an answer went as it was into mailer.error.code, so a
+  // provider that wrote text there made a series per answer.
+  const { codeAttribute } = require('../../src/otel/metrics.js');
+  assert.strictEqual(codeAttribute('slack.channel_not_found'), 'slack.channel_not_found');
+  assert.strictEqual(codeAttribute('apns.BadDeviceToken'), 'apns.BadDeviceToken');
+  assert.strictEqual(codeAttribute('x.The number +380671234567 is not valid'), 'other');
+  assert.strictEqual(codeAttribute('x'.repeat(65)), 'other');
+  const { tracerProvider, meterProvider } = providers();
+  const transport = new OpenTelemetryTransport(
+    plain(
+      {},
+      {
+        successful: false,
+        errorMessages: ['no'],
+        errors: [{ message: 'no', category: 'validation', code: 'odd code with spaces' }],
+        retryable: false,
+      },
+    ),
+    { tracerProvider, meterProvider },
+  );
+  await transport.send(createTestMessage());
+  const messages = meterProvider
+    .getAllRecords()
+    .find((record) => record.name === 'mailer.message.messages');
+  assert.strictEqual(messages.records[0].attributes['mailer.error.code'], 'other');
+});

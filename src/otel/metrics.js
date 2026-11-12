@@ -11,6 +11,12 @@ const batchStatus = (successCount, failureCount) => {
   return successCount === 0 ? 'failure' : 'partial_failure';
 };
 
+// A code as an attribute of a metric: the code of a provider, which its answer
+// gives, as it is when it looks like one, and `other` when it does not, so
+// that an answer cannot make series without end.
+const CODE = /^[A-Za-z0-9_.:-]{1,64}$/;
+const codeAttribute = (code) => (CODE.test(code) ? code : 'other');
+
 // The states a receipt of a channel names: `accepted` by a provider that
 // tells its delivery later, `sent` by one that tells none (a chat, a push).
 const STATES = new Set(['accepted', 'sent']);
@@ -133,7 +139,7 @@ class MetricsCollector {
       'mailer.priority': priority,
       'mailer.status': receipt.successful ? 'success' : 'failure',
       ...(typeof first?.category === 'string' && { 'error.type': first.category }),
-      ...(typeof first?.code === 'string' && { 'mailer.error.code': first.code }),
+      ...(typeof first?.code === 'string' && { 'mailer.error.code': codeAttribute(first.code) }),
       ...(receipt.deliveryUnknown === true && { 'mailer.delivery_unknown': true }),
       ...(STATES.has(receipt.state) && { 'mailer.message.state': receipt.state }),
     });
@@ -218,4 +224,4 @@ class MetricsCollector {
   }
 }
 
-module.exports = { MetricsCollector };
+module.exports = { codeAttribute, MetricsCollector };

@@ -1215,6 +1215,10 @@ that fails without it; C for the channels):
   receipt reached neither the log nor the audit, so the cost of SMS per tenant could not be
   rebuilt. `queue.job.completed`, `retrying`, `failed` and `released` carry `channel`, the
   first the `state` of the receipt, and `accepted` its `segments`.
+- C61. otel: `mailer.error.code` and `mailer.job.code` took the code of an answer as it came,
+  a string of the provider's, so one that wrote text there made a series per answer. A code is
+  kept when it looks like one (64 characters of letters, digits and `_.:-`), and is `other`
+  otherwise.
 
 ## Repository layout
 

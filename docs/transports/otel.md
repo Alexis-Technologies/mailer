@@ -426,7 +426,7 @@ messages are not read yet:
 |---|---|---|---|
 | `mailer.message.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.channel`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
 | `mailer.message.duration` | histogram | `s` | as `mailer.message.attempts` |
-| `mailer.message.messages` | counter | `{message}` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it; on a success of a channel, `mailer.message.state`, `accepted` (delivery comes in its events) or `sent` |
+| `mailer.message.messages` | counter | `{message}` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`; `other` for a code that is no code, of more than 64 characters or other than letters, digits and `_.:-`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it; on a success of a channel, `mailer.message.state`, `accepted` (delivery comes in its events) or `sent` |
 | `mailer.message.retries` | counter | `{retry}` | `mailer.transport.name`, `mailer.channel`, `error.type` |
 | `mailer.message.size` | histogram | `By` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, and `email.content.type` for email |
 | `mailer.message.attachments` | histogram | `{attachment}` | as `mailer.message.size`: the attachments of an email, the media of a message of a channel |
