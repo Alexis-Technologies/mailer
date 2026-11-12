@@ -107,9 +107,12 @@ test('Token cache: one token is made for every caller, and again near its end', 
   assert.strictEqual(await cache.get(), 't3');
 });
 
-test('Token cache: a refresh that fails near the end keeps the token held, which serves', async () => {
+test('Token cache: a refresh that fails near the end keeps the token held, which serves', async (t) => {
   // Before (C40): in the five minutes before its end, every call waited for
   // the refresh and failed with it, though the token held still served.
+  // Before (C53): its failure was told to no one until the token ended.
+  const warnings = [];
+  t.mock.method(process, 'emitWarning', (text, options) => warnings.push([options?.code, text]));
   let time = 0;
   let calls = 0;
   const cache = createTokenCache(
@@ -126,6 +129,12 @@ test('Token cache: a refresh that fails near the end keeps the token held, which
   await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(await cache.get(), 'held', 'kept after the refresh failed');
   assert.strictEqual(calls, 2, 'not tried again at once');
+  assert.deepStrictEqual(warnings, [
+    [
+      'MAILER_TOKEN_REFRESH_FAILED',
+      'A token could not be made anew; the one held serves until it ends: token endpoint down',
+    ],
+  ]);
   time += 31 * 1000;
   await cache.get();
   assert.strictEqual(calls, 3, 'tried again after a pause');

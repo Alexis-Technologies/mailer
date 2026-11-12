@@ -1178,6 +1178,10 @@ that fails without it; C for the channels):
   the cache gave every caller waiting the one error, so the mark one request put on it was
   read by another, never sent. `channelFailure` keeps the mark, its reason and the attempts,
   and each caller fails with an error of its own, of the same class and fields.
+- C53. token-cache: a token that could not be made anew while the held one served was told to
+  no one, so the first sign of a token endpoint that refused (a key revoked) was every send
+  failing once the held token ended. It is a process warning, `MAILER_TOKEN_REFRESH_FAILED`,
+  held to ten a minute.
 
 ## Repository layout
 

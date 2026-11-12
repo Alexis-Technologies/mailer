@@ -30,7 +30,9 @@ await fcm.send(
 
 The token of the service account is asked for once, held until five minutes
 before its end and shared by every send; one FCM refuses with a 401 is dropped,
-and the next send asks for another. The `token_uri` of the account's JSON is
+and the next send asks for another. A new token that cannot be made while the
+held one still serves is a process warning, `MAILER_TOKEN_REFRESH_FAILED`, at
+most ten a minute, so the failure is heard before the sends fail. The `token_uri` of the account's JSON is
 not followed: a file of credentials does not choose where its signed assertion
 goes.
 

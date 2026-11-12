@@ -5,6 +5,7 @@
 
 const { untilAborted } = require('./until-aborted.js');
 const { isUnsentRequestError, markUnsent } = require('./unsent.js');
+const { warnLimited } = require('./warn.js');
 
 // A failure of its own for each caller that waited for one token: the cache
 // gives every caller the one error, and a mark a request puts on it (of
@@ -71,8 +72,14 @@ const createTokenCache = (make, options = {}) => {
         // A refresh that fails leaves the token held, which still serves, and
         // is tried again after a pause rather than at every call.
         if (time >= held.expiresAt - refreshMs && time >= quietUntil) {
-          refresh().catch(() => {
+          refresh().catch((error) => {
             quietUntil = now() + RETRY_PAUSE_MS;
+            // Told, as the sends fail once the token held ends.
+            const text = error instanceof Error ? error.message : String(error);
+            warnLimited(
+              'MAILER_TOKEN_REFRESH_FAILED',
+              `A token could not be made anew; the one held serves until it ends: ${text.slice(0, 300)}`,
+            );
           });
         }
         return held.token;
