@@ -4,6 +4,7 @@
 // application composed, and makes of the receipt what the queue does next,
 // telling the audit sink each state on the way.
 
+const { createHmac } = require('node:crypto');
 const { classifyReceiptError } = require('../core/receipt.js');
 const { renderFields } = require('../render/renderer.js');
 const { warnThrown } = require('../internal/callback.js');
@@ -41,6 +42,30 @@ const LATER_CODES = new Set(['queue.unsupported_version', 'queue.codec_missing']
 // How long such a job waits for its worker before it is given up: a week,
 // the time a failed job is kept.
 const MAX_WAIT_FOR_WORKER_MS = 7 * 24 * 60 * 60 * 1000;
+// The key of the hash of a message of a channel, derived from the key that
+// signs, so that it serves no other use of that key.
+const messageHashKeyOf = (keyring) =>
+  keyring === undefined
+    ? undefined
+    : createHmac('sha256', keyring.keys.get(keyring.signer))
+        .update('mailer: the hash of a message of a channel')
+        .digest();
+
+// The hash of what a message says, told with `rendered`. That of a message of
+// a channel is keyed, and left out without a signing key: a SHA-256 of a code
+// of six digits to a number one knows is found in a million guesses. An email
+// keeps the SHA-256 of 1.2.
+const messageHashOf = (config, message) => {
+  const fingerprint = fingerprintOf(message);
+  if (typeof message.channel !== 'string' || message.channel === 'email') {
+    return { messageHash: fingerprint };
+  }
+  if (config.messageHashKey === undefined) return {};
+  return {
+    messageHash: createHmac('sha256', config.messageHashKey).update(fingerprint).digest('hex'),
+  };
+};
+
 const checkBackoff = (given) => {
   const backoff = { ...DEFAULT_BACKOFF, ...given };
   for (const name of ['baseDelayMilliseconds', 'maxDelayMilliseconds']) {
@@ -77,8 +102,9 @@ const createHandlerConfig = (options = {}) => {
     throw new TypeError("redelivered must be 'send' or 'delivery_unknown'.");
   }
   // Checked now, so that a bad key fails the worker, not each job.
-  keyringOf(options.signingKeys);
+  const keyring = keyringOf(options.signingKeys);
   return {
+    messageHashKey: messageHashKeyOf(keyring),
     transport,
     renderer,
     audit,
@@ -473,7 +499,7 @@ const attempt = async (run) => {
   } catch (error) {
     return fail(run, 'queue.invalid_message', messageOf(error));
   }
-  const stopped = await emit(run, 'rendered', { messageHash: fingerprintOf(message) });
+  const stopped = await emit(run, 'rendered', messageHashOf(run.config, message));
   if (stopped !== undefined) return stopped;
   if (signal.aborted) return release(run, 'aborted before the send');
   const unrecorded = await emit(run, 'submitted');

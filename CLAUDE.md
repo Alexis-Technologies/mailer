@@ -1165,6 +1165,13 @@ that fails without it; C for the channels):
 - C50. queue: a job of a channel past its `expiresAt`, or whose retry would come after it, was
   told `failed` to the audit, as an email job is, while an SMS a carrier gave up is `expired`.
   A job of a channel is told `expired`; an email job keeps the `failed` of 1.2.
+- C51. queue: the `messageHash` of the event `rendered` was an unsalted SHA-256 of what a
+  message says, its recipient and text among it, so a code of six digits sent to a number one
+  knows came back from the audit in a million guesses. That of a message of a channel is an
+  HMAC under a key derived from the first signing key, and absent without one; an email's is
+  the SHA-256 of 1.2. The `hash` of a job, in clear beside a sealed one, is the same kind of
+  oracle when its other fields can be guessed; it tells duplicates and is checked by workers,
+  so it is left for a change of its own.
 
 ## Repository layout
 

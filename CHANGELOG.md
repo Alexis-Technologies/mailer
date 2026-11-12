@@ -303,6 +303,9 @@ worker of 1.2 holds reads the same.
   the queue (`mailer.queue.jobs`, `lag`, `job.duration`, `redeliveries`) carry
   `mailer.channel`, `email` for an email job, the name of a sealed job of a channel, none for a
   job of no known channel.
+- **The audit keeps no hash of an SMS that gives its code back:** the `messageHash` of a message
+  of a channel is an HMAC under a key derived from the worker's first signing key, and absent
+  without one; that of an email is the SHA-256 of 1.2.
 - **A receipt of unknown delivery tells why:** `deliveryUnknownReason` is `timeout`,
   `lost-answer`, `server-error`, `unreadable-answer`, `no-id`, `duplicate` or `in-flight`
   (`DeliveryUnknownReason`), for every transport of email and of the channels, so a message

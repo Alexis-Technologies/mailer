@@ -46,7 +46,11 @@ channels rank between them (`sent` 3.5, `expired` 4, `read` 4.5).
 }
 ```
 
-An event holds no recipient: the message is found by its `correlationId`. Its
+An event holds no recipient: the message is found by its `correlationId`. The
+`messageHash` of a message of a channel is an HMAC under a key derived from the
+first of the worker's `signingKeys`, and absent without them: a SHA-256 of an
+SMS would give back a code of six digits sent to a number one knows, in a
+million guesses. That of an email is the SHA-256 of 1.2. Its
 `id` is the same however often it is told, and a sink that can tell whether it
 holds one (`has(id)`: the memory and MongoDB sinks, and combined sinks when one
 of them can) lets a worker know a run that submitted before it died. `appendMany(events)`

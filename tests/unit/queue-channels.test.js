@@ -248,7 +248,25 @@ test('Queue channels: a job of SMS is sent as a message of its channel, its stat
     assert.strictEqual(event.tenantId, 'acme');
   }
   assert.strictEqual(events[3].providerMessageId, 'SM1');
-  assert.strictEqual(typeof events[1].messageHash, 'string');
+  // Changed after C51: without a signing key, no hash of what it says.
+  assert.strictEqual('messageHash' in events[1], false);
+});
+
+test('Queue channels: the hash of what a message of a channel says is keyed, under the signing key', async (t) => {
+  // Before: a SHA-256 of its recipient and text, which a million guesses turn
+  // back into a code of six digits sent to a number one knows.
+  const { fingerprintOf } = require('../../src/internal/fingerprint.js');
+  const key = { id: 'k1', secret: 'k'.repeat(32) };
+  const { driver, audit, queue } = setup({ signingKeys: [key] });
+  const transport = fakeTransport(() => ({ ...sent('SM1'), state: 'accepted' }));
+  const enqueued = await queue.enqueue(otp());
+  const worker = queue.createWorker({ transport });
+  t.after(() => worker.close());
+  await driver.drain();
+  const rendered = audit.eventsOf(enqueued.correlationId)[1];
+  assert.strictEqual(rendered.state, 'rendered');
+  assert.match(rendered.messageHash, /^[0-9a-f]{64}$/);
+  assert.notStrictEqual(rendered.messageHash, fingerprintOf(transport.calls[0].message));
 });
 
 test('Queue channels: a job of a channel that expired in its queue is told expired', async (t) => {
