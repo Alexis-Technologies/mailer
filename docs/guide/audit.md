@@ -46,6 +46,13 @@ channels rank between them (`sent` 3.5, `expired` 4, `read` 4.5).
 }
 ```
 
+A job the worker cannot read tells the audit nothing: one that is invalid,
+whose hash or signature does not hold, or that its codec cannot open. What it
+names was not checked, so it could name the `correlationId` of any message, and
+a forged job would mark that message failed. It is logged `queue.job.failed`
+with its code, and counted by `mailer.queue.jobs` (`mailer.job.code`) of
+`instrumentHandler`.
+
 An event holds no recipient: the message is found by its `correlationId`. The
 `messageHash` of a message of a channel is an HMAC under a key derived from the
 first of the worker's `signingKeys`, and absent without them: a SHA-256 of an
