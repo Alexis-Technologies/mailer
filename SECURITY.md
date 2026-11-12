@@ -6,7 +6,8 @@ Only the latest published version receives fixes.
 
 | Version | Supported |
 |---|---|
-| 1.x | ✅ |
+| 2.x | ✅ |
+| < 2.0 | ❌ |
 
 ## Reporting a vulnerability
 
@@ -20,7 +21,8 @@ Include, as far as you can:
 
 - what an attacker can do, and what they need in order to do it;
 - the affected version, and the runtime (Node.js, Bun or Deno) and its version;
-- the transport or provider involved (SMTP server, Amazon SES, another HTTP provider);
+- the transport or provider involved (SMTP server, Amazon SES, another HTTP provider of email,
+  a provider of a channel such as Twilio, Telegram or FCM);
 - a minimal reproduction.
 
 You can expect an acknowledgement within a few days, and an assessment of severity and a fix
@@ -28,9 +30,11 @@ timeline once the report is confirmed.
 
 ## Threat model
 
-The transport layer, the delivery events and their webhooks, the queue with its drivers,
-templates and the audit of states are built; suppression and the crypto-shredding of the audit
-are next. The principles all of it is designed around:
+The transports of email and of the channels (SMS, RCS, WhatsApp, Messenger, Instagram,
+Telegram, Viber, Slack, Discord, Teams, Google Chat and push), the delivery events and the
+webhooks of email, the queue with its drivers, templates and the audit of states are built; the
+webhooks of the channels, suppression and the crypto-shredding of the audit are next. The
+principles all of it is designed around:
 
 - **Message content is untrusted data.** Addresses, display names, subjects, headers, file names
   and bodies can come from users. A CR or LF in any header field is rejected rather than encoded
@@ -42,7 +46,11 @@ are next. The principles all of it is designed around:
   in the headers of the message.
 - **Provider requests stay with their provider.** Redirects are not followed, so credentials in a
   header never reach another host; a provider URL must be HTTPS (plain HTTP only to a loopback
-  host); and an answer is read up to 4 MiB.
+  host) and carry no user or password; and an answer is read up to 4 MiB. A recipient that goes
+  into the path of a request (a channel of Discord, a conversation of Teams, a space of Google
+  Chat) is held to the shape of an id, so that `..` cannot move the request and its token. The
+  token of a Telegram bot goes in the path of each request, as the Bot API asks: the transport
+  writes that URL nowhere, but a `fetch` passed in or an instrumentation of `fetch` may.
 - **Attachments do not read the machine by default.** No file or URL is read for an attachment
   but through `fromPath` and `fromUrl` of `./attachments`, which the application calls.
   `fromUrl` checks every URL, redirects included, with `allowUrl`; it refuses a redirect from
@@ -97,7 +105,10 @@ are next. The principles all of it is designed around:
   Mustache.
 - **The audit holds no recipient.** An event names its message by `correlationId`, with the
   hashes of its job and message; the text of an error in it has its addresses and phone numbers
-  redacted.
+  redacted. The hash of a message of a channel is an HMAC under a key derived from the signing
+  key, absent without one, as a SHA-256 of a short SMS would give back its code. The id a provider
+  gives a message (Telegram's names its chat) is kept by the audit, which matches it to the
+  events of the provider, and redacted in logs and spans.
 - **The audit log can forget a person** (planned). Recipients are stored as a keyed hash and an
   encrypted block whose key can be destroyed, so a request to erase someone's data does not require
   editing an append-only log.
