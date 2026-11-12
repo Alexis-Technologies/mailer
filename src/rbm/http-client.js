@@ -74,6 +74,7 @@ const createRbmClient = (config) => {
   const client = createApiClient(
     { ...config, fetch },
     {
+      refreshesToken: true,
       id: 'rbm',
       label: 'RBM',
       authorize: async (headers, { signal }) => {

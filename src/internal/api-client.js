@@ -152,7 +152,8 @@ const unsentOf = (provider, error) =>
  * `Retry-After`.  A provider with errors of its own replaces any of:
  * `read(response, text, attempt)`, the result of a 2xx, which a request may
  * replace too; `reject(response, text, attempt)`, the error of another
- * answer, `text` undefined when it could not be read; `timeoutError()`;
+ * answer, `text` undefined when it could not be read; `refreshesToken`, a 401
+ * sent once more, as it dropped the token; `timeoutError()`;
  * `finalError(error, attempts)`; `acceptedError(error, attempts)`, a failure
  * after a 2xx; `isAnswer(error)`, a refusal in a 2xx; `isAmbiguousStatus(status)`,
  * an answer after which the request may have been taken, held as of unknown
@@ -242,8 +243,13 @@ const createApiClient = (config, provider) => {
       read: async (response, attempt) => readAnswer(response, await readText(response), attempt),
       reject: async (response, attempt) => reject(response, await readErrorText(response), attempt),
       // What the provider says of an error is retried as it says, a 420 of
-      // SparkPost's spent limit among them; the status says the rest.
-      isRetryable: retryableOf,
+      // SparkPost's spent limit among them; the status says the rest. A
+      // provider whose token a 401 drops sends its first refusal once more,
+      // with a new token: a token revoked or rotated costs no send.
+      isRetryable:
+        provider.refreshesToken === true
+          ? (error) => (error.statusCode === 401 && error.attempts === 1) || retryableOf(error)
+          : retryableOf,
       createTimeoutError: timeoutError,
       finalError,
       wrapAccepted: provider.acceptedError,

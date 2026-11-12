@@ -80,6 +80,7 @@ const createGoogleChatClient = (config) => {
   const app = createApiClient(
     { ...config, fetch },
     {
+      refreshesToken: auth !== undefined,
       id: 'google-chat',
       label: 'Google Chat',
       authorize: async (headers, { signal }) => {

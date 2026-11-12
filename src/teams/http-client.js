@@ -122,6 +122,7 @@ const createTeamsClient = (config) => {
   const bot = createApiClient(
     { ...config, fetch },
     {
+      refreshesToken: auth !== undefined,
       id: 'teams',
       label: 'Teams',
       authorize: async (headers, { signal }) => {

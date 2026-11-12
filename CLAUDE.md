@@ -1237,6 +1237,11 @@ that fails without it; C for the channels):
   lived no longer than the five minutes before its end it is made anew in was made anew at
   every call. A refusal that says it is not retryable is given to the calls of the 30 seconds
   after it, unasked, and a short token is made anew from the middle of its life.
+- C66. fcm, rbm, google-chat, teams: a token a 401 refused was dropped, so that the next send
+  asked for another, but the send that met the 401 failed as `auth`, so a token revoked or
+  rotated cost a push or a message; only APNs sent again with a new one. A provider whose
+  token a 401 drops (`refreshesToken` of the shared client) sends its first 401 once more,
+  with a new token; a second is the credentials' own and fails.
 
 ## Repository layout
 

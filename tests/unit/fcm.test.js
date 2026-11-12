@@ -338,3 +338,24 @@ test('FCM: a push over the 4096 bytes of FCM is refused before any request', asy
   const fits = await transport().send(push({ data: { blob: 'x'.repeat(3900) } }));
   assert.strictEqual(fits.successful, true);
 });
+
+test('FCM: a token refused with a 401 is made anew and the push sent once more', async (t) => {
+  // Before: the token was dropped, but the push that met the 401 failed, so a
+  // token revoked or rotated cost a send.
+  const { tokens, sends } = stub(t, (_request, index) =>
+    index === 1 ? json({ error: { code: 401, status: 'UNAUTHENTICATED' } }, 401) : named(),
+  );
+  const receipt = await transport({ retries: 1 }).send(push());
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(tokens.length, 2, 'a new token for the second attempt');
+  const sent = sends();
+  assert.strictEqual(sent.length, 2);
+  assert.notStrictEqual(sent[0].headers.get('authorization'), sent[1].headers.get('authorization'));
+  // A second 401 in a row is the credentials' own: not sent a third time.
+  const refused = stub(t, (request) =>
+    request.url === SEND_URL ? json({ error: { code: 401 } }, 401) : named(),
+  );
+  const twice = await transport({ retries: 3 }).send(push());
+  assert.strictEqual(twice.errors[0].category, 'auth');
+  assert.strictEqual(refused.sends().length, 2);
+});

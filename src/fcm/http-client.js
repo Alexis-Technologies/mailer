@@ -103,6 +103,7 @@ const createFcmClient = (config) => {
   const client = createApiClient(
     { ...config, fetch },
     {
+      refreshesToken: true,
       id: 'fcm',
       label: 'FCM',
       authorize: async (headers, { signal }) => {
