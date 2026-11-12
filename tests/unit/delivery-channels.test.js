@@ -380,3 +380,28 @@ test('Delivery of the channels: the error of an API of phone numbers keeps no an
     }
   }
 });
+
+test('Delivery of the channels: the log of a retry names no number written without its +', async () => {
+  // Before: the log of a retry was redacted of addresses and numbers with a +
+  // alone, and the answers of the APIs of SMS name the number without it.
+  for (const provider of channelProviders) {
+    if (provider.message().channel !== 'sms' || provider.keyed === true) continue;
+    const records = [];
+    const logger = { debug: (properties) => records.push(properties) };
+    let requests = 0;
+    const fetch = async () =>
+      ++requests === 1
+        ? Response.json(
+            { message: 'Busy for 380671234567', Message: 'Busy for 380671234567' },
+            { status: 503 },
+          )
+        : provider.ok();
+    const receipt = await provider.create({ fetch, logger }).send(provider.message());
+    assert.strictEqual(receipt.successful, true, provider.name);
+    assert.ok(records.length > 0, provider.name);
+    assert.ok(
+      !JSON.stringify(records).includes('380671234567'),
+      `${provider.name} ${JSON.stringify(records)}`,
+    );
+  }
+});

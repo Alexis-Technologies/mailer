@@ -50,6 +50,10 @@ const isRetryableFailure = (error) =>
 // The longest Retry-After a send waits for between two attempts; beyond it the
 // failure is thrown with its delay, for the caller or a queue to schedule.
 const MAX_RETRY_AFTER_WAIT_MS = 30_000;
+// A number of 7 to 15 digits with no + before it, which this layer, knowing no
+// message, cannot tell from the recipient a provider wrote so (a number of an
+// SMS without its +, a chat id of Telegram): redacted in the log of a retry.
+const BARE_NUMBER = /(?<![\d+])\d{7,15}(?!\d)/g;
 
 // The deadline of one attempt, combined with the caller's signal.  A timeout
 // of 0 or Infinity sets none: setTimeout() would fire at once for either.
@@ -204,7 +208,7 @@ const requestWithRetry = async (request) => {
         attempt: attempt + 1,
         delayMilliseconds: waitMs,
         statusCode: failure.statusCode,
-        error: redactRecipients(failure.message),
+        error: redactRecipients(failure.message).replace(BARE_NUMBER, '[REDACTED]'),
       }),
       'Retrying request',
     );

@@ -1224,6 +1224,10 @@ that fails without it; C for the channels):
   an `error` of an object read `[object Object]`. The two near copies are one
   (`internal/token-failure.js`), the reason bounded to 300 characters, an object written as
   JSON.
+- C63. http: the log of a retry was redacted of addresses and of numbers with a `+` alone, and
+  the answers of the APIs of SMS name the number without it (C2), which the logger of the
+  transport wrote at `debug`. The request layer knows no message, so it also redacts a bare
+  number of 7 to 15 digits there; `onRetry` is given the error as it is.
 
 ## Repository layout
 
