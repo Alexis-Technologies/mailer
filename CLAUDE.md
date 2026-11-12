@@ -1228,6 +1228,10 @@ that fails without it; C for the channels):
   the answers of the APIs of SMS name the number without it (C2), which the logger of the
   transport wrote at `debug`. The request layer knows no message, so it also redacts a bare
   number of 7 to 15 digits there; `onRetry` is given the error as it is.
+- C64. webpush: the check that the endpoint resolves to a public address ran in the converter,
+  outside the deadline of the request, and `dns.lookup` takes no signal, so a resolver that
+  never answered held a send past its timeout and its caller's abort. The check ends with the
+  caller's signal and the timeout of the transport.
 
 ## Repository layout
 

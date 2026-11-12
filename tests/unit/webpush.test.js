@@ -319,3 +319,22 @@ test('Web Push: no key is printed, whatever ECE_KEYLOG says', async (t) => {
   await transport().send(push());
   assert.deepStrictEqual(written, []);
 });
+
+test('Web Push: a lookup of the endpoint that hangs ends with the timeout and the caller', async (t) => {
+  // Before: the check of the endpoint ran outside the deadline of the request,
+  // so a resolver that never answered held a send past its timeout and its abort.
+  const requests = stubFetch(t, () => new Response(null, { status: 201 }));
+  const hanging = transport({ lookup: () => new Promise(() => {}), timeout: 30 });
+  const receipt = await hanging.send(push());
+  assert.strictEqual(receipt.successful, false);
+  assert.strictEqual(receipt.deliveryUnknown, undefined);
+  assert.strictEqual(receipt.retryable, true);
+  const caller = new AbortController();
+  const reason = new Error('stop');
+  const pending = transport({ lookup: () => new Promise(() => {}), timeout: 0 }).send(push(), {
+    signal: caller.signal,
+  });
+  caller.abort(reason);
+  await assert.rejects(pending, (error) => error === reason);
+  assert.strictEqual(requests.length, 0);
+});

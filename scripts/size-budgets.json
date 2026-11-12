@@ -61,7 +61,7 @@
   "./slack": 9.5,
   "./discord": 9.5,
   "./fcm": 10.5,
-  "./webpush": 9.5,
+  "./webpush": 10,
   "./meta": 10,
   "./twilio": 9,
   "./aws-sms": 9.5,

@@ -9,6 +9,8 @@ const { lookup: dnsLookup } = require('node:dns').promises;
 const { InvalidMessageError } = require('../internal/channel/failure.js');
 const { resolvesPublic } = require('../internal/public-url.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { timerMs } = require('../internal/sleep.js');
+const { untilAborted } = require('../internal/until-aborted.js');
 const { MAX_PLAINTEXT, encryptPush } = require('./encryption.js');
 
 // A Topic of RFC 8030 §5.4: 32 characters of base64url at most.
@@ -64,6 +66,18 @@ const isAllowed = async (endpoint, config) => {
   return endpoint.protocol === 'https:' && resolvesPublic(endpoint, config.lookup ?? dnsLookup);
 };
 
+// The check of an endpoint, which may look its name up, ends with the
+// caller's signal and the timeout of the transport, as a request does: a
+// resolver that hangs does not hold a send.
+const checkSignalOf = (signal, timeoutMs) => {
+  const signals = [];
+  if (signal !== undefined) signals.push(signal);
+  if (timeoutMs > 0 && Number.isFinite(timeoutMs)) {
+    signals.push(AbortSignal.timeout(timerMs(timeoutMs)));
+  }
+  return signals.length > 0 ? AbortSignal.any(signals) : undefined;
+};
+
 /**
  * The request of a push: its endpoint, its encrypted body and its headers.
  *
@@ -74,7 +88,7 @@ const isAllowed = async (endpoint, config) => {
  * @throws {RefusalError} If it holds what a push cannot carry.
  * @internal
  */
-const convertMessage = async (message, config) => {
+const convertMessage = async (message, config, signal) => {
   if (message.channel !== 'push') {
     throw unsupported(`the transport sends pushes, not messages of ${message.channel ?? 'email'}.`);
   }
@@ -85,7 +99,8 @@ const convertMessage = async (message, config) => {
     );
   }
   const endpoint = new URL(to.endpoint);
-  if (!(await isAllowed(endpoint, config))) {
+  const allowed = untilAborted(isAllowed(endpoint, config), checkSignalOf(signal, config.timeout));
+  if (!(await allowed)) {
     throw badSubscription('the endpoint of the subscription is not a public HTTPS URL.');
   }
   const subscription = {
