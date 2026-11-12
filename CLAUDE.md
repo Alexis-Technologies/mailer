@@ -1190,6 +1190,11 @@ that fails without it; C for the channels):
   for FCM to refuse with a 400 of `MessageTooBig`. It is refused before any request. Infobip,
   AlphaSMS and SMS Club document no limit of the text of an SMS, so none is guessed; their
   live runs are to find it.
+- C56. channels (residual of C25): the error of an answer the shared client read kept its JSON
+  whole as `providerDetails`, and the answers of the APIs of phone numbers name the number they
+  refused (Twilio's 21211, the `Message` of AWS) without its `+`, which redaction finds in a
+  text but not in an object a receipt keeps. A receipt of SMS, RCS or WhatsApp keeps the status
+  and code of an error, not the answer.
 
 ## Repository layout
 

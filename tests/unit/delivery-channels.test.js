@@ -354,3 +354,29 @@ test('Delivery of the channels: a provider with a key sends a lost request again
     assert.strictEqual(bodies[0], bodies[1], provider.name);
   }
 });
+
+test('Delivery of the channels: the error of an API of phone numbers keeps no answer naming the number', async () => {
+  // Before: the JSON of the answer, whose message names the number refused
+  // (Twilio's 21211, the Message of AWS), was kept whole in providerDetails.
+  for (const provider of channelProviders) {
+    if (!['sms', 'rcs', 'whatsapp'].includes(provider.message().channel)) continue;
+    const fetch = async () =>
+      Response.json(
+        {
+          code: 21211,
+          message: "The 'To' number 380671234567 is not a valid phone number.",
+          Message: 'Invalid destination 380671234567',
+          text: 'Invalid destination 380671234567',
+        },
+        { status: 400 },
+      );
+    const receipt = await provider.create({ fetch }).send(provider.message());
+    assert.strictEqual(receipt.successful, false, provider.name);
+    for (const receiptError of receipt.errors) {
+      assert.ok(
+        !JSON.stringify(receiptError.providerDetails ?? {}).includes('380671234567'),
+        provider.name,
+      );
+    }
+  }
+});

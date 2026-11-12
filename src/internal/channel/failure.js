@@ -9,6 +9,26 @@ const { createFailedReceipt } = require('../../core/receipt.js');
 const { ProviderApiError, providerFailure } = require('../api-client.js');
 const { deliveryUnknownReasonOf, isDeliveryUnknown } = require('../delivery-unknown.js');
 
+// The answer of an error of an API of phone numbers names the number it
+// refused (the message of Twilio's 21211, the Message of AWS), which redaction
+// finds in a text but not in an object a receipt keeps whole: an error of a
+// receipt of these keeps its status and code, not the answer.
+const PHONE_CHANNELS = new Set(['sms', 'rcs', 'whatsapp']);
+
+const withoutDetails = (errors) => {
+  const kept = [];
+  for (const receiptError of errors) {
+    if (receiptError.providerDetails === undefined) {
+      kept.push(receiptError);
+      continue;
+    }
+    const copy = { ...receiptError };
+    delete copy.providerDetails;
+    kept.push(copy);
+  }
+  return kept;
+};
+
 /**
  * The refusal of a converter of a message the provider's API would refuse
  * whatever transport sent it: a TypeError that only a converter throws.
@@ -51,7 +71,10 @@ const channelFailure = (provider, channel, error) => {
       attempts: Number.isInteger(error.attempts) ? error.attempts : undefined,
     });
   }
-  return { ...providerFailure(provider, error), channel };
+  const receipt = providerFailure(provider, error);
+  return PHONE_CHANNELS.has(channel)
+    ? { ...receipt, errors: withoutDetails(receipt.errors), channel }
+    : { ...receipt, channel };
 };
 
 module.exports = { InvalidMessageError, channelFailure };
