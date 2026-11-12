@@ -369,7 +369,7 @@
     "docs:preview": "vitepress preview docs",
     "docs:comparison": "node scripts/comparison.js",
     "prepublishOnly": "pnpm run lint && pnpm run format:check && pnpm run test:coverage && pnpm run test:runtime && pnpm run test:types && pnpm run check:dts && pnpm size --check && pnpm run check:pack",
-    "release": "pnpm publish"
+    "release": "node scripts/check-live-runs.js && pnpm publish"
   },
   "tsd": {
     "directory": "tests/types"

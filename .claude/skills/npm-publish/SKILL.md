@@ -213,8 +213,11 @@ and `pnpm test:mailpit` against the local Mailpit. A release that changed a prov
 its error handling should have run that provider's suite. From 2.0, a new provider ships only
 after a live run of its suite on a real account: one that has not run leaves the exports map,
 the docs and the CHANGELOG of the release (it ships in a later minor), and a source in
-`LICENSE` that no shipped file names leaves it. Report which suites ran and which were
-skipped.
+`LICENSE` that no shipped file names leaves it (`attribution.test.js` fails on one). Record each
+run that passed in `tests/e2e/live-runs.json`; `pnpm run release` fails while a provider of a
+channel of the exports map has none (`scripts/check-live-runs.js`), and
+`node scripts/provider-places.js <subpath>` lists where one to take out is. Report which suites
+ran and which were skipped.
 
 The release is published by hand (`pnpm run release`), after the merge into `main` and the tag
 on the commit of `main`; no workflow publishes.
@@ -237,7 +240,7 @@ Then list remaining manual steps:
 1. `git add -A && git commit -m "chore(release): vX.Y.Z"` (or ask the user if they want you to commit)
 2. `git tag vX.Y.Z`
 3. `git push && git push --tags`
-4. `pnpm run release` (runs `pnpm publish`; `prepublishOnly` re-runs the gates). For prereleases: `pnpm publish --tag <label>`
+4. `pnpm run release` (checks the live runs, then runs `pnpm publish`; `prepublishOnly` re-runs the gates). For prereleases: `pnpm publish --tag <label>`
 
 Do NOT run `pnpm publish`, `pnpm run release` or `git push` automatically — always let the user do it or explicitly confirm.
 

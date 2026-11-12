@@ -1317,6 +1317,8 @@ scripts/
   size-budgets.json the min+gzip budget of each entry in KB (the root, and each subpath on top)
   check-dts.js      tsc --strict over the d.ts of every entry of the exports map
   check-pack.js     the tarball holds every file of the exports map and nothing outside `files`
+  check-live-runs.js  every provider of a channel of the exports map has a live run recorded
+  provider-places.js  where a provider is, to take out of a release that leaves it
   comparison.js     renders each docs/comparison*.json into its page of docs/guide/
 bench/              zero-dependency ops/sec harness; baseline.json is a snapshot for --compare
 docs/               VitePress site (mailerat.vercel.app), not published
@@ -1805,9 +1807,14 @@ it. The `npm-publish` skill walks through it step by step:
    `pnpm test:mailpit` and the `pnpm test:e2e` suites of the providers that changed.
    **From 2.0 a new provider is released only after a live run** of its `tests/e2e` suite on a
    real account: one without it leaves the exports map, the docs and the CHANGELOG of the
-   release, and ships in a later minor once it has run (adding a provider is additive). A source
-   in `LICENSE` that no shipped file names leaves it before the release.
+   release, and ships in a later minor once it has run (adding a provider is additive). A run
+   that passed is recorded in `tests/e2e/live-runs.json` (`{ "<subpath>": { result: 'pass',
+   date, version, commit } }`), and `node scripts/provider-places.js <subpath>` lists where a
+   provider to take out is. A source in `LICENSE` that no shipped file names leaves it before the
+   release (`attribution.test.js` fails on one).
 4. Commit, merge into `main` (a squash merge, as #2 and #3), then tag `vX.Y.Z` on the commit of
    `main`, never on the feature branch.
-5. Run `pnpm run release` (`pnpm publish`, gated by `prepublishOnly`, which includes the size
-   gate and the tarball check; `publishConfig.access` is public).
+5. Run `pnpm run release` (`scripts/check-live-runs.js`, which fails while a provider of a
+   channel of the exports map has no live run recorded, then `pnpm publish`, gated by
+   `prepublishOnly`, which includes the size gate and the tarball check; `publishConfig.access`
+   is public).

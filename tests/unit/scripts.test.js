@@ -181,3 +181,38 @@ test('Scripts: test:stores fails rather than skip when a store is not given', ()
   assert.strictEqual(half.status, 1);
   assert.match(half.stderr, /needs BULLMQ_REDIS_URL:/);
 });
+
+test('Scripts: check-live-runs holds every provider of a channel to a live run', () => {
+  // Before: the rule that a provider is released only after a live run was
+  // kept in memory, and nothing told which had run.
+  const { channelProvidersOf, missingRuns } = require('../../scripts/check-live-runs.js');
+  const providers = channelProvidersOf(pkg, ROOT);
+  assert.ok(providers.includes('telegram'));
+  assert.ok(providers.includes('apns'));
+  assert.ok(!providers.includes('ses'));
+  assert.ok(!providers.includes('queue'));
+  assert.deepStrictEqual(missingRuns(['a', 'b', 'c'], { a: { result: 'pass' }, b: {} }), [
+    'b',
+    'c',
+  ]);
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mailer-live-'));
+  const file = path.join(directory, 'live-runs.json');
+  fs.writeFileSync(file, '{}');
+  const missing = run('scripts/check-live-runs.js', ['--file', file]);
+  assert.strictEqual(missing.status, 1);
+  assert.match(missing.stderr, /telegram/);
+  const all = {};
+  for (const provider of providers) all[provider] = { result: 'pass' };
+  fs.writeFileSync(file, JSON.stringify(all));
+  assert.strictEqual(run('scripts/check-live-runs.js', ['--file', file]).status, 0);
+  fs.rmSync(directory, { recursive: true });
+});
+
+test('Scripts: provider-places lists where a provider is, changing nothing', () => {
+  const { placesOf } = require('../../scripts/provider-places.js');
+  const { places, files } = placesOf('smsclub', ROOT);
+  assert.ok(files.includes('src/smsclub'));
+  assert.ok(places.some((place) => place.file === 'package.json'));
+  assert.ok(places.some((place) => place.file === 'scripts/size-budgets.json'));
+  assert.ok(places.some((place) => place.file === 'tests/helpers/delivery/channels.js'));
+});
