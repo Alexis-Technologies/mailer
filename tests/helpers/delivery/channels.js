@@ -159,6 +159,8 @@ const channelProviders = [
   },
   {
     name: 'FCM',
+    // FCM asks for a 500 and a 503 to be sent again (FB1); a push twice is cheap.
+    retries5xx: true,
     create: (extra = {}) =>
       new FcmTransport({
         retries: 1,
@@ -196,6 +198,8 @@ const channelProviders = [
   },
   {
     name: 'Web Push',
+    // A push service's 5xx is sent again, as FCM's; a push twice is cheap.
+    retries5xx: true,
     create: (extra = {}) =>
       new WebPushTransport({
         retries: 1,
@@ -592,6 +596,9 @@ const channelProviders = [
   },
   {
     name: 'SMS Club',
+    // A second SMS within two minutes is refused with 453 (C16), so a 5xx is
+    // sent again without sending it twice.
+    retries5xx: true,
     create: (extra) =>
       new SmsClubTransport({ retries: 1, ...extra, token: 'SmsClubSecret', sender: 'MyBrand' }),
     message: () =>

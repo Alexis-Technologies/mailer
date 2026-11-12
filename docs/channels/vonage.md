@@ -59,8 +59,8 @@ as the recipient may hold it.
 | 8, 9, 11, 15, 23, 29 (an account barred, a quota, a sender, a trial) | `configuration` |
 | 2, 3, 12, 22, another | `validation` |
 
-The SMS API takes no idempotency key: a send whose answer was lost is never
-retried, and its receipt is `deliveryUnknown`.
+The SMS API takes no idempotency key: a send whose answer was lost, or was a 500
+or a 502, is never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` reads the balance of the account, with Basic credentials rather
 than the secret in the query of a URL.

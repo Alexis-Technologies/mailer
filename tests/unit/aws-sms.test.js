@@ -138,7 +138,10 @@ test('AWS SMS: an error is told by its reason, then its type', async (t) => {
       false,
     ],
     [awsError('ThrottlingException', undefined, 400), 'rate-limit', true],
-    [awsError('InternalServerException', undefined, 500), 'server-error', true],
+    // Changed after C44: a 500 may come once the SMS was taken, which nothing
+    // dedupes, so it is of unknown delivery and not sent again; a 503 is.
+    [awsError('InternalServerException', undefined, 500), 'server-error', false],
+    [awsError('ServiceUnavailableException', undefined, 503), 'server-error', true],
   ];
   for (const [answer, category, retryable] of cases) {
     t.mock.restoreAll();

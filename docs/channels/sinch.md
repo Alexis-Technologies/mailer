@@ -61,10 +61,11 @@ none in its answer.
 | 401                                        | `auth`                  |
 | 403, 404, `unprovisioned_region`           | `configuration`         |
 | 429                                        | `rate-limit`, retried   |
-| 5xx                                        | `server-error`, retried |
+| 500, 502                                   | of unknown delivery     |
+| 503, another 5xx                           | `server-error`, retried |
 | another 400                                | `validation`            |
 
-The batches API takes no idempotency key: a send whose answer was lost is
-never retried, and its receipt is `deliveryUnknown`.
+The batches API takes no idempotency key: a send whose answer was lost, or was a
+500 or a 502, is never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` lists one batch of the plan, which sends nothing.

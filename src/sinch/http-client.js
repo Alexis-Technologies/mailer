@@ -52,6 +52,9 @@ const createSinchClient = (config) => {
     authorize: (headers) => headers.set('Authorization', `Bearer ${config.apiToken}`),
     messageOf: (json) => (typeof json?.text === 'string' ? json.text : undefined),
     classify: classifySinch,
+    // A 500 or a 502 may come once the SMS was taken, which no key dedupes
+    // (C44): of unknown delivery; a 503 took nothing and is sent again.
+    isAmbiguousStatus: (status) => status === 500 || status === 502,
   });
   const batchesUrl = `${config.baseUrl}/xms/v1/${encodeURIComponent(config.servicePlanId)}/batches`;
   return {

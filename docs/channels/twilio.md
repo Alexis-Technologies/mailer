@@ -74,7 +74,7 @@ receipt says `state: 'accepted'`, its id the sid of the message, and its
 | 21602, 21617, 21620, 21623               | `validation`           |
 | 20429, 14107, 30022                      | `rate-limit`, retried  |
 
-The Messages API takes no idempotency key: a send whose answer was lost is
-never retried, and its receipt is `deliveryUnknown`.
+The Messages API takes no idempotency key: a send whose answer was lost, or was
+a 500 or a 502, is never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` reads the account.

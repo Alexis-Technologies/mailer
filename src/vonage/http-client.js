@@ -62,6 +62,9 @@ const createVonageClient = (config) => {
     },
     messageOf: (json) =>
       typeof json?.['error-text'] === 'string' ? json['error-text'] : undefined,
+    // A 500 or a 502 may come once the SMS was taken, which no key dedupes
+    // (C44): of unknown delivery; a 503 took nothing and is sent again.
+    isAmbiguousStatus: (status) => status === 500 || status === 502,
   });
   return {
     ...client,

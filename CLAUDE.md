@@ -1130,6 +1130,13 @@ that fails without it; C for the channels):
   a warning each time, instead of failing as `signature_invalid`. The signature is verified
   first, as it reads no field by its schema; the fields it leaves out (`UNHASHED`) are fixed,
   so that a job of a later version still verifies and waits for its worker.
+- C44. twilio, sinch, infobip, vonage, aws-sms, alphasms, viber: a 500, a 502 and a 503 were
+  retried, as for an email provider (bug 39), though an SMS API may answer a 500 once it took
+  the SMS and none of these dedupes a request, so an SMS went twice, and up to twenty times
+  under the attempts of a queue. A 500 and a 502 are of unknown delivery, not retried; a 503,
+  which took nothing, is. Viber, an API of chats, makes every 5xx of unknown delivery, as C17
+  has it for Meta. FCM and Web Push keep retrying 5xx (FB1), and SMS Club too, its 453 telling
+  a second SMS within two minutes (C16).
 
 ## Repository layout
 

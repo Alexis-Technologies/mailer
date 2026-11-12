@@ -67,8 +67,8 @@ when the answer has none).
 
 An error answer is told by its status (401 `auth`, 403 `configuration`, 429
 `rate-limit`), its `errorCode` the code of the receipt. The SMS API takes no
-idempotency key: a send whose answer was lost is never retried, and its
-receipt is `deliveryUnknown`.
+idempotency key: a send whose answer was lost, or was a 500 or a 502, is never
+retried, and its receipt is `deliveryUnknown`.
 
 `verify()` reads the balance of the account; a 403, which a key whose scopes
 leave out the balance is answered, verifies it too.

@@ -124,7 +124,10 @@ test('Sinch: an error is told by its code, then its status', async (t) => {
     [json({ code: 'forbidden', text: 'x' }, 403), 'configuration', false, 'forbidden'],
     [json({ text: 'not found' }, 404), 'configuration', false, 'http_404'],
     [json({ text: 'slow down' }, 429, { 'retry-after': '1' }), 'rate-limit', true, 'http_429'],
-    [json({ text: 'oops' }, 500), 'server-error', true, 'http_500'],
+    // Changed after C44: a 500 may come once the SMS was taken, which nothing
+    // dedupes, so it is of unknown delivery and not sent again; a 503 is.
+    [json({ text: 'oops' }, 500), 'server-error', false, 'http_500'],
+    [json({ text: 'later' }, 503), 'server-error', true, 'http_503'],
     [json({ text: 'unprocessable' }, 422), 'validation', false, 'http_422'],
   ];
   for (const [response, category, retryable, code] of cases) {

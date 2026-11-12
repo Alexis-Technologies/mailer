@@ -61,8 +61,8 @@ the reading come to the webhook.
 | 7, 8, 9, 10, 15, 21, 23, 24 (the account blocked, suspended or out of balance) | `configuration`                    |
 | another                                                                        | `rejected`                         |
 
-The API takes no idempotency key: a send whose answer was lost is never
-retried, and its receipt is `deliveryUnknown`.
+The API takes no idempotency key: a send whose answer was lost, or was a 5xx, is
+never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` reads the account of the bot, whose refusal is a status in a 200
 too.

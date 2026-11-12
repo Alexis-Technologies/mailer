@@ -62,11 +62,12 @@ count of the parts, so its `segments` are those `countSegments` of
 | `DESTINATION_PHONE_NUMBER_NOT_VERIFIED` (the sandbox), `DESTINATION_COUNTRY_BLOCKED`, `MONTHLY_SPEND_LIMIT_REACHED_FOR_TEXT`, `ResourceNotFoundException` | `configuration` |
 | `AccessDeniedException`, `UnrecognizedClientException`, `InvalidSignatureException` | `auth` |
 | `ThrottlingException`, `ServiceQuotaExceededException` | `rate-limit`, retried |
-| `InternalServerException` | `server-error`, retried |
+| `InternalServerException`, a 500 or a 502 | of unknown delivery |
+| `ServiceUnavailableException`, a 503 | `server-error`, retried |
 | another `ValidationException` | `validation` |
 
-`SendTextMessage` takes no idempotency key: a send whose answer was lost is
-never retried, and its receipt is `deliveryUnknown`.
+`SendTextMessage` takes no idempotency key: a send whose answer was lost, or was
+a 500 or a 502, is never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` describes the configuration sets of the account, which sends
 nothing; a key that may only send, refused that read, is verified.

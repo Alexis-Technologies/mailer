@@ -77,6 +77,45 @@ test('Delivery of the channels: a send that times out is not sent again without 
   }
 });
 
+// A 500 or a 502 may come once the provider took the message: without a key
+// it is not sent again, which would send it twice, but by a provider whose
+// retries its API dedupes or makes harmless (`retries5xx`).
+test('Delivery of the channels: a 500 or a 502 is not sent again without a key', async () => {
+  for (const provider of channelProviders) {
+    for (const status of [500, 502]) {
+      let requests = 0;
+      const fetch = async () => {
+        requests++;
+        return requests === 1 ? new Response('Internal error', { status }) : provider.ok();
+      };
+      const receipt = await provider.create({ fetch }).send(provider.message());
+      const resent = provider.keyed === true || provider.retries5xx === true;
+      const name = `${provider.name} ${status}`;
+      assert.strictEqual(requests, resent ? 2 : 1, name);
+      assert.strictEqual(receipt.successful, resent, name);
+      if (!resent) {
+        assert.strictEqual(receipt.deliveryUnknown, true, name);
+        assert.strictEqual(receipt.retryable, false, name);
+      }
+    }
+  }
+});
+
+// A 503 of an SMS API says it took nothing: it is sent again.
+test('Delivery of the channels: a 503 of an SMS API is sent again', async () => {
+  for (const provider of channelProviders) {
+    if (provider.message().channel !== 'sms' || provider.keyed === true) continue;
+    let requests = 0;
+    const fetch = async () => {
+      requests++;
+      return requests === 1 ? new Response('Unavailable', { status: 503 }) : provider.ok();
+    };
+    const receipt = await provider.create({ fetch }).send(provider.message());
+    assert.strictEqual(requests, 2, provider.name);
+    assert.strictEqual(receipt.successful, true, provider.name);
+  }
+});
+
 test('Delivery of the channels: the wait a provider asks for is read, and a long one returned', async () => {
   for (const provider of channelProviders) {
     let requests = 0;

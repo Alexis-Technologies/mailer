@@ -49,7 +49,7 @@ message; as its errors carry no code, their words tell the category:
 of one that went says `state: 'accepted'`, the `msg_id` its id and the
 `parts` its segments.
 
-The API takes no idempotency key: a send whose answer was lost is never
-retried, and its receipt is `deliveryUnknown`.
+The API takes no idempotency key: a send whose answer was lost, or was a 500 or
+a 502, is never retried, and its receipt is `deliveryUnknown`.
 
 `verify()` reads the balance of the account, whose refusal is in a 200 too.

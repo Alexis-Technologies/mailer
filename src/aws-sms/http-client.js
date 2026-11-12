@@ -89,6 +89,9 @@ const createAwsSmsClient = (config) => {
       return typeof message === 'string' ? message : undefined;
     },
     classify: classifyAwsSms,
+    // A 500 or a 502 may come once the SMS was taken, which no key dedupes
+    // (C44): of unknown delivery; a 503 took nothing and is sent again.
+    isAmbiguousStatus: (status) => status === 500 || status === 502,
   });
   const call = (action, body, options) =>
     client.request({

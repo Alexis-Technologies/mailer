@@ -69,6 +69,9 @@ const createViberClient = (config) => {
     authorize: (headers) => headers.set('X-Viber-Auth-Token', config.authToken),
     messageOf: (json) =>
       typeof json?.status_message === 'string' ? json.status_message : undefined,
+    // A 5xx may come once the message was posted, as for the other APIs of
+    // chats (C17), and Viber dedupes nothing (C44).
+    isAmbiguousStatus: (status) => status >= 500,
   });
   return {
     ...client,

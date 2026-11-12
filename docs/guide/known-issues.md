@@ -11,6 +11,21 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
   answer to a streamed body so. Requests, and raw messages of a known size up to 4 MiB, go from a
   buffer and are not affected.
 
+## The channels
+
+- A 5xx may come once the provider took the message. Without an idempotency key, a transport
+  does not send the message again after a 5xx; the receipt is of unknown delivery
+  (`deliveryUnknown`). A 503 of an SMS API (Twilio, Vonage, Infobip, Sinch, AWS SMS, AlphaSMS)
+  says that nothing was taken, so the transport sends it again. Three transports send again
+  after any 5xx:
+  - FCM, which asks for its 500 and 503 to be retried;
+  - Web Push;
+  - SMS Club, which refuses the same SMS within two minutes with a 453, so the retry is
+    reported as of unknown delivery instead of going out twice.
+
+  So an FCM or Web Push notification may arrive twice when the push service answered with a
+  5xx after taking it.
+
 ## Deno
 
 - Deno's `fetch` (2.9.6) sends a request again when a reused HTTP/1.1 connection closes before
