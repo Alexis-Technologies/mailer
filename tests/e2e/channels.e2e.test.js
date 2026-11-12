@@ -20,6 +20,8 @@ const PROVIDERS = [
     refused: () => ({ botToken: '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }),
     message: (fields) =>
       createChannelMessage({ channel: 'telegram', to: env.TELEGRAM_CHAT_ID, ...fields }),
+    // A chat no bot is in: refused, nothing sent.
+    invalid: ({ text }) => createChannelMessage({ channel: 'telegram', to: 1, text }),
   },
   {
     name: 'Slack',
@@ -29,6 +31,7 @@ const PROVIDERS = [
     refused: () => ({ botToken: 'xoxb-0000000000-0000000000000-invalid' }),
     message: (fields) =>
       createChannelMessage({ channel: 'slack', to: env.SLACK_CHANNEL, ...fields }),
+    invalid: ({ text }) => createChannelMessage({ channel: 'slack', to: 'C00000000', text }),
   },
   {
     name: 'Slack webhook',
@@ -46,6 +49,7 @@ const PROVIDERS = [
     refused: () => ({ botToken: 'MTAwMDAwMDAwMDAwMDAwMDAw.invalid.invalid' }),
     message: (fields) =>
       createChannelMessage({ channel: 'discord', to: env.DISCORD_CHANNEL_ID, ...fields }),
+    invalid: ({ text }) => createChannelMessage({ channel: 'discord', to: '1', text }),
   },
   {
     name: 'Discord webhook',
@@ -111,6 +115,21 @@ const PROVIDERS = [
       createChannelMessage({ channel: 'messenger', to: env.MESSENGER_PSID, text, buttons }),
   },
   {
+    name: 'Instagram',
+    Transport: require('../../src/meta/index.js').MetaTransport,
+    needs: ['INSTAGRAM_ACCESS_TOKEN', 'INSTAGRAM_ACCOUNT_ID', 'INSTAGRAM_IGSID'],
+    config: () => ({
+      accessToken: env.INSTAGRAM_ACCESS_TOKEN,
+      instagram: { accountId: env.INSTAGRAM_ACCOUNT_ID },
+    }),
+    refused: () => ({
+      accessToken: 'EAAGinvalid',
+      instagram: { accountId: env.INSTAGRAM_ACCOUNT_ID },
+    }),
+    message: ({ text }) =>
+      createChannelMessage({ channel: 'instagram', to: env.INSTAGRAM_IGSID, text }),
+  },
+  {
     name: 'Twilio',
     Transport: require('../../src/twilio/index.js').TwilioTransport,
     needs: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM', 'TWILIO_TO'],
@@ -131,6 +150,45 @@ const PROVIDERS = [
         text,
         media: media?.filter((medium) => medium.url !== undefined),
       }),
+  },
+  {
+    // WhatsApp through Twilio: its sandbox, or a sender it approved.
+    name: 'Twilio WhatsApp',
+    Transport: require('../../src/twilio/index.js').TwilioTransport,
+    needs: [
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_WHATSAPP_FROM',
+      'TWILIO_WHATSAPP_TO',
+    ],
+    config: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: env.TWILIO_AUTH_TOKEN,
+      whatsappFrom: env.TWILIO_WHATSAPP_FROM,
+    }),
+    refused: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: 'invalid',
+      whatsappFrom: env.TWILIO_WHATSAPP_FROM,
+    }),
+    message: ({ text }) =>
+      createChannelMessage({ channel: 'whatsapp', to: env.TWILIO_WHATSAPP_TO, text }),
+  },
+  {
+    name: 'Twilio RCS',
+    Transport: require('../../src/twilio/index.js').TwilioTransport,
+    needs: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_RCS_FROM', 'TWILIO_RCS_TO'],
+    config: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: env.TWILIO_AUTH_TOKEN,
+      rcsFrom: env.TWILIO_RCS_FROM,
+    }),
+    refused: () => ({
+      accountSid: env.TWILIO_ACCOUNT_SID,
+      authToken: 'invalid',
+      rcsFrom: env.TWILIO_RCS_FROM,
+    }),
+    message: ({ text }) => createChannelMessage({ channel: 'rcs', to: env.TWILIO_RCS_TO, text }),
   },
   {
     name: 'AWS SMS',
@@ -368,6 +426,22 @@ const PROVIDERS = [
     message: ({ text }) => createChannelMessage({ channel: 'sms', to: env.ALPHASMS_TO, text }),
   },
   {
+    name: 'TurboSMS Viber',
+    Transport: require('../../src/turbosms/index.js').TurboSmsTransport,
+    needs: ['TURBOSMS_TOKEN', 'TURBOSMS_VIBER_SENDER', 'TURBOSMS_TO'],
+    config: () => ({ token: env.TURBOSMS_TOKEN, viberSender: env.TURBOSMS_VIBER_SENDER }),
+    refused: () => ({ token: 'invalid', viberSender: env.TURBOSMS_VIBER_SENDER }),
+    message: ({ text }) => createChannelMessage({ channel: 'viber', to: env.TURBOSMS_TO, text }),
+  },
+  {
+    name: 'AlphaSMS Viber',
+    Transport: require('../../src/alphasms/index.js').AlphaSmsTransport,
+    needs: ['ALPHASMS_API_KEY', 'ALPHASMS_VIBER_SENDER', 'ALPHASMS_TO'],
+    config: () => ({ apiKey: env.ALPHASMS_API_KEY, viberSender: env.ALPHASMS_VIBER_SENDER }),
+    refused: () => ({ apiKey: 'invalid', viberSender: env.ALPHASMS_VIBER_SENDER }),
+    message: ({ text }) => createChannelMessage({ channel: 'viber', to: env.ALPHASMS_TO, text }),
+  },
+  {
     name: 'SMS Club',
     Transport: require('../../src/smsclub/index.js').SmsClubTransport,
     needs: ['SMSCLUB_TOKEN', 'SMSCLUB_SENDER', 'SMSCLUB_TO'],
@@ -413,13 +487,18 @@ const PROVIDERS = [
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 1000));
 
-const assertSent = (receipt) => {
+// A receipt of a send: its id, the channel of its message, the state the
+// provider took it in, and for an SMS the segments it counted, when it does.
+const assertSent = (receipt, message) => {
   assert.equal(
     receipt.successful,
     true,
     receipt.successful ? undefined : receipt.errorMessages.join(', '),
   );
   assert.ok(receipt.messageId);
+  if (message !== undefined) assert.equal(receipt.channel, message.channel);
+  assert.ok(['accepted', 'sent'].includes(receipt.state), String(receipt.state));
+  if (receipt.segments !== undefined) assert.ok(Number.isInteger(receipt.segments));
 };
 
 for (const provider of PROVIDERS) {
@@ -429,10 +508,9 @@ for (const provider of PROVIDERS) {
 
   test(`E2E ${provider.name}: a text`, { skip }, async () => {
     await pause();
-    const receipt = await new provider.Transport(provider.config()).send(
-      provider.message({ text }),
-    );
-    assertSent(receipt);
+    const message = provider.message({ text });
+    const receipt = await new provider.Transport(provider.config()).send(message);
+    assertSent(receipt, message);
     console.log(`${provider.name} text: ${receipt.messageId}`);
   });
 
@@ -473,11 +551,33 @@ for (const provider of PROVIDERS) {
     for (const receipt of receipts) assertSent(receipt);
   });
 
-  test(`E2E ${provider.name}: verify() accepts the credentials`, { skip }, async () => {
+  test(`E2E ${provider.name}: verify() accepts the credentials`, { skip }, async (t) => {
     const transport = new provider.Transport(provider.config());
-    if (typeof transport.verify !== 'function') return;
+    if (typeof transport.verify !== 'function') {
+      t.skip('no verify(): its credentials are checked by a send alone');
+      return;
+    }
     await transport.verify();
   });
+
+  test(
+    `E2E ${provider.name}: a recipient that is none is refused, not retried`,
+    {
+      skip: skip || (provider.invalid === undefined && 'no recipient known to be none'),
+    },
+    async () => {
+      await pause();
+      const receipt = await new provider.Transport(provider.config()).send(
+        provider.invalid({ text }),
+      );
+      assert.equal(receipt.successful, false);
+      assert.equal(receipt.retryable, false, receipt.errorMessages.join(', '));
+      assert.ok(
+        ['invalid-recipient', 'not-on-channel', 'blocked'].includes(receipt.errors[0].category),
+        receipt.errors[0].category,
+      );
+    },
+  );
 
   test(`E2E ${provider.name}: refused credentials are an auth failure`, { skip }, async () => {
     await pause();
