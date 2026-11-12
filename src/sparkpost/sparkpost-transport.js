@@ -35,6 +35,7 @@ const receiptOf = (json) => {
       provider: 'sparkpost',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   const receipt = { successful: true, messageId, provider: 'sparkpost' };

@@ -32,6 +32,7 @@ const receiptOf = (entry) => {
       provider: 'postmark',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'unreadable-answer',
     });
   }
   if (entry.ErrorCode !== 0 && entry.ErrorCode !== undefined) {

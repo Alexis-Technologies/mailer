@@ -117,6 +117,7 @@ const duplicate = (message) =>
     channel: message.channel,
     category: 'unknown',
     deliveryUnknown: true,
+    deliveryUnknownReason: 'duplicate',
     code: 'turbosms.427',
   });
 
@@ -137,6 +138,7 @@ const receiptOf = (json, message) => {
       channel: message.channel,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'unreadable-answer',
     });
   }
   const [recipient] = Array.isArray(json.response_result) ? json.response_result : [];
@@ -156,6 +158,7 @@ const receiptOf = (json, message) => {
       channel: message.channel,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   const receipt = {

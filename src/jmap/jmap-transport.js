@@ -7,12 +7,16 @@ const { createRawMessagePlan, RawMessageValidationError } = require('../core/raw
 const { deliverRawMessage, rawDiscoveryResult } = require('./raw-delivery.js');
 const { findOnlyResponse, isRecord, rawOperation } = require('./raw-upload.js');
 const { readAttachmentContent } = require('../core/attachment.js');
-const { createFailedReceipt } = require('../core/receipt.js');
+const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
 const { uploadBlob } = require('./blob-uploader.js');
 const { createJmapConfig } = require('./config.js');
 const { JmapApiError } = require('./errors.js');
 const { JmapHttpClient } = require('./http-client.js');
-const { isDeliveryUnknown, markDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const {
+  deliveryUnknownReasonOf,
+  isDeliveryUnknown,
+  markDeliveryUnknown,
+} = require('../internal/delivery-unknown.js');
 const { isUnsentRequestError } = require('../internal/unsent.js');
 const { convertMessage } = require('./message-converter.js');
 const { findMailAccount } = require('./session.js');
@@ -986,7 +990,9 @@ const executeSubmission = async (client, apiUrl, request, signal) => {
     return await client.executeRequest(apiUrl, request, signal);
   } catch (error) {
     const isUnanswered = error instanceof JmapApiError && error.statusCode === undefined;
-    throw isUnanswered && !isUnsentRequestError(error) ? markDeliveryUnknown(error) : error;
+    if (!isUnanswered || isUnsentRequestError(error)) throw error;
+    const isTimeout = classifyReceiptError(error).category === 'timeout';
+    throw markDeliveryUnknown(error, isTimeout ? 'timeout' : 'lost-answer');
   }
 };
 
@@ -1033,6 +1039,7 @@ const createJmapFailure = (message, error, override = {}) => {
       code: override.code,
       retryable: override.retryable,
       deliveryUnknown: isDeliveryUnknown(error),
+      deliveryUnknownReason: deliveryUnknownReasonOf(error),
     });
   }
 
@@ -1043,6 +1050,7 @@ const createJmapFailure = (message, error, override = {}) => {
     code: override.code,
     retryable: override.retryable,
     deliveryUnknown: isDeliveryUnknown(error),
+    deliveryUnknownReason: deliveryUnknownReasonOf(error),
   });
 };
 

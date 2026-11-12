@@ -24,6 +24,7 @@ const receiptOf = (answer) => {
       channel: PROVIDER,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return {

@@ -282,6 +282,21 @@ test('Receipt: an unknown delivery is never retryable, nor are the errors made f
   assert.strictEqual('deliveryUnknown' in createFailedReceipt('Busy', { statusCode: 503 }), false);
 });
 
+test('Receipt: an unknown delivery tells why, a reason of the list and with the flag alone', () => {
+  const lost = createFailedReceipt('Gone.', {
+    deliveryUnknown: true,
+    deliveryUnknownReason: 'timeout',
+  });
+  assert.strictEqual(lost.deliveryUnknownReason, 'timeout');
+  const without = createFailedReceipt('Busy', { deliveryUnknownReason: 'timeout' });
+  assert.strictEqual('deliveryUnknownReason' in without, false);
+  const unknown = createFailedReceipt('Gone.', {
+    deliveryUnknown: true,
+    deliveryUnknownReason: 'cosmic rays',
+  });
+  assert.strictEqual('deliveryUnknownReason' in unknown, false);
+});
+
 test('Receipt: a Retry-After longer than a day is read as a day', () => {
   const now = new Date('2026-10-16T00:00:00Z');
   const dayMs = 24 * 60 * 60 * 1000;

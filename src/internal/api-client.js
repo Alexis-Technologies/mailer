@@ -9,7 +9,7 @@ const {
   parseRetryAfter,
 } = require('../core/receipt.js');
 const { readText } = require('./body.js');
-const { isDeliveryUnknown } = require('./delivery-unknown.js');
+const { deliveryUnknownReasonOf, isDeliveryUnknown } = require('./delivery-unknown.js');
 const { isRetryableFailure, requestWithRetry } = require('./http.js');
 const { isCallerAbort } = require('./abort.js');
 const { certificateFailure, refusalFailure } = require('./refusal.js');
@@ -274,6 +274,7 @@ const providerFailure = (provider, error) => {
     return createFailedReceipt(message, {
       provider,
       deliveryUnknown: isDeliveryUnknown(error),
+      deliveryUnknownReason: deliveryUnknownReasonOf(error),
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
       attempts: error.attempts,
@@ -288,6 +289,7 @@ const providerFailure = (provider, error) => {
     createFailedReceipt(message, {
       provider,
       deliveryUnknown: isDeliveryUnknown(error),
+      deliveryUnknownReason: deliveryUnknownReasonOf(error),
       attempts: typeof error?.attempts === 'number' ? error.attempts : undefined,
       // By the codes along its causes first, then by its words.
       ...categoryOf(error),

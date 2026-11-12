@@ -118,14 +118,27 @@ const startDeadline = (timeoutMs, signal) => {
  * @returns What `read` returns.
  * @internal
  */
+// Why an ambiguous attempt left the delivery unknown: a 2xx that could not be
+// read; a status after which the provider may have taken it, a 5xx, or a 4xx
+// by which it says it took the same message before; no answer before the
+// deadline; or a connection lost after the request went.
+const ambiguousReasonOf = (isAccepted, hasResponse, failure, isExpired) => {
+  if (isAccepted) return 'unreadable-answer';
+  if (hasResponse) return failure.statusCode >= 500 ? 'server-error' : 'duplicate';
+  return isExpired ? 'timeout' : 'lost-answer';
+};
+
 const requestWithRetry = async (request) => {
   const signal = request.signal;
   const wait = request.sleep ?? sleep;
   const isRead = request.isIdempotent === true;
   const hasKey = request.hasIdempotencyKey === true;
   let wasAmbiguous = false;
+  // Why the last ambiguous attempt left the delivery unknown.
+  let ambiguousReason;
   // The last failure, marked when an attempt left the delivery unknown.
-  const settle = (error) => (wasAmbiguous && !isRead ? markDeliveryUnknown(error) : error);
+  const settle = (error) =>
+    wasAmbiguous && !isRead ? markDeliveryUnknown(error, ambiguousReason) : error;
   for (let attempt = 0; ; attempt++) {
     signal?.throwIfAborted();
     const deadline = startDeadline(request.timeoutMs, signal);
@@ -160,9 +173,13 @@ const requestWithRetry = async (request) => {
         : !isUnsentRequestError(failure));
     if (isAmbiguous && !isRead) {
       wasAmbiguous = true;
+      ambiguousReason = ambiguousReasonOf(isAccepted, hasResponse, failure, deadline.isExpired);
       if (!hasKey) {
         const wrapped = isAccepted ? request.wrapAccepted?.(failure, attempt + 1) : undefined;
-        throw markDeliveryUnknown(wrapped ?? request.finalError?.(failure, attempt + 1) ?? failure);
+        throw markDeliveryUnknown(
+          wrapped ?? request.finalError?.(failure, attempt + 1) ?? failure,
+          ambiguousReason,
+        );
       }
     }
     // A certificate refused in the handshake refuses every attempt alike.

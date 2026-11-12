@@ -27,6 +27,7 @@ const failureOf = (error) => {
         provider: 'brevo',
         category: 'unknown',
         deliveryUnknown: true,
+        deliveryUnknownReason: 'duplicate',
         code: 'brevo.duplicate_parameter',
       },
     );

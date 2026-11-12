@@ -8,7 +8,7 @@ const { SesApiError, SesHttpClient } = require('./http-client.js');
 const { convertMessage, convertRawMessage } = require('./message-converter.js');
 const { rawMessageFailure, readRawMessage } = require('../internal/raw.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
-const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
+const { deliveryUnknownReasonOf, isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { chunks } = require('../internal/batch.js');
 const { certificateFailure, refusalFailure } = require('../internal/refusal.js');
 const { verifyByRequest } = require('../internal/verify.js');
@@ -288,6 +288,7 @@ const createSesFailure = (message, error) => {
   if (error instanceof SesApiError) {
     return createFailedReceipt(message, {
       deliveryUnknown: isDeliveryUnknown(error),
+      deliveryUnknownReason: deliveryUnknownReasonOf(error),
       provider: 'ses',
       statusCode: error.statusCode,
       retryAfterMilliseconds: error.retryAfterMilliseconds,
@@ -300,6 +301,7 @@ const createSesFailure = (message, error) => {
   const { category, retryable } = classifyReceiptError(error);
   return createFailedReceipt(message, {
     deliveryUnknown: isDeliveryUnknown(error),
+    deliveryUnknownReason: deliveryUnknownReasonOf(error),
     provider: 'ses',
     category,
     retryable,

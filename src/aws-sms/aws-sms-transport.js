@@ -43,6 +43,7 @@ class AwsSmsTransport extends ProviderTransport {
             channel: 'sms',
             category: 'unknown',
             deliveryUnknown: true,
+            deliveryUnknownReason: 'no-id',
           });
         }
         // AWS gives no count of the segments; they are counted as a carrier does.

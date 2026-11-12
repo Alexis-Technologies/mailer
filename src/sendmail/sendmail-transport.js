@@ -226,6 +226,7 @@ const receiptOf = (result, path, messageId) => {
       provider: 'sendmail',
       category: 'server-error',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'lost-answer',
     });
   }
   if (result.code == null) {

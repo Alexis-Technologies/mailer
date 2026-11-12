@@ -58,6 +58,7 @@ class TeamsTransport extends ProviderTransport {
       return failed('Teams answered the post with neither 1 nor an error.', {
         category: 'unknown',
         deliveryUnknown: true,
+        deliveryUnknownReason: 'unreadable-answer',
       });
     }
     return success(id(), 'sent');
@@ -107,6 +108,7 @@ class TeamsTransport extends ProviderTransport {
           return failed('Teams answered without the id of the activity.', {
             category: 'unknown',
             deliveryUnknown: true,
+            deliveryUnknownReason: 'no-id',
           });
         }
         return success(id, 'sent');

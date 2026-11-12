@@ -811,6 +811,7 @@ const createSmtpFailure = (message, error) => {
       code: 'smtp.delivery-unknown',
       category: classifyReceiptError(error.cause).category,
       deliveryUnknown: true,
+      deliveryUnknownReason: 'lost-answer',
       attempts: 1,
     });
   }

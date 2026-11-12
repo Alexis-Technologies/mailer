@@ -48,6 +48,7 @@ const receiptOf = (json) => {
       channel: PROVIDER,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return { successful: true, messageId, provider: PROVIDER, channel: PROVIDER, state: 'sent' };

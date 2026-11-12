@@ -33,6 +33,7 @@ const receiptOf = (json, channel) => {
       channel,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   // Meta tells of the delivery through its webhooks: the message is taken.

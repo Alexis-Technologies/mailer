@@ -140,6 +140,7 @@ const receiptOf = (json, message) => {
       channel: message.channel,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   const receipt = {

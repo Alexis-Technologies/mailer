@@ -23,6 +23,7 @@ import {
   type Receipt,
   type DeliveryBounce,
   type DeliveryEvent,
+  type DeliveryUnknownReason,
   type DeliveryEventType,
   type ReceiptError,
   type ReceiptErrorCategory,
@@ -187,10 +188,13 @@ const typedReceipt: Receipt<'sendgrid'> = createFailedReceipt('Too many requests
 expectType<'sendgrid' | undefined>(typedReceipt.provider);
 const unknownDelivery = createFailedReceipt('Connection closed after DATA', {
   deliveryUnknown: true,
+  deliveryUnknownReason: 'lost-answer',
 });
 if (!unknownDelivery.successful) {
   expectType<boolean | undefined>(unknownDelivery.deliveryUnknown);
+  expectType<DeliveryUnknownReason | undefined>(unknownDelivery.deliveryUnknownReason);
 }
+expectError(createFailedReceipt('Gone', { deliveryUnknown: true, deliveryUnknownReason: 'rays' }));
 // A message this transport cannot send as it is, which a pool fails over with.
 const unsupported = createFailedReceipt('Postmark takes one tag per message.', {
   provider: 'postmark',

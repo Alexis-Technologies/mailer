@@ -30,6 +30,7 @@ const failureOf = (error) => {
       provider: 'azure',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'duplicate',
       statusCode: error.statusCode,
       attempts: error.attempts,
       code: error.receiptCode,

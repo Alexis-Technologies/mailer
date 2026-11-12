@@ -60,7 +60,11 @@ const receiptOf = (json, config) => {
             code: 'cloudflare.no_recipient_accepted',
             providerDetails: result,
           }
-        : { provider: 'cloudflare', deliveryUnknown: true },
+        : {
+            provider: 'cloudflare',
+            deliveryUnknown: true,
+            deliveryUnknownReason: 'unreadable-answer',
+          },
     );
   }
   const messageId =

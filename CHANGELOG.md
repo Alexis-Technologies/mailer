@@ -303,6 +303,10 @@ worker of 1.2 holds reads the same.
   the queue (`mailer.queue.jobs`, `lag`, `job.duration`, `redeliveries`) carry
   `mailer.channel`, `email` for an email job, the name of a sealed job of a channel, none for a
   job of no known channel.
+- **A receipt of unknown delivery tells why:** `deliveryUnknownReason` is `timeout`,
+  `lost-answer`, `server-error`, `unreadable-answer`, `no-id`, `duplicate` or `in-flight`
+  (`DeliveryUnknownReason`), for every transport of email and of the channels, so a message
+  to reconcile is told from one that most likely went.
 - **`./otel` counts a message of a channel by the state its provider took it in:**
   `mailer.message.messages` carries `mailer.message.state`, `accepted` when its delivery comes in
   the events of the provider, `sent` when none will.

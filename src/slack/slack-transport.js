@@ -46,6 +46,7 @@ const apiReceiptOf = (json) => {
       channel: PROVIDER,
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return sent(`${json.channel}:${json.ts}`);

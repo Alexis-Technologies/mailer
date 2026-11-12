@@ -143,6 +143,7 @@ test('Delivery: a 2xx with an unreadable body is sent once, of unknown delivery'
     assert.strictEqual(requests, expectedRequests(name), name);
     assert.strictEqual(receipt.successful, false, name);
     assert.strictEqual(receipt.deliveryUnknown, true, name);
+    assert.strictEqual(receipt.deliveryUnknownReason, 'unreadable-answer', name);
     assert.strictEqual(receipt.retryable, false, name);
   }
 });
@@ -319,6 +320,7 @@ test('Delivery: a lost request is not sent again without a key; a refused one is
       } else {
         assert.strictEqual(requests, expectedRequests(name), `${name} ${code}`);
         assert.strictEqual(receipt.deliveryUnknown, true, `${name} ${code}`);
+        assert.strictEqual(receipt.deliveryUnknownReason, 'lost-answer', `${name} ${code}`);
       }
     }
   }

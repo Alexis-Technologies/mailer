@@ -73,6 +73,11 @@ const sendConverted = async (message, options, steps) => {
 const sentWith = (provider, messageId, missing) =>
   typeof messageId === 'string' && messageId !== ''
     ? { successful: true, messageId, provider }
-    : createFailedReceipt(missing, { provider, category: 'unknown', deliveryUnknown: true });
+    : createFailedReceipt(missing, {
+        provider,
+        category: 'unknown',
+        deliveryUnknown: true,
+        deliveryUnknownReason: 'no-id',
+      });
 
 module.exports = { checkCredential, mergeBatch, sendConverted, sentWith };

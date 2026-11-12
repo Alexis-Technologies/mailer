@@ -4,7 +4,7 @@
 // refused in the handshake.
 
 const { createFailedReceipt, isCertificateFailure } = require('../core/receipt.js');
-const { isDeliveryUnknown } = require('./delivery-unknown.js');
+const { deliveryUnknownReasonOf, isDeliveryUnknown } = require('./delivery-unknown.js');
 
 /**
  * The refusal of a converter, a RangeError that only a converter throws, so
@@ -49,6 +49,7 @@ const certificateFailure = (provider, message, error) =>
         code: 'configuration',
         retryable: false,
         deliveryUnknown: isDeliveryUnknown(error),
+        deliveryUnknownReason: deliveryUnknownReasonOf(error),
         attempts: Number.isInteger(error.attempts) ? error.attempts : undefined,
       })
     : undefined;

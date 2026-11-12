@@ -201,6 +201,7 @@ class IdempotencyTransport {
         provider: this.id,
         category: 'unknown',
         deliveryUnknown: true,
+        deliveryUnknownReason: 'in-flight',
         code: 'idempotency.in_flight',
       },
     );
@@ -249,6 +250,7 @@ class IdempotencyTransport {
         provider: this.id,
         category: 'unknown',
         deliveryUnknown: true,
+        deliveryUnknownReason: 'lost-answer',
         code: 'idempotency.abandoned',
       },
     );
@@ -267,6 +269,7 @@ class IdempotencyTransport {
           provider: this.id,
           category: 'unknown',
           deliveryUnknown: true,
+          deliveryUnknownReason: 'lost-answer',
           code: 'idempotency.aborted',
         },
       );

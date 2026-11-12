@@ -35,6 +35,7 @@ test('Delivery of the channels: a 2xx with an unreadable body is sent once, of u
     assert.strictEqual(requests, expectedRequests(provider), provider.name);
     assert.strictEqual(receipt.successful, false, provider.name);
     assert.strictEqual(receipt.deliveryUnknown, true, provider.name);
+    assert.strictEqual(receipt.deliveryUnknownReason, 'unreadable-answer', provider.name);
     assert.strictEqual(receipt.retryable, false, provider.name);
     assert.strictEqual(receipt.channel, provider.message().channel, provider.name);
   }
@@ -57,6 +58,11 @@ test('Delivery of the channels: a lost request is not sent again without a key; 
       } else {
         assert.strictEqual(requests, expectedRequests(provider), `${provider.name} ${code}`);
         assert.strictEqual(receipt.deliveryUnknown, true, `${provider.name} ${code}`);
+        assert.strictEqual(
+          receipt.deliveryUnknownReason,
+          'lost-answer',
+          `${provider.name} ${code}`,
+        );
       }
     }
   }
@@ -74,6 +80,7 @@ test('Delivery of the channels: a send that times out is not sent again without 
     const receipt = await provider.create({ fetch, timeout: 20 }).send(provider.message());
     assert.strictEqual(requests, expectedRequests(provider), provider.name);
     assert.strictEqual(receipt.deliveryUnknown, true, provider.name);
+    assert.strictEqual(receipt.deliveryUnknownReason, 'timeout', provider.name);
   }
 });
 
@@ -95,6 +102,7 @@ test('Delivery of the channels: a 500 or a 502 is not sent again without a key',
       assert.strictEqual(receipt.successful, resent, name);
       if (!resent) {
         assert.strictEqual(receipt.deliveryUnknown, true, name);
+        assert.strictEqual(receipt.deliveryUnknownReason, 'server-error', name);
         assert.strictEqual(receipt.retryable, false, name);
       }
     }

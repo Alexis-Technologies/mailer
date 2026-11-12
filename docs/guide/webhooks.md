@@ -113,6 +113,21 @@ for (const event of delivery.events) {
 }
 ```
 
+Such a receipt says why the delivery is unknown in `deliveryUnknownReason`, when the transport
+can tell:
+
+| Reason              | What happened                                                                 |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `timeout`           | the request went, and no answer came before its deadline                      |
+| `lost-answer`       | the connection was lost after the request went (or after the end of `DATA`)   |
+| `server-error`      | the provider answered with a status after which it may have taken the message |
+| `unreadable-answer` | a 2xx whose body could not be read, or that lacked what it must hold          |
+| `no-id`             | the provider took the message and named no id for it                          |
+| `duplicate`         | the provider says it took the same message, or its key, before                |
+| `in-flight`         | another send of the same idempotency key is under way (`./idempotency`)       |
+
+A `no-id` or a `duplicate` most likely went; a `timeout` or a `lost-answer` may not have.
+
 ## Time and replays
 
 A signed request is taken only within `toleranceMs` of now, and only once, by

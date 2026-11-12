@@ -1257,6 +1257,24 @@ export declare function comparePriority(a: Priority, b: Priority): number;
  * a device token or a subscription no longer valid; and `unreachable`, a
  * phone out of reach for now.  Only `unreachable` is retryable.
  */
+/**
+ * Why the delivery of a message is unknown: the request went and no answer
+ * came before its deadline (`timeout`), or its connection was lost
+ * (`lost-answer`); the provider answered with a status after which it may
+ * have taken the message (`server-error`); a 2xx could not be read
+ * (`unreadable-answer`); the provider took it and named no id (`no-id`); it
+ * says it took the same message before (`duplicate`); or another send of its
+ * idempotency key is under way (`in-flight`).
+ */
+export type DeliveryUnknownReason =
+  | 'timeout'
+  | 'lost-answer'
+  | 'server-error'
+  | 'unreadable-answer'
+  | 'no-id'
+  | 'duplicate'
+  | 'in-flight';
+
 export type ReceiptErrorCategory =
   | 'auth'
   | 'rate-limit'
@@ -1399,6 +1417,8 @@ export type Receipt<TProviderId extends string = string> =
        * events instead.
        */
       readonly deliveryUnknown?: boolean;
+      /** Why the delivery is unknown, when the transport tells it. */
+      readonly deliveryUnknownReason?: DeliveryUnknownReason;
       /**
        * Provider or transport that produced this receipt.
        */
@@ -1458,6 +1478,8 @@ export interface CreateFailedReceiptOptions<
    * then not retryable.  See {@link Receipt}.
    */
   readonly deliveryUnknown?: boolean;
+  /** Why the delivery is unknown; kept only with `deliveryUnknown`. */
+  readonly deliveryUnknownReason?: DeliveryUnknownReason;
 }
 /**
  * Classifies an HTTP status code for delivery error handling.

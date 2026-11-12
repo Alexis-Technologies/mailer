@@ -67,6 +67,7 @@ const receiptOf = (json, message) => {
       channel: 'sms',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return {

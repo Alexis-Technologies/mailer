@@ -18,6 +18,7 @@ const receiptOf = (json) => {
       channel: 'push',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return {

@@ -23,6 +23,7 @@ const failureOf = (error) => {
       channel: 'rcs',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'duplicate',
       code: 'rbm.ALREADY_EXISTS',
     });
   }

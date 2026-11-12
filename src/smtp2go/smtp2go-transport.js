@@ -43,6 +43,7 @@ const receiptOf = (json) => {
       provider: 'smtp2go',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return { successful: true, messageId, provider: 'smtp2go' };

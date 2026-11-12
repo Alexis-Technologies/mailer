@@ -105,6 +105,7 @@ const receiptOf = (answer) => {
       channel: 'viber',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'unreadable-answer',
     });
   }
   if (status !== 0) {
@@ -122,6 +123,7 @@ const receiptOf = (answer) => {
       channel: 'viber',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
     });
   }
   return {

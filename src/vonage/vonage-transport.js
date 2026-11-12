@@ -79,6 +79,7 @@ const receiptOf = (json) => {
       channel: 'sms',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'unreadable-answer',
     });
   }
   let failed;
@@ -109,6 +110,7 @@ const receiptOf = (json) => {
       channel: 'sms',
       category: 'unknown',
       deliveryUnknown: true,
+      deliveryUnknownReason: 'no-id',
       segments: parts.length,
     });
   }

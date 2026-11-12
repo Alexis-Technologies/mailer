@@ -284,6 +284,21 @@ const isAnyRetryable = (errors) => {
  * @param options Optional receipt and error metadata.
  * @returns A failed receipt.
  */
+// Why a delivery is unknown: the request went and no answer came before its
+// deadline, or its connection was lost; the provider answered with a status
+// after which it may have taken the message; a 2xx could not be read; the
+// provider took it and named no id; it says it took the same message before;
+// or another send of its idempotency key is under way.
+const DELIVERY_UNKNOWN_REASONS = new Set([
+  'timeout',
+  'lost-answer',
+  'server-error',
+  'unreadable-answer',
+  'no-id',
+  'duplicate',
+  'in-flight',
+]);
+
 const createFailedReceipt = (error, options = {}) => {
   // When delivery is unknown, the message may have been accepted, so sending
   // it again may deliver it twice: neither the receipt nor the errors made for
@@ -301,6 +316,10 @@ const createFailedReceipt = (error, options = {}) => {
     errors,
     retryable,
     deliveryUnknown,
+    deliveryUnknownReason:
+      deliveryUnknown === true && DELIVERY_UNKNOWN_REASONS.has(options.deliveryUnknownReason)
+        ? options.deliveryUnknownReason
+        : undefined,
     provider,
     channel: options.channel,
     segments: options.segments,

@@ -82,6 +82,7 @@ class MailjetTransport extends ProviderTransport {
         provider: 'mailjet',
         category: 'unknown',
         deliveryUnknown: true,
+        deliveryUnknownReason: 'no-id',
       });
     }
     return { successful: true, messageId, provider: 'mailjet' };
