@@ -248,6 +248,8 @@ test('Queue channels: a job of SMS is sent as a message of its channel, its stat
     assert.strictEqual(event.tenantId, 'acme');
   }
   assert.strictEqual(events[3].providerMessageId, 'SM1');
+  // Before (C60): the parts of the SMS were told nowhere a cost per tenant is read.
+  assert.strictEqual(events[3].segments, 1);
   // Changed after C51: without a signing key, no hash of what it says.
   assert.strictEqual('messageHash' in events[1], false);
 });
@@ -630,6 +632,9 @@ test('Queue channels: a log of a job done keeps no recipient of the id of its me
   await driver.drain();
   const completed = records.find((record) => record[0] === 'queue.job.completed');
   assert.strictEqual(completed[1].providerMessageId, '[REDACTED]:42');
+  // Before (C60): a log of a job named no channel, nor the state of its message.
+  assert.strictEqual(completed[1].channel, 'telegram');
+  assert.strictEqual(completed[1].state, 'sent');
   const accepted = audit.eventsOf(enqueued.correlationId)[3];
   assert.strictEqual(accepted.providerMessageId, '987654321:42');
 });
@@ -669,4 +674,5 @@ test('Queue channels: the reason of a failure thrown by the transport names no r
   assert.strictEqual(last.error.message, 'Telegram: no answer for chat [REDACTED]');
   const failed = records.find((record) => record[0] === 'queue.job.failed');
   assert.ok(!JSON.stringify(failed).includes('987654321'));
+  assert.strictEqual(failed[1].channel, 'telegram');
 });

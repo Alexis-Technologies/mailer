@@ -189,12 +189,16 @@ const emit = async (run, state, extra = {}, attempt = run.job.attempt) => {
   }
 };
 
+// The channel of a job, for its logs: `email` for an email job.
+const channelOfRun = (run) => (typeof run.data.channel === 'string' ? run.data.channel : 'email');
+
 const logFailed = (run, code, reason, state) => {
   run.config.log.write(
     'error',
     () => ({
       jobId: run.job.id,
       attempt: run.job.attempt,
+      channel: channelOfRun(run),
       correlationId: run.data.correlationId,
       code,
       state,
@@ -221,7 +225,7 @@ const fail = async (run, code, reason, options = {}) => {
 const release = (run, why) => {
   run.config.log.write(
     'warn',
-    () => ({ jobId: run.job.id, attempt: run.job.attempt, why }),
+    () => ({ jobId: run.job.id, attempt: run.job.attempt, channel: channelOfRun(run), why }),
     'queue.job.released',
   );
   return { type: 'release' };
@@ -249,6 +253,7 @@ const settleFailure = async (run, receipt, code) => {
         jobId: job.id,
         attempt: job.attempt,
         maxAttempts: job.maxAttempts,
+        channel: channelOfRun(run),
         code: outcome.code,
         delayMilliseconds: outcome.delayMilliseconds,
         scope: outcome.scope,
@@ -424,6 +429,9 @@ const sendStep = async (run, message) => {
       provider: receipt.provider ?? config.transport.id,
       providerMessageId: receipt.messageId,
     };
+    // The parts of an SMS the provider counted, by which its cost per tenant
+    // is told.
+    if (Number.isInteger(receipt.segments)) result.segments = receipt.segments;
     await emit(run, 'accepted', result);
     // A channel that reports no delivery (a work chat, a push) stops at sent.
     if (receipt.state === 'sent') await emit(run, 'sent', result);
@@ -432,10 +440,12 @@ const sendStep = async (run, message) => {
       () => ({
         jobId: job.id,
         attempt: job.attempt,
+        channel: channelOfRun(run),
         ...result,
         // The audit keeps the id, by which the events of the provider find
         // it; a log keeps none of the recipient it may name.
         providerMessageId: logIdOf(result.providerMessageId, message),
+        ...(typeof receipt.state === 'string' && { state: receipt.state }),
         durationMs: config.now() - run.started,
       }),
       'queue.job.completed',

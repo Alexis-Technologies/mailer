@@ -1210,6 +1210,11 @@ that fails without it; C for the channels):
   job names it, so an error a transport threw (of unknown delivery, a bug, a resolver, a
   `checkJob`) that named a chat id or a number without its `+` was told raw. It is redacted
   by the job, as the others.
+- C60. queue: the logs of a job named no channel but at `debug`, so a shared queue's records of
+  retries, failures and releases did not say which channel failed, and the `segments` of a
+  receipt reached neither the log nor the audit, so the cost of SMS per tenant could not be
+  rebuilt. `queue.job.completed`, `retrying`, `failed` and `released` carry `channel`, the
+  first the `state` of the receipt, and `accepted` its `segments`.
 
 ## Repository layout
 

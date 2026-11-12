@@ -310,6 +310,8 @@ worker of 1.2 holds reads the same.
   `lost-answer`, `server-error`, `unreadable-answer`, `no-id`, `duplicate` or `in-flight`
   (`DeliveryUnknownReason`), for every transport of email and of the channels, so a message
   to reconcile is told from one that most likely went.
+- **The logs of the queue name the channel of a job,** and `queue.job.completed` the state of its
+  message; the audit event `accepted` keeps the `segments` the provider counted.
 - **`./otel` counts a message of a channel by the state its provider took it in:**
   `mailer.message.messages` carries `mailer.message.state`, `accepted` when its delivery comes in
   the events of the provider, `sent` when none will.

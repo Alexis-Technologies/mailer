@@ -1785,6 +1785,8 @@ export interface AuditEvent {
   readonly provider?: string;
   /** The provider's id of the message: the `messageId` of its receipt. */
   readonly providerMessageId?: string;
+  /** The parts of an SMS the provider counted, with `accepted`. */
+  readonly segments?: number;
   readonly priority?: Priority;
   readonly template?: string;
   readonly tags?: readonly string[];

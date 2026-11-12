@@ -40,6 +40,7 @@ channels rank between them (`sent` 3.5, `expired` 4, `read` 4.5).
   payloadHash: '…',        // the job as enqueued
   messageHash: '…',        // the message as rendered
   messageId: '…@example.com', provider: 'ses', providerMessageId: '…',
+  segments: 2,             // with accepted, the parts of an SMS its provider counted
   priority: 'high', template: 'reset-password', tags: ['auth'],
   error: { category, code, message, retryable },  // for a failure, redacted
   retryAt: '…',            // for a retry
