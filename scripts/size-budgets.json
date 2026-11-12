@@ -60,7 +60,7 @@
   "./telegram": 9.5,
   "./slack": 9.5,
   "./discord": 9.5,
-  "./fcm": 10,
+  "./fcm": 10.5,
   "./webpush": 9.5,
   "./meta": 10,
   "./twilio": 9,

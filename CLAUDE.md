@@ -1186,6 +1186,10 @@ that fails without it; C for the channels):
   none (Telegram, Slack, Discord, Teams, Google Chat, Viber, Meta, SMS Club) and with a time to
   live already over by the others, so a code of sign-in held in a queue past its end still
   went. `sendConverted` refuses it, by the clock of the transport, as a `validation` failure.
+- C55. fcm: a push whose notification and data were over the 4096 bytes FCM takes was sent,
+  for FCM to refuse with a 400 of `MessageTooBig`. It is refused before any request. Infobip,
+  AlphaSMS and SMS Club document no limit of the text of an SMS, so none is guessed; their
+  live runs are to find it.
 
 ## Repository layout
 

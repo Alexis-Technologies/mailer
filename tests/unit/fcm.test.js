@@ -327,3 +327,14 @@ test('FCM: verify is a dry run to a topic, which sends nothing', async (t) => {
   stub(t, () => fcmError('PERMISSION_DENIED', 403));
   await assert.rejects(transport().verify(), (error) => error.statusCode === 403);
 });
+
+test('FCM: a push over the 4096 bytes of FCM is refused before any request', async (t) => {
+  // Before: it was sent, for FCM to refuse with a 400 of MessageTooBig.
+  const { sends } = stub(t, () => named());
+  const big = await transport().send(push({ data: { blob: 'x'.repeat(4100) } }));
+  assert.strictEqual(big.errors[0].category, 'validation');
+  assert.match(big.errorMessages[0], /more than the 4096 of FCM/);
+  assert.strictEqual(sends().length, 0);
+  const fits = await transport().send(push({ data: { blob: 'x'.repeat(3900) } }));
+  assert.strictEqual(fits.successful, true);
+});

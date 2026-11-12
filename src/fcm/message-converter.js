@@ -5,11 +5,15 @@
 // overrides over them; the reserved keys of its data refused before the
 // request.
 
+const { Buffer } = require('node:buffer');
 const { InvalidMessageError } = require('../internal/channel/failure.js');
 const { RefusalError } = require('../internal/refusal.js');
 
 // The longest FCM keeps a message, four weeks.
 const MAX_TTL_SECONDS = 28 * 24 * 60 * 60;
+// The most a push of FCM carries, its notification and its data (FCM refuses
+// more with a 400 of MessageTooBig).
+const MAX_PAYLOAD_BYTES = 4096;
 // The keys of data FCM refuses: its own words, and its prefixes.
 const RESERVED_KEYS = new Set(['from', 'notification', 'message_type']);
 const RESERVED_PREFIXES = ['google.', 'gcm.'];
@@ -120,6 +124,12 @@ const convertMessage = (message, config) => {
   }
   if (fcm.notification === undefined && fcm.data === undefined && message.payload === undefined) {
     throw invalid('a push needs a title, a text, data or a payload.');
+  }
+  const bytes = Buffer.byteLength(
+    JSON.stringify({ notification: sent.notification, data: sent.data }),
+  );
+  if (bytes > MAX_PAYLOAD_BYTES) {
+    throw invalid(`the push carries ${bytes} bytes, more than the ${MAX_PAYLOAD_BYTES} of FCM.`);
   }
   return { message: sent };
 };
