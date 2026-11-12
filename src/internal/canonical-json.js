@@ -7,29 +7,64 @@
 
 const { createHash, createHmac } = require('node:crypto');
 
-const update = (digest, value) => {
+// The text of a value in its canonical form, written in pieces into a buffer
+// that goes to the digest by the 64 KiB: a call of the digest per token, of
+// which a payload of blocks holds thousands, cost tenfold the hash itself.
+const CHUNK_LENGTH = 64 * 1024;
+
+const createWriter = (digest) => {
+  let buffered = '';
+  return {
+    write(text) {
+      // A long string, the base64 of a file, goes as it is, not copied.
+      if (text.length >= CHUNK_LENGTH) {
+        if (buffered !== '') digest.update(buffered);
+        buffered = '';
+        digest.update(text);
+        return;
+      }
+      buffered += text;
+      if (buffered.length >= CHUNK_LENGTH) {
+        digest.update(buffered);
+        buffered = '';
+      }
+    },
+    end() {
+      if (buffered !== '') digest.update(buffered);
+      buffered = '';
+    },
+  };
+};
+
+const write = (writer, value) => {
   if (value === null || typeof value !== 'object') {
-    digest.update(JSON.stringify(value));
+    writer.write(JSON.stringify(value));
     return;
   }
   if (Array.isArray(value)) {
-    digest.update('[');
+    writer.write('[');
     for (let index = 0; index < value.length; index++) {
-      if (index > 0) digest.update(',');
-      update(digest, value[index]);
+      if (index > 0) writer.write(',');
+      write(writer, value[index]);
     }
-    digest.update(']');
+    writer.write(']');
     return;
   }
-  digest.update('{');
+  writer.write('{');
   let first = true;
   for (const key of Object.keys(value).toSorted()) {
     if (value[key] === undefined) continue;
-    digest.update(`${first ? '' : ','}${JSON.stringify(key)}:`);
+    writer.write(`${first ? '' : ','}${JSON.stringify(key)}:`);
     first = false;
-    update(digest, value[key]);
+    write(writer, value[key]);
   }
-  digest.update('}');
+  writer.write('}');
+};
+
+const update = (digest, value) => {
+  const writer = createWriter(digest);
+  write(writer, value);
+  writer.end();
 };
 
 const digestJson = (digest, value, leaveOut) => {

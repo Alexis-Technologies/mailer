@@ -388,3 +388,24 @@ test('Queue: under idSecret the id of a job cannot be found from the addresses o
     );
   }
 });
+
+test('Queue: the canonical hash is that of the canonical text, however long, in pieces', () => {
+  // The text is written into the digest by pieces of 64 KiB and long strings
+  // apart; the hash is that of the whole text at once.
+  const { createHash } = require('node:crypto');
+  const canonical = (value) =>
+    value === null || typeof value !== 'object'
+      ? JSON.stringify(value)
+      : Array.isArray(value)
+        ? `[${value.map(canonical).join(',')}]`
+        : `{${Object.keys(value)
+            .toSorted()
+            .filter((key) => value[key] !== undefined)
+            .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+            .join(',')}}`;
+  const blocks = [];
+  for (let i = 0; i < 5000; i++) blocks.push({ type: 'section', text: `Ряд ${i} 📦`, n: i });
+  const value = { z: 'x'.repeat(70_000), blocks, a: { b: [1, null, true, 'é'] }, u: undefined };
+  const expected = createHash('sha256').update(canonical(value)).digest('hex');
+  assert.strictEqual(hashJson(value), expected);
+});

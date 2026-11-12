@@ -1201,6 +1201,10 @@ that fails without it; C for the channels):
   whatever `recordSensitiveData` said, and to the log `queue.job.completed`, which C41 has
   redact the chat id everywhere else. Each is redacted of the recipient of its message; the
   audit keeps it, by which the events of the provider find their message.
+- C58. canonical-json (perf): the canonical text of a job went into the digest one token at a
+  time, a call of node:crypto for each, and a payload of blocks holds thousands: a job of
+  2,000 blocks of Slack hashed at 450 a second, four or five times per job, on the event
+  loop. The text goes by pieces of 64 KiB, a long string apart: 825 a second, the same bytes.
 
 ## Repository layout
 

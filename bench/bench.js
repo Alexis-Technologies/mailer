@@ -32,6 +32,9 @@ const { composeMessage } = require('../src/mime/index.js');
 const { inlineDataUrls } = require('../src/attachments/index.js');
 const { htmlToText } = require('../src/render/index.js');
 const { fingerprintOf } = require('../src/internal/fingerprint.js');
+const { hashJson } = require('../src/internal/canonical-json.js');
+const { prepareJob } = require('../src/queue/index.js');
+const { UNHASHED } = require('../src/queue/job.js');
 const { gatedSendMany } = require('../src/internal/gate.js');
 const { createMailtrapWebhookVerifier } = require('../src/webhooks/mailtrap/index.js');
 const { createSendGridWebhookVerifier } = require('../src/webhooks/sendgrid/index.js');
@@ -60,6 +63,41 @@ const { createSigV4Signer } = require('../src/internal/sigv4.js');
 const { encryptPush } = require('../src/webpush/encryption.js');
 
 const BASELINE = path.join(__dirname, 'baseline.json');
+// A job of the queue as a worker reads it, and one with a file of 140 KB
+// inline, some 190 KB of JSON.
+const jobInput = {
+  kind: 'content',
+  from: 'App <app@example.com>',
+  to: 'ada@example.com',
+  subject: 'Your invoice',
+  content: { text: 'Your invoice is attached.', html: '<p>Your invoice is attached.</p>' },
+  idempotencyKey: 'invoice:1',
+};
+const smallJob = JSON.parse(JSON.stringify(prepareJob(jobInput).data));
+// A job of Slack whose Block Kit is 2,000 small blocks: many tokens, not one.
+const blocks = [];
+for (let i = 0; i < 2000; i++) {
+  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `Line ${i} of the report` } });
+}
+const blockJob = JSON.parse(
+  JSON.stringify(
+    prepareJob({
+      channel: 'slack',
+      kind: 'content',
+      to: 'C0123456',
+      payload: { blocks },
+      idempotencyKey: 'report:1',
+    }).data,
+  ),
+);
+const bigJob = JSON.parse(
+  JSON.stringify(
+    prepareJob({
+      ...jobInput,
+      attachments: [{ filename: 'invoice.pdf', content: crypto.randomBytes(140 * 1024) }],
+    }).data,
+  ),
+);
 
 // The texts of the channels: ten parts of an SMS in GSM-7 and in Cyrillic,
 // one with emoji, and 4 KB of chat text full of what each markup escapes.
@@ -342,6 +380,9 @@ const main = async () => {
     ['Render — htmlToText of 1 MB', () => htmlToText(megabyteHtml), slow],
     ['Idempotency — fingerprintOf a message', () => fingerprintOf(textMessage)],
     ['Idempotency — fingerprintOf 1 MiB of HTML', () => fingerprintOf(htmlMessage), slow],
+    ['Queue — hashJson of a job', () => hashJson(smallJob, UNHASHED)],
+    ['Queue — hashJson of a job of 190 KB', () => hashJson(bigJob, UNHASHED), slow],
+    ['Queue — hashJson of a job of 2,000 blocks', () => hashJson(blockJob, UNHASHED), slow],
     ['Webhooks — verify a Svix (Resend) request', () => resend.verify(svixSigned)],
     ['Webhooks — verify a SendGrid ECDSA request', () => sendgrid.verify(sendgridSigned)],
     ['Webhooks — verify a Mailtrap HMAC request', () => mailtrap.verify(mailtrapRequest)],
