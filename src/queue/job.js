@@ -3,7 +3,8 @@
 // and its correlation id; its schedule, expiry and attempts; either a
 // template with its context, rendered by the worker, or content rendered
 // already; its hash and signature, bounded in size. The fields of its message
-// are made and checked by the strategy of its kind (email-job.js).
+// are made and checked by the strategy of its kind (email-job.js for an
+// email, channel-job.js for a message of a channel).
 
 const { Buffer } = require('node:buffer');
 const { generateId } = require('../core/id.js');

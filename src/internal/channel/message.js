@@ -424,4 +424,10 @@ const checkChannelMessage = (message) => {
  */
 const isChannelMessage = (value) => isObject(value) && CHANNELS.has(value.channel);
 
-module.exports = { checkChannelMessage, createChannelMessage, isChannelMessage };
+module.exports = {
+  checkChannelMessage,
+  createChannelMessage,
+  isChannelMessage,
+  isContent,
+  isObject,
+};

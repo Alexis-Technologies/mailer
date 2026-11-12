@@ -4,6 +4,8 @@
 
 const { Buffer } = require('node:buffer');
 const { toBase64 } = require('../internal/base64.js');
+// One test of an object and of content for the messages and their jobs.
+const { isContent, isObject } = require('../internal/channel/message.js');
 
 /**
  * Whether a value is a string of 1 to `max` characters.
@@ -11,25 +13,6 @@ const { toBase64 } = require('../internal/base64.js');
  * @internal
  */
 const isText = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max;
-
-/**
- * Whether a value is an object of JSON, no array.
- *
- * @internal
- */
-const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-/**
- * Whether a value is the content of an attachment or a medium: bytes, a
- * Blob, a promise of them, or a factory of chunks.
- *
- * @internal
- */
-const isContent = (value) =>
-  value instanceof Uint8Array ||
-  value instanceof Blob ||
-  value instanceof Promise ||
-  typeof value === 'function';
 
 /**
  * Keeps bytes in a job, in base64, the bytes of the job so far counted

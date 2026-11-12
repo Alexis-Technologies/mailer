@@ -206,7 +206,7 @@ export interface PoolVerification {
  * it stops at a refused message (`validation`, `rejected`), at a recipient
  * another transport of the channel would fail too (`invalid-recipient`,
  * `opted-out`, `outside-window`, `blocked`, `unregistered`, `not-on-channel`,
- * the last a reason for `./fallback` to another channel) and at an unknown
+ * the last a reason to fall back to another channel, `./fallback` of 2.1) and at an unknown
  * delivery.  Its transports are those of one channel.  A bug of a transport (a `TypeError` that is no failure of
  * delivery, as `./retry` tells it) rejects the send rather than failing over.
  *

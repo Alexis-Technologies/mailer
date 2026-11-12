@@ -555,7 +555,8 @@ const isFailedReceipt = (value) => {
 // itself refused (`validation`, `rejected`), or its recipient, who is no
 // recipient of the channel, opted out, blocked the bot, is outside the 24
 // hours of Meta, is gone from push, or is not on the channel at all (a reason
-// for ./fallback to another channel, not for another provider of this one).
+// to fall back to another channel, ./fallback of 2.1, not for another
+// provider of this one).
 // A failure of the transport (authentication, rate limit, outage), of what it
 // can express (`unsupported`), or a handset `unreachable`, which another
 // route may reach, fails over.
