@@ -325,3 +325,15 @@ test('Teams: a conversation of a dot segment is refused, as it would leave the p
   }
   assert.ok(teams({ to: { serviceUrl: SERVICE, conversationId: 'a:1.b' } }));
 });
+
+test('Teams: verify() asks for the token of the bot; a webhook alone verifies nothing', async (t) => {
+  // Before: Teams had no verify(), so a pool or a router verified it as nothing.
+  const { isVerifiableTransport } = require('../../index.js');
+  const { tokens, posts } = stub(t, () => accepted());
+  assert.strictEqual(isVerifiableTransport(transport()), true);
+  await transport({ bot: BOT }).verify();
+  assert.strictEqual(tokens(), 1);
+  await transport().verify();
+  assert.strictEqual(tokens(), 1, 'a webhook asks for no token');
+  assert.strictEqual(posts.length, 0, 'nothing is posted');
+});

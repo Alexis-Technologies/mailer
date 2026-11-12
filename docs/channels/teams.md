@@ -65,6 +65,10 @@ from elsewhere does not get it. A bot can write only to a conversation it is
 in; the conversations it starts on its own, and the activities it receives,
 are for a later release.
 
+`verify()` asks for the token of the bot, which Microsoft makes only for the
+secret of its app; a webhook cannot be checked without posting, so a transport
+of a webhook alone verifies nothing.
+
 ## What goes
 
 `payload` holds the fields of the activity over those (`attachments` for a

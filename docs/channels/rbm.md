@@ -63,3 +63,6 @@ to the webhook of the agent.
 A user without RCS is refused by the send itself, so no capability check goes
 before it: it would be a request more for each message, under a quota of its
 own.
+
+`verify()` asks for the token of the service account, which Google makes only
+for a key it takes; the agent is checked only by a message.

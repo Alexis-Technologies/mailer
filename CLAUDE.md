@@ -1251,6 +1251,11 @@ that fails without it; C for the channels):
   own `createECDH` writes the scalar without its leading zero bytes, so one key of some 300 it
   makes was refused (the delivery matrix, which makes one per run, failed so now and then). A
   shorter scalar is padded back to the 32 bytes its JWK takes; one longer is refused.
+- C69. rbm, teams: neither had `verify()`, so `./pool` and `./router` verified them as nothing,
+  though their credentials can be checked without a message: each asks for its token, which
+  Google makes only for a key it takes and Microsoft only for the secret of the app. A webhook
+  of Teams alone verifies nothing, as Slack's and Google Chat's; Web Push and APNs, whose
+  credentials no service answers for without a push, have none.
 
 ## Repository layout
 

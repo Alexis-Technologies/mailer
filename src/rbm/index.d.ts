@@ -8,6 +8,7 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  VerifiableTransport,
 } from '../../index.js';
 
 export type { GoogleServiceAccount };
@@ -69,7 +70,7 @@ export interface RbmConfig extends TransportDependencies {
  * const rbm = new RbmTransport({ serviceAccount, agentId: 'my-agent' });
  * ```
  */
-export declare class RbmTransport implements Transport<'rbm', RcsMessage> {
+export declare class RbmTransport implements VerifiableTransport<'rbm', RcsMessage> {
   readonly id = 'rbm';
   constructor(config: RbmConfig);
   send(message: RcsMessage, options?: TransportOptions): Promise<Receipt<'rbm'>>;
@@ -77,4 +78,8 @@ export declare class RbmTransport implements Transport<'rbm', RcsMessage> {
     messages: Iterable<RcsMessage> | AsyncIterable<RcsMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<'rbm'>>;
+  /**
+   * Verifies the service account by asking for its token; the agent is checked only by a message.
+   */
+  verify(options?: TransportOptions): Promise<void>;
 }

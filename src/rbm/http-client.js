@@ -88,6 +88,9 @@ const createRbmClient = (config) => {
   const agent = encodeURIComponent(config.agentId);
   return {
     ...client,
+    // The token of the account, which its endpoint makes only for keys it
+    // takes: what verify() can check without sending.
+    token: (signal) => auth.token(signal),
     send: (to, messageId, body, options) =>
       client.request({
         url:

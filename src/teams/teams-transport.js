@@ -117,6 +117,20 @@ class TeamsTransport extends ProviderTransport {
       failureOf: (error) => channelFailure(PROVIDER, PROVIDER, error),
     });
   }
+
+  /**
+   * Checks the app of the bot by asking for its token, which Microsoft makes
+   * only for its secret. A webhook cannot be checked without posting to it: a
+   * transport of a webhook alone verifies nothing, as Slack's.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Microsoft refuses the app.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    if (this.httpClient.token === undefined) return;
+    await this.httpClient.token(options?.signal);
+  }
 }
 
 module.exports = { TeamsTransport };

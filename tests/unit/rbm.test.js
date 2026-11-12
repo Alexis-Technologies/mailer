@@ -261,3 +261,22 @@ test('RBM: the options are checked when made, the key never shown', () => {
   assert.throws(() => transport({ baseUrl: 'http://api.example.com' }), TypeError);
   assert.ok(!JSON.stringify(transport()).includes('PRIVATE KEY'));
 });
+
+test('RBM: verify() asks for the token of the account, and fails as Google refuses it', async (t) => {
+  // Before: RBM had no verify(), so a pool or a router verified it as nothing.
+  const { isVerifiableTransport } = require('../../index.js');
+  const tokens = [];
+  stubFetch(t, (request) => {
+    if (request.url.startsWith('https://oauth2.googleapis.com/')) {
+      tokens.push(request);
+      return tokens.length === 1
+        ? Response.json({ access_token: 'ya29.ok', expires_in: 3600 })
+        : Response.json({ error: 'invalid_grant' }, { status: 400 });
+    }
+    return Response.json({});
+  });
+  assert.strictEqual(isVerifiableTransport(transport()), true);
+  await transport().verify();
+  assert.strictEqual(tokens.length, 1);
+  await assert.rejects(transport().verify(), /invalid_grant/);
+});

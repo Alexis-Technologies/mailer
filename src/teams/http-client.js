@@ -143,6 +143,9 @@ const createTeamsClient = (config) => {
   });
   return {
     ...bot,
+    // The token of the bot, which Microsoft makes only for the secret of its
+    // app: what verify() can check without sending.
+    token: auth === undefined ? undefined : (signal) => auth.token(signal),
     isServiceUrl: (serviceUrl) => isServiceUrl(config, serviceUrl),
     /** Posts an activity to a conversation of the bot. */
     post: (to, body, options) => {

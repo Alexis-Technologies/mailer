@@ -68,6 +68,18 @@ class RbmTransport extends ProviderTransport {
       failureOf,
     });
   }
+
+  /**
+   * Checks the service account by asking for its token, which Google makes
+   * only for a key it takes; the agent can be checked only by a message.
+   *
+   * @param options Optional abort signal.
+   * @throws {Error} If Google refuses the account.
+   */
+  async verify(options) {
+    options?.signal?.throwIfAborted();
+    await this.httpClient.token(options?.signal);
+  }
 }
 
 module.exports = { RbmTransport };

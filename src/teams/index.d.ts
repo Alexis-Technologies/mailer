@@ -7,6 +7,7 @@ import type {
   Transport,
   TransportDependencies,
   TransportOptions,
+  VerifiableTransport,
 } from '../../index.js';
 
 /** The app of a bot of the Bot Framework, registered in Azure. */
@@ -84,7 +85,7 @@ export interface TeamsConfig extends TransportDependencies {
  * const teams = new TeamsTransport({ webhookUrl: process.env.TEAMS_WEBHOOK_URL });
  * ```
  */
-export declare class TeamsTransport implements Transport<'teams', TeamsMessage> {
+export declare class TeamsTransport implements VerifiableTransport<'teams', TeamsMessage> {
   readonly id = 'teams';
   constructor(config: TeamsConfig);
   send(message: TeamsMessage, options?: TransportOptions): Promise<Receipt<'teams'>>;
@@ -92,4 +93,9 @@ export declare class TeamsTransport implements Transport<'teams', TeamsMessage> 
     messages: Iterable<TeamsMessage> | AsyncIterable<TeamsMessage>,
     options?: TransportOptions,
   ): AsyncIterable<Receipt<'teams'>>;
+  /**
+   * Verifies the app of the bot by asking for its token; a webhook cannot be checked
+   * without posting, so a transport of a webhook alone verifies nothing.
+   */
+  verify(options?: TransportOptions): Promise<void>;
 }
