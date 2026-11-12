@@ -204,6 +204,24 @@ test('SES: a request is signed as the SigV4 test suite of AWS expects', (t) => {
   }
 });
 
+test('SES: a query is signed as its canonical query, as the SigV4 test suite of AWS expects', (t) => {
+  // "get-vanilla-query-order-key-case" of the test suite. Before: the query
+  // went after the path and the canonical query was empty, so a request with
+  // one was refused.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2015-08-30T12:36:00Z') });
+  const client = new SesHttpClient(createSesConfig({ region: 'us-east-1' }));
+  const headers = client.signRequest(
+    'https://example.amazonaws.com/?Param2=value2&Param1=value1',
+    { method: 'GET' },
+    { accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY' },
+    'service',
+  );
+  assert.match(
+    headers.get('Authorization'),
+    /Signature=b97d918cfa904a5beff61c982a1b6f458b799221646efd99d3219ec94cdf2500$/,
+  );
+});
+
 test('SES: a rate limit (429) is retried, a refusal (400) is not', async (t) => {
   let requests = 0;
   t.mock.method(globalThis, 'fetch', async () => {

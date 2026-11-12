@@ -9,6 +9,36 @@ const ALGORITHM = 'AWS4-HMAC-SHA256';
 
 const sha256Hex = (data) => createHash('sha256').update(data).digest('hex');
 
+// A name or a value of the query as SigV4 encodes it: every byte but the
+// unreserved characters of RFC 3986, which encodeURIComponent leaves `!'()*`
+// of too.
+const RESERVED = /[!'()*]/g;
+const encodeQueryPart = (text) =>
+  encodeURIComponent(text).replace(
+    RESERVED,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+const compareParts = (left, right) => {
+  if (left[0] !== right[0]) return left[0] < right[0] ? -1 : 1;
+  if (left[1] === right[1]) return 0;
+  return left[1] < right[1] ? -1 : 1;
+};
+
+// The canonical query of a URL: its parameters encoded and sorted by name,
+// then value, on a line of their own, not after the path.
+const canonicalQueryOf = (searchParams) => {
+  const parts = [];
+  for (const entry of searchParams)
+    parts.push([encodeQueryPart(entry[0]), encodeQueryPart(entry[1])]);
+  parts.sort(compareParts);
+  let query = '';
+  for (let index = 0; index < parts.length; index++) {
+    query += `${index > 0 ? '&' : ''}${parts[index][0]}=${parts[index][1]}`;
+  }
+  return query;
+};
+
 /**
  * Makes a signer of AWS Signature Version 4 for one region.
  *
@@ -42,7 +72,8 @@ const createSigV4Signer = (region, defaultService) => {
     const headers = new Headers(options.headers);
 
     const host = parsedUrl.host;
-    const path = parsedUrl.pathname + parsedUrl.search;
+    const path = parsedUrl.pathname;
+    const query = canonicalQueryOf(parsedUrl.searchParams);
 
     const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.substring(0, 8);
@@ -61,7 +92,7 @@ const createSigV4Signer = (region, defaultService) => {
       (credentials.sessionToken ? `x-amz-security-token:${credentials.sessionToken}\n` : '');
 
     const payloadHash = sha256Hex(options.body || '');
-    const canonicalRequest = `${method}\n${path}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+    const canonicalRequest = `${method}\n${path}\n${query}\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
 
     const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
     const stringToSign = `${ALGORITHM}\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;

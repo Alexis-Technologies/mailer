@@ -1242,6 +1242,11 @@ that fails without it; C for the channels):
   rotated cost a push or a message; only APNs sent again with a new one. A provider whose
   token a 401 drops (`refreshesToken` of the shared client) sends its first 401 once more,
   with a new token; a second is the credentials' own and fails.
+- C67. sigv4: the query of a URL went after the path of the canonical request and its
+  canonical query was empty, against the specification, so a signed request with a query
+  would be refused; none of SES or AWS SMS has one yet. The query is its own line, its
+  parameters encoded as RFC 3986 and sorted, as the vector `get-vanilla-query-order-key-case`
+  of AWS's test suite expects.
 
 ## Repository layout
 
