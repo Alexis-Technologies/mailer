@@ -9,6 +9,7 @@
 const { base64Attachments, headerFieldsOf, mailboxesOf, mailboxOf } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // "MAX RECIPIENTS: 50", across To, Cc and Bcc of the whole request.
 const MAX_RECIPIENTS = 50;
@@ -113,6 +114,7 @@ const trackingOf = (message, config, hasHtml) => {
  * @throws {TypeError} If it is scheduled.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Mailjet');
   checkLimits(message);
   const entry = {
     From: addressOf(message.sender),

@@ -18,6 +18,7 @@ const {
 const { rawMessageText } = require('../internal/raw.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // "The combined number of addresses across to, cc, and bcc must not exceed 50."
 const MAX_RECIPIENTS = 50;
@@ -62,6 +63,7 @@ const headersOf = (message) => {
  * @throws {TypeError} If it is scheduled.
  */
 const convertMessage = async (message, signal) => {
+  checkEmailMessage(message, 'Cloudflare');
   checkLimits(message);
   const payload = { from: addressOf(message.sender), subject: message.subject };
   if (message.recipients.length > 0) payload.to = addressesOf(message.recipients);

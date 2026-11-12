@@ -18,6 +18,7 @@ const {
   visitMetadataHeaders,
 } = require('../internal/api.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const LIMITS = [
   ['recipients', 'to', 50],
@@ -100,6 +101,7 @@ const placeHeaders = (payload, message) => {
  * @throws {RangeError} If the message is over a limit of MailerSend.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'MailerSend');
   checkLimits(message, config);
   const payload = {
     from: addressOf(message.sender),

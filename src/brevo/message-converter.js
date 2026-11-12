@@ -15,6 +15,7 @@ const { generateId } = require('../core/id.js');
 const { base64Attachments, headerFieldsOf, mailboxesOf, mailboxOf } = require('../internal/api.js');
 const { toUuid } = require('../internal/uuid.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const addressOf = (address) => mailboxOf(address, 'email', 'name');
 
@@ -31,6 +32,7 @@ const addressesOf = (addresses) => mailboxesOf(addresses, 'email', 'name');
  * inline attachment.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Brevo');
   if (message.replyRecipients.length > 1) {
     throw new RefusalError('Brevo takes one reply-to address.');
   }

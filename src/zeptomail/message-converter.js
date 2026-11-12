@@ -12,6 +12,7 @@ const {
 } = require('../internal/api.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // At most 500 addresses in each of to, cc and bcc (TM_8001, SM_127).
 const MAX_RECIPIENTS = 500;
@@ -74,6 +75,7 @@ const headersOf = (message) => {
  * @throws {TypeError} If it is scheduled.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'ZeptoMail');
   checkLimits(message);
   const payload = {
     from: addressOf(message.sender),

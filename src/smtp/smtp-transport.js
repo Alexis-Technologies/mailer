@@ -35,6 +35,7 @@ const { TLSSocket } = require('node:tls');
 const { warnDegradation } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 /**
  * SMTP transport implementation for sending emails via SMTP protocol.
@@ -235,6 +236,7 @@ class SmtpTransport {
     let connection;
 
     try {
+      checkEmailMessage(message, 'SMTP');
       const envelope = resolveEnvelopeOption(message, options?.envelope, 0);
       const dsn = resolveSmtpDsn(envelope, options?.dsn);
       // Composed before a connection is taken: a message that cannot be
@@ -360,6 +362,7 @@ class SmtpTransport {
 
         let smtpMessage;
         try {
+          checkEmailMessage(message, 'SMTP');
           const envelope = resolveEnvelopeOption(message, options?.envelope, index++);
           const dsn = resolveSmtpDsn(envelope, options?.dsn);
           smtpMessage = prepareMessage(message, this.config.dkim, dsn, envelope, this.config);

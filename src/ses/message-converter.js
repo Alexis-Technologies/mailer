@@ -13,6 +13,7 @@ const {
   withCalendarAttachment,
 } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // The header fields SES sets itself and refuses in Headers, lower-cased.
 const SES_HEADERS = new Set([
@@ -54,6 +55,7 @@ const MAX_SES_HEADERS = 15;
 const MAX_SES_HEADER_LENGTH = 996;
 
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'SES');
   refuseScheduledAt(message, 'ses');
   const destination = {};
 

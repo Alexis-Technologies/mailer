@@ -7,6 +7,7 @@ const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -41,6 +42,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * @throws {RefusalError} If the message has more than one tag, or `scheduledAt`.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Lettermint');
   refuseScheduledAt(message, 'lettermint');
   if (message.tags.length > 1) {
     throw new RefusalError('Lettermint supports at most one tag per message.');

@@ -1147,6 +1147,12 @@ that fails without it; C for the channels):
   a stream without an id never had its headers sent, so a deadline met while the session
   connected (a slow TLS handshake) made a push of unknown delivery, never retried, that never
   went. Such an abort is an error of its own, marked unsent, the reason its cause.
+- C47. every transport of email: a message of a channel, given through a queue shared with
+  the channels or a router or a pool set up wrong, failed with the TypeError of a field it has
+  not (`reading 'name'`), of the category `unknown`, and Resend's `sendMany` threw for the
+  whole batch. It is refused before any request as `unsupported`, as a transport of a channel
+  refuses an email (`checkEmailMessage` of `internal/email-only.js`, in every converter and in
+  SMTP, JMAP and sendmail), in its place in a batch.
 
 ## Repository layout
 
@@ -1164,7 +1170,7 @@ src/
                     ./attachments and of Web Push), validate-ssl.js, verify.js, sigv4.js for
                     the services of AWS, jwt.js, token-cache.js and google-auth.js for the
                     tokens of the channels, http2.js, a fetch over node:http2 for APNs),
-                    receipts (provider.js, refusal.js), message fields (message-checks.js,
+                    receipts (provider.js, refusal.js, email-only.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,
                     capabilities.js, batch.js, base64.js, uuid.js),
                     the decorators of 1.1 (gate.js, callback.js, options.js, decorator.js),

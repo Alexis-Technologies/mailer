@@ -13,6 +13,7 @@ const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { rawMessageText } = require('../internal/raw.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // "Maximum number of tags - 10 per recipient".
 const MAX_TAGS = 10;
@@ -100,6 +101,7 @@ const contentOf = async (message, signal) => {
  * @throws {RangeError} If the message has more than ten tags.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'SparkPost');
   if (message.tags.length > MAX_TAGS) {
     throw new RefusalError(`SparkPost takes at most ${MAX_TAGS} tags.`);
   }

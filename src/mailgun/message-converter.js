@@ -4,6 +4,7 @@
 const { formatQuotedMailbox: formatAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { visitCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const PRIORITIES = { high: '1', normal: '3', low: '5' };
 
@@ -25,6 +26,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * ```
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Mailgun');
   const formData = new FormData();
   const attachments = withCalendarAttachment(message);
 

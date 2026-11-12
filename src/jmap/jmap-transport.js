@@ -20,6 +20,7 @@ const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.
 const { chunks, readItems } = require('../internal/batch.js');
 const { schedulingRefusal } = require('../internal/schedule.js');
 const { certificateFailure } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 const { timerMs } = require('../internal/sleep.js');
 
 /**
@@ -174,7 +175,8 @@ class JmapTransport {
   async send(message, options) {
     const signal = options?.signal;
     signal?.throwIfAborted();
-    if (message.scheduledAt != null) return refuseScheduled();
+    const refused = refusalOf(message);
+    if (refused !== undefined) return refused;
 
     try {
       // Get or refresh session
@@ -367,8 +369,11 @@ class JmapTransport {
     if (first.done) return;
     const discovery = await this.discoverForBatch(signal, options?.onRetry);
     if (discovery.failure !== undefined) {
-      yield discovery.failure();
-      while (!(await input.next()).done) yield discovery.failure();
+      // A message this transport refuses is refused whatever the session.
+      yield refusalOf(first.value) ?? discovery.failure();
+      for (let next = await input.next(); !next.done; next = await input.next()) {
+        yield refusalOf(next.value) ?? discovery.failure();
+      }
       return;
     }
 
@@ -392,9 +397,10 @@ class JmapTransport {
   async *sendRuns(discovered, batch, signal) {
     let start = 0;
     for (let i = 0; i < batch.length; i++) {
-      if (batch[i].scheduledAt == null) continue;
+      const refused = refusalOf(batch[i]);
+      if (refused === undefined) continue;
       if (i > start) yield* this.sendBatch(discovered, batch.slice(start, i), signal);
-      yield refuseScheduled();
+      yield refused;
       start = i + 1;
     }
     if (start === 0) yield* this.sendBatch(discovered, batch, signal);
@@ -992,6 +998,21 @@ const refuseScheduled = () =>
     code: 'jmap.scheduling_unsupported',
     retryable: false,
   });
+
+// What this transport refuses before any request: a message of a channel
+// other than email, or one scheduled for later.
+const refusalOf = (message) => {
+  try {
+    checkEmailMessage(message, 'JMAP');
+  } catch (error) {
+    return createJmapFailure(error.message, undefined, {
+      category: 'unsupported',
+      code: 'jmap.unsupported',
+      retryable: false,
+    });
+  }
+  return message.scheduledAt == null ? undefined : refuseScheduled();
+};
 
 const createJmapFailure = (message, error, override = {}) => {
   const certificate = certificateFailure('jmap', message, error);

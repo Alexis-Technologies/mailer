@@ -17,6 +17,7 @@ const {
 const { formatAddresses } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // "Maximum email size (API): 2 MB, including the email and all attachments".
 const MAX_EMAIL_BYTES = 2 * 1024 * 1024;
@@ -52,6 +53,7 @@ const headersOf = (message) => {
  * @throws {TypeError} If it is scheduled.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Scaleway');
   refuseScheduledAt(message, 'scaleway');
   for (const attachment of message.attachments) {
     if (attachment.inline) {

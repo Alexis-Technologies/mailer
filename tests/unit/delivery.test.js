@@ -520,3 +520,52 @@ test('Delivery: every HTTP provider rejects with the reason of an abort, before 
     t.mock.restoreAll();
   }
 });
+
+test('Delivery: an email transport refuses a message of a channel, and sends nothing', async (t) => {
+  // Before: an SMS given to a transport of email, through a queue shared with
+  // the channels or a router or pool set up wrong, failed with the TypeError
+  // of a field it has not ("reading 'name'"), of the category unknown.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const { SmtpTransport } = require('../../src/smtp/index.js');
+  const { SendmailTransport } = require('../../src/sendmail/index.js');
+  const sms = () =>
+    createChannelMessage({ channel: 'sms', to: '+380671234567', text: 'Your code is 1234' });
+  const isRefusal = (receipt, name) => {
+    assert.strictEqual(receipt.successful, false, name);
+    assert.strictEqual(receipt.retryable, false, name);
+    assert.strictEqual(receipt.errors[0].category, 'unsupported', name);
+    assert.match(receipt.errorMessages[0], /sends email, not messages of sms/, name);
+  };
+  const transports = [];
+  for (const [name, , create] of providers) transports.push([name, create]);
+  transports.push(
+    [
+      'JMAP',
+      () =>
+        new JmapTransport({
+          sessionUrl: 'https://jmap.example.com/.well-known/jmap',
+          bearerToken: 'token',
+        }),
+    ],
+    ['SMTP', () => new SmtpTransport({ host: '127.0.0.1', port: 1, retries: 0 })],
+    ['sendmail', () => new SendmailTransport({ path: '/nonexistent/sendmail' })],
+  );
+  for (const [name, create] of transports) {
+    let requests = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      requests++;
+      // The emails beside it are refused, so that no retry waits.
+      return new Response('{}', { status: 400 });
+    });
+    isRefusal(await create().send(sms()), name);
+    assert.strictEqual(requests, 0, name);
+    // In a batch it fails alone, in its place.
+    const receipts = [];
+    for await (const receipt of create().sendMany([message(), sms(), message()])) {
+      receipts.push(receipt);
+    }
+    assert.strictEqual(receipts.length, 3, name);
+    isRefusal(receipts[1], name);
+    t.mock.restoreAll();
+  }
+});

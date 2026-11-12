@@ -9,6 +9,7 @@ const { formatMailbox } = require('../core/address.js');
 const { base64Attachments, headerFieldsOf, visitMetadataHeaders } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // "An array of names and email addresses (up to 100)", in each field.
 const MAX_RECIPIENTS = 100;
@@ -66,6 +67,7 @@ const headersOf = (message) => {
  * @throws {RangeError} If the message is over a limit of SMTP2GO.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'SMTP2GO');
   checkLimits(message, config);
   const payload = {
     sender: formatMailbox(message.sender),

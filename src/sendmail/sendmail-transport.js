@@ -25,6 +25,7 @@ const {
   RawMessageValidationError,
 } = require('../core/raw-message.js');
 const { classifyReceiptError, createFailedReceipt } = require('../core/receipt.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 const { refusalFailure } = require('../internal/refusal.js');
 const { createLog } = require('../internal/log.js');
 const { INSPECT, inspectRedacted, redactSecrets } = require('../internal/redact.js');
@@ -300,6 +301,7 @@ class SendmailTransport {
     let composed;
     let pinned;
     try {
+      checkEmailMessage(message, 'sendmail');
       refuseScheduledAt(message, 'sendmail');
       pinned = pinMessageId(message, this.config.generateId);
       composed = await composeMessage(pinned, {

@@ -5,6 +5,7 @@ const { toAsciiAddress } = require('../core/address.js');
 const { readAttachmentContent } = require('../core/attachment.js');
 const { toBase64 } = require('../internal/base64.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 const {
   convertAttachments,
   formatAddresses,
@@ -41,6 +42,7 @@ const PRIORITIES = { high: '1', normal: '3', low: '5' };
  * @throws {Error} If the caller aborts the operation.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Mailtrap');
   signal?.throwIfAborted();
   refuseScheduledAt(message, 'mailtrap');
 

@@ -16,6 +16,7 @@ const {
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { trackingSwitchOf } = require('../internal/tracking.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 /** Azure takes a request of at most 10 MB, its attachments included. */
 const MAX_REQUEST_BYTES = 10 * 1024 * 1024;
@@ -57,6 +58,7 @@ const headersOf = (message) => {
  * @throws {TypeError} If it is scheduled.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Azure');
   refuseScheduledAt(message, 'azure');
   const recipients = { to: addressesOf(message.recipients) };
   if (message.ccRecipients.length > 0) recipients.cc = addressesOf(message.ccRecipients);

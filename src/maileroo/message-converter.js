@@ -13,6 +13,7 @@ const {
   withCalendarAttachment,
 } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const STANDARD_HEADERS = new Set([
   'from',
@@ -42,6 +43,7 @@ const STANDARD_HEADERS = new Set([
  * @throws {Error} If the caller aborts the operation.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Maileroo');
   signal?.throwIfAborted();
 
   const attachments = withCalendarAttachment(message);

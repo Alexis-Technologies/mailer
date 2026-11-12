@@ -11,6 +11,7 @@ const {
   withCalendarAttachment,
 } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 // `send_at` may be at most 72 hours ahead.
 const SCHEDULE_WINDOW_MS = 72 * 60 * 60 * 1000;
@@ -34,6 +35,7 @@ const SCHEDULE_WINDOW_MS = 72 * 60 * 60 * 1000;
  * ```
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'SendGrid');
   if (
     message.scheduledAt !== undefined &&
     message.scheduledAt.getTime() - config.now() > SCHEDULE_WINDOW_MS

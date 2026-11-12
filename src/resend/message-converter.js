@@ -12,6 +12,7 @@ const {
   withCalendarAttachment,
 } = require('../internal/provider.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const PRIORITIES = { high: '1', normal: '3', low: '5' };
 // The name and value of a Resend tag: "ASCII letters, numbers, underscores,
@@ -67,6 +68,7 @@ const tagsOf = (message) => {
  * ```
  */
 const convertMessage = async (message, _config, options = {}) => {
+  checkEmailMessage(message, 'Resend');
   const attachments = withCalendarAttachment(message);
 
   const emailData = {

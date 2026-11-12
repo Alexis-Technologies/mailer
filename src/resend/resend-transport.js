@@ -318,6 +318,8 @@ class ResendTransport {
    */
   canUseBatchApi(messages) {
     for (const message of messages) {
+      // A message of a channel is refused alone, by its converter.
+      if (message.channel !== undefined && message.channel !== 'email') return false;
       // A calendar becomes an attachment during conversion, which the batch
       // API forbids, and `sendBatch()` fails a whole chunk on one conversion
       // error.  Sending these individually keeps the failure — or the success

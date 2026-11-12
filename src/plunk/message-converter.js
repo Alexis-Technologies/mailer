@@ -7,6 +7,7 @@ const { toBase64 } = require('../internal/base64.js');
 const { collectCustomHeaders, withCalendarAttachment } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 /**
  * Converts a Upyo message to Plunk API format.
@@ -35,6 +36,7 @@ const addressesOf = (message) => {
 };
 
 const convertMessage = async (message, _config, signal) => {
+  checkEmailMessage(message, 'Plunk');
   refuseScheduledAt(message, 'plunk');
   // Convert recipients - Plunk accepts either string or array
   const to =

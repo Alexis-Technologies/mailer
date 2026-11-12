@@ -14,6 +14,7 @@ const { base64Attachments, headerFieldsOf } = require('../internal/api.js');
 const { formatAddresses } = require('../internal/provider.js');
 const { refuseScheduledAt } = require('../internal/schedule.js');
 const { RefusalError } = require('../internal/refusal.js');
+const { checkEmailMessage } = require('../internal/email-only.js');
 
 const addressList = (addresses) => formatAddresses(addresses, formatMailbox).join(', ');
 
@@ -34,6 +35,7 @@ const trackingOf = (message, config) => {
  * @throws {RangeError} If it has more than one tag.
  */
 const convertMessage = async (message, config, signal) => {
+  checkEmailMessage(message, 'Postmark');
   refuseScheduledAt(message, 'postmark');
   if (message.tags.length > 1) throw new RefusalError('Postmark takes one tag per message.');
   const payload = {
