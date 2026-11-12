@@ -35,6 +35,23 @@ const recipientOf = (to) => {
  * @param message The message, of any channel, if the text is about one.
  * @internal
  */
+// The pattern of a number without its +, made once per number: a message is
+// redacted for each record, span and reason of its send. The latest numbers
+// are kept, a few hundred at most.
+const BARE_NUMBERS = new Map();
+const MAX_BARE_NUMBERS = 256;
+const bareNumberOf = (recipient) => {
+  let pattern = BARE_NUMBERS.get(recipient);
+  if (pattern === undefined) {
+    pattern = new RegExp(`(?<!\\d)${recipient.slice(1)}(?!\\d)`, 'g');
+    if (BARE_NUMBERS.size >= MAX_BARE_NUMBERS) {
+      BARE_NUMBERS.delete(BARE_NUMBERS.keys().next().value);
+    }
+    BARE_NUMBERS.set(recipient, pattern);
+  }
+  return pattern;
+};
+
 const redactMessageRecipient = (text, message) => {
   const recipient = recipientOf(message?.to);
   let exact =
@@ -44,7 +61,7 @@ const redactMessageRecipient = (text, message) => {
   // Most providers are sent a number without its +, and their errors echo
   // it so, which the pattern of redactRecipients, held to a +, misses.
   if (typeof recipient === 'string' && E164.test(recipient)) {
-    exact = exact.replace(new RegExp(`(?<!\\d)${recipient.slice(1)}(?!\\d)`, 'g'), REDACTED);
+    exact = exact.replace(bareNumberOf(recipient), REDACTED);
   }
   return redactRecipients(exact);
 };

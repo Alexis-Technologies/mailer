@@ -58,6 +58,7 @@ const {
   normalizePhone,
 } = require('../src/channels/index.js');
 const { redactRecipients } = require('../src/internal/redact-addresses.js');
+const { redactMessageRecipient } = require('../src/internal/channel/recipient.js');
 const { signJwt } = require('../src/internal/jwt.js');
 const { createSigV4Signer } = require('../src/internal/sigv4.js');
 const { encryptPush } = require('../src/webpush/encryption.js');
@@ -105,6 +106,7 @@ const gsmText = 'Your code is 1234. Do not share it with anyone; we never ask fo
 const cyrillicText = 'Ваш код 1234. Нікому його не повідомляйте. '.repeat(15);
 const emojiText = 'Order shipped 📦 arriving soon 🚚 '.repeat(10);
 const chatText = '<b>*_~`[link](x) @everyone <!channel> & > #5 | done_*</b> '.repeat(64);
+const smsMessage = { channel: 'sms', to: '+380671234567', text: 'Your code is 1234' };
 const logText = `Twilio refused +380671234567 and +14155550123 for ops@example.com. `.repeat(60);
 const awsSigner = createSigV4Signer('eu-west-1', 'sms-voice');
 const awsCredentials = { accessKeyId: 'AKIAEXAMPLE', secretAccessKey: 'secret' };
@@ -405,6 +407,10 @@ const main = async () => {
     ['Channels — escapeDiscordMarkdown of 4 KB', () => escapeDiscordMarkdown(chatText)],
     ['Channels — neutralizeMentions of 4 KB', () => neutralizeMentions(chatText)],
     ['Channels — redactRecipients of 4 KB of a log', () => redactRecipients(logText)],
+    [
+      'Channels — redactMessageRecipient of an error of an SMS',
+      () => redactMessageRecipient('Twilio: 380671234567 is unreachable', smsMessage),
+    ],
     [
       'Channels — sign an AWS SMS request (SigV4)',
       () =>

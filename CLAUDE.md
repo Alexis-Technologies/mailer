@@ -1267,6 +1267,12 @@ that fails without it; C for the channels):
   takes on it, where node-apn had a client of several connections. `maxSessions` (1 by
   default, at most 64) opens another session while every one has a push out, and a push goes
   on the one with the fewest out.
+- C73. channels (perf): `countSegments` read a text twice, once to tell GSM-7 and once to
+  count, against the rule of one pass, and `redactMessageRecipient` made the pattern of a
+  number without its `+` anew for each record, span and reason. The segments are counted in
+  one pass, both encodings at once (10 parts of GSM-7 137,000 a second, was 84,000; Cyrillic
+  1,130,000, was 883,000), and the pattern of a number is kept, 256 at most (5.9 million a
+  second, was 3.4).
 
 ## Repository layout
 

@@ -17,13 +17,6 @@ const LIMITS = {
   'UCS-2': { single: 70, part: 67 },
 };
 
-const isGsm7 = (text) => {
-  for (let i = 0; i < text.length; i++) {
-    if (septetsOf(text.charCodeAt(i)) === 0) return false;
-  }
-  return true;
-};
-
 const isHighSurrogate = (code) => code >= 0xd800 && code <= 0xdbff;
 const isLowSurrogate = (code) => code >= 0xdc00 && code <= 0xdfff;
 
@@ -40,34 +33,57 @@ const isLowSurrogate = (code) => code >= 0xdc00 && code <= 0xdfff;
  */
 const countSegments = (text) => {
   if (typeof text !== 'string') throw new TypeError('countSegments needs a string.');
-  const encoding = isGsm7(text) ? 'GSM-7' : 'UCS-2';
-  const limits = LIMITS[encoding];
-  let units = 0;
+  // Both counts in one pass, GSM-7 until a character it has not: a text is
+  // GSM-7 only when every character is. The parts of a concatenated message
+  // are filled as they go: a character that does not fit in what is left of
+  // one starts the next.
+  const gsmPart = LIMITS['GSM-7'].part;
+  const ucsPart = LIMITS['UCS-2'].part;
+  let gsm = true;
+  let septets = 0;
+  let gsmSegments = 1;
+  let gsmUsed = 0;
+  let codeUnits = 0;
+  let ucsSegments = 1;
+  let ucsUsed = 0;
   let characters = 0;
-  // The parts of a concatenated message, filled as they go: a character
-  // that does not fit in what is left of one starts the next.
-  let segments = 1;
-  let used = 0;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    let size;
-    if (encoding === 'GSM-7') {
-      size = septetsOf(code);
-    } else if (isHighSurrogate(code) && isLowSurrogate(text.charCodeAt(i + 1))) {
+    if (gsm) {
+      const size = septetsOf(code);
+      if (size === 0) {
+        gsm = false;
+      } else {
+        septets += size;
+        if (gsmUsed + size > gsmPart) {
+          gsmSegments++;
+          gsmUsed = 0;
+        }
+        gsmUsed += size;
+      }
+    }
+    let size = 1;
+    if (isHighSurrogate(code) && isLowSurrogate(text.charCodeAt(i + 1))) {
       size = 2;
       i++;
-    } else {
-      size = 1;
     }
-    units += size;
+    codeUnits += size;
+    if (ucsUsed + size > ucsPart) {
+      ucsSegments++;
+      ucsUsed = 0;
+    }
+    ucsUsed += size;
     characters++;
-    if (used + size > limits.part) {
-      segments++;
-      used = 0;
-    }
-    used += size;
   }
-  return { encoding, segments: units <= limits.single ? 1 : segments, units, characters };
+  const encoding = gsm ? 'GSM-7' : 'UCS-2';
+  const units = gsm ? septets : codeUnits;
+  const segments = gsm ? gsmSegments : ucsSegments;
+  return {
+    encoding,
+    segments: units <= LIMITS[encoding].single ? 1 : segments,
+    units,
+    characters,
+  };
 };
 
 module.exports = { countSegments };
