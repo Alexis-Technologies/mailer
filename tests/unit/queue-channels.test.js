@@ -633,3 +633,40 @@ test('Queue channels: a log of a job done keeps no recipient of the id of its me
   const accepted = audit.eventsOf(enqueued.correlationId)[3];
   assert.strictEqual(accepted.providerMessageId, '987654321:42');
 });
+
+test('Queue channels: the reason of a failure thrown by the transport names no recipient', async (t) => {
+  // Before: fail() redacted the reason of addresses and numbers with a + alone,
+  // so a thrown error naming the chat id was told to the audit and the log.
+  const { markDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
+  const { driver, audit, queue } = setup();
+  const transport = {
+    id: 'telegram',
+    send: async () => {
+      throw markDeliveryUnknown(new Error('Telegram: no answer for chat 987654321'));
+    },
+    async *sendMany() {},
+  };
+  const enqueued = await queue.enqueue({
+    channel: 'telegram',
+    kind: 'content',
+    to: 987654321,
+    text: 'Hi',
+    idempotencyKey: 'hi:2',
+  });
+  const records = [];
+  const logger = {
+    error: (properties, message) => records.push([message, properties]),
+    info: () => {},
+    warn: () => {},
+    debug: () => {},
+  };
+  const worker = queue.createWorker({ transport, logger });
+  t.after(() => worker.close());
+  await driver.drain();
+  const events = audit.eventsOf(enqueued.correlationId);
+  const last = events[events.length - 1];
+  assert.strictEqual(last.state, 'delivery_unknown');
+  assert.strictEqual(last.error.message, 'Telegram: no answer for chat [REDACTED]');
+  const failed = records.find((record) => record[0] === 'queue.job.failed');
+  assert.ok(!JSON.stringify(failed).includes('987654321'));
+});

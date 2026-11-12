@@ -1205,6 +1205,11 @@ that fails without it; C for the channels):
   time, a call of node:crypto for each, and a payload of blocks holds thousands: a job of
   2,000 blocks of Slack hashed at 450 a second, four or five times per job, on the event
   loop. The text goes by pieces of 64 KiB, a long string apart: 825 a second, the same bytes.
+- C59. queue: `fail()` redacted the reason it told the audit and the log of addresses and
+  numbers with a `+` alone, while a reason of a receipt is redacted of the recipient as the
+  job names it, so an error a transport threw (of unknown delivery, a bug, a resolver, a
+  `checkJob`) that named a chat id or a number without its `+` was told raw. It is redacted
+  by the job, as the others.
 
 ## Repository layout
 

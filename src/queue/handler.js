@@ -208,7 +208,9 @@ const logFailed = (run, code, reason, state) => {
 // Fails a job for good, its state `failed` or `delivery_unknown`.
 const fail = async (run, code, reason, options = {}) => {
   const state = options.state ?? 'failed';
-  const message = reasonOf(reason);
+  // Redacted of the recipient as the job names it, a chat id or a number
+  // without its +, as the reasons of a receipt are.
+  const message = reasonOf(reason, run.data);
   await emit(run, state, {
     error: options.error ?? failureError(options.category ?? 'validation', code, message),
   });
