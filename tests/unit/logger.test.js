@@ -300,3 +300,42 @@ test('Logger: a message of a channel is logged with its channel and counts, not 
   assert.strictEqual(records[0].properties.message, telegram);
   assert.strictEqual(records[2].properties.hasPayload, true);
 });
+
+test('Logger: the id of a message of a channel is logged without the recipient it names', async () => {
+  // Before: Telegram's id, `<chat>:<message>`, was logged whole, the chat id
+  // the failures of the same message are redacted of.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const records = [];
+  const logger = {
+    info: (properties) => records.push(properties),
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+  const telegram = createChannelMessage({ channel: 'telegram', to: 987654321, text: 'Hi' });
+  const transport = {
+    id: 'telegram',
+    send: async () => ({ successful: true, messageId: '987654321:42', provider: 'telegram' }),
+  };
+  await new LoggerTransport({ logger, transport }).send(telegram);
+  const sent = records.find((entry) => entry.event === 'message.sent');
+  assert.strictEqual(sent.messageId, '[REDACTED]:42');
+  assert.strictEqual(sent.receipt.messageId, '[REDACTED]:42');
+  // With recordMessage, and for an email, as it is.
+  records.length = 0;
+  await new LoggerTransport({ logger, transport, recordMessage: true }).send(telegram);
+  assert.strictEqual(
+    records.find((entry) => entry.event === 'message.sent').messageId,
+    '987654321:42',
+  );
+  records.length = 0;
+  const mail = {
+    id: 'p',
+    send: async () => ({ successful: true, messageId: '<1@ses.example.com>' }),
+  };
+  await new LoggerTransport({ logger, transport: mail }).send(message());
+  assert.strictEqual(
+    records.find((entry) => entry.event === 'message.sent').messageId,
+    '<1@ses.example.com>',
+  );
+});

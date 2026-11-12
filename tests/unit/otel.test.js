@@ -719,3 +719,22 @@ test('OTel: a batch is named and measured by the channel its messages share', as
   const prefixed = await run([sms('a')], { spanPrefix: 'notify' });
   assert.strictEqual(prefixed.span.attributes['span.name'], 'notify send_batch');
 });
+
+test('OTel: the id of a message of a channel is recorded without the recipient it names', async () => {
+  // Before: Telegram's id, `<chat>:<message>`, went whole into mailer.message.id.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const telegram = createChannelMessage({ channel: 'telegram', to: 987654321, text: 'Hi' });
+  for (const recordSensitiveData of [false, true]) {
+    const { tracerProvider, meterProvider } = providers();
+    const transport = new OpenTelemetryTransport(
+      plain({}, { successful: true, messageId: '987654321:42' }),
+      { tracerProvider, meterProvider, tracing: { recordSensitiveData } },
+    );
+    await transport.send(telegram);
+    const [span] = tracerProvider.getAllSpans();
+    assert.strictEqual(
+      span.attributes['mailer.message.id'],
+      recordSensitiveData ? '987654321:42' : '[REDACTED]:42',
+    );
+  }
+});

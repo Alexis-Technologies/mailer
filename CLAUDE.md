@@ -1195,6 +1195,12 @@ that fails without it; C for the channels):
   refused (Twilio's 21211, the `Message` of AWS) without its `+`, which redaction finds in a
   text but not in an object a receipt keeps. A receipt of SMS, RCS or WhatsApp keeps the status
   and code of an error, not the answer.
+- C57. logger, otel, queue: the id a provider gives a message of a channel may name its
+  recipient (Telegram's `<chat>:<message>`, a space of Google Chat), and it was written whole
+  to the record of a send, even without `recordMessage`, to `mailer.message.id` of a span,
+  whatever `recordSensitiveData` said, and to the log `queue.job.completed`, which C41 has
+  redact the chat id everywhere else. Each is redacted of the recipient of its message; the
+  audit keeps it, by which the events of the provider find their message.
 
 ## Repository layout
 

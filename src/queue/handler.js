@@ -11,6 +11,7 @@ const { warnThrown } = require('../internal/callback.js');
 const { messageOf } = require('../internal/decorator.js');
 const { isDeliveryUnknown } = require('../internal/delivery-unknown.js');
 const { fingerprintOf } = require('../internal/fingerprint.js');
+const { redactMessageRecipient } = require('../internal/channel/recipient.js');
 const { createLog } = require('../internal/log.js');
 const { checkOptionalFunction, checkPositiveInteger } = require('../internal/options.js');
 const { checkNonNegativeInteger } = require('../internal/queue-options.js');
@@ -381,6 +382,13 @@ const partsStep = async (run) => {
   return { parts };
 };
 
+// The id a provider gave a message of a channel, as a log keeps it: redacted
+// of the recipient it may name (a chat of Telegram, a space of Google Chat).
+const logIdOf = (id, message) =>
+  typeof id === 'string' && typeof message.channel === 'string' && message.channel !== 'email'
+    ? redactMessageRecipient(id, message)
+    : id;
+
 const sendStep = async (run, message) => {
   const { config, job, signal } = run;
   let receipt;
@@ -423,6 +431,9 @@ const sendStep = async (run, message) => {
         jobId: job.id,
         attempt: job.attempt,
         ...result,
+        // The audit keeps the id, by which the events of the provider find
+        // it; a log keeps none of the recipient it may name.
+        providerMessageId: logIdOf(result.providerMessageId, message),
         durationMs: config.now() - run.started,
       }),
       'queue.job.completed',

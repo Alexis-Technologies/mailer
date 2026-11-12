@@ -247,6 +247,10 @@ class LoggerTransport {
       pendingMessage == null ? {} : this.getMessageProperties(pendingMessage.message);
 
     if (receipt.successful) {
+      const sent =
+        this.config.recordMessage === false
+          ? redactSuccess(receipt, pendingMessage?.message)
+          : receipt;
       this.log(
         this.config.levels.sent,
         this.getMessageText('Message sent.', pendingMessage?.message),
@@ -256,9 +260,9 @@ class LoggerTransport {
           operation,
           transportId: this.id,
           durationMilliseconds,
-          messageId: receipt.messageId,
+          messageId: sent.messageId,
           provider: receipt.provider ?? this.id,
-          receipt,
+          receipt: sent,
         },
       );
       return;
@@ -406,6 +410,17 @@ class LoggerTransport {
 // addresses and numbers its error text names, such as the recipient of an
 // SMTP rejection, without the recipient of the message of a channel, which
 // may be an id or a token, and without the provider's raw response.
+// A receipt of a message of a channel, its id redacted of the recipient it
+// may name: a chat of Telegram (`<chat>:<message>`), a space of Google Chat.
+// The id of an email names none.
+const redactSuccess = (receipt, message) => {
+  const channel = message?.channel;
+  if (typeof receipt.messageId !== 'string' || channel === undefined || channel === 'email') {
+    return receipt;
+  }
+  return { ...receipt, messageId: redactMessageRecipient(receipt.messageId, message) };
+};
+
 const redactFailure = (receipt, message) => {
   const errorMessages = [];
   for (const text of receipt.errorMessages) {

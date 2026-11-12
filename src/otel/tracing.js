@@ -208,8 +208,14 @@ class LiveEmailSpan {
     });
   }
 
-  recordSuccess(messageId) {
+  recordSuccess(given) {
     this.span.setStatus({ code: SPAN_STATUS_OK });
+    // The id of a message of a channel may name its recipient: a chat of
+    // Telegram (`<chat>:<message>`), a space of Google Chat.
+    const messageId =
+      typeof given === 'string' && this.channel !== 'email'
+        ? this.attributeExtractor.describeError(given, this.message)
+        : given;
 
     if (messageId) {
       this.span.setAttributes({

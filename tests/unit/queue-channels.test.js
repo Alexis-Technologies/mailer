@@ -605,3 +605,31 @@ test('Queue channels: every field of a message of a channel goes through its job
   assert.strictEqual(second.thread, slack.thread);
   assert.strictEqual(second.to, 'C123');
 });
+
+test('Queue channels: a log of a job done keeps no recipient of the id of its message', async (t) => {
+  // Before: Telegram's id, `<chat>:<message>`, was logged whole; the audit
+  // keeps it, by which the events of the provider find their message.
+  const { driver, audit, queue } = setup();
+  const transport = fakeTransport(() => ({ ...sent('987654321:42'), state: 'sent' }));
+  const enqueued = await queue.enqueue({
+    channel: 'telegram',
+    kind: 'content',
+    to: 987654321,
+    text: 'Hi',
+    idempotencyKey: 'hi:1',
+  });
+  const records = [];
+  const logger = {
+    info: (properties, message) => records.push([message, properties]),
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
+  const worker = queue.createWorker({ transport, logger });
+  t.after(() => worker.close());
+  await driver.drain();
+  const completed = records.find((record) => record[0] === 'queue.job.completed');
+  assert.strictEqual(completed[1].providerMessageId, '[REDACTED]:42');
+  const accepted = audit.eventsOf(enqueued.correlationId)[3];
+  assert.strictEqual(accepted.providerMessageId, '987654321:42');
+});
