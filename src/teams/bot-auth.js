@@ -7,6 +7,7 @@ const { readText } = require('../internal/body.js');
 const { timerMs } = require('../internal/sleep.js');
 const { createTokenCache } = require('../internal/token-cache.js');
 const { markUnsent } = require('../internal/unsent.js');
+const { tokenFailure } = require('../internal/token-failure.js');
 
 const MAX_ANSWER_BYTES = 64 * 1024;
 
@@ -16,20 +17,6 @@ const parseJson = (text) => {
   } catch {
     return undefined;
   }
-};
-
-// Credentials refused are `auth`, which a retry does not mend; the request
-// of the bot that waited for the token was never sent.
-const tokenFailure = (status, json, text) => {
-  const reason =
-    json?.error_description ?? json?.error ?? (text.trim() === '' ? `HTTP ${status}` : text);
-  const error = new Error(`Microsoft refused the token of the bot: ${reason}`);
-  error.statusCode = status;
-  if (status === 400 || status === 401 || status === 403) {
-    error.category = 'auth';
-    error.retryable = false;
-  }
-  return markUnsent(error);
 };
 
 /**
@@ -66,7 +53,8 @@ const createBotAuth = (config) => {
       throw markUnsent(error);
     });
     const json = parseJson(text);
-    if (!response.ok) throw tokenFailure(response.status, json, text);
+    if (!response.ok)
+      throw tokenFailure('Microsoft refused the token of the bot', response.status, json, text);
     if (typeof json?.access_token !== 'string' || !(json.expires_in > 0)) {
       throw markUnsent(new Error('Microsoft answered the token request with no access_token.'));
     }

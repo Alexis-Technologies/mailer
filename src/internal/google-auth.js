@@ -11,6 +11,7 @@ const { privateKeyOf, signJwt } = require('./jwt.js');
 const { timerMs } = require('./sleep.js');
 const { createTokenCache } = require('./token-cache.js');
 const { markUnsent } = require('./unsent.js');
+const { tokenFailure } = require('./token-failure.js');
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
@@ -40,21 +41,6 @@ const checkServiceAccount = (account) => {
     throw new TypeError(`serviceAccount is of type ${account.type}, not service_account.`);
   }
   return privateKeyOf(account.private_key, 'RS256', 'The private_key of serviceAccount');
-};
-
-// The failure of the token endpoint: credentials refused are `auth`, which a
-// retry does not mend; the rest as their status says. The request of the
-// provider that waited for the token was never sent.
-const tokenFailure = (status, json, text) => {
-  const reason =
-    json?.error_description ?? json?.error ?? (text.trim() === '' ? `HTTP ${status}` : text);
-  const error = new Error(`Google refused the token of the service account: ${reason}`);
-  error.statusCode = status;
-  if (status === 400 || status === 401 || status === 403) {
-    error.category = 'auth';
-    error.retryable = false;
-  }
-  return markUnsent(error);
 };
 
 /**
@@ -116,7 +102,13 @@ const createGoogleAuth = (options) => {
       throw markUnsent(error);
     });
     const json = parseJson(text);
-    if (!response.ok) throw tokenFailure(response.status, json, text);
+    if (!response.ok)
+      throw tokenFailure(
+        'Google refused the token of the service account',
+        response.status,
+        json,
+        text,
+      );
     if (typeof json?.access_token !== 'string' || !(json.expires_in > 0)) {
       throw markUnsent(new Error('Google answered the token request with no access_token.'));
     }

@@ -1219,6 +1219,11 @@ that fails without it; C for the channels):
   a string of the provider's, so one that wrote text there made a series per answer. A code is
   kept when it looks like one (64 characters of letters, digits and `_.:-`), and is `other`
   otherwise.
+- C62. google-auth, teams: a refusal of the endpoint of tokens put its whole answer, up to the
+  64 KiB read, into the message of its error, which a receipt, a log and a warning carry, and
+  an `error` of an object read `[object Object]`. The two near copies are one
+  (`internal/token-failure.js`), the reason bounded to 300 characters, an object written as
+  JSON.
 
 ## Repository layout
 
@@ -1234,7 +1239,7 @@ src/
                     what a provider of any channel shares of them, body.js, unsent.js,
                     delivery-unknown.js, config.js, loopback.js, public-url.js (the check of
                     ./attachments and of Web Push), validate-ssl.js, verify.js, sigv4.js for
-                    the services of AWS, jwt.js, token-cache.js and google-auth.js for the
+                    the services of AWS, jwt.js, token-cache.js, token-failure.js and google-auth.js for the
                     tokens of the channels, http2.js, a fetch over node:http2 for APNs),
                     receipts (provider.js, refusal.js, email-only.js), message fields (message-checks.js,
                     which every channel shares, headers.js, raw.js, schedule.js, tracking.js,

@@ -163,3 +163,30 @@ test('Google auth: the account, its key, the scopes and the URL are checked when
     typ: 'JWT',
   });
 });
+
+test('Google auth: the reason of a refusal is bounded, and an object of an error is written', async () => {
+  // Before: a page of 64 KiB went whole into the message of the error, and an
+  // `error` of an object read "[object Object]".
+  const page = tokenServer(
+    () => new Response(`<html>${'x'.repeat(60_000)}</html>`, { status: 502 }),
+  );
+  await assert.rejects(
+    createGoogleAuth({ serviceAccount, scopes: SCOPES, fetch: page.fetch }).token(),
+    (error) => {
+      assert.ok(error.message.length < 400, String(error.message.length));
+      assert.ok(error.message.endsWith('…'));
+      return true;
+    },
+  );
+  const object = tokenServer(() =>
+    Response.json({ error: { code: 403, status: 'PERMISSION_DENIED' } }, { status: 403 }),
+  );
+  await assert.rejects(
+    createGoogleAuth({ serviceAccount, scopes: SCOPES, fetch: object.fetch }).token(),
+    (error) => {
+      assert.match(error.message, /PERMISSION_DENIED/);
+      assert.ok(!error.message.includes('[object Object]'));
+      return true;
+    },
+  );
+});
