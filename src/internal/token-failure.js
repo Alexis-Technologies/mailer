@@ -1,8 +1,10 @@
-// Not ported: the failure of an endpoint of tokens of OAuth 2.0 (Google's for a
-// service account, Microsoft's for a bot): credentials refused are `auth`,
-// which a retry does not mend, the rest as their status says, and the request
-// of the provider that waited for the token was never sent.
+// Not ported: the request of a token of OAuth 2.0 (Google's for a service
+// account, Microsoft's for a bot): its deadline, the timeout of its transport;
+// and its failure: credentials refused are `auth`, which a retry does not
+// mend, the rest as their status says, and the request of the provider that
+// waited for the token was never sent.
 
+const { timerMs } = require('./sleep.js');
 const { markUnsent } = require('./unsent.js');
 
 // The most of the reason of a refusal kept: its answer may be a page of HTML
@@ -47,4 +49,16 @@ const tokenFailure = (refused, status, json, text) => {
   return markUnsent(error);
 };
 
-module.exports = { tokenFailure };
+/**
+ * The deadline of a request of a token: the timeout of its transport, where
+ * 0 and Infinity mean none, as for every request (bug 28). The token is
+ * shared, so no caller's signal ends its request.
+ *
+ * @param timeoutMs The timeout, in milliseconds.
+ * @returns The signal, or `undefined` for none.
+ * @internal
+ */
+const tokenSignalOf = (timeoutMs) =>
+  timeoutMs > 0 && Number.isFinite(timeoutMs) ? AbortSignal.timeout(timerMs(timeoutMs)) : undefined;
+
+module.exports = { tokenFailure, tokenSignalOf };

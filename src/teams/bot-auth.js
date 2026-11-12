@@ -4,10 +4,9 @@
 // however many sends want it, as internal/google-auth.js holds Google's.
 
 const { readText } = require('../internal/body.js');
-const { timerMs } = require('../internal/sleep.js');
 const { createTokenCache } = require('../internal/token-cache.js');
 const { markUnsent } = require('../internal/unsent.js');
-const { tokenFailure } = require('../internal/token-failure.js');
+const { tokenFailure, tokenSignalOf } = require('../internal/token-failure.js');
 
 const MAX_ANSWER_BYTES = 64 * 1024;
 
@@ -44,7 +43,7 @@ const createBotAuth = (config) => {
         }).toString(),
         redirect: 'manual',
         // The token is shared, so no caller's signal ends its request.
-        signal: AbortSignal.timeout(timerMs(config.timeout || 30_000)),
+        signal: tokenSignalOf(config.timeout ?? 30_000),
       });
     } catch (error) {
       throw markUnsent(error);

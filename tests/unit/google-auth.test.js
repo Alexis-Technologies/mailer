@@ -146,7 +146,9 @@ test('Google auth: the account, its key, the scopes and the URL are checked when
   assert.throws(make({ serviceAccount: { ...serviceAccount, private_key: 'x' } }), /private_key/);
   assert.throws(make({ scopes: [] }), /scopes/);
   assert.throws(make({ tokenUrl: 'http://tokens.example/token' }), /HTTPS/);
-  assert.throws(make({ timeout: 0 }), RangeError);
+  // Changed after C74: 0 means no deadline, as for the requests of a transport.
+  assert.throws(make({ timeout: -1 }), RangeError);
+  assert.throws(make({ timeout: '5' }), RangeError);
   const { private_key_id: _kid, ...unkeyed } = serviceAccount;
   const server = tokenServer();
   await createGoogleAuth({
@@ -189,4 +191,21 @@ test('Google auth: the reason of a refusal is bounded, and an object of an error
       return true;
     },
   );
+});
+
+test('Google auth: a timeout of 0 or Infinity sets no deadline on the token request', async () => {
+  // Before: a timeout of 0 was refused, and Teams read one as 30 seconds, where
+  // every request of a transport takes 0 and Infinity as none (bug 28).
+  const signals = [];
+  const server = tokenServer();
+  const fetch = (url, init) => {
+    signals.push(init.signal);
+    return server.fetch(url, init);
+  };
+  for (const timeout of [0, Infinity]) {
+    await createGoogleAuth({ serviceAccount, scopes: SCOPES, fetch, timeout }).token();
+  }
+  await createGoogleAuth({ serviceAccount, scopes: SCOPES, fetch, timeout: 5000 }).token();
+  assert.deepStrictEqual([signals[0], signals[1]], [undefined, undefined]);
+  assert.ok(signals[2] instanceof AbortSignal);
 });

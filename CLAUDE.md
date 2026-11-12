@@ -1274,6 +1274,11 @@ that fails without it; C for the channels):
   one pass, both encodings at once (10 parts of GSM-7 137,000 a second, was 84,000; Cyrillic
   1,130,000, was 883,000), and the pattern of a number is kept, 256 at most (5.9 million a
   second, was 3.4).
+- C74. google-auth, teams: the request of a token took its own deadline, not the transport's,
+  Google's refusing a timeout of 0 and the bot's reading one as 30 seconds, where every request
+  of a transport takes 0 and Infinity as none (bug 28), and FCM, RBM and a Chat app passed it
+  none of theirs. Both are bounded by the timeout of the transport, `tokenSignalOf` of
+  `internal/token-failure.js`, 0 and Infinity none.
 
 ## Repository layout
 

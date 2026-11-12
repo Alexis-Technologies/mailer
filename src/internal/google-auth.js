@@ -8,10 +8,9 @@
 const { readText } = require('./body.js');
 const { checkSecureUrl } = require('./config.js');
 const { privateKeyOf, signJwt } = require('./jwt.js');
-const { timerMs } = require('./sleep.js');
 const { createTokenCache } = require('./token-cache.js');
 const { markUnsent } = require('./unsent.js');
-const { tokenFailure } = require('./token-failure.js');
+const { tokenFailure, tokenSignalOf } = require('./token-failure.js');
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
@@ -65,9 +64,10 @@ const createGoogleAuth = (options) => {
   const tokenUrl = options.tokenUrl ?? TOKEN_URL;
   checkSecureUrl(tokenUrl, 'tokenUrl');
   const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
-  if (typeof timeout !== 'number' || !(timeout > 0)) {
+  // 0 and Infinity mean none, as for the requests of the transport.
+  if (typeof timeout !== 'number' || !(timeout >= 0)) {
     throw new RangeError(
-      'The timeout of a token request must be a positive number of milliseconds.',
+      'The timeout of a token request must be a number of milliseconds, 0 for none.',
     );
   }
   const now = options.now ?? Date.now;
@@ -93,7 +93,7 @@ const createGoogleAuth = (options) => {
         },
         body: new URLSearchParams({ grant_type: GRANT_TYPE, assertion }).toString(),
         redirect: 'manual',
-        signal: AbortSignal.timeout(timerMs(timeout)),
+        signal: tokenSignalOf(timeout),
       });
     } catch (error) {
       throw markUnsent(error);

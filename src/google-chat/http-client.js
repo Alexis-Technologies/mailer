@@ -66,6 +66,8 @@ const createGoogleChatClient = (config) => {
           scopes: SCOPES,
           fetch: (url, init) => (config.fetch ?? globalThis.fetch)(url, init),
           tokenUrl: config.tokenUrl,
+          // The token is bounded by the timeout of the transport, as its requests.
+          timeout: config.timeout,
           now: config.now,
         });
   // A token the API refuses is dropped, so that the next send asks for another.
