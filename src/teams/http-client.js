@@ -13,6 +13,7 @@
 const { parseRetryAfter } = require('../core/receipt.js');
 const { createApiClient, ProviderApiError } = require('../internal/api-client.js');
 const { createBotAuth } = require('./bot-auth.js');
+const { fetchDroppingRefused } = require('../internal/token-failure.js');
 
 // The hosts of the service URLs of Teams: commercial, GCC, GCC High, DoD.
 const SERVICE_HOSTS = new Set([
@@ -111,14 +112,7 @@ const createTeamsClient = (config) => {
   const auth = config.bot === undefined ? undefined : createBotAuth(config);
   // A token the Connector API refuses is dropped, so that the next send asks
   // for another.
-  const fetch = async (url, init) => {
-    const response = await (config.fetch ?? globalThis.fetch)(url, init);
-    if (response.status === 401 && auth !== undefined) {
-      const token = new Headers(init.headers).get('authorization')?.slice('Bearer '.length);
-      if (token !== undefined) auth.invalidate(token);
-    }
-    return response;
-  };
+  const fetch = fetchDroppingRefused(config.fetch, auth);
   const bot = createApiClient(
     { ...config, fetch },
     {

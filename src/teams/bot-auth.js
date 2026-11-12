@@ -6,17 +6,9 @@
 const { readText } = require('../internal/body.js');
 const { createTokenCache } = require('../internal/token-cache.js');
 const { markUnsent } = require('../internal/unsent.js');
-const { tokenFailure, tokenSignalOf } = require('../internal/token-failure.js');
+const { parseJson, tokenFailure, tokenSignalOf } = require('../internal/token-failure.js');
 
 const MAX_ANSWER_BYTES = 64 * 1024;
-
-const parseJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
 
 /**
  * Makes the token source of a bot.

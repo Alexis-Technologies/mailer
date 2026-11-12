@@ -13,6 +13,7 @@
 
 const { createApiClient } = require('../internal/api-client.js');
 const { createGoogleAuth } = require('../internal/google-auth.js');
+const { fetchDroppingRefused } = require('../internal/token-failure.js');
 
 const SCOPES = ['https://www.googleapis.com/auth/firebase.messaging'];
 // The ErrorCode of an FcmError
@@ -94,14 +95,7 @@ const createFcmClient = (config) => {
     now: config.now,
   });
   // A token FCM refuses is dropped, so that the next send asks for another.
-  const fetch = async (url, init) => {
-    const response = await (config.fetch ?? globalThis.fetch)(url, init);
-    if (response.status === 401) {
-      const token = new Headers(init.headers).get('authorization')?.slice('Bearer '.length);
-      if (token !== undefined) auth.invalidate(token);
-    }
-    return response;
-  };
+  const fetch = fetchDroppingRefused(config.fetch, auth);
   const client = createApiClient(
     { ...config, fetch },
     {

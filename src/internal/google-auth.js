@@ -10,7 +10,7 @@ const { checkSecureUrl } = require('./config.js');
 const { privateKeyOf, signJwt } = require('./jwt.js');
 const { createTokenCache } = require('./token-cache.js');
 const { markUnsent } = require('./unsent.js');
-const { tokenFailure, tokenSignalOf } = require('./token-failure.js');
+const { parseJson, tokenFailure, tokenSignalOf } = require('./token-failure.js');
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
@@ -18,14 +18,6 @@ const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
 const ASSERTION_SECONDS = 3600;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_ANSWER_BYTES = 64 * 1024;
-
-const parseJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
 
 const checkServiceAccount = (account) => {
   if (

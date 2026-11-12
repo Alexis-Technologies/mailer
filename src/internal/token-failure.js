@@ -1,8 +1,9 @@
 // Not ported: the request of a token of OAuth 2.0 (Google's for a service
 // account, Microsoft's for a bot): its deadline, the timeout of its transport;
-// and its failure: credentials refused are `auth`, which a retry does not
-// mend, the rest as their status says, and the request of the provider that
-// waited for the token was never sent.
+// its answer; its failure: credentials refused are `auth`, which a retry does
+// not mend, the rest as their status says, and the request of the provider
+// that waited for the token was never sent; and the token a provider refuses,
+// dropped.
 
 const { timerMs } = require('./sleep.js');
 const { markUnsent } = require('./unsent.js');
@@ -61,4 +62,35 @@ const tokenFailure = (refused, status, json, text) => {
 const tokenSignalOf = (timeoutMs) =>
   timeoutMs > 0 && Number.isFinite(timeoutMs) ? AbortSignal.timeout(timerMs(timeoutMs)) : undefined;
 
-module.exports = { tokenFailure, tokenSignalOf };
+/**
+ * The answer of an endpoint of tokens as JSON, or `undefined`.
+ *
+ * @internal
+ */
+const parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A `fetch` that drops the token a 401 refuses, so that the next request asks
+ * for another (and `refreshesToken` of the shared client sends it once more).
+ *
+ * @param fetch The fetch of the transport, or none for the global one.
+ * @param auth The source of the token, with `invalidate(token)`, or none.
+ * @returns The fetch.
+ * @internal
+ */
+const fetchDroppingRefused = (fetch, auth) => async (url, init) => {
+  const response = await (fetch ?? globalThis.fetch)(url, init);
+  if (response.status === 401 && auth !== undefined) {
+    const token = new Headers(init.headers).get('authorization')?.slice('Bearer '.length);
+    if (token !== undefined) auth.invalidate(token);
+  }
+  return response;
+};
+
+module.exports = { fetchDroppingRefused, parseJson, tokenFailure, tokenSignalOf };

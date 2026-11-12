@@ -7,6 +7,7 @@
 
 const { createApiClient } = require('../internal/api-client.js');
 const { createGoogleAuth } = require('../internal/google-auth.js');
+const { fetchDroppingRefused } = require('../internal/token-failure.js');
 
 const SCOPES = ['https://www.googleapis.com/auth/chat.bot'];
 const STATUSES = new Map([
@@ -71,14 +72,7 @@ const createGoogleChatClient = (config) => {
           now: config.now,
         });
   // A token the API refuses is dropped, so that the next send asks for another.
-  const fetch = async (url, init) => {
-    const response = await (config.fetch ?? globalThis.fetch)(url, init);
-    if (response.status === 401 && auth !== undefined) {
-      const token = new Headers(init.headers).get('authorization')?.slice('Bearer '.length);
-      if (token !== undefined) auth.invalidate(token);
-    }
-    return response;
-  };
+  const fetch = fetchDroppingRefused(config.fetch, auth);
   const app = createApiClient(
     { ...config, fetch },
     {
