@@ -296,7 +296,13 @@ test('Web Push: the VAPID keys are checked when the transport is made', () => {
     /mailto: or an https: URL/,
   );
   assert.throws(() => transport({ vapid: { ...VAPID, publicKey: 'short' } }), /65 bytes/);
-  assert.throws(() => transport({ vapid: { ...VAPID, privateKey: 'short' } }), /32 bytes/);
+  // Changed after C68: a key shorter than 32 bytes is padded, a scalar of its
+  // own, whose public key is another.
+  assert.throws(
+    () => transport({ vapid: { ...VAPID, privateKey: 'short' } }),
+    /not the public key of vapid.privateKey/,
+  );
+  assert.throws(() => transport({ vapid: { ...VAPID, privateKey: 'not base64!' } }), /32 bytes/);
   assert.throws(
     () => transport({ vapid: { ...VAPID, publicKey: other.getPublicKey().toString('base64url') } }),
     /not the public key of vapid.privateKey/,
@@ -337,4 +343,29 @@ test('Web Push: a lookup of the endpoint that hangs ends with the timeout and th
   caller.abort(reason);
   await assert.rejects(pending, (error) => error === reason);
   assert.strictEqual(requests.length, 0);
+});
+
+test('Web Push: a VAPID key Node wrote without its leading zeros is read as its 32 bytes', async (t) => {
+  // Before: Node's getPrivateKey() writes the scalar without its leading zero
+  // bytes, so one key of some 300 it makes was refused as no key of 32 bytes.
+  const { createECDH } = require('node:crypto');
+  let short;
+  while (short === undefined) {
+    const ecdh = createECDH('prime256v1');
+    ecdh.generateKeys();
+    if (ecdh.getPrivateKey().length < 32) short = ecdh;
+  }
+  const vapid = {
+    subject: 'mailto:ops@example.com',
+    publicKey: short.getPublicKey().toString('base64url'),
+    privateKey: short.getPrivateKey().toString('base64url'),
+  };
+  const requests = stubFetch(t, () => created('https://fcm.googleapis.com/m/2'));
+  const receipt = await transport({ vapid }).send(push());
+  assert.strictEqual(receipt.successful, true);
+  assert.strictEqual(requests.length, 1);
+  assert.throws(
+    () => transport({ vapid: { ...vapid, privateKey: Buffer.alloc(33, 1).toString('base64url') } }),
+    /32 bytes/,
+  );
 });

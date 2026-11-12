@@ -26,6 +26,24 @@ const bytesOf = (value, length, name) => {
   return bytes;
 };
 
+// The private key, a scalar of P-256 in 32 bytes. Node's getPrivateKey()
+// writes it without its leading zero bytes, so one of some 300 keys it makes
+// is shorter: such a key is the same scalar, padded back to the 32 bytes the
+// JWK of the key takes.
+const scalarOf = (value) => {
+  const bytes =
+    typeof value === 'string' && BASE64URL.test(value)
+      ? Buffer.from(value, 'base64url')
+      : undefined;
+  if (bytes === undefined || bytes.length === 0 || bytes.length > 32) {
+    throw new TypeError('vapid.privateKey must be 32 bytes in base64url.');
+  }
+  if (bytes.length === 32) return bytes;
+  const padded = Buffer.alloc(32);
+  bytes.copy(padded, 32 - bytes.length);
+  return padded;
+};
+
 /**
  * Checks the VAPID keys and subject of the transport.
  *
@@ -44,7 +62,7 @@ const checkVapid = (vapid) => {
     throw new TypeError('vapid.subject must be a mailto: or an https: URL.');
   }
   const publicKey = bytesOf(vapid.publicKey, 65, 'publicKey');
-  const privateKey = bytesOf(vapid.privateKey, 32, 'privateKey');
+  const privateKey = scalarOf(vapid.privateKey);
   const ecdh = createECDH('prime256v1');
   try {
     ecdh.setPrivateKey(privateKey);

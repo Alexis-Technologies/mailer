@@ -1247,6 +1247,10 @@ that fails without it; C for the channels):
   would be refused; none of SES or AWS SMS has one yet. The query is its own line, its
   parameters encoded as RFC 3986 and sorted, as the vector `get-vanilla-query-order-key-case`
   of AWS's test suite expects.
+- C68. webpush: a VAPID private key had to decode to 32 bytes, and `getPrivateKey()` of Node's
+  own `createECDH` writes the scalar without its leading zero bytes, so one key of some 300 it
+  makes was refused (the delivery matrix, which makes one per run, failed so now and then). A
+  shorter scalar is padded back to the 32 bytes its JWK takes; one longer is refused.
 
 ## Repository layout
 
