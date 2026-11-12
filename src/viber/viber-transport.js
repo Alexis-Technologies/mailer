@@ -7,7 +7,11 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const {
+  channelFailure,
+  InvalidMessageError,
+  noIdReceipt,
+} = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
 const { verifyByGet } = require('../internal/verify.js');
@@ -118,13 +122,7 @@ const receiptOf = (answer) => {
     });
   }
   if (answer.messageToken === undefined) {
-    return createFailedReceipt('Viber answered without the token of the message.', {
-      provider: PROVIDER,
-      channel: 'viber',
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Viber answered without the token of the message.', PROVIDER, 'viber');
   }
   return {
     successful: true,

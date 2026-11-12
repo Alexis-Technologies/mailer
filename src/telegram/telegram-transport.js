@@ -9,7 +9,7 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { verifyByGet } = require('../internal/verify.js');
 const { createTelegramConfig } = require('./config.js');
@@ -43,13 +43,7 @@ const receiptOf = (json) => {
   }
   const messageId = messageIdOf(json?.result);
   if (messageId === undefined) {
-    return createFailedReceipt('Telegram answered without the id of the message.', {
-      provider: PROVIDER,
-      channel: PROVIDER,
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Telegram answered without the id of the message.', PROVIDER, PROVIDER);
   }
   return { successful: true, messageId, provider: PROVIDER, channel: PROVIDER, state: 'sent' };
 };

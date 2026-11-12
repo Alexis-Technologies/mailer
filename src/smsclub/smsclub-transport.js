@@ -4,7 +4,11 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const {
+  channelFailure,
+  InvalidMessageError,
+  noIdReceipt,
+} = require('../internal/channel/failure.js');
 const { countSegments } = require('../internal/channel/segments.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -85,13 +89,7 @@ const receiptOf = (json, message) => {
       code: 'smsclub.add_info',
     });
   }
-  return createFailedReceipt('SMS Club answered without the id of the SMS.', {
-    provider: PROVIDER,
-    channel: 'sms',
-    category: 'unknown',
-    deliveryUnknown: true,
-    deliveryUnknownReason: 'no-id',
-  });
+  return noIdReceipt('SMS Club answered without the id of the SMS.', PROVIDER, 'sms');
 };
 
 /**

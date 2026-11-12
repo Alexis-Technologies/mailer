@@ -8,7 +8,11 @@
 
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const {
+  channelFailure,
+  InvalidMessageError,
+  noIdReceipt,
+} = require('../internal/channel/failure.js');
 const { countSegments } = require('../internal/channel/segments.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -89,13 +93,7 @@ const receiptOf = (json, message) => {
     });
   }
   if (typeof sent?.messageId !== 'string' || sent.messageId === '') {
-    return createFailedReceipt('Infobip answered without the id of the message.', {
-      provider: PROVIDER,
-      channel: 'sms',
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Infobip answered without the id of the message.', PROVIDER, 'sms');
   }
   const count = sent.details?.messageCount;
   return {

@@ -3,10 +3,9 @@
 // `MessageId` the id, whose delivery the events of its configuration set
 // tell.
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
 const { countSegments } = require('../internal/channel/segments.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { createAwsSmsConfig } = require('./config.js');
 const { createAwsSmsClient } = require('./http-client.js');
@@ -39,13 +38,7 @@ class AwsSmsTransport extends ProviderTransport {
       receiptOf: (answer) => {
         const messageId = answer.json?.MessageId;
         if (typeof messageId !== 'string' || messageId === '') {
-          return createFailedReceipt('AWS answered without the MessageId.', {
-            provider: PROVIDER,
-            channel: 'sms',
-            category: 'unknown',
-            deliveryUnknown: true,
-            deliveryUnknownReason: 'no-id',
-          });
+          return noIdReceipt('AWS answered without the MessageId.', PROVIDER, 'sms');
         }
         // AWS gives no count of the segments; they are counted as a carrier does.
         return {

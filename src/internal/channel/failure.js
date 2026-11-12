@@ -77,4 +77,24 @@ const channelFailure = (provider, channel, error) => {
     : { ...receipt, channel };
 };
 
-module.exports = { InvalidMessageError, channelFailure };
+/**
+ * The receipt of an answer that took the message and named no id of it: of
+ * unknown delivery, as the provider took it.
+ *
+ * @param text What the provider left out, such as "Telegram answered without
+ * the id of the message.".
+ * @param provider The provider's id.
+ * @param channel The channel of the message.
+ * @returns The failed receipt.
+ * @internal
+ */
+const noIdReceipt = (text, provider, channel) =>
+  createFailedReceipt(text, {
+    provider,
+    channel,
+    category: 'unknown',
+    deliveryUnknown: true,
+    deliveryUnknownReason: 'no-id',
+  });
+
+module.exports = { InvalidMessageError, channelFailure, noIdReceipt };

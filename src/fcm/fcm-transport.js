@@ -1,9 +1,8 @@
 // Not ported: a transport of push notifications over FCM HTTP v1, the
 // receipt of the message FCM took, its `name` the id.
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { createFcmConfig } = require('./config.js');
 const { createFcmClient } = require('./http-client.js');
@@ -13,13 +12,7 @@ const PROVIDER = 'fcm';
 
 const receiptOf = (json) => {
   if (typeof json?.name !== 'string' || json.name === '') {
-    return createFailedReceipt('FCM answered without the name of the message.', {
-      provider: PROVIDER,
-      channel: 'push',
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('FCM answered without the name of the message.', PROVIDER, 'push');
   }
   return {
     successful: true,

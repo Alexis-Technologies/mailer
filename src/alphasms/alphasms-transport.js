@@ -7,7 +7,11 @@
 const { createHash } = require('node:crypto');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const {
+  channelFailure,
+  InvalidMessageError,
+  noIdReceipt,
+} = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
 const { verifyByGet } = require('../internal/verify.js');
@@ -135,13 +139,11 @@ const receiptOf = (json, message) => {
   if (item?.success === false) return fail(item.error);
   const id = item?.data?.msg_id;
   if (json?.success !== true || item?.success !== true || id === undefined || id === null) {
-    return createFailedReceipt('AlphaSMS answered without the id of the message.', {
-      provider: PROVIDER,
-      channel: message.channel,
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt(
+      'AlphaSMS answered without the id of the message.',
+      PROVIDER,
+      message.channel,
+    );
   }
   const receipt = {
     successful: true,

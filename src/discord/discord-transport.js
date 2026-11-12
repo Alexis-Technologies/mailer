@@ -2,10 +2,9 @@
 // webhook: the wait for the bucket of a route before a send, and the receipt
 // of the message Discord created, its snowflake the id.
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { ProviderApiError } = require('../internal/api-client.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
 const { sleep } = require('../internal/sleep.js');
@@ -21,13 +20,7 @@ const MAX_BUCKET_WAIT_MS = 30_000;
 
 const receiptOf = (json) => {
   if (typeof json?.id !== 'string' || json.id === '') {
-    return createFailedReceipt('Discord answered without the id of the message.', {
-      provider: PROVIDER,
-      channel: PROVIDER,
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Discord answered without the id of the message.', PROVIDER, PROVIDER);
   }
   return {
     successful: true,

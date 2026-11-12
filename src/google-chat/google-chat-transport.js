@@ -2,9 +2,8 @@
 // webhook, or to a space of a Chat app under a request id of the
 // idempotency key, the `name` of the message the id of the receipt.
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
 const { generateId } = require('../core/id.js');
@@ -19,13 +18,7 @@ const PROVIDER = 'google-chat';
 const receiptOf = (answer) => {
   const name = answer.json?.name;
   if (typeof name !== 'string' || name === '') {
-    return createFailedReceipt('Google Chat answered without the name of the message.', {
-      provider: PROVIDER,
-      channel: PROVIDER,
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Google Chat answered without the name of the message.', PROVIDER, PROVIDER);
   }
   return {
     successful: true,

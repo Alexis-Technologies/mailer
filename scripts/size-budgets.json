@@ -58,7 +58,7 @@
   "./channels": 6.5,
   "./router": 1.5,
   "./telegram": 9.5,
-  "./slack": 9.5,
+  "./slack": 10,
   "./discord": 10,
   "./fcm": 10.5,
   "./webpush": 10,

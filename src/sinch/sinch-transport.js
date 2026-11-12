@@ -6,9 +6,12 @@
 // days Sinch keeps a batch, and an answer without the id of the batch is of
 // unknown delivery rather than a success with none.
 
-const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure, InvalidMessageError } = require('../internal/channel/failure.js');
+const {
+  channelFailure,
+  InvalidMessageError,
+  noIdReceipt,
+} = require('../internal/channel/failure.js');
 const { countSegments } = require('../internal/channel/segments.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
@@ -62,13 +65,7 @@ const bodyOf = (message, config) => {
 
 const receiptOf = (json, message) => {
   if (typeof json?.id !== 'string' || json.id === '') {
-    return createFailedReceipt('Sinch answered without the id of the batch.', {
-      provider: PROVIDER,
-      channel: 'sms',
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Sinch answered without the id of the batch.', PROVIDER, 'sms');
   }
   return {
     successful: true,

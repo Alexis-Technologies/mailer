@@ -7,7 +7,7 @@
 const { generateId } = require('../core/id.js');
 const { createFailedReceipt } = require('../core/receipt.js');
 const { sendConverted } = require('../internal/api-steps.js');
-const { channelFailure } = require('../internal/channel/failure.js');
+const { channelFailure, noIdReceipt } = require('../internal/channel/failure.js');
 const { ProviderTransport } = require('../internal/provider-transport.js');
 const { RefusalError } = require('../internal/refusal.js');
 const { verifyByGet } = require('../internal/verify.js');
@@ -41,13 +41,7 @@ const apiReceiptOf = (json) => {
     });
   }
   if (typeof json.ts !== 'string' || json.ts === '') {
-    return createFailedReceipt('Slack answered without the ts of the message.', {
-      provider: PROVIDER,
-      channel: PROVIDER,
-      category: 'unknown',
-      deliveryUnknown: true,
-      deliveryUnknownReason: 'no-id',
-    });
+    return noIdReceipt('Slack answered without the ts of the message.', PROVIDER, PROVIDER);
   }
   return sent(`${json.channel}:${json.ts}`);
 };
