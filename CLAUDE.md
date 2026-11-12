@@ -1157,6 +1157,11 @@ that fails without it; C for the channels):
   leaves `.` and `..`, so `to: '..'` sent the message, with the token of the bot, to
   `/api/v10/messages`, as C19 had it for Google Chat. A channel or a thread of Discord is its
   snowflake, of decimal digits, and a conversation of Teams is no dot segment.
+- C49. idempotency: the key of a message of a channel read no tenant, as an email's does
+  for the keys 1.2 stored, so two tenants that sent the same code to the same number under one
+  key shared a receipt, and the SMS of the second never went. The store key of a message of a
+  channel ends with its tenant after a NUL, which neither a key nor a tenant holds; an email's
+  and one a `key` of the application gives are as they were.
 
 ## Repository layout
 

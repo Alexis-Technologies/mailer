@@ -44,9 +44,12 @@ fields, the names and types of its attachments (not their bytes), its
 threading, schedule, tracking and metadata; a message of a channel by its
 channel, recipient, sender, text, media (their URLs or ids, not their bytes),
 buttons, payload, template, schedule, tags and metadata, so that two SMS of
-another text under one key are one sent and one refused. Neither reads the
-tenant: a key per tenant is the application's (`key`, or a `namespace` per
-tenant). A message without a key goes as it is.
+another text under one key are one sent and one refused. The key of a message
+of a channel is its tenant's (`tenantId`): two tenants that send the same code
+to the same number under one key both send it. That of an email reads no
+tenant, as in 1.2, whose keys the stores hold: a key per tenant is then the
+application's (`key`, or a `namespace` per tenant), as is any key that `key`
+gives. A message without a key goes as it is.
 
 A key is reserved for `leaseMs` (ten minutes), and the receipt of its send is
 kept for `ttlMs` (a day). The lease bounds how long a process that crashed, or

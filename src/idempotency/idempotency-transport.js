@@ -37,6 +37,17 @@ const isRecord = (value) => typeof value === 'object' && value !== null;
  * a key already used answers with the receipt of the first, or as of unknown
  * delivery while the first is in flight.
  */
+// The key of a message of a channel is its tenant's, after a NUL that neither
+// a key nor a tenant holds: two tenants that send the same code to the same
+// number under one key both send it. An email keeps the key of 1.2, which
+// stores hold; a key of the application's (`key`) is as it gives it.
+const tenantOf = (message) =>
+  typeof message.channel === 'string' &&
+  message.channel !== 'email' &&
+  typeof message.tenantId === 'string'
+    ? `\u0000${message.tenantId}`
+    : '';
+
 class IdempotencyTransport {
   id;
   config;
@@ -140,9 +151,10 @@ class IdempotencyTransport {
   // Reserves the key of a message: `{ key, fingerprint, token }` to send
   // under it, `{}` for a message without one, or `{ receipt }` to answer with.
   async #reserve(message) {
-    const key = this.config.key === undefined ? message.idempotencyKey : this.config.key(message);
+    const ownKey = this.config.key === undefined;
+    const key = ownKey ? message.idempotencyKey : this.config.key(message);
     if (key === undefined || key === null || key === '') return {};
-    const storeKey = `${this.config.namespace}:${key}`;
+    const storeKey = `${this.config.namespace}:${key}${ownKey ? tenantOf(message) : ''}`;
     const fingerprint = fingerprintOf(message);
     let reservation;
     try {

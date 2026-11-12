@@ -575,3 +575,33 @@ test('Idempotency: a message of a channel is sent once per key, another text und
     'idempotency.key_reused',
   );
 });
+
+test("Idempotency: the key of a message of a channel is its tenant's; that of an email is not", async () => {
+  // Before: two tenants that sent the same code to the same number under one
+  // key shared a receipt, so the SMS of the second never went.
+  const { createChannelMessage } = require('../../src/channels/index.js');
+  const sms = (tenantId) =>
+    createChannelMessage({
+      channel: 'sms',
+      to: '+380671234567',
+      text: 'Code 1234',
+      idempotencyKey: 'otp:42',
+      tenantId,
+    });
+  const inner = fakeTransport();
+  const once = new IdempotencyTransport(inner);
+  assert.strictEqual((await once.send(sms('acme'))).successful, true);
+  assert.strictEqual((await once.send(sms('globex'))).successful, true);
+  assert.strictEqual((await once.send(sms(undefined))).successful, true);
+  assert.strictEqual(inner.calls.length, 3);
+  // The same tenant again is answered, unsent.
+  await once.send(sms('acme'));
+  assert.strictEqual(inner.calls.length, 3);
+  // An email keeps the key of 1.2, which reads no tenant.
+  const mailer = fakeTransport();
+  const mail = new IdempotencyTransport(mailer);
+  const email = (tenantId) => message({ idempotencyKey: 'welcome:1', tenantId });
+  await mail.send(email('acme'));
+  assert.strictEqual((await mail.send(email('globex'))).successful, true);
+  assert.strictEqual(mailer.calls.length, 1, 'answered by the receipt of the first');
+});
