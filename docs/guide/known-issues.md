@@ -26,6 +26,17 @@ still open; the fixed ones are in the [changelog](https://github.com/Alexis-Tech
   So an FCM or Web Push notification may arrive twice when the push service answered with a
   5xx after taking it.
 
+- `accepted` is the last state a receipt of a channel reaches in 2.0. The verifiers of the
+  webhooks of the channels, by which a delivery, a failure or a read comes back, ship in 2.1, so
+  until then a message that ends `accepted` (an SMS, WhatsApp, RCS, Viber, a Workflows webhook
+  of Teams) has no later state unless your own handler of the provider's callbacks records one.
+  The work chats and the pushes end at `sent`, as their providers tell no delivery; a webhook
+  of Slack, Discord or Teams, or a push with no `Location`, has an id of the transport's own
+  (`webhook:<uuid>`), which no event will name.
+- The default `graphVersion` of `./meta` is `v23.0`, of May 2025. Meta keeps a version of the
+  Graph API about two years, so the default is raised in a minor of 2.x before it ends; pass
+  `graphVersion` to move earlier.
+
 ## Deno
 
 - Deno's `fetch` (2.9.6) sends a request again when a reused HTTP/1.1 connection closes before

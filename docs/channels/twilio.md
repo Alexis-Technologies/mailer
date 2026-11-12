@@ -31,6 +31,12 @@ const receipt = await twilio.send(
 //   state: 'accepted', segments: 1 }
 ```
 
+`accepted` is where the receipt stops: Twilio tells the delivery to the
+`statusCallback`, and 2.0 has no verifier of that callback yet (it comes with the
+webhooks of the channels in 2.1). Until then, check its `X-Twilio-Signature` in
+your handler before you trust what it says, as an unsigned callback can be posted
+by anyone who knows its URL.
+
 ## What goes
 
 | Message                  | Form                                                                                                                          |

@@ -17,7 +17,7 @@ const meta = new MetaTransport({
   whatsapp: { phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID },
   messenger: { pageId: process.env.PAGE_ID, accessToken: process.env.PAGE_TOKEN },
   instagram: { accountId: process.env.INSTAGRAM_ACCOUNT_ID },
-  // graphVersion: 'v23.0' by default
+  // graphVersion: 'v23.0' by default, of May 2025; Meta keeps a version about two years
 });
 
 // Outside the 24 hours of the user's last message, WhatsApp takes a template it approved.

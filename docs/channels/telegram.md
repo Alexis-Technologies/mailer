@@ -25,6 +25,13 @@ const receipt = await telegram.send(
 //   channel: 'telegram', state: 'sent' }
 ```
 
+The Bot API takes its token in the path of each request
+(`https://api.telegram.org/bot<token>/sendMessage`). The transport never writes
+that URL into an error, a receipt or a log, but a `fetch` you pass in, a
+proxy or an instrumentation of `fetch` (the `url.full` of OpenTelemetry's HTTP
+instrumentation) may record it: keep such logs as secret as the token, or
+leave the URL out of them.
+
 ## What goes
 
 | Message | Call |
