@@ -17,6 +17,7 @@ const { createApiClient } = require('../internal/api-client.js');
 const { readText } = require('../internal/body.js');
 const { createHttp2Fetch } = require('../internal/http2.js');
 const { signJwt } = require('../internal/jwt.js');
+const { createLog } = require('../internal/log.js');
 const { createTokenCache } = require('../internal/token-cache.js');
 
 // A token of APNs is good for an hour, and may change no more than once in
@@ -88,7 +89,12 @@ const classifyApns = (status, json) => {
 const createApnsClient = (config) => {
   const http2 =
     config.fetch === undefined
-      ? createHttp2Fetch({ tls: config.tls, pingIntervalMs: config.pingIntervalMs })
+      ? createHttp2Fetch({
+          tls: config.tls,
+          pingIntervalMs: config.pingIntervalMs,
+          pingTimeoutMs: config.pingTimeoutMs,
+          log: createLog(config.logger, { transport: 'apns' }),
+        })
       : undefined;
   const base = config.fetch ?? http2.fetch;
   let issued;

@@ -18,6 +18,9 @@ const { markUnsent } = require('./unsent.js');
 
 const { NGHTTP2_CANCEL, NGHTTP2_REFUSED_STREAM } = http2.constants;
 const DEFAULT_PING_INTERVAL_MS = 60_000;
+// Node's ping has no deadline: one a dead connection never answers would
+// leave the session in use, every request on it timing out.
+const DEFAULT_PING_TIMEOUT_MS = 10_000;
 // The fields of HTTP/1.1 a request of HTTP/2 may not carry (RFC 9113 §8.2.2).
 const CONNECTION_HEADERS = new Set([
   'connection',
@@ -55,33 +58,84 @@ class Session {
   /** The last stream the server said it handles, after a GOAWAY. */
   lastStreamId = Infinity;
   #pinger;
+  #pingTimer;
+  #pingTimeoutMs;
+  #log;
+  #origin;
 
   constructor(origin, options, forget) {
     this.forget = forget;
     this.retired = false;
+    this.#origin = origin;
+    this.#log = options.log;
+    this.#pingTimeoutMs = options.pingTimeoutMs ?? DEFAULT_PING_TIMEOUT_MS;
     this.handle = (options.connect ?? http2.connect)(origin, options.tls ?? {});
     // Not held until a request is out on it.
     this.handle.unref();
     const end = () => {
       clearInterval(this.#pinger);
+      clearTimeout(this.#pingTimer);
       forget(this);
     };
     this.handle.on('goaway', (errorCode, lastStreamId) => {
       this.lastStreamId = lastStreamId;
+      this.#tell('info', 'http2.goaway', { errorCode, lastStreamId });
       forget(this);
     });
     this.handle.on('close', end);
-    this.handle.on('error', end);
+    this.handle.on('error', (error) => {
+      this.#tell('warn', 'http2.session_failed', { code: error?.code });
+      end();
+    });
     this.handle.on('frameError', () => this.handle.destroy());
-    this.#pinger = setInterval(() => {
-      // A session still connecting has no ping to answer: Node cancels it,
-      // which is no failure of the session.
-      if (this.handle.closed || this.handle.destroyed || this.handle.connecting) return;
-      this.handle.ping((error) => {
-        if (error !== null && error.code !== 'ERR_HTTP2_PING_CANCEL') this.handle.destroy(error);
-      });
-    }, options.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS);
+    this.#pinger = setInterval(
+      () => this.ping(),
+      options.pingIntervalMs ?? DEFAULT_PING_INTERVAL_MS,
+    );
     this.#pinger.unref();
+  }
+
+  #tell(level, message, fields) {
+    this.#log?.write(
+      level,
+      () => ({ origin: this.#origin, active: this.active, ...fields }),
+      message,
+    );
+  }
+
+  /**
+   * Pings the session, which is destroyed when the ping fails or goes
+   * unanswered for `pingTimeoutMs`: a connection that died without a word,
+   * behind a NAT that forgot it, answers nothing, and the requests on it
+   * would each time out, of unknown delivery, until the system gave the
+   * socket up minutes later. One ping at a time.
+   */
+  ping() {
+    const handle = this.handle;
+    // A session still connecting has no ping to answer: Node cancels it,
+    // which is no failure of the session.
+    if (handle.closed || handle.destroyed || handle.connecting) return;
+    if (this.#pingTimer !== undefined) return;
+    const timeoutMs = this.#pingTimeoutMs;
+    const timer = setTimeout(() => {
+      this.#pingTimer = undefined;
+      this.#tell('warn', 'http2.ping_timeout', { timeoutMilliseconds: timeoutMs });
+      handle.destroy(new Error(`The HTTP/2 session answered no ping within ${timeoutMs} ms.`));
+    }, timeoutMs);
+    timer.unref();
+    this.#pingTimer = timer;
+    const sent = handle.ping((error) => {
+      clearTimeout(timer);
+      this.#pingTimer = undefined;
+      if (error !== null && error.code !== 'ERR_HTTP2_PING_CANCEL') handle.destroy(error);
+    });
+    // Too many pings unanswered: Node sends no more.
+    if (sent === false) {
+      clearTimeout(timer);
+      this.#pingTimer = undefined;
+      this.#tell('warn', 'http2.ping_timeout', { timeoutMilliseconds: timeoutMs });
+      handle.destroy(new Error('The HTTP/2 session answered none of its last pings.'));
+    }
   }
 
   get isUsable() {
@@ -100,6 +154,7 @@ class Session {
   retire() {
     if (this.retired) return;
     this.retired = true;
+    this.#tell('info', 'http2.session_retired', {});
     this.forget(this);
     if (!this.handle.closed && !this.handle.destroyed) this.handle.close();
   }
@@ -161,8 +216,23 @@ const requestOn = (session, url, init) =>
         return;
       }
       settled = true;
+      const sent = stream.id !== undefined;
       stream.close(NGHTTP2_CANCEL);
-      reject(abortReason(signal));
+      if (sent) {
+        // Sent and unanswered: the session may have died without a word,
+        // which a ping tells at once rather than at its next interval.
+        session.ping();
+        reject(abortReason(signal));
+        return;
+      }
+      // A stream without an id never had its headers sent, as the session
+      // still connected: an abort of its own, marked unsent, so that the
+      // reason of the signal, the caller's, is not.
+      const unsent = new Error('The HTTP/2 request was aborted before it was sent.', {
+        cause: abortReason(signal),
+      });
+      unsent.name = 'AbortError';
+      reject(markUnsent(unsent));
     };
     signal?.addEventListener('abort', onAbort, { once: true });
     // A stream that closes without its headers, reset with no error among
@@ -211,7 +281,10 @@ const requestOn = (session, url, init) =>
  * speaks HTTP/2 alone (APNs), which Node's `fetch` does not.
  *
  * @param options `tls`, the options of the TLS connection (`ca`, …);
- * `pingIntervalMs` (60 seconds); `connect`, in place of `http2.connect`.
+ * `pingIntervalMs` (60 seconds); `pingTimeoutMs` (10 seconds), after which
+ * an unanswered ping ends the session; `log`, of `internal/log.js`, told of
+ * GOAWAYs, failed and unanswered pings and retired sessions; `connect`, in
+ * place of `http2.connect`.
  * @returns `{ fetch(url, init), close() }`: `init` takes `method`,
  * `headers`, a body of a string or bytes, and `signal`; a redirect is never
  * followed, as HTTP/2 does not.

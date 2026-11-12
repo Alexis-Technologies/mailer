@@ -373,6 +373,12 @@ test('APNs: the options are checked when made, the environment never from NODE_E
   assert.throws(() => transport({ privateKey: rsa }), /P-256/);
   assert.throws(() => transport({ privateKey: 'not a key' }), /no private key/);
   assert.throws(() => transport({ baseUrl: 'http://api.example.com' }), TypeError);
+  for (const name of ['pingIntervalMs', 'pingTimeoutMs']) {
+    for (const value of [0, -1, Number.NaN, 2 ** 31, '10']) {
+      assert.throws(() => transport({ [name]: value }), /must be a positive number/, name);
+    }
+    assert.ok(transport({ [name]: 5000 }));
+  }
   const body = KEY.split('\n')[1];
   assert.ok(!JSON.stringify(transport()).includes(body));
 });

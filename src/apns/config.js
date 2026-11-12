@@ -12,6 +12,16 @@ const HOSTS = new Map([
 // A team id and a key id of Apple: ten characters of A-Z and 0-9.
 const APPLE_ID = /^[A-Z0-9]{10}$/;
 
+// A period of the HTTP/2 session: a positive number of milliseconds a timer
+// keeps.
+const checkMilliseconds = (value, name) => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !(value > 0) || value > 2 ** 31 - 1) {
+    throw new TypeError(`ApnsTransport: ${name} must be a positive number of milliseconds.`);
+  }
+  return value;
+};
+
 const checkAppleId = (value, name) => {
   if (typeof value !== 'string' || !APPLE_ID.test(value)) {
     throw new TypeError(`ApnsTransport: ${name} must be the ten characters Apple gives it.`);
@@ -46,7 +56,8 @@ const createApnsConfig = (config = {}) => {
     environment: config.environment,
     baseUrl: config.baseUrl ?? host,
     tls: config.tls,
-    pingIntervalMs: config.pingIntervalMs,
+    pingIntervalMs: checkMilliseconds(config.pingIntervalMs, 'pingIntervalMs'),
+    pingTimeoutMs: checkMilliseconds(config.pingTimeoutMs, 'pingTimeoutMs'),
     timeout: config.timeout ?? 30000,
     retries: config.retries ?? 3,
     concurrency: config.concurrency ?? 10,

@@ -393,3 +393,140 @@ test('HTTP/2: a stream closed with no answer fails; a request it cannot make was
     isUnsentRequestError(error),
   );
 });
+
+// A session of the test that answers nothing: no ping, no stream. Its streams
+// get the id `streamId` (none while it connects), and `pings` counts pings.
+const silentSession = (options = {}) => {
+  const { EventEmitter } = require('node:events');
+  // An id given as undefined is one, unlike a default of destructuring.
+  const streamId = Object.hasOwn(options, 'streamId') ? options.streamId : 1;
+  const { pingResult } = options;
+  const handle = new EventEmitter();
+  Object.assign(handle, {
+    closed: false,
+    destroyed: false,
+    connecting: false,
+    pings: 0,
+    destroyedWith: undefined,
+    unref() {},
+    ref() {},
+    destroy(error) {
+      handle.destroyed = true;
+      handle.destroyedWith = error;
+      setImmediate(() => handle.emit('close'));
+    },
+    close(callback) {
+      handle.closed = true;
+      callback?.();
+    },
+    ping() {
+      handle.pings++;
+      return pingResult;
+    },
+    request() {
+      const stream = new EventEmitter();
+      Object.assign(stream, { id: streamId, rstCode: 0, end() {}, close() {}, destroy() {} });
+      return stream;
+    },
+  });
+  return handle;
+};
+
+test('HTTP/2: a ping left unanswered ends the session, and the next request opens another', async (t) => {
+  // Before: Node's ping has no deadline, so a connection that died without a
+  // word kept its session in use, every request on it timing out of unknown
+  // delivery until the system gave the socket up, minutes later.
+  const handles = [];
+  const records = [];
+  const client = createHttp2Fetch({
+    connect: () => {
+      const handle = silentSession();
+      handles.push(handle);
+      return handle;
+    },
+    pingIntervalMs: 5,
+    pingTimeoutMs: 20,
+    log: { write: (level, fields, message) => records.push([level, message, fields()]) },
+  });
+  t.after(() => client.close());
+  client.fetch('https://api.example.com/a', { signal: AbortSignal.timeout(500) }).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.strictEqual(handles[0].destroyed, true);
+  assert.match(handles[0].destroyedWith.message, /answered no ping within 20 ms/);
+  // One ping at a time, however short the interval.
+  assert.strictEqual(handles[0].pings, 1);
+  assert.deepStrictEqual(records[0].slice(0, 2), ['warn', 'http2.ping_timeout']);
+  assert.strictEqual(records[0][2].origin, 'https://api.example.com');
+  client.fetch('https://api.example.com/b', { signal: AbortSignal.timeout(50) }).catch(() => {});
+  assert.strictEqual(handles.length, 2);
+});
+
+test('HTTP/2: a session whose pings Node no longer sends is ended', async (t) => {
+  const handle = silentSession({ pingResult: false });
+  const client = createHttp2Fetch({ connect: () => handle, pingIntervalMs: 5 });
+  t.after(() => client.close());
+  client.fetch('https://api.example.com/a', { signal: AbortSignal.timeout(200) }).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.strictEqual(handle.destroyed, true);
+  assert.match(handle.destroyedWith.message, /answered none of its last pings/);
+});
+
+test('HTTP/2: a request unanswered at its deadline pings its session at once', async (t) => {
+  const handle = silentSession();
+  const client = createHttp2Fetch({ connect: () => handle, pingIntervalMs: 60_000 });
+  t.after(() => client.close());
+  const error = await client
+    .fetch('https://api.example.com/a', { signal: AbortSignal.timeout(20) })
+    .catch((caught) => caught);
+  assert.strictEqual(error.name, 'TimeoutError');
+  // Sent, so of unknown fate: not marked unsent.
+  assert.strictEqual(isUnsentRequestError(error), false);
+  assert.strictEqual(handle.pings, 1);
+});
+
+test('HTTP/2: a request aborted while its session connects was never sent', async (t) => {
+  // Before: the abort was rejected with its bare reason, though the stream
+  // had no id, so a deadline met during a slow TLS handshake to APNs made a
+  // push of unknown delivery, never retried, that never went.
+  const handle = Object.assign(silentSession({ streamId: undefined }), { connecting: true });
+  const client = createHttp2Fetch({ connect: () => handle });
+  t.after(() => client.close());
+  const caller = new AbortController();
+  const reason = new Error('the reason of the caller');
+  const pending = client.fetch('https://api.example.com/a', { signal: caller.signal });
+  caller.abort(reason);
+  const error = await pending.catch((caught) => caught);
+  assert.strictEqual(error.name, 'AbortError');
+  assert.strictEqual(error.cause, reason);
+  assert.strictEqual(isUnsentRequestError(error), true);
+  // The caller's reason is not marked.
+  assert.strictEqual(isUnsentRequestError(reason), false);
+  assert.strictEqual(handle.pings, 0);
+
+  let requests = 0;
+  const h2 = createHttp2Fetch({
+    connect: () => {
+      const connecting = Object.assign(silentSession({ streamId: undefined }), {
+        connecting: true,
+      });
+      const request = connecting.request;
+      connecting.request = () => {
+        requests++;
+        return request();
+      };
+      return connecting;
+    },
+  });
+  t.after(() => h2.close());
+  const api = createApiClient(
+    { fetch: h2.fetch, retries: 1, timeout: 20, headers: {} },
+    { id: 'apns', label: 'APNs', authorize: () => {} },
+  );
+  const failure = await api
+    .request({ url: 'https://api.example.com/3/device/abc', body: { aps: {} } })
+    .catch((caught) => caught);
+  assert.strictEqual(requests, 2, 'sent again, as it never went');
+  assert.strictEqual(isUnsentRequestError(failure), true);
+  const { isDeliveryUnknown } = require('../../src/internal/delivery-unknown.js');
+  assert.strictEqual(isDeliveryUnknown(failure), false);
+});

@@ -50,6 +50,11 @@ export interface ApnsConfig extends TransportDependencies {
   /** How often an idle session is pinged, in milliseconds. @default 60000 */
   readonly pingIntervalMs?: number;
   /**
+   * How long a ping may go unanswered before the session is ended and the
+   * next push opens another, in milliseconds. @default 10000
+   */
+  readonly pingTimeoutMs?: number;
+  /**
    * A `fetch` that speaks HTTP/2, in place of the one of the transport over
    * `node:http2`: Node's own `fetch` speaks HTTP/1.1, which APNs refuses.
    */

@@ -37,6 +37,19 @@ device is of one environment, and the other refuses it. The session is held
 by the process only while a push is out on it, so a script ends without
 disposing of the transport.
 
+The session is pinged every `pingIntervalMs` (60 seconds), and at once after
+a push that got no answer before its timeout. When a ping goes unanswered for
+`pingTimeoutMs` (10 seconds), the session is ended and the next push opens
+another. This catches a connection that died silently, for example behind a
+NAT that dropped it, which would otherwise time out every push until the
+system gave the socket up. A `logger` is told of the session at these
+events:
+
+- `http2.goaway` (`info`), with its `errorCode` and `lastStreamId`;
+- `http2.ping_timeout` (`warn`);
+- `http2.session_failed` (`warn`);
+- `http2.session_retired` (`info`).
+
 ## What goes
 
 | Message           | APNs                                                                                    |

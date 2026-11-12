@@ -1137,6 +1137,16 @@ that fails without it; C for the channels):
   which took nothing, is. Viber, an API of chats, makes every 5xx of unknown delivery, as C17
   has it for Meta. FCM and Web Push keep retrying 5xx (FB1), and SMS Club too, its 453 telling
   a second SMS within two minutes (C16).
+- C45. http2: Node's `ping` has no deadline and its `false` (too many pings unanswered) was
+  ignored, so a connection that died without a word (a NAT that forgot it) kept its session in
+  use, every push on it timing out of unknown delivery until the system gave the socket up,
+  minutes later. An unanswered ping ends the session after `pingTimeoutMs` (10 seconds), one
+  ping at a time, and a request unanswered at its deadline pings at once; GOAWAYs, failed and
+  unanswered pings and retired sessions go to the logger of the transport.
+- C46. http2: an abort before the answer rejected with the bare reason of the signal, though
+  a stream without an id never had its headers sent, so a deadline met while the session
+  connected (a slow TLS handshake) made a push of unknown delivery, never retried, that never
+  went. Such an abort is an error of its own, marked unsent, the reason its cause.
 
 ## Repository layout
 
