@@ -1,9 +1,13 @@
 name: CI
 
 on:
+  # A feature branch is checked on every push, with no pull request: a major
+  # is built there for weeks before it is merged.
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   pull_request:
+  # By hand, on any branch, once this file is on the default branch.
+  workflow_dispatch:
 
 # Read-only by default: nothing here writes to the repository.
 permissions:
