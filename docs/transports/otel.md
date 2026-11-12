@@ -361,9 +361,9 @@ const consumer = driver.consume(handler, { concurrency: 4, audit });
 
 | Metric | Of |
 | --- | --- |
-| `mailer.queue.jobs` | runs, by `outcome` (`ack`, `retry`, `fail`, `release`, `thrown`) and `code` |
+| `mailer.queue.jobs` | runs, by `mailer.job.outcome` (`ack`, `retry`, `fail`, `release`, `thrown`) and `mailer.job.code` |
 | `mailer.queue.lag` | ms from the enqueue of a job to the start of a run: the backlog, to alert on |
-| `mailer.queue.job.duration` | ms of a run, by `outcome` and `code` |
+| `mailer.queue.job.duration` | ms of a run, by `mailer.job.outcome` and `mailer.job.code` |
 | `mailer.queue.redeliveries` | runs again of jobs whose run before did not settle |
 
 The span and each metric carry the `mailer.channel` of the job: `email` for an
@@ -426,7 +426,7 @@ messages are not read yet:
 |---|---|---|---|
 | `mailer.message.attempts` | counter | `{attempt}` | `mailer.transport.name`, `mailer.channel`, `mailer.operation.name` (`send`, `send_batch`), `mailer.status` (`success`, `failure`, `partial_failure`), `error.type` on a failure |
 | `mailer.message.duration` | histogram | `s` | as `mailer.message.attempts` |
-| `mailer.message.messages` | counter | `{message}` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it |
+| `mailer.message.messages` | counter | `{message}` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, `mailer.status`; on a failure, `error.type` and `mailer.error.code`, the category and code of its first error (`rate-limit`, `http.429`), and `mailer.delivery_unknown` (`true`) when the provider may have taken it; on a success of a channel, `mailer.message.state`, `accepted` (delivery comes in its events) or `sent` |
 | `mailer.message.retries` | counter | `{retry}` | `mailer.transport.name`, `mailer.channel`, `error.type` |
 | `mailer.message.size` | histogram | `By` | `mailer.transport.name`, `mailer.channel`, `mailer.priority`, and `email.content.type` for email |
 | `mailer.message.attachments` | histogram | `{attachment}` | as `mailer.message.size`: the attachments of an email, the media of a message of a channel |

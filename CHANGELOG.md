@@ -31,6 +31,9 @@ worker of 1.2 holds reads the same.
   attribute `mailer.priority` (was `email.priority`); the events of `./logger` are `message.*`
   (was `email.*`); the logger sink of `./audit` writes `message.<state>` (was `mail.<state>`);
   a span is named by its channel (`email send`) unless `spanPrefix` says otherwise.
+  The metrics of the queue (`mailer.queue.jobs`, `mailer.queue.job.duration`) take
+  `mailer.job.outcome` and `mailer.job.code` (were `outcome` and `code`), the names of the
+  attributes of its span.
 - **Cover the new members of the unions** in an exhaustive `switch`: the seven categories of the
   channels in `ReceiptErrorCategory`, `sent`, `read`, `failed`, `expired` and `subscribed` in
   `DeliveryEventType`, `sent`, `read` and `expired` in `MessageState`. A `DeliveryEvent` built
@@ -300,6 +303,9 @@ worker of 1.2 holds reads the same.
   the queue (`mailer.queue.jobs`, `lag`, `job.duration`, `redeliveries`) carry
   `mailer.channel`, `email` for an email job, the name of a sealed job of a channel, none for a
   job of no known channel.
+- **`./otel` counts a message of a channel by the state its provider took it in:**
+  `mailer.message.messages` carries `mailer.message.state`, `accepted` when its delivery comes in
+  the events of the provider, `sent` when none will.
 - **`./bullmq` tells the channel of a job it gives up:** the `delivery_unknown` event of a job
   of a channel that stalled too often carries its `channel`, read from its name when it is
   sealed; that of an email names none, as in 1.x.

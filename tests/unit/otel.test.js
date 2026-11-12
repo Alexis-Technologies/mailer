@@ -578,7 +578,7 @@ test('OTel: a message of a channel has a span and metrics of its channel, not it
     const transport = new OpenTelemetryTransport(
       plain({}, (message) =>
         message.channel === 'sms'
-          ? { successful: true, messageId: 'SM1', segments: 1 }
+          ? { successful: true, messageId: 'SM1', segments: 1, state: 'accepted' }
           : {
               successful: false,
               errorMessages: ['Forbidden: bot was blocked by the user 987654321'],
@@ -644,6 +644,8 @@ test('OTel: a message of a channel has a span and metrics of its channel, not it
           'mailer.channel': 'sms',
           'mailer.priority': 'high',
           'mailer.status': 'success',
+          // The state the provider took it in; delivery comes in its events.
+          'mailer.message.state': 'accepted',
         },
         {
           'mailer.transport.name': 'unknown',

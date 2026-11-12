@@ -121,23 +121,25 @@ const instrumentHandler = (handler, options = {}) => {
           ? await options.withSpan(span, () => handler(job, signal))
           : await handler(job, signal);
     } catch (error) {
-      instruments?.jobs.add(1, { outcome: 'thrown', ...of });
+      instruments?.jobs.add(1, { 'mailer.job.outcome': 'thrown', ...of });
       span?.setStatus({ code: STATUS_ERROR, message: 'The handler threw.' });
       span?.end();
       throw error;
     }
-    const attributes = { outcome: outcome?.type ?? 'none', ...of };
-    if (typeof outcome?.code === 'string') attributes.code = outcome.code;
+    // Named as the attributes of the span, as those of a transport are
+    // namespaced.
+    const attributes = { 'mailer.job.outcome': outcome?.type ?? 'none', ...of };
+    if (typeof outcome?.code === 'string') attributes['mailer.job.code'] = outcome.code;
     instruments?.jobs.add(1, attributes);
     instruments?.duration.record(now() - started, attributes);
     if (span !== undefined) {
       span.setAttributes({
-        'mailer.job.outcome': attributes.outcome,
-        'mailer.job.code': attributes.code ?? '',
+        'mailer.job.outcome': attributes['mailer.job.outcome'],
+        'mailer.job.code': attributes['mailer.job.code'] ?? '',
       });
       span.setStatus(
         outcome?.type === 'fail'
-          ? { code: STATUS_ERROR, message: attributes.code }
+          ? { code: STATUS_ERROR, message: attributes['mailer.job.code'] }
           : { code: STATUS_OK },
       );
       span.end();

@@ -88,13 +88,13 @@ test('OTel handler: a run is a span linked to its producer, and counted by outco
   assert.ok(span.ended);
   assert.strictEqual(span.options.attributes['mailer.channel'], 'email');
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.jobs'), [
-    { value: 1, attributes: { outcome: 'ack', 'mailer.channel': 'email' } },
+    { value: 1, attributes: { 'mailer.job.outcome': 'ack', 'mailer.channel': 'email' } },
   ]);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.lag'), [
     { value: 4000, attributes: { 'mailer.channel': 'email' } },
   ]);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.job.duration'), [
-    { value: 250, attributes: { outcome: 'ack', 'mailer.channel': 'email' } },
+    { value: 250, attributes: { 'mailer.job.outcome': 'ack', 'mailer.channel': 'email' } },
   ]);
 });
 
@@ -111,9 +111,9 @@ test('OTel handler: a failure, a run again and a throw are told', async () => {
   assert.deepStrictEqual(span.options.links, []);
   assert.strictEqual(recordsOf(meterProvider, 'mailer.queue.redeliveries').length, 1);
   assert.deepStrictEqual(recordsOf(meterProvider, 'mailer.queue.jobs')[0].attributes, {
-    outcome: 'fail',
+    'mailer.job.outcome': 'fail',
     'mailer.channel': 'email',
-    code: 'x.rejected',
+    'mailer.job.code': 'x.rejected',
   });
   const throwing = instrumentHandler(
     async () => {
@@ -214,11 +214,11 @@ test('OTel handler: a run is told by the channel of its job, sealed or not, and 
   assert.deepStrictEqual(
     recordsOf(meterProvider, 'mailer.queue.jobs').map((record) => record.attributes),
     [
-      { outcome: 'ack', 'mailer.channel': 'sms' },
-      { outcome: 'ack', 'mailer.channel': 'telegram' },
-      { outcome: 'ack', 'mailer.channel': 'email' },
-      { outcome: 'ack' },
-      { outcome: 'ack' },
+      { 'mailer.job.outcome': 'ack', 'mailer.channel': 'sms' },
+      { 'mailer.job.outcome': 'ack', 'mailer.channel': 'telegram' },
+      { 'mailer.job.outcome': 'ack', 'mailer.channel': 'email' },
+      { 'mailer.job.outcome': 'ack' },
+      { 'mailer.job.outcome': 'ack' },
     ],
   );
 });

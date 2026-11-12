@@ -11,6 +11,10 @@ const batchStatus = (successCount, failureCount) => {
   return successCount === 0 ? 'failure' : 'partial_failure';
 };
 
+// The states a receipt of a channel names: `accepted` by a provider that
+// tells its delivery later, `sent` by one that tells none (a chat, a push).
+const STATES = new Set(['accepted', 'sent']);
+
 // The attributes of a transport and of the channel of its messages, which a
 // batch of several channels (`null`), or one not read yet, goes without.
 const transportAttributes = (transport, channel) =>
@@ -118,7 +122,9 @@ class MetricsCollector {
    * category and the code of its first error (`error.type`,
    * `mailer.error.code`, such as `rate-limit` and `http.429`) and, when the
    * provider may have taken it, `mailer.delivery_unknown`: the messages to
-   * reconcile.  The segments a receipt counts go to their histogram.
+   * reconcile; for a channel, the state the provider took it in
+   * (`mailer.message.state`, `accepted` or `sent`).  The segments a receipt
+   * counts go to their histogram.
    */
   recordMessageOutcome(transport, channel, priority, receipt) {
     const first = receipt.successful ? undefined : receipt.errors?.[0];
@@ -129,6 +135,7 @@ class MetricsCollector {
       ...(typeof first?.category === 'string' && { 'error.type': first.category }),
       ...(typeof first?.code === 'string' && { 'mailer.error.code': first.code }),
       ...(receipt.deliveryUnknown === true && { 'mailer.delivery_unknown': true }),
+      ...(STATES.has(receipt.state) && { 'mailer.message.state': receipt.state }),
     });
     if (typeof receipt.segments === 'number') {
       this.segmentCountHistogram.record(receipt.segments, transportAttributes(transport, channel));
